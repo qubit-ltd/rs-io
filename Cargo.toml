@@ -1,0 +1,34 @@
+[package]
+name = "qubit-io"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.94"
+authors = ["Haixing Hu <starfish.hu@gmail.com>"]
+license = "Apache-2.0"
+repository = "https://github.com/qubit-ltd/rs-io"
+description = "Small I/O trait utilities for Rust"
+homepage = "https://github.com/qubit-ltd/rs-io"
+documentation = "https://docs.rs/qubit-io"
+readme = "README.md"
+keywords = ["io", "read", "write", "seek", "qubit"]
+categories = ["filesystem", "rust-patterns"]
+exclude = [
+    "align-ci.sh",
+    "coverage.sh",
+    "COVERAGE.md",
+    "COVERAGE.zh_CN.md",
+    ".circleci/*",
+    ".rs-ci/**",
+    "ci-check.sh",
+    ".llvm-cov.toml",
+    ".cargo-audit.toml.example",
+]
+
+[lib]
+name = "qubit_io"
+doctest = true
+
+[dependencies]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage)'] }
