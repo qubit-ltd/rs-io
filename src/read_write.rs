@@ -7,7 +7,10 @@
  *    Licensed under the Apache License, Version 2.0.
  *
  ******************************************************************************/
-use std::io::{Read, Write};
+use std::io::{
+    Read,
+    Write,
+};
 
 /// Object-safe capability trait for values that can be both read and written.
 ///
