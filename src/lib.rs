@@ -11,25 +11,16 @@
 //!
 //! Small I/O trait utilities for Rust.
 //!
+//! This crate provides named, object-safe composition traits for common
+//! [`std::io`] capability combinations. The concrete trait definitions live in
+//! dedicated modules and are re-exported from the crate root for ergonomic use.
 
-use std::io::{Read, Seek, Write};
+mod read_seek;
+mod read_write;
+mod read_write_seek;
+mod write_seek;
 
-/// Trait object friendly alias for types that implement [`Read`] and [`Seek`].
-pub trait ReadSeek: Read + Seek {}
-
-impl<T> ReadSeek for T where T: Read + Seek {}
-
-/// Trait object friendly alias for types that implement [`Read`] and [`Write`].
-pub trait ReadWrite: Read + Write {}
-
-impl<T> ReadWrite for T where T: Read + Write {}
-
-/// Trait object friendly alias for types that implement [`Write`] and [`Seek`].
-pub trait WriteSeek: Write + Seek {}
-
-impl<T> WriteSeek for T where T: Write + Seek {}
-
-/// Trait object friendly alias for types that implement [`Read`], [`Write`], and [`Seek`].
-pub trait ReadWriteSeek: Read + Write + Seek {}
-
-impl<T> ReadWriteSeek for T where T: Read + Write + Seek {}
+pub use read_seek::ReadSeek;
+pub use read_write::ReadWrite;
+pub use read_write_seek::ReadWriteSeek;
+pub use write_seek::WriteSeek;
