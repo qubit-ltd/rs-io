@@ -1,6 +1,6 @@
 # Qubit IO
 
-[![CircleCI](https://circleci.com/gh/qubit-ltd/rs-io.svg?style=shield)](https://circleci.com/gh/qubit-ltd/rs-io)
+[![Rust CI](https://github.com/qubit-ltd/rs-io/actions/workflows/ci.yml/badge.svg)](https://github.com/qubit-ltd/rs-io/actions/workflows/ci.yml)
 [![Coverage Status](https://coveralls.io/repos/github/qubit-ltd/rs-io/badge.svg?branch=main)](https://coveralls.io/github/qubit-ltd/rs-io?branch=main)
 [![Crates.io](https://img.shields.io/crates/v/qubit-io.svg?color=blue)](https://crates.io/crates/qubit-io)
 [![Rust](https://img.shields.io/badge/rust-1.94+-blue.svg?logo=rust)](https://www.rust-lang.org)
