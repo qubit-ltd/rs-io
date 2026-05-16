@@ -48,7 +48,7 @@ adapter 代码。
 
 ```toml
 [dependencies]
-qubit-io = "0.1.2"
+qubit-io = "0.1"
 ```
 
 ## 快速开始
