@@ -256,7 +256,7 @@ fn test_read_exact_or_eof_at_works_on_dyn_read_seek() {
     cursor
         .seek(SeekFrom::Start(4))
         .expect("cursor should seek to initial position");
-    let stream: &mut dyn ReadSeek = &mut cursor;
+    let mut stream: &mut dyn ReadSeek = &mut cursor;
     let mut buffer = [0; 3];
 
     let count = stream
@@ -331,7 +331,7 @@ fn test_peek_exact_or_eof_works_on_dyn_read_seek() {
     cursor
         .seek(SeekFrom::Start(1))
         .expect("cursor should seek to initial position");
-    let stream: &mut dyn ReadSeek = &mut cursor;
+    let mut stream: &mut dyn ReadSeek = &mut cursor;
     let mut buffer = [0; 2];
 
     let count = stream

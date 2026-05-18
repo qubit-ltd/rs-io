@@ -140,7 +140,7 @@ fn test_stream_size_works_on_dyn_seek() {
     cursor
         .seek(SeekFrom::Start(3))
         .expect("cursor should seek to initial position");
-    let stream: &mut dyn Seek = &mut cursor;
+    let mut stream: &mut dyn Seek = &mut cursor;
 
     let size = stream
         .stream_size()

@@ -44,4 +44,4 @@ use std::io::{
 /// ```
 pub trait ReadSeek: Read + Seek {}
 
-impl<T> ReadSeek for T where T: Read + Seek {}
+impl<T> ReadSeek for T where T: Read + Seek + ?Sized {}
