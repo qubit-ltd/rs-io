@@ -138,12 +138,12 @@ where
 
     #[inline]
     fn copy_to(&mut self, writer: &mut dyn Write) -> Result<u64> {
-        copy_to_from(self, writer)
+        copy_all(self, writer)
     }
 
     #[inline]
     fn copy_to_limited(&mut self, writer: &mut dyn Write, max_bytes: u64) -> Result<u64> {
-        copy_to_limited_from(self, writer, max_bytes)
+        copy_limited(self, writer, max_bytes)
     }
 
     #[inline]
@@ -165,12 +165,12 @@ impl ReadExt for dyn Read + '_ {
 
     #[inline]
     fn copy_to(&mut self, writer: &mut dyn Write) -> Result<u64> {
-        copy_to_from(self, writer)
+        copy_all(self, writer)
     }
 
     #[inline]
     fn copy_to_limited(&mut self, writer: &mut dyn Write, max_bytes: u64) -> Result<u64> {
-        copy_to_limited_from(self, writer, max_bytes)
+        copy_limited(self, writer, max_bytes)
     }
 
     #[inline]
@@ -242,42 +242,6 @@ pub(crate) fn discard_exact_or_eof_from(reader: &mut dyn Read, bytes: u64) -> Re
     Ok(discarded)
 }
 
-/// Copies all remaining bytes from `reader` to `writer`.
-///
-/// # Parameters
-/// - `reader`: Source reader.
-/// - `writer`: Destination writer.
-///
-/// # Returns
-/// The number of bytes copied.
-///
-/// # Errors
-/// Returns the first read or write error reported by [`std::io::copy`].
-fn copy_to_from(reader: &mut dyn Read, writer: &mut dyn Write) -> Result<u64> {
-    copy_all(reader, writer)
-}
-
-/// Copies at most `max_bytes` bytes from `reader` to `writer`.
-///
-/// # Parameters
-/// - `reader`: Source reader.
-/// - `writer`: Destination writer.
-/// - `max_bytes`: Maximum number of bytes to copy.
-///
-/// # Returns
-/// The number of bytes copied.
-///
-/// # Errors
-/// Returns the first non-interrupted read error or write error reported by the
-/// underlying streams.
-fn copy_to_limited_from(
-    reader: &mut dyn Read,
-    writer: &mut dyn Write,
-    max_bytes: u64,
-) -> Result<u64> {
-    copy_limited(reader, writer, max_bytes)
-}
-
 /// Reads all remaining bytes from `reader` when the result fits `max_len`.
 ///
 /// # Parameters
@@ -300,7 +264,12 @@ fn read_to_end_limited_from(reader: &mut dyn Read, max_len: usize) -> Result<Vec
         match reader.read(&mut buffer[..requested]) {
             Ok(0) => return Ok(output),
             Ok(count) if count <= remaining => output.extend_from_slice(&buffer[..count]),
-            Ok(_) => return Err(input_too_large(max_len)),
+            Ok(_) => {
+                return Err(Error::new(
+                    ErrorKind::InvalidData,
+                    format!("input exceeds maximum length of {max_len} bytes"),
+                ));
+            }
             Err(error) => {
                 if error.kind() == ErrorKind::Interrupted {
                     continue;
@@ -309,18 +278,4 @@ fn read_to_end_limited_from(reader: &mut dyn Read, max_len: usize) -> Result<Vec
             }
         }
     }
-}
-
-/// Builds an invalid-data error for oversized bounded reads.
-///
-/// # Parameters
-/// - `max_len`: Maximum accepted input length.
-///
-/// # Returns
-/// An [`ErrorKind::InvalidData`] error.
-fn input_too_large(max_len: usize) -> Error {
-    Error::new(
-        ErrorKind::InvalidData,
-        format!("input exceeds maximum length of {max_len} bytes"),
-    )
 }
