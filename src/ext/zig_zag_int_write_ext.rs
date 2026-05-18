@@ -22,6 +22,15 @@ use crate::Leb128IntWriteExt;
 /// guide:
 /// <https://protobuf.dev/programming-guides/encoding/#signed-integers>.
 pub trait ZigZagIntWriteExt: Write {
+    /// Writes a ZigZag encoded `i16`.
+    ///
+    /// # Parameters
+    /// - `value`: Value to encode.
+    ///
+    /// # Errors
+    /// Returns an I/O error from the underlying writer.
+    fn write_zigzag_i16(&mut self, value: i16) -> Result<()>;
+
     /// Writes a ZigZag encoded `i32`.
     ///
     /// # Parameters
@@ -55,6 +64,11 @@ where
     T: Write + ?Sized,
 {
     #[inline]
+    fn write_zigzag_i16(&mut self, value: i16) -> Result<()> {
+        self.write_uleb_u16(encode_zigzag_i16(value))
+    }
+
+    #[inline]
     fn write_zigzag_i32(&mut self, value: i32) -> Result<()> {
         self.write_uleb_u32(encode_zigzag_i32(value))
     }
@@ -68,6 +82,17 @@ where
     fn write_zigzag_isize(&mut self, value: isize) -> Result<()> {
         self.write_uleb_usize(encode_zigzag_isize(value))
     }
+}
+
+/// Encodes an `i16` with ZigZag mapping.
+///
+/// # Parameters
+/// - `value`: Signed value to map.
+///
+/// # Returns
+/// ZigZag mapped unsigned value.
+fn encode_zigzag_i16(value: i16) -> u16 {
+    ((value as u16) << 1) ^ ((value >> 15) as u16)
 }
 
 /// Encodes an `i32` with ZigZag mapping.

@@ -21,6 +21,15 @@ use std::io::{
 /// binary format:
 /// <https://webassembly.github.io/spec/core/binary/values.html#integers>.
 pub trait Leb128IntWriteExt: Write {
+    /// Writes an unsigned LEB128 `u16`.
+    ///
+    /// # Parameters
+    /// - `value`: Value to encode.
+    ///
+    /// # Errors
+    /// Returns an I/O error from the underlying writer.
+    fn write_uleb_u16(&mut self, value: u16) -> Result<()>;
+
     /// Writes an unsigned LEB128 `u32`.
     ///
     /// # Parameters
@@ -47,6 +56,15 @@ pub trait Leb128IntWriteExt: Write {
     /// # Errors
     /// Returns an I/O error from the underlying writer.
     fn write_uleb_usize(&mut self, value: usize) -> Result<()>;
+
+    /// Writes a signed LEB128 `i16`.
+    ///
+    /// # Parameters
+    /// - `value`: Value to encode.
+    ///
+    /// # Errors
+    /// Returns an I/O error from the underlying writer.
+    fn write_sleb_i16(&mut self, value: i16) -> Result<()>;
 
     /// Writes a signed LEB128 `i32`.
     ///
@@ -81,6 +99,11 @@ where
     T: Write + ?Sized,
 {
     #[inline]
+    fn write_uleb_u16(&mut self, value: u16) -> Result<()> {
+        write_uleb(self, value as u64)
+    }
+
+    #[inline]
     fn write_uleb_u32(&mut self, value: u32) -> Result<()> {
         write_uleb(self, value as u64)
     }
@@ -93,6 +116,11 @@ where
     #[inline]
     fn write_uleb_usize(&mut self, value: usize) -> Result<()> {
         write_uleb(self, value as u64)
+    }
+
+    #[inline]
+    fn write_sleb_i16(&mut self, value: i16) -> Result<()> {
+        write_sleb(self, value as i64)
     }
 
     #[inline]

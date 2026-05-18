@@ -20,6 +20,35 @@ use qubit_io::{
 };
 
 #[test]
+fn test_leb128_int_ext_round_trips_u16_values() {
+    let mut output = Vec::new();
+
+    output
+        .write_uleb_u16(0)
+        .expect("zero u16 LEB128 value should be written");
+    output
+        .write_uleb_u16(127)
+        .expect("single-byte u16 LEB128 value should be written");
+    output
+        .write_uleb_u16(128)
+        .expect("two-byte u16 LEB128 value should be written");
+    output
+        .write_uleb_u16(u16::MAX)
+        .expect("max u16 LEB128 value should be written");
+
+    assert_eq!(vec![0x00, 0x7f, 0x80, 0x01, 0xff, 0xff, 0x03], output);
+
+    let mut input = Cursor::new(output);
+    assert_eq!(0, input.read_uleb_u16().expect("zero should be read"));
+    assert_eq!(127, input.read_uleb_u16().expect("127 should be read"));
+    assert_eq!(128, input.read_uleb_u16().expect("128 should be read"));
+    assert_eq!(
+        u16::MAX,
+        input.read_uleb_u16().expect("max u16 should be read")
+    );
+}
+
+#[test]
 fn test_leb128_int_ext_round_trips_unsigned_values() {
     let mut output = Vec::new();
 
@@ -59,6 +88,28 @@ fn test_leb128_int_ext_round_trips_unsigned_values() {
         u64::MAX,
         input.read_uleb_u64().expect("max u64 should be read")
     );
+}
+
+#[test]
+fn test_leb128_int_read_ext_rejects_u16_overflow() {
+    let mut input = Cursor::new([0xff, 0xff, 0x04]);
+
+    let error = input
+        .read_uleb_u16()
+        .expect_err("overflowing u16 LEB128 value should fail");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+}
+
+#[test]
+fn test_leb128_int_read_ext_rejects_unterminated_u16() {
+    let mut input = Cursor::new([0x80, 0x80, 0x80]);
+
+    let error = input
+        .read_uleb_u16()
+        .expect_err("unterminated u16 LEB128 value should fail");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
 }
 
 #[test]
@@ -150,6 +201,38 @@ fn test_leb128_int_ext_round_trips_usize_values() {
 }
 
 #[test]
+fn test_leb128_int_ext_round_trips_i16_values() {
+    let mut output = Vec::new();
+
+    output
+        .write_sleb_i16(0)
+        .expect("zero i16 SLEB128 value should be written");
+    output
+        .write_sleb_i16(-1)
+        .expect("negative one i16 SLEB128 value should be written");
+    output
+        .write_sleb_i16(i16::MAX)
+        .expect("maximum i16 SLEB128 value should be written");
+    output
+        .write_sleb_i16(i16::MIN)
+        .expect("minimum i16 SLEB128 value should be written");
+
+    assert_eq!(vec![0x00, 0x7f, 0xff, 0xff, 0x01, 0x80, 0x80, 0x7e], output);
+
+    let mut input = Cursor::new(output);
+    assert_eq!(0, input.read_sleb_i16().expect("zero should be read"));
+    assert_eq!(-1, input.read_sleb_i16().expect("-1 should be read"));
+    assert_eq!(
+        i16::MAX,
+        input.read_sleb_i16().expect("maximum i16 should be read")
+    );
+    assert_eq!(
+        i16::MIN,
+        input.read_sleb_i16().expect("minimum i16 should be read")
+    );
+}
+
+#[test]
 fn test_leb128_int_ext_round_trips_signed_values() {
     let mut output = Vec::new();
 
@@ -195,6 +278,17 @@ fn test_leb128_int_ext_round_trips_signed_values() {
 }
 
 #[test]
+fn test_leb128_int_read_ext_rejects_i16_overflow() {
+    let mut input = Cursor::new([0x80, 0x80, 0x02]);
+
+    let error = input
+        .read_sleb_i16()
+        .expect_err("overflowing i16 SLEB128 value should fail");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+}
+
+#[test]
 fn test_leb128_int_read_ext_rejects_i32_overflow() {
     let mut input = Cursor::new([0xff, 0xff, 0xff, 0xff, 0x0f]);
 
@@ -219,6 +313,35 @@ fn test_leb128_int_ext_round_trips_isize_values() {
         input
             .read_sleb_isize()
             .expect("minimum isize should be read")
+    );
+}
+
+#[test]
+fn test_zigzag_int_ext_round_trips_i16_values() {
+    let mut output = Vec::new();
+
+    output
+        .write_zigzag_i16(0)
+        .expect("zero i16 ZigZag value should be written");
+    output
+        .write_zigzag_i16(-1)
+        .expect("negative one i16 ZigZag value should be written");
+    output
+        .write_zigzag_i16(1)
+        .expect("positive one i16 ZigZag value should be written");
+    output
+        .write_zigzag_i16(i16::MIN)
+        .expect("minimum i16 ZigZag value should be written");
+
+    assert_eq!(vec![0x00, 0x01, 0x02, 0xff, 0xff, 0x03], output);
+
+    let mut input = Cursor::new(output);
+    assert_eq!(0, input.read_zigzag_i16().expect("zero should be read"));
+    assert_eq!(-1, input.read_zigzag_i16().expect("-1 should be read"));
+    assert_eq!(1, input.read_zigzag_i16().expect("1 should be read"));
+    assert_eq!(
+        i16::MIN,
+        input.read_zigzag_i16().expect("minimum i16 should be read")
     );
 }
 

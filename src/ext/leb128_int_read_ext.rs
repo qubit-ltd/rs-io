@@ -25,6 +25,16 @@ use crate::BinaryReadExt;
 /// binary format:
 /// <https://webassembly.github.io/spec/core/binary/values.html#integers>.
 pub trait Leb128IntReadExt: Read {
+    /// Reads an unsigned LEB128 `u16`.
+    ///
+    /// # Returns
+    /// The decoded value.
+    ///
+    /// # Errors
+    /// Returns `UnexpectedEof` for truncated input, `InvalidData` for overflow,
+    /// or another I/O error from the underlying reader.
+    fn read_uleb_u16(&mut self) -> Result<u16>;
+
     /// Reads an unsigned LEB128 `u32`.
     ///
     /// # Returns
@@ -54,6 +64,16 @@ pub trait Leb128IntReadExt: Read {
     /// Returns `UnexpectedEof` for truncated input, `InvalidData` for overflow,
     /// or another I/O error from the underlying reader.
     fn read_uleb_usize(&mut self) -> Result<usize>;
+
+    /// Reads a signed LEB128 `i16`.
+    ///
+    /// # Returns
+    /// The decoded value.
+    ///
+    /// # Errors
+    /// Returns `UnexpectedEof` for truncated input, `InvalidData` for overflow,
+    /// or another I/O error from the underlying reader.
+    fn read_sleb_i16(&mut self) -> Result<i16>;
 
     /// Reads a signed LEB128 `i32`.
     ///
@@ -91,6 +111,11 @@ where
     T: Read + ?Sized,
 {
     #[inline]
+    fn read_uleb_u16(&mut self) -> Result<u16> {
+        read_uleb(self, u16::BITS, "u16").map(|value| value as u16)
+    }
+
+    #[inline]
     fn read_uleb_u32(&mut self) -> Result<u32> {
         read_uleb(self, u32::BITS, "u32").map(|value| value as u32)
     }
@@ -103,6 +128,11 @@ where
     #[inline]
     fn read_uleb_usize(&mut self) -> Result<usize> {
         read_uleb(self, usize::BITS, "usize").map(|value| value as usize)
+    }
+
+    #[inline]
+    fn read_sleb_i16(&mut self) -> Result<i16> {
+        read_sleb(self, i16::BITS, "i16").map(|value| value as i16)
     }
 
     #[inline]
