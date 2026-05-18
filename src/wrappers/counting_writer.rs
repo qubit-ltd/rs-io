@@ -1,0 +1,82 @@
+/*******************************************************************************
+ *
+ *    Copyright (c) 2026 Haixing Hu.
+ *
+ *    SPDX-License-Identifier: Apache-2.0
+ *
+ *    Licensed under the Apache License, Version 2.0.
+ *
+ ******************************************************************************/
+use std::io::{
+    Result,
+    Write,
+};
+
+/// writes do not change the counter.
+pub struct CountingWriter<W> {
+    inner: W,
+    bytes_written: u64,
+}
+
+impl<W> CountingWriter<W> {
+    /// Creates a counting writer.
+    ///
+    /// # Parameters
+    /// - `inner`: Writer to wrap.
+    ///
+    /// # Returns
+    /// A new counting writer with a zero byte count.
+    pub fn new(inner: W) -> Self {
+        Self {
+            inner,
+            bytes_written: 0,
+        }
+    }
+
+    /// Returns the number of bytes successfully written through this wrapper.
+    ///
+    /// # Returns
+    /// Total byte count. The value saturates at [`u64::MAX`].
+    pub fn bytes_written(&self) -> u64 {
+        self.bytes_written
+    }
+
+    /// Returns an immutable reference to the wrapped writer.
+    ///
+    /// # Returns
+    /// The wrapped writer reference.
+    pub fn get_ref(&self) -> &W {
+        &self.inner
+    }
+
+    /// Returns a mutable reference to the wrapped writer.
+    ///
+    /// # Returns
+    /// The wrapped writer reference.
+    pub fn get_mut(&mut self) -> &mut W {
+        &mut self.inner
+    }
+
+    /// Consumes this wrapper and returns the wrapped writer.
+    ///
+    /// # Returns
+    /// The wrapped writer.
+    pub fn into_inner(self) -> W {
+        self.inner
+    }
+}
+
+impl<W> Write for CountingWriter<W>
+where
+    W: Write,
+{
+    fn write(&mut self, buffer: &[u8]) -> Result<usize> {
+        let count = self.inner.write(buffer)?;
+        self.bytes_written = self.bytes_written.saturating_add(count as u64);
+        Ok(count)
+    }
+
+    fn flush(&mut self) -> Result<()> {
+        self.inner.flush()
+    }
+}

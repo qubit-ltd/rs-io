@@ -16,7 +16,7 @@ use std::io::{
     copy as copy_all,
 };
 
-use crate::copy::copy_limited;
+use crate::copy_limited;
 
 /// Default stack buffer size used by discard operations.
 const DISCARD_BUFFER_SIZE: usize = 8 * 1024;
