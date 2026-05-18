@@ -1,1 +1,4 @@
 multiple-public-types | src/wrappers.rs | Reusable IO wrapper types form one coherent public wrapper module.
+coverage-cfg | src/file.rs | Coverage-only entry exercises defensive path handling without process-wide cwd changes.
+coverage-cfg | src/lib.rs | Re-export coverage-only helper functions for integration coverage tests.
+coverage-cfg | src/string_write_ext.rs | Coverage-only entry exercises impossible u32 string length overflow without allocating huge memory.

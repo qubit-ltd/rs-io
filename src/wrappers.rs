@@ -8,6 +8,7 @@
  *
  ******************************************************************************/
 // qubit-style: allow multiple-public-types
+use std::hash::Hasher;
 use std::io::{
     Read,
     Result,
@@ -303,6 +304,182 @@ where
     fn write(&mut self, buffer: &[u8]) -> Result<usize> {
         let count = self.inner.write(buffer)?;
         self.bytes_written = self.bytes_written.saturating_add(count as u64);
+        Ok(count)
+    }
+
+    fn flush(&mut self) -> Result<()> {
+        self.inner.flush()
+    }
+}
+
+/// Reader wrapper that feeds successfully read bytes into a [`Hasher`].
+///
+/// The wrapped hasher can be any checksum, digest, or hash implementation that
+/// implements [`Hasher`]. Failed reads do not update the hasher.
+pub struct ChecksumReader<R, H> {
+    inner: R,
+    hasher: H,
+}
+
+impl<R, H> ChecksumReader<R, H>
+where
+    H: Hasher,
+{
+    /// Creates a checksum reader.
+    ///
+    /// # Parameters
+    /// - `inner`: Reader to wrap.
+    /// - `hasher`: Hasher updated with successfully read bytes.
+    ///
+    /// # Returns
+    /// A new checksum reader.
+    pub fn new(inner: R, hasher: H) -> Self {
+        Self { inner, hasher }
+    }
+
+    /// Returns the current checksum value.
+    ///
+    /// # Returns
+    /// The value reported by [`Hasher::finish`].
+    pub fn checksum(&self) -> u64 {
+        self.hasher.finish()
+    }
+
+    /// Returns an immutable reference to the wrapped reader.
+    ///
+    /// # Returns
+    /// The wrapped reader reference.
+    pub fn get_ref(&self) -> &R {
+        &self.inner
+    }
+
+    /// Returns a mutable reference to the wrapped reader.
+    ///
+    /// # Returns
+    /// The wrapped reader reference.
+    pub fn get_mut(&mut self) -> &mut R {
+        &mut self.inner
+    }
+
+    /// Returns an immutable reference to the wrapped hasher.
+    ///
+    /// # Returns
+    /// The wrapped hasher reference.
+    pub fn hasher_ref(&self) -> &H {
+        &self.hasher
+    }
+
+    /// Returns a mutable reference to the wrapped hasher.
+    ///
+    /// # Returns
+    /// The wrapped hasher reference.
+    pub fn hasher_mut(&mut self) -> &mut H {
+        &mut self.hasher
+    }
+
+    /// Consumes this wrapper and returns the wrapped reader and hasher.
+    ///
+    /// # Returns
+    /// A tuple containing the wrapped reader and hasher.
+    pub fn into_inner(self) -> (R, H) {
+        (self.inner, self.hasher)
+    }
+}
+
+impl<R, H> Read for ChecksumReader<R, H>
+where
+    R: Read,
+    H: Hasher,
+{
+    fn read(&mut self, buffer: &mut [u8]) -> Result<usize> {
+        let count = self.inner.read(buffer)?;
+        self.hasher.write(&buffer[..count]);
+        Ok(count)
+    }
+}
+
+/// Writer wrapper that feeds successfully written bytes into a [`Hasher`].
+///
+/// The wrapped hasher is updated only after the inner writer accepts bytes.
+/// Failed writes do not update the hasher.
+pub struct ChecksumWriter<W, H> {
+    inner: W,
+    hasher: H,
+}
+
+impl<W, H> ChecksumWriter<W, H>
+where
+    H: Hasher,
+{
+    /// Creates a checksum writer.
+    ///
+    /// # Parameters
+    /// - `inner`: Writer to wrap.
+    /// - `hasher`: Hasher updated with successfully written bytes.
+    ///
+    /// # Returns
+    /// A new checksum writer.
+    pub fn new(inner: W, hasher: H) -> Self {
+        Self { inner, hasher }
+    }
+
+    /// Returns the current checksum value.
+    ///
+    /// # Returns
+    /// The value reported by [`Hasher::finish`].
+    pub fn checksum(&self) -> u64 {
+        self.hasher.finish()
+    }
+
+    /// Returns an immutable reference to the wrapped writer.
+    ///
+    /// # Returns
+    /// The wrapped writer reference.
+    pub fn get_ref(&self) -> &W {
+        &self.inner
+    }
+
+    /// Returns a mutable reference to the wrapped writer.
+    ///
+    /// # Returns
+    /// The wrapped writer reference.
+    pub fn get_mut(&mut self) -> &mut W {
+        &mut self.inner
+    }
+
+    /// Returns an immutable reference to the wrapped hasher.
+    ///
+    /// # Returns
+    /// The wrapped hasher reference.
+    pub fn hasher_ref(&self) -> &H {
+        &self.hasher
+    }
+
+    /// Returns a mutable reference to the wrapped hasher.
+    ///
+    /// # Returns
+    /// The wrapped hasher reference.
+    pub fn hasher_mut(&mut self) -> &mut H {
+        &mut self.hasher
+    }
+
+    /// Consumes this wrapper and returns the wrapped writer and hasher.
+    ///
+    /// # Returns
+    /// A tuple containing the wrapped writer and hasher.
+    pub fn into_inner(self) -> (W, H) {
+        (self.inner, self.hasher)
+    }
+}
+
+impl<W, H> Write for ChecksumWriter<W, H>
+where
+    W: Write,
+    H: Hasher,
+{
+    fn write(&mut self, buffer: &[u8]) -> Result<usize> {
+        let count = self.inner.write(buffer)?;
+        self.hasher.write(&buffer[..count]);
         Ok(count)
     }
 
