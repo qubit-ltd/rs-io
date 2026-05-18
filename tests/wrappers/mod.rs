@@ -1,0 +1,8 @@
+mod checksum_wrapper_tests;
+mod counting_reader_tests;
+mod counting_writer_tests;
+mod limit_reader_tests;
+mod limit_writer_tests;
+mod position_guard_tests;
+mod tee_reader_tests;
+mod tee_writer_tests;

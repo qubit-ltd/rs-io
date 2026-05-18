@@ -1,0 +1,87 @@
+/*******************************************************************************
+ *
+ *    Copyright (c) 2026 Haixing Hu.
+ *
+ *    SPDX-License-Identifier: Apache-2.0
+ *
+ *    Licensed under the Apache License, Version 2.0.
+ *
+ ******************************************************************************/
+use std::io::{
+    Read,
+    Result,
+    Write,
+};
+
+/// while it is consumed. If the branch writer fails, the source bytes have
+/// already been read from the inner reader and the branch error is returned.
+pub struct TeeReader<R, W> {
+    reader: R,
+    branch: W,
+}
+
+impl<R, W> TeeReader<R, W> {
+    /// Creates a tee reader.
+    ///
+    /// # Parameters
+    /// - `reader`: Source reader.
+    /// - `branch`: Writer that receives the bytes successfully read.
+    ///
+    /// # Returns
+    /// A new tee reader.
+    pub fn new(reader: R, branch: W) -> Self {
+        Self { reader, branch }
+    }
+
+    /// Returns an immutable reference to the source reader.
+    ///
+    /// # Returns
+    /// The source reader reference.
+    pub fn reader_ref(&self) -> &R {
+        &self.reader
+    }
+
+    /// Returns a mutable reference to the source reader.
+    ///
+    /// # Returns
+    /// The source reader reference.
+    pub fn reader_mut(&mut self) -> &mut R {
+        &mut self.reader
+    }
+
+    /// Returns an immutable reference to the branch writer.
+    ///
+    /// # Returns
+    /// The branch writer reference.
+    pub fn branch_ref(&self) -> &W {
+        &self.branch
+    }
+
+    /// Returns a mutable reference to the branch writer.
+    ///
+    /// # Returns
+    /// The branch writer reference.
+    pub fn branch_mut(&mut self) -> &mut W {
+        &mut self.branch
+    }
+
+    /// Consumes this wrapper and returns the source reader and branch writer.
+    ///
+    /// # Returns
+    /// A tuple containing the source reader and branch writer.
+    pub fn into_inner(self) -> (R, W) {
+        (self.reader, self.branch)
+    }
+}
+
+impl<R, W> Read for TeeReader<R, W>
+where
+    R: Read,
+    W: Write,
+{
+    fn read(&mut self, buffer: &mut [u8]) -> Result<usize> {
+        let count = self.reader.read(buffer)?;
+        self.branch.write_all(&buffer[..count])?;
+        Ok(count)
+    }
+}

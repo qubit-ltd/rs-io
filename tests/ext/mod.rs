@@ -1,0 +1,7 @@
+mod binary_read_write_ext_tests;
+mod read_ext_tests;
+mod read_seek_ext_tests;
+mod seek_ext_tests;
+mod string_ext_tests;
+mod varint_ext_tests;
+mod write_seek_ext_tests;
