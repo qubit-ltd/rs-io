@@ -16,17 +16,21 @@
 //! standard-library I/O patterns. The concrete trait definitions live in
 //! dedicated modules and are re-exported from the crate root for ergonomic use.
 
+// qubit-style: allow coverage-cfg
 mod binary_read_ext;
 mod binary_write_ext;
 mod buf_read_seek;
 mod compare;
 mod copy;
+mod file;
 mod read_ext;
 mod read_seek;
 mod read_seek_ext;
 mod read_write;
 mod read_write_seek;
 mod seek_ext;
+mod string_read_ext;
+mod string_write_ext;
 mod var_int_read_ext;
 mod var_int_write_ext;
 mod wrappers;
@@ -41,15 +45,30 @@ pub use compare::{
     content_eq,
 };
 pub use copy::copy_limited;
+#[cfg(coverage)]
+pub use file::coverage_exercise_file_helper_defensive_paths;
+pub use file::{
+    atomic_write,
+    atomic_write_with,
+    create_buffered_writer_with_parent,
+    create_file_with_parent,
+    open_buffered_reader,
+};
 pub use read_ext::ReadExt;
 pub use read_seek::ReadSeek;
 pub use read_seek_ext::ReadSeekExt;
 pub use read_write::ReadWrite;
 pub use read_write_seek::ReadWriteSeek;
 pub use seek_ext::SeekExt;
+pub use string_read_ext::StringReadExt;
+pub use string_write_ext::StringWriteExt;
+#[cfg(coverage)]
+pub use string_write_ext::coverage_checked_u32_len;
 pub use var_int_read_ext::VarIntReadExt;
 pub use var_int_write_ext::VarIntWriteExt;
 pub use wrappers::{
+    ChecksumReader,
+    ChecksumWriter,
     CountingReader,
     CountingWriter,
     LimitReader,
