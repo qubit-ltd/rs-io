@@ -31,6 +31,26 @@ pub trait StringWriteExt: Write {
     /// Returns an I/O error from the underlying writer.
     fn write_utf8_string_uleb(&mut self, value: &str) -> Result<()>;
 
+    /// Writes a UTF-8 string with a big-endian `u16` byte-length prefix.
+    ///
+    /// # Parameters
+    /// - `value`: String slice to write.
+    ///
+    /// # Errors
+    /// Returns [`ErrorKind::InvalidInput`] when the UTF-8 byte length does not
+    /// fit into `u16`, or an I/O error from the underlying writer.
+    fn write_utf8_string_u16_be(&mut self, value: &str) -> Result<()>;
+
+    /// Writes a UTF-8 string with a little-endian `u16` byte-length prefix.
+    ///
+    /// # Parameters
+    /// - `value`: String slice to write.
+    ///
+    /// # Errors
+    /// Returns [`ErrorKind::InvalidInput`] when the UTF-8 byte length does not
+    /// fit into `u16`, or an I/O error from the underlying writer.
+    fn write_utf8_string_u16_le(&mut self, value: &str) -> Result<()>;
+
     /// Writes a UTF-8 string with a big-endian `u32` byte-length prefix.
     ///
     /// # Parameters
@@ -54,10 +74,18 @@ pub trait StringWriteExt: Write {
 
 impl<T> StringWriteExt for T
 where
-    T: Write,
+    T: Write + ?Sized,
 {
     fn write_utf8_string_uleb(&mut self, value: &str) -> Result<()> {
         write_utf8_string_uleb_to(self, value)
+    }
+
+    fn write_utf8_string_u16_be(&mut self, value: &str) -> Result<()> {
+        write_utf8_string_u16_be_to(self, value)
+    }
+
+    fn write_utf8_string_u16_le(&mut self, value: &str) -> Result<()> {
+        write_utf8_string_u16_le_to(self, value)
     }
 
     fn write_utf8_string_u32_be(&mut self, value: &str) -> Result<()> {
@@ -69,30 +97,86 @@ where
     }
 }
 
-fn write_utf8_string_uleb_to(writer: &mut dyn Write, value: &str) -> Result<()> {
+fn write_utf8_string_uleb_to<T>(writer: &mut T, value: &str) -> Result<()>
+where
+    T: Write + ?Sized,
+{
     let bytes = value.as_bytes();
     writer.write_uleb_usize(bytes.len())?;
     writer.write_all(bytes)
 }
 
-fn write_utf8_string_u32_be_to(writer: &mut dyn Write, value: &str) -> Result<()> {
+fn write_utf8_string_u16_be_to<T>(writer: &mut T, value: &str) -> Result<()>
+where
+    T: Write + ?Sized,
+{
+    let bytes = value.as_bytes();
+    write_utf8_bytes_u16_be(writer, bytes, bytes.len())
+}
+
+fn write_utf8_string_u16_le_to<T>(writer: &mut T, value: &str) -> Result<()>
+where
+    T: Write + ?Sized,
+{
+    let bytes = value.as_bytes();
+    write_utf8_bytes_u16_le(writer, bytes, bytes.len())
+}
+
+fn write_utf8_string_u32_be_to<T>(writer: &mut T, value: &str) -> Result<()>
+where
+    T: Write + ?Sized,
+{
     let bytes = value.as_bytes();
     write_utf8_bytes_u32_be(writer, bytes, bytes.len())
 }
 
-fn write_utf8_string_u32_le_to(writer: &mut dyn Write, value: &str) -> Result<()> {
+fn write_utf8_string_u32_le_to<T>(writer: &mut T, value: &str) -> Result<()>
+where
+    T: Write + ?Sized,
+{
     let bytes = value.as_bytes();
     write_utf8_bytes_u32_le(writer, bytes, bytes.len())
 }
 
-fn write_utf8_bytes_u32_be(writer: &mut dyn Write, bytes: &[u8], len: usize) -> Result<()> {
+fn write_utf8_bytes_u16_be<T>(writer: &mut T, bytes: &[u8], len: usize) -> Result<()>
+where
+    T: Write + ?Sized,
+{
+    writer.write_u16_be(checked_u16_len(len)?)?;
+    writer.write_all(bytes)
+}
+
+fn write_utf8_bytes_u16_le<T>(writer: &mut T, bytes: &[u8], len: usize) -> Result<()>
+where
+    T: Write + ?Sized,
+{
+    writer.write_u16_le(checked_u16_len(len)?)?;
+    writer.write_all(bytes)
+}
+
+fn write_utf8_bytes_u32_be<T>(writer: &mut T, bytes: &[u8], len: usize) -> Result<()>
+where
+    T: Write + ?Sized,
+{
     writer.write_u32_be(checked_u32_len(len)?)?;
     writer.write_all(bytes)
 }
 
-fn write_utf8_bytes_u32_le(writer: &mut dyn Write, bytes: &[u8], len: usize) -> Result<()> {
+fn write_utf8_bytes_u32_le<T>(writer: &mut T, bytes: &[u8], len: usize) -> Result<()>
+where
+    T: Write + ?Sized,
+{
     writer.write_u32_le(checked_u32_len(len)?)?;
     writer.write_all(bytes)
+}
+
+fn checked_u16_len(len: usize) -> Result<u16> {
+    u16::try_from(len).map_err(|_| {
+        Error::new(
+            ErrorKind::InvalidInput,
+            format!("string length {len} exceeds maximum encodable u16 length"),
+        )
+    })
 }
 
 fn checked_u32_len(len: usize) -> Result<u32> {

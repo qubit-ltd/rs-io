@@ -50,7 +50,7 @@ pub fn content_eq(left: &mut dyn Read, right: &mut dyn Read) -> Result<bool> {
 ///
 /// # Errors
 /// Returns the first read error reported by either stream.
-pub fn compare_content(left: &mut dyn Read, right: &mut dyn Read) -> Result<Ordering> {
+pub fn compare_content(mut left: &mut dyn Read, mut right: &mut dyn Read) -> Result<Ordering> {
     let mut left_buffer = [0; COMPARE_BUFFER_SIZE];
     let mut right_buffer = [0; COMPARE_BUFFER_SIZE];
     loop {

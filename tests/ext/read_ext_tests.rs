@@ -140,7 +140,7 @@ fn test_read_exact_or_eof_empty_buffer_does_not_read() {
 #[test]
 fn test_read_exact_or_eof_works_on_dyn_read() {
     let mut cursor = Cursor::new(b"abc".to_vec());
-    let reader: &mut dyn Read = &mut cursor;
+    let mut reader: &mut dyn Read = &mut cursor;
     let mut buffer = [0; 3];
 
     let count = reader
@@ -154,7 +154,7 @@ fn test_read_exact_or_eof_works_on_dyn_read() {
 #[test]
 fn test_discard_exact_or_eof_works_on_dyn_read() {
     let mut cursor = Cursor::new(b"abcdef".to_vec());
-    let reader: &mut dyn Read = &mut cursor;
+    let mut reader: &mut dyn Read = &mut cursor;
 
     let count = reader
         .discard_exact_or_eof(4)
@@ -171,7 +171,7 @@ fn test_discard_exact_or_eof_works_on_dyn_read() {
 #[test]
 fn test_copy_to_works_on_dyn_read() {
     let mut cursor = Cursor::new(b"abcdef".to_vec());
-    let reader: &mut dyn Read = &mut cursor;
+    let mut reader: &mut dyn Read = &mut cursor;
     let mut output = Vec::new();
 
     let count = reader
@@ -185,7 +185,7 @@ fn test_copy_to_works_on_dyn_read() {
 #[test]
 fn test_copy_to_limited_works_on_dyn_read() {
     let mut cursor = Cursor::new(b"abcdef".to_vec());
-    let reader: &mut dyn Read = &mut cursor;
+    let mut reader: &mut dyn Read = &mut cursor;
     let mut output = Vec::new();
 
     let count = reader
@@ -273,7 +273,7 @@ fn test_discard_exact_or_eof_returns_non_interrupted_error() {
 #[test]
 fn test_read_to_end_limited_works_on_dyn_read() {
     let mut cursor = Cursor::new(b"abc".to_vec());
-    let reader: &mut dyn Read = &mut cursor;
+    let mut reader: &mut dyn Read = &mut cursor;
 
     let data = reader
         .read_to_end_limited(3)
@@ -314,4 +314,65 @@ fn test_read_to_end_limited_zero_limit_rejects_non_empty_input() {
         .expect_err("zero limit should reject non-empty input");
 
     assert_eq!(ErrorKind::InvalidData, error.kind());
+}
+
+#[test]
+fn test_read_to_end_limited_zero_limit_accepts_empty_input() {
+    let mut reader = Cursor::new(Vec::new());
+
+    let value = reader
+        .read_to_end_limited(0)
+        .expect("zero limit should accept empty input");
+
+    assert!(value.is_empty());
+}
+
+#[test]
+fn test_read_to_string_limited_reads_utf8_input() {
+    let mut reader = Cursor::new("hello 世界".as_bytes().to_vec());
+
+    let value = reader
+        .read_to_string_limited(16)
+        .expect("UTF-8 input within the limit should be read");
+
+    assert_eq!("hello 世界", value);
+}
+
+#[test]
+fn test_read_to_string_limited_zero_limit_accepts_empty_input() {
+    let mut reader = Cursor::new(Vec::new());
+
+    let value = reader
+        .read_to_string_limited(0)
+        .expect("zero limit should accept empty UTF-8 input");
+
+    assert!(value.is_empty());
+}
+
+#[test]
+fn test_read_to_string_limited_rejects_oversized_input() {
+    let mut reader = Cursor::new(b"abcd".to_vec());
+
+    let error = reader
+        .read_to_string_limited(3)
+        .expect_err("oversized string input should be rejected");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!("input exceeds maximum length of 3 bytes", error.to_string());
+}
+
+#[test]
+fn test_read_to_string_limited_rejects_invalid_utf8() {
+    let mut reader = Cursor::new(vec![0xff]);
+
+    let error = reader
+        .read_to_string_limited(4)
+        .expect_err("invalid UTF-8 should be rejected");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert!(
+        error
+            .to_string()
+            .starts_with("limited input is not valid UTF-8")
+    );
 }

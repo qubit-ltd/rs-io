@@ -15,6 +15,7 @@ use std::io::{
     Write,
     copy as copy_all,
 };
+use std::string::FromUtf8Error;
 
 use crate::copy_limited;
 
@@ -120,6 +121,25 @@ pub trait ReadExt: Read {
     /// `max_len` bytes. Returns the first non-[`ErrorKind::Interrupted`] error
     /// reported by the underlying reader; interrupted reads are retried.
     fn read_to_end_limited(&mut self, max_len: usize) -> Result<Vec<u8>>;
+
+    /// Reads the remaining bytes as UTF-8 text with a maximum accepted length.
+    ///
+    /// This method has the same size limit and read semantics as
+    /// [`ReadExt::read_to_end_limited`], then validates the collected bytes as
+    /// UTF-8.
+    ///
+    /// # Parameters
+    /// - `max_len`: Maximum number of bytes accepted before UTF-8 decoding.
+    ///
+    /// # Returns
+    /// The decoded UTF-8 string.
+    ///
+    /// # Errors
+    /// Returns [`ErrorKind::InvalidData`] when the stream contains more than
+    /// `max_len` bytes or when the collected bytes are not valid UTF-8. Returns
+    /// the first non-[`ErrorKind::Interrupted`] error reported by the
+    /// underlying reader; interrupted reads are retried.
+    fn read_to_string_limited(&mut self, max_len: usize) -> Result<String>;
 }
 
 impl<T> ReadExt for T
@@ -138,7 +158,7 @@ where
 
     #[inline]
     fn copy_to(&mut self, writer: &mut dyn Write) -> Result<u64> {
-        copy_all(self, writer)
+        copy_to_impl(self, writer)
     }
 
     #[inline]
@@ -150,32 +170,10 @@ where
     fn read_to_end_limited(&mut self, max_len: usize) -> Result<Vec<u8>> {
         read_to_end_limited_impl(self, max_len)
     }
-}
-
-impl ReadExt for dyn Read + '_ {
-    #[inline]
-    fn read_exact_or_eof(&mut self, buffer: &mut [u8]) -> Result<usize> {
-        read_exact_or_eof_impl(self, buffer)
-    }
 
     #[inline]
-    fn discard_exact_or_eof(&mut self, bytes: u64) -> Result<u64> {
-        discard_exact_or_eof_impl(self, bytes)
-    }
-
-    #[inline]
-    fn copy_to(&mut self, writer: &mut dyn Write) -> Result<u64> {
-        copy_all(self, writer)
-    }
-
-    #[inline]
-    fn copy_to_limited(&mut self, writer: &mut dyn Write, max_bytes: u64) -> Result<u64> {
-        copy_limited(self, writer, max_bytes)
-    }
-
-    #[inline]
-    fn read_to_end_limited(&mut self, max_len: usize) -> Result<Vec<u8>> {
-        read_to_end_limited_impl(self, max_len)
+    fn read_to_string_limited(&mut self, max_len: usize) -> Result<String> {
+        read_to_string_limited_impl(self, max_len)
     }
 }
 
@@ -256,7 +254,7 @@ fn discard_exact_or_eof_impl(reader: &mut dyn Read, bytes: u64) -> Result<u64> {
 /// more than `max_len` bytes. Returns the first non-interrupted read error
 /// reported by `reader`.
 fn read_to_end_limited_impl(reader: &mut dyn Read, max_len: usize) -> Result<Vec<u8>> {
-    let mut output = Vec::new();
+    let mut output = Vec::with_capacity(max_len.min(READ_TO_END_BUFFER_SIZE));
     let mut buffer = [0; READ_TO_END_BUFFER_SIZE];
     loop {
         let remaining = max_len.saturating_sub(output.len());
@@ -278,4 +276,51 @@ fn read_to_end_limited_impl(reader: &mut dyn Read, max_len: usize) -> Result<Vec
             }
         }
     }
+}
+
+/// Reads all remaining bytes from `reader` as UTF-8 when the input fits `max_len`.
+///
+/// # Parameters
+/// - `reader`: Source reader.
+/// - `max_len`: Maximum accepted input length in bytes.
+///
+/// # Returns
+/// Decoded UTF-8 string.
+///
+/// # Errors
+/// Returns [`ErrorKind::InvalidData`] when the input is oversized or is not
+/// valid UTF-8. Returns the first non-interrupted read error reported by
+/// `reader`.
+fn read_to_string_limited_impl(reader: &mut dyn Read, max_len: usize) -> Result<String> {
+    let bytes = read_to_end_limited_impl(reader, max_len)?;
+    String::from_utf8(bytes).map_err(invalid_utf8_error)
+}
+
+/// Copies all remaining bytes from `reader` into `writer`.
+///
+/// # Parameters
+/// - `reader`: Source reader.
+/// - `writer`: Destination writer.
+///
+/// # Returns
+/// The number of bytes copied.
+///
+/// # Errors
+/// Returns the first read or write error reported by the underlying streams.
+fn copy_to_impl(reader: &mut dyn Read, writer: &mut dyn Write) -> Result<u64> {
+    copy_all(reader, writer)
+}
+
+/// Converts an invalid UTF-8 read result into an I/O error.
+///
+/// # Parameters
+/// - `error`: UTF-8 conversion error.
+///
+/// # Returns
+/// An [`ErrorKind::InvalidData`] error containing the UTF-8 error context.
+fn invalid_utf8_error(error: FromUtf8Error) -> Error {
+    Error::new(
+        ErrorKind::InvalidData,
+        format!("limited input is not valid UTF-8: {error}"),
+    )
 }

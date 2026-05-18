@@ -9,6 +9,7 @@
  ******************************************************************************/
 mod binary_read_ext;
 mod binary_write_ext;
+mod buf_read_ext;
 mod byte_order;
 mod leb128_int_read_ext;
 mod leb128_int_write_ext;
@@ -23,6 +24,7 @@ mod zig_zag_int_write_ext;
 
 pub use binary_read_ext::BinaryReadExt;
 pub use binary_write_ext::BinaryWriteExt;
+pub use buf_read_ext::BufReadExt;
 pub use byte_order::ByteOrder;
 pub use leb128_int_read_ext::Leb128IntReadExt;
 pub use leb128_int_write_ext::Leb128IntWriteExt;

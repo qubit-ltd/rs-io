@@ -27,6 +27,7 @@ pub use ext::string_write_ext::coverage_checked_u32_len;
 pub use ext::{
     BinaryReadExt,
     BinaryWriteExt,
+    BufReadExt,
     ByteOrder,
     Leb128IntReadExt,
     Leb128IntWriteExt,
