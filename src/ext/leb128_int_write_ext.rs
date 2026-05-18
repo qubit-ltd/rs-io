@@ -21,6 +21,15 @@ use std::io::{
 /// binary format:
 /// <https://webassembly.github.io/spec/core/binary/values.html#integers>.
 pub trait Leb128IntWriteExt: Write {
+    /// Writes an unsigned LEB128 `u8`.
+    ///
+    /// # Parameters
+    /// - `value`: Value to encode.
+    ///
+    /// # Errors
+    /// Returns an I/O error from the underlying writer.
+    fn write_uleb_u8(&mut self, value: u8) -> Result<()>;
+
     /// Writes an unsigned LEB128 `u16`.
     ///
     /// # Parameters
@@ -48,6 +57,15 @@ pub trait Leb128IntWriteExt: Write {
     /// Returns an I/O error from the underlying writer.
     fn write_uleb_u64(&mut self, value: u64) -> Result<()>;
 
+    /// Writes an unsigned LEB128 `u128`.
+    ///
+    /// # Parameters
+    /// - `value`: Value to encode.
+    ///
+    /// # Errors
+    /// Returns an I/O error from the underlying writer.
+    fn write_uleb_u128(&mut self, value: u128) -> Result<()>;
+
     /// Writes an unsigned LEB128 `usize`.
     ///
     /// # Parameters
@@ -56,6 +74,15 @@ pub trait Leb128IntWriteExt: Write {
     /// # Errors
     /// Returns an I/O error from the underlying writer.
     fn write_uleb_usize(&mut self, value: usize) -> Result<()>;
+
+    /// Writes a signed LEB128 `i8`.
+    ///
+    /// # Parameters
+    /// - `value`: Value to encode.
+    ///
+    /// # Errors
+    /// Returns an I/O error from the underlying writer.
+    fn write_sleb_i8(&mut self, value: i8) -> Result<()>;
 
     /// Writes a signed LEB128 `i16`.
     ///
@@ -84,6 +111,15 @@ pub trait Leb128IntWriteExt: Write {
     /// Returns an I/O error from the underlying writer.
     fn write_sleb_i64(&mut self, value: i64) -> Result<()>;
 
+    /// Writes a signed LEB128 `i128`.
+    ///
+    /// # Parameters
+    /// - `value`: Value to encode.
+    ///
+    /// # Errors
+    /// Returns an I/O error from the underlying writer.
+    fn write_sleb_i128(&mut self, value: i128) -> Result<()>;
+
     /// Writes a signed LEB128 `isize`.
     ///
     /// # Parameters
@@ -99,43 +135,63 @@ where
     T: Write + ?Sized,
 {
     #[inline]
+    fn write_uleb_u8(&mut self, value: u8) -> Result<()> {
+        write_uleb(self, value as u128)
+    }
+
+    #[inline]
     fn write_uleb_u16(&mut self, value: u16) -> Result<()> {
-        write_uleb(self, value as u64)
+        write_uleb(self, value as u128)
     }
 
     #[inline]
     fn write_uleb_u32(&mut self, value: u32) -> Result<()> {
-        write_uleb(self, value as u64)
+        write_uleb(self, value as u128)
     }
 
     #[inline]
     fn write_uleb_u64(&mut self, value: u64) -> Result<()> {
+        write_uleb(self, value as u128)
+    }
+
+    #[inline]
+    fn write_uleb_u128(&mut self, value: u128) -> Result<()> {
         write_uleb(self, value)
     }
 
     #[inline]
     fn write_uleb_usize(&mut self, value: usize) -> Result<()> {
-        write_uleb(self, value as u64)
+        write_uleb(self, value as u128)
+    }
+
+    #[inline]
+    fn write_sleb_i8(&mut self, value: i8) -> Result<()> {
+        write_sleb(self, value as i128)
     }
 
     #[inline]
     fn write_sleb_i16(&mut self, value: i16) -> Result<()> {
-        write_sleb(self, value as i64)
+        write_sleb(self, value as i128)
     }
 
     #[inline]
     fn write_sleb_i32(&mut self, value: i32) -> Result<()> {
-        write_sleb(self, value as i64)
+        write_sleb(self, value as i128)
     }
 
     #[inline]
     fn write_sleb_i64(&mut self, value: i64) -> Result<()> {
+        write_sleb(self, value as i128)
+    }
+
+    #[inline]
+    fn write_sleb_i128(&mut self, value: i128) -> Result<()> {
         write_sleb(self, value)
     }
 
     #[inline]
     fn write_sleb_isize(&mut self, value: isize) -> Result<()> {
-        write_sleb(self, value as i64)
+        write_sleb(self, value as i128)
     }
 }
 
@@ -148,7 +204,7 @@ where
 ///
 /// # Errors
 /// Returns an I/O error from `writer`.
-fn write_uleb<T>(writer: &mut T, value: u64) -> Result<()>
+fn write_uleb<T>(writer: &mut T, value: u128) -> Result<()>
 where
     T: Write + ?Sized,
 {
@@ -169,7 +225,7 @@ where
 ///
 /// # Errors
 /// Returns an I/O error from `writer`.
-fn write_sleb<T>(writer: &mut T, value: i64) -> Result<()>
+fn write_sleb<T>(writer: &mut T, value: i128) -> Result<()>
 where
     T: Write + ?Sized,
 {
