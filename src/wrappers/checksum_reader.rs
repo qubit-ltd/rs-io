@@ -13,7 +13,34 @@ use std::io::{
     Result,
 };
 
-/// implements [`Hasher`]. Failed reads do not update the hasher.
+/// Reader wrapper that updates a checksum hasher with bytes read.
+///
+/// `ChecksumReader` forwards reads to the wrapped reader and writes every
+/// successfully read byte into the wrapped [`Hasher`]. Failed reads do not
+/// update the hasher.
+///
+/// # Examples
+/// ```
+/// use std::collections::hash_map::DefaultHasher;
+/// use std::hash::Hasher;
+/// use std::io::{
+///     Cursor,
+///     Read,
+/// };
+///
+/// use qubit_io::ChecksumReader;
+///
+/// let mut expected = DefaultHasher::new();
+/// expected.write(b"payload");
+///
+/// let mut reader = ChecksumReader::new(Cursor::new(b"payload"), DefaultHasher::new());
+/// let mut data = Vec::new();
+/// reader.read_to_end(&mut data)?;
+///
+/// assert_eq!(b"payload", data.as_slice());
+/// assert_eq!(expected.finish(), reader.checksum());
+/// # Ok::<(), std::io::Error>(())
+/// ```
 pub struct ChecksumReader<R, H> {
     inner: R,
     hasher: H,

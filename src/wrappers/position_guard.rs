@@ -13,9 +13,36 @@ use std::io::{
     SeekFrom,
 };
 
-/// [`PositionGuard::dismiss`] has already completed. Drop-time restoration
-/// errors are ignored because [`Drop::drop`] cannot return a [`Result`]; call
-/// [`PositionGuard::restore`] when the error must be observed.
+/// Guard that restores a seekable stream to its original position.
+///
+/// `PositionGuard` captures the stream position when it is created and seeks
+/// back to that position when the guard is dropped, unless
+/// [`PositionGuard::restore`] or [`PositionGuard::dismiss`] has already
+/// completed. Drop-time restoration errors are ignored because [`Drop::drop`]
+/// cannot return a [`Result`]; call [`PositionGuard::restore`] when the error
+/// must be observed.
+///
+/// # Examples
+/// ```
+/// use std::io::{
+///     Cursor,
+///     Seek,
+///     SeekFrom,
+/// };
+///
+/// use qubit_io::PositionGuard;
+///
+/// let mut stream = Cursor::new(b"abcdef".to_vec());
+/// stream.seek(SeekFrom::Start(2))?;
+///
+/// {
+///     let mut guard = PositionGuard::new(&mut stream)?;
+///     guard.get_mut().seek(SeekFrom::End(0))?;
+/// }
+///
+/// assert_eq!(2, stream.position());
+/// # Ok::<(), std::io::Error>(())
+/// ```
 pub struct PositionGuard<'a, S>
 where
     S: Seek + ?Sized,

@@ -13,8 +13,29 @@ use std::io::{
     Write,
 };
 
+/// Writer wrapper that updates a checksum hasher with bytes written.
+///
 /// The wrapped hasher is updated only after the inner writer accepts bytes.
 /// Failed writes do not update the hasher.
+///
+/// # Examples
+/// ```
+/// use std::collections::hash_map::DefaultHasher;
+/// use std::hash::Hasher;
+/// use std::io::Write;
+///
+/// use qubit_io::ChecksumWriter;
+///
+/// let mut expected = DefaultHasher::new();
+/// expected.write(b"payload");
+///
+/// let mut writer = ChecksumWriter::new(Vec::new(), DefaultHasher::new());
+/// writer.write_all(b"payload")?;
+///
+/// assert_eq!(expected.finish(), writer.checksum());
+/// assert_eq!(b"payload", writer.get_ref().as_slice());
+/// # Ok::<(), std::io::Error>(())
+/// ```
 pub struct ChecksumWriter<W, H> {
     inner: W,
     hasher: H,

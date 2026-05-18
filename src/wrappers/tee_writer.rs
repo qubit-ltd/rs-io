@@ -12,8 +12,30 @@ use std::io::{
     Write,
 };
 
-/// [`Write::write_all`]. If the branch writer fails, the primary writer may
-/// already have accepted bytes and the branch error is returned.
+/// Writer wrapper that mirrors accepted bytes into a branch writer.
+///
+/// `TeeWriter` writes to the primary writer first, then writes exactly the
+/// accepted bytes into the branch writer with [`Write::write_all`]. If the
+/// branch writer fails, the primary writer may already have accepted bytes and
+/// the branch error is returned.
+///
+/// # Examples
+/// ```
+/// use std::io::Write;
+///
+/// use qubit_io::TeeWriter;
+///
+/// let primary = Vec::new();
+/// let branch = Vec::new();
+/// let mut writer = TeeWriter::new(primary, branch);
+///
+/// writer.write_all(b"abc")?;
+/// let (primary, branch) = writer.into_inner();
+///
+/// assert_eq!(b"abc", primary.as_slice());
+/// assert_eq!(b"abc", branch.as_slice());
+/// # Ok::<(), std::io::Error>(())
+/// ```
 pub struct TeeWriter<P, B> {
     primary: P,
     branch: B,
