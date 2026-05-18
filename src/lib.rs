@@ -29,6 +29,7 @@ mod read_write_seek;
 mod seek_ext;
 mod var_int_read_ext;
 mod var_int_write_ext;
+mod wrappers;
 mod write_seek;
 mod write_seek_ext;
 
@@ -48,5 +49,14 @@ pub use read_write_seek::ReadWriteSeek;
 pub use seek_ext::SeekExt;
 pub use var_int_read_ext::VarIntReadExt;
 pub use var_int_write_ext::VarIntWriteExt;
+pub use wrappers::{
+    CountingReader,
+    CountingWriter,
+    LimitReader,
+    LimitWriter,
+    PositionGuard,
+    TeeReader,
+    TeeWriter,
+};
 pub use write_seek::WriteSeek;
 pub use write_seek_ext::WriteSeekExt;
