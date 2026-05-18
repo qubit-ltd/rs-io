@@ -60,14 +60,16 @@ ZigZag integer encodings, and position-preserving seek operations.
     full or EOF is reached.
   - `discard_exact_or_eof` consumes and discards up to a requested number of
     bytes without allocating.
-  - `copy_to` and `copy_to_limited` copy into a writer with method-style
-    ergonomics.
-  - `read_to_end_limited` reads the remaining input into a `Vec<u8>` with a
-    maximum accepted size.
-  - `read_to_string_limited` reads bounded UTF-8 text.
+  - `copy_to`, `copy_to_at_most`, and `copy_to_end_limited` copy into a writer
+    with method-style ergonomics.
+  - `read_to_end_limited` and `read_to_end_limited_into` read the remaining
+    input with a maximum accepted size.
+  - `read_to_string_limited` and `read_to_string_limited_into` read bounded
+    UTF-8 text.
 - **`BufReadExt`**:
-  - `read_until_limited`, `read_line_limited`, and `discard_until_limited`
-    provide bounded delimiter-oriented operations.
+  - `read_until_limited`, `read_until_limited_into`, `read_line_limited`,
+    `read_line_limited_into`, and `discard_until_limited` provide bounded
+    delimiter-oriented operations.
 - **`SeekExt`**:
   - `stream_size` measures stream size and restores the original position.
 - **`ReadSeekExt`**:
@@ -97,6 +99,8 @@ ZigZag integer encodings, and position-preserving seek operations.
 - content helpers compare readers and copy bounded byte ranges;
 - wrapper types provide counting, limiting, teeing, checksum updating, and
   position-guard behavior.
+- `qubit_io::prelude` re-exports the extension traits and composition traits
+  for method-oriented call sites.
 
 ### Blanket Implementations
 
@@ -325,8 +329,8 @@ For a complete method-level overview, see the [API matrix](doc/api-matrix.md).
 
 | Extension trait | Methods | Typical use |
 |-----------------|---------|-------------|
-| `ReadExt` | `read_exact_or_eof`, `discard_exact_or_eof`, `copy_to`, `copy_to_limited`, `read_to_end_limited`, `read_to_string_limited` | short-read-safe reads, bounded copies, and bounded reads |
-| `BufReadExt` | `read_until_limited`, `read_line_limited`, `discard_until_limited` | bounded delimiter and line operations |
+| `ReadExt` | `read_exact_or_eof`, `discard_exact_or_eof`, `copy_to`, `copy_to_at_most`, `copy_to_end_limited`, `read_to_end_limited`, `read_to_end_limited_into`, `read_to_string_limited`, `read_to_string_limited_into` | short-read-safe reads, bounded copies, and bounded reads |
+| `BufReadExt` | `read_until_limited`, `read_until_limited_into`, `read_line_limited`, `read_line_limited_into`, `discard_until_limited` | bounded delimiter and line operations |
 | `SeekExt` | `stream_size` | size checks that keep the original cursor |
 | `ReadSeekExt` | `peek_exact_or_eof`, `read_exact_or_eof_at` | non-consuming inspection and random-offset reads |
 | `WriteSeekExt` | `write_all_at_preserving_position` | random-access patch writes |
