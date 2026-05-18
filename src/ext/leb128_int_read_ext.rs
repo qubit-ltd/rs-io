@@ -394,42 +394,52 @@ where
     }
 }
 
+#[inline]
 fn u128_to_u8(value: u128) -> u8 {
     value as u8
 }
 
+#[inline]
 fn u128_to_u16(value: u128) -> u16 {
     value as u16
 }
 
+#[inline]
 fn u128_to_u32(value: u128) -> u32 {
     value as u32
 }
 
+#[inline]
 fn u128_to_u64(value: u128) -> u64 {
     value as u64
 }
 
+#[inline]
 fn u128_to_usize(value: u128) -> usize {
     value as usize
 }
 
+#[inline]
 fn i128_to_i8(value: i128) -> i8 {
     value as i8
 }
 
+#[inline]
 fn i128_to_i16(value: i128) -> i16 {
     value as i16
 }
 
+#[inline]
 fn i128_to_i32(value: i128) -> i32 {
     value as i32
 }
 
+#[inline]
 fn i128_to_i64(value: i128) -> i64 {
     value as i64
 }
 
+#[inline]
 fn i128_to_isize(value: i128) -> isize {
     value as isize
 }
@@ -677,6 +687,7 @@ fn encode_sleb(value: i128, output: &mut Vec<u8>) {
 ///
 /// # Returns
 /// An [`ErrorKind::InvalidData`] error.
+#[inline]
 fn invalid_leb128(type_name: &'static str) -> Error {
     Error::new(
         ErrorKind::InvalidData,
@@ -691,6 +702,7 @@ fn invalid_leb128(type_name: &'static str) -> Error {
 ///
 /// # Returns
 /// An [`ErrorKind::InvalidData`] error.
+#[inline]
 fn noncanonical_leb128(type_name: &'static str) -> Error {
     Error::new(
         ErrorKind::InvalidData,
