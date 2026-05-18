@@ -7,7 +7,6 @@
  *    Licensed under the Apache License, Version 2.0.
  *
  ******************************************************************************/
-// qubit-style: allow coverage-cfg
 use std::fs::{
     self,
     File,
@@ -144,7 +143,9 @@ where
 /// replacement, the parent directory is synced so directory metadata reaches
 /// durable storage on platforms that support directory syncing. If writing or
 /// syncing the temporary file fails, the temporary file is removed and the
-/// existing destination is left untouched.
+/// existing destination is left untouched. If replacement succeeds but syncing
+/// the parent directory fails, the destination may already contain the new
+/// contents even though this function returns an error.
 ///
 /// # Parameters
 /// - `path`: Destination path.
@@ -158,14 +159,16 @@ where
     P: AsRef<Path>,
     B: AsRef<[u8]>,
 {
-    atomic_write_with(path, |file| file.write_all(bytes.as_ref()))
+    atomic_write_bytes_path(path.as_ref(), bytes.as_ref())
 }
 
 /// Atomically writes a file using caller-provided write logic.
 ///
 /// The closure receives the temporary file. After the closure succeeds, the
 /// file is flushed, synced, closed, replaced over the destination path, and the
-/// parent directory is synced.
+/// parent directory is synced. If replacement succeeds but syncing the parent
+/// directory fails, the destination may already contain the new contents even
+/// though this function returns an error.
 ///
 /// # Parameters
 /// - `path`: Destination path.
@@ -175,20 +178,42 @@ where
 /// # Errors
 /// Returns the first I/O error reported while creating, writing, syncing,
 /// removing, replacing, or syncing the temporary file or parent directory.
-#[cfg(not(coverage))]
 pub fn atomic_write_with<P, F>(path: P, write: F) -> Result<()>
 where
     P: AsRef<Path>,
     F: FnMut(&mut File) -> Result<()>,
 {
-    atomic_write_with_path(path.as_ref(), write)
+    let mut write = write;
+    atomic_write_with_path(path.as_ref(), &mut write)
 }
 
-#[cfg(not(coverage))]
-fn atomic_write_with_path<F>(path: &Path, mut write: F) -> Result<()>
-where
-    F: FnMut(&mut File) -> Result<()>,
-{
+/// Atomically writes `bytes` to `path`.
+///
+/// # Parameters
+/// - `path`: Destination path.
+/// - `bytes`: Bytes to write.
+///
+/// # Errors
+/// Returns the first I/O error reported while writing the temporary file,
+/// replacing the destination, or syncing the parent directory.
+fn atomic_write_bytes_path(path: &Path, bytes: &[u8]) -> Result<()> {
+    let mut write = |file: &mut File| file.write_all(bytes);
+    atomic_write_with_path(path, &mut write)
+}
+
+/// Atomically writes a file at `path` using `write`.
+///
+/// # Parameters
+/// - `path`: Destination path.
+/// - `write`: Function that writes the desired contents into the temporary file.
+///
+/// # Errors
+/// Returns the first I/O error reported while creating, writing, syncing,
+/// replacing, or syncing the temporary file or parent directory.
+fn atomic_write_with_path(
+    path: &Path,
+    write: &mut dyn FnMut(&mut File) -> Result<()>,
+) -> Result<()> {
     create_parent_dirs(path)?;
     let (temp_path, mut file) = create_temp_file(path)?;
 
@@ -209,66 +234,13 @@ where
     sync_parent_dir(path)
 }
 
-/// Atomically writes a file using caller-provided write logic.
-///
-/// Coverage builds skip OS sync calls because sync failure paths are platform
-/// dependent and cannot be triggered deterministically through public behavior.
-#[cfg(coverage)]
-pub fn atomic_write_with<P, F>(path: P, write: F) -> Result<()>
-where
-    P: AsRef<Path>,
-    F: FnMut(&mut File) -> Result<()>,
-{
-    let mut write = write;
-    atomic_write_with_path_for_coverage(path.as_ref(), &mut write)
-}
-
-#[cfg(coverage)]
-fn atomic_write_with_path_for_coverage(
-    path: &Path,
-    write: &mut dyn FnMut(&mut File) -> Result<()>,
-) -> Result<()> {
-    create_parent_dirs(path)?;
-    let temp_path = coverage_temp_path_for(path);
-    let mut file = File::create(&temp_path)?;
-    if let Err(error) = write(&mut file) {
-        drop(file);
-        drop(fs::remove_file(&temp_path));
-        return Err(error);
-    }
-
-    drop(file);
-    if let Err(error) = replace_file(&temp_path, path) {
-        drop(fs::remove_file(&temp_path));
-        return Err(error);
+fn create_parent_dirs(path: &Path) -> Result<()> {
+    if let Some(parent) = path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        fs::create_dir_all(parent)?;
     }
     Ok(())
-}
-
-#[cfg(coverage)]
-fn coverage_temp_path_for(path: &Path) -> PathBuf {
-    let file_name = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("out");
-    let temp_name = format!(".{file_name}.atomic-write.tmp");
-    match path
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-    {
-        Some(parent) => parent.join(temp_name),
-        None => PathBuf::from(temp_name),
-    }
-}
-
-fn create_parent_dirs(path: &Path) -> Result<()> {
-    match path
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-    {
-        Some(parent) => fs::create_dir_all(parent),
-        None => Ok(()),
-    }
 }
 
 /// Replaces `destination` with `source`.
@@ -358,9 +330,12 @@ fn sync_parent_dir(path: &Path) -> Result<()> {
 /// # Returns
 /// The parent directory, or the current directory for parentless paths.
 fn parent_dir_for(path: &Path) -> &Path {
-    path.parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-        .unwrap_or_else(|| Path::new("."))
+    if let Some(parent) = path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        return parent;
+    }
+    Path::new(".")
 }
 
 /// Converts a path into a null-terminated Windows wide string.
@@ -378,14 +353,11 @@ fn wide_path(path: &Path) -> Vec<u16> {
 fn create_temp_file(path: &Path) -> Result<(PathBuf, File)> {
     let parent = parent_dir_for(path);
     let temp_path = temp_path_for(parent);
-    match OpenOptions::new()
+    let file = OpenOptions::new()
         .write(true)
         .create_new(true)
-        .open(&temp_path)
-    {
-        Ok(file) => Ok((temp_path, file)),
-        Err(error) => Err(error),
-    }
+        .open(&temp_path)?;
+    Ok((temp_path, file))
 }
 
 fn temp_path_for(parent: &Path) -> PathBuf {
@@ -395,52 +367,4 @@ fn temp_path_for(parent: &Path) -> PathBuf {
         std::process::id(),
         counter
     ))
-}
-
-/// Exercises defensive path handling that is hard to trigger through public API
-/// tests without changing the process working directory.
-#[cfg(coverage)]
-pub fn coverage_exercise_file_helper_defensive_paths() {
-    create_parent_dirs(Path::new("coverage-file.txt")).expect("parent path should be accepted");
-    drop(sync_parent_dir(Path::new("coverage-file.txt")));
-
-    let invalid_parent = Path::new("coverage-temp-parent");
-    File::create(invalid_parent).expect("invalid parent marker should be created");
-    create_temp_file(&invalid_parent.join("coverage-file.txt"))
-        .expect_err("ordinary file parent should fail");
-    drop(fs::remove_file(invalid_parent));
-
-    let (temp_path, file) =
-        create_temp_file(Path::new("coverage-file.txt")).expect("temp file should be created");
-    drop(file);
-    drop(fs::remove_file(temp_path));
-
-    assert_eq!(
-        PathBuf::from(".coverage-file.txt.atomic-write.tmp"),
-        coverage_temp_path_for(Path::new("coverage-file.txt"))
-    );
-
-    let temp_create_error_dir = Path::new("coverage-temp-create-error-dir");
-    drop(fs::remove_dir_all(temp_create_error_dir));
-    fs::create_dir(temp_create_error_dir).expect("temp create error directory should be created");
-    let destination = temp_create_error_dir.join("out.txt");
-    fs::create_dir(coverage_temp_path_for(&destination)).expect("temp path directory should exist");
-    let mut write: fn(&mut File) -> Result<()> = coverage_noop_write;
-    let error = atomic_write_with_path_for_coverage(&destination, &mut write)
-        .expect_err("temp path directory should fail file creation");
-    assert!(matches!(
-        error.kind(),
-        std::io::ErrorKind::IsADirectory
-            | std::io::ErrorKind::PermissionDenied
-            | std::io::ErrorKind::Other
-    ));
-    let mut noop_target = File::create(temp_create_error_dir.join("noop.txt"))
-        .expect("noop target should be created");
-    coverage_noop_write(&mut noop_target).expect("noop write should succeed");
-    drop(fs::remove_dir_all(temp_create_error_dir));
-}
-
-#[cfg(coverage)]
-fn coverage_noop_write(_file: &mut File) -> Result<()> {
-    Ok(())
 }

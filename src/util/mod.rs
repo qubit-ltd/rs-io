@@ -9,13 +9,16 @@
  ******************************************************************************/
 mod compare;
 mod copy;
-pub(crate) mod file;
+mod file;
 
 pub use compare::{
     compare_content,
     content_eq,
 };
-pub use copy::copy_limited;
+pub use copy::{
+    copy_at_most,
+    copy_to_end_limited,
+};
 pub use file::{
     atomic_write,
     atomic_write_with,

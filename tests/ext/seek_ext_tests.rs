@@ -40,6 +40,14 @@ impl FailingSeek {
             restore_result: Err(Error::other("restore failed")),
         }
     }
+
+    fn size_and_restore_error(original_position: u64) -> Self {
+        Self {
+            original_position,
+            end_result: Err(Error::other("size failed")),
+            restore_result: Err(Error::other("restore failed")),
+        }
+    }
 }
 
 impl Seek for FailingSeek {
@@ -123,6 +131,18 @@ fn test_stream_size_returns_restore_error() {
 }
 
 #[test]
+fn test_stream_size_prefers_restore_error_over_size_error() {
+    let mut stream = FailingSeek::size_and_restore_error(4);
+
+    let error = stream
+        .stream_size()
+        .expect_err("restore errors should take precedence over size errors");
+
+    assert_eq!(ErrorKind::Other, error.kind());
+    assert_eq!("restore failed", error.to_string());
+}
+
+#[test]
 fn test_stream_size_returns_position_error() {
     let mut stream = PositionFailingSeek;
 
@@ -140,7 +160,7 @@ fn test_stream_size_works_on_dyn_seek() {
     cursor
         .seek(SeekFrom::Start(3))
         .expect("cursor should seek to initial position");
-    let mut stream: &mut dyn Seek = &mut cursor;
+    let stream: &mut dyn Seek = &mut cursor;
 
     let size = stream
         .stream_size()
@@ -149,6 +169,26 @@ fn test_stream_size_works_on_dyn_seek() {
     assert_eq!(6, size);
     assert_eq!(
         3,
+        stream
+            .stream_position()
+            .expect("stream position should be restored"),
+    );
+}
+
+#[test]
+fn test_stream_size_ufcs_works_on_dyn_seek() {
+    let mut cursor = Cursor::new(b"abcdef".to_vec());
+    cursor
+        .seek(SeekFrom::Start(2))
+        .expect("cursor should seek to initial position");
+    let stream: &mut dyn Seek = &mut cursor;
+
+    let size = <dyn Seek as SeekExt>::stream_size(stream)
+        .expect("UFCS stream_size should work on dyn Seek");
+
+    assert_eq!(6, size);
+    assert_eq!(
+        2,
         stream
             .stream_position()
             .expect("stream position should be restored"),

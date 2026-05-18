@@ -16,6 +16,7 @@ use std::io::{
     Write,
 };
 use std::path::PathBuf;
+use std::sync::Mutex;
 use std::sync::atomic::{
     AtomicU64,
     Ordering,
@@ -29,10 +30,8 @@ use qubit_io::{
     open_buffered_reader,
 };
 
-#[cfg(coverage)]
-use qubit_io::coverage_exercise_file_helper_defensive_paths;
-
 static TEST_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
+static CURRENT_DIR_LOCK: Mutex<()> = Mutex::new(());
 
 fn temp_dir(name: &str) -> PathBuf {
     let id = TEST_DIR_COUNTER.fetch_add(1, Ordering::Relaxed);
@@ -45,6 +44,24 @@ fn temp_dir(name: &str) -> PathBuf {
     path
 }
 
+struct CurrentDirGuard {
+    original: PathBuf,
+}
+
+impl CurrentDirGuard {
+    fn change_to(path: &std::path::Path) -> Self {
+        let original = std::env::current_dir().expect("current dir should be readable");
+        std::env::set_current_dir(path).expect("current dir should be changed");
+        Self { original }
+    }
+}
+
+impl Drop for CurrentDirGuard {
+    fn drop(&mut self) {
+        drop(std::env::set_current_dir(&self.original));
+    }
+}
+
 #[test]
 fn test_atomic_write_creates_parent_directories_and_replaces_file() {
     let dir = temp_dir("atomic-replace");
@@ -54,6 +71,21 @@ fn test_atomic_write_creates_parent_directories_and_replaces_file() {
     atomic_write(&path, b"second").expect("second atomic write should replace file");
 
     assert_eq!(b"second", fs::read(&path).unwrap().as_slice());
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn test_atomic_write_supports_parentless_relative_path() {
+    let _lock = CURRENT_DIR_LOCK
+        .lock()
+        .expect("current dir lock should be acquired");
+    let dir = temp_dir("atomic-parentless");
+    let _guard = CurrentDirGuard::change_to(&dir);
+
+    atomic_write("out.txt", b"data").expect("parentless atomic write should succeed");
+
+    assert_eq!(b"data", fs::read(dir.join("out.txt")).unwrap().as_slice());
+    drop(_guard);
     fs::remove_dir_all(dir).unwrap();
 }
 
@@ -78,6 +110,26 @@ fn test_atomic_write_with_preserves_existing_file_and_removes_temp_on_error() {
         .filter(|entry| entry.file_name().to_string_lossy().contains(".tmp."))
         .count();
     assert_eq!(0, leftovers);
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn test_atomic_write_returns_temp_file_create_error() {
+    let dir = temp_dir("atomic-temp-create-error");
+    let process_id = std::process::id();
+    for counter in 0..256 {
+        fs::write(
+            dir.join(format!(".atomic-write.tmp.{process_id}.{counter}")),
+            b"collision",
+        )
+        .expect("collision temp file should be created");
+    }
+
+    let error = atomic_write(dir.join("out.txt"), b"data")
+        .expect_err("temp file create errors should be returned");
+
+    assert_eq!(ErrorKind::AlreadyExists, error.kind());
+    assert!(!dir.join("out.txt").exists());
     fs::remove_dir_all(dir).unwrap();
 }
 
@@ -172,10 +224,4 @@ fn test_atomic_write_removes_temp_when_rename_fails() {
         .count();
     assert_eq!(0, leftovers);
     fs::remove_dir_all(dir).unwrap();
-}
-
-#[cfg(coverage)]
-#[test]
-fn test_coverage_exercise_file_helper_defensive_paths() {
-    coverage_exercise_file_helper_defensive_paths();
 }

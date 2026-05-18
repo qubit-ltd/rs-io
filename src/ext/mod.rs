@@ -17,7 +17,7 @@ mod read_ext;
 mod read_seek_ext;
 mod seek_ext;
 mod string_read_ext;
-pub(crate) mod string_write_ext;
+mod string_write_ext;
 mod write_seek_ext;
 mod zig_zag_int_read_ext;
 mod zig_zag_int_write_ext;

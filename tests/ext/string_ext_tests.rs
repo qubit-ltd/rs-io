@@ -21,9 +21,6 @@ use qubit_io::{
     StringWriteExt,
 };
 
-#[cfg(coverage)]
-use qubit_io::coverage_checked_u32_len;
-
 struct FailingReader;
 
 impl Read for FailingReader {
@@ -118,6 +115,31 @@ fn test_length_prefixed_utf8_strings_round_trip_u16_be_and_le() {
             .read_utf8_string_u16_le(16)
             .expect("little-endian u16 string should be read")
     );
+}
+
+#[test]
+fn test_string_write_ext_ufcs_methods_work_on_dyn_write() {
+    let mut buffer = Vec::new();
+    {
+        let writer: &mut dyn Write = &mut buffer;
+        <dyn Write as StringWriteExt>::write_utf8_string_uleb(writer, "uleb")
+            .expect("UFCS uleb string write should work on dyn Write");
+        <dyn Write as StringWriteExt>::write_utf8_string_u16_be(writer, "u16be")
+            .expect("UFCS u16be string write should work on dyn Write");
+        <dyn Write as StringWriteExt>::write_utf8_string_u16_le(writer, "u16le")
+            .expect("UFCS u16le string write should work on dyn Write");
+        <dyn Write as StringWriteExt>::write_utf8_string_u32_be(writer, "u32be")
+            .expect("UFCS u32be string write should work on dyn Write");
+        <dyn Write as StringWriteExt>::write_utf8_string_u32_le(writer, "u32le")
+            .expect("UFCS u32le string write should work on dyn Write");
+    }
+
+    let mut input = Cursor::new(buffer);
+    assert_eq!("uleb", input.read_utf8_string_uleb(16).unwrap());
+    assert_eq!("u16be", input.read_utf8_string_u16_be(16).unwrap());
+    assert_eq!("u16le", input.read_utf8_string_u16_le(16).unwrap());
+    assert_eq!("u32be", input.read_utf8_string_u32_be(16).unwrap());
+    assert_eq!("u32le", input.read_utf8_string_u32_le(16).unwrap());
 }
 
 #[test]
@@ -288,17 +310,28 @@ fn test_write_utf8_string_u16_returns_length_write_error() {
 
 #[test]
 fn test_write_utf8_string_u16_rejects_length_overflow() {
-    let mut output = Vec::new();
+    let mut be_output = Vec::new();
+    let mut le_output = Vec::new();
     let oversized = "a".repeat(u16::MAX as usize + 1);
 
-    let error = output
+    let be_error = be_output
         .write_utf8_string_u16_be(&oversized)
-        .expect_err("u16 length overflow should be rejected");
+        .expect_err("big-endian u16 length overflow should be rejected");
 
-    assert_eq!(ErrorKind::InvalidInput, error.kind());
+    assert_eq!(ErrorKind::InvalidInput, be_error.kind());
     assert_eq!(
         "string length 65536 exceeds maximum encodable u16 length",
-        error.to_string()
+        be_error.to_string()
+    );
+
+    let le_error = le_output
+        .write_utf8_string_u16_le(&oversized)
+        .expect_err("little-endian u16 length overflow should be rejected");
+
+    assert_eq!(ErrorKind::InvalidInput, le_error.kind());
+    assert_eq!(
+        "string length 65536 exceeds maximum encodable u16 length",
+        le_error.to_string()
     );
 }
 
@@ -358,19 +391,4 @@ fn test_write_utf8_string_returns_payload_write_error_after_u16_length_prefix() 
         .expect_err("little-endian u16 payload write error should be returned");
     assert_eq!(ErrorKind::Other, le_error.kind());
     assert_eq!("payload failed", le_error.to_string());
-}
-
-#[cfg(coverage)]
-#[test]
-fn test_coverage_checked_u32_len_returns_overflow_error() {
-    coverage_checked_u32_len(3).expect("small length should be accepted");
-
-    let error = coverage_checked_u32_len(u32::MAX as usize + 1)
-        .expect_err("coverage-only overflow should be rejected");
-
-    assert_eq!(ErrorKind::InvalidInput, error.kind());
-    assert_eq!(
-        "string length 4294967296 exceeds maximum encodable u32 length",
-        error.to_string()
-    );
 }

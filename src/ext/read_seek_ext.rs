@@ -64,16 +64,18 @@ pub trait ReadSeekExt: Read + Seek {
 
 impl<T> ReadSeekExt for T
 where
-    T: Read + Seek,
+    T: Read + Seek + ?Sized,
 {
     #[inline]
     fn peek_exact_or_eof(&mut self, buffer: &mut [u8]) -> Result<usize> {
-        peek_exact_or_eof_impl(self, buffer)
+        let mut reader = self;
+        peek_exact_or_eof_impl(&mut reader, buffer)
     }
 
     #[inline]
     fn read_exact_or_eof_at(&mut self, offset: u64, buffer: &mut [u8]) -> Result<usize> {
-        read_exact_or_eof_at_impl(self, offset, buffer)
+        let mut reader = self;
+        read_exact_or_eof_at_impl(&mut reader, offset, buffer)
     }
 }
 

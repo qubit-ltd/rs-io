@@ -40,11 +40,12 @@ pub trait WriteSeekExt: Write + Seek {
 
 impl<T> WriteSeekExt for T
 where
-    T: Write + Seek,
+    T: Write + Seek + ?Sized,
 {
     #[inline]
     fn write_all_at_preserving_position(&mut self, offset: u64, buffer: &[u8]) -> Result<()> {
-        write_all_at_preserving_position_impl(self, offset, buffer)
+        let mut writer = self;
+        write_all_at_preserving_position_impl(&mut writer, offset, buffer)
     }
 }
 

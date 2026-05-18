@@ -25,7 +25,8 @@ pub trait BufReadExt: BufRead {
     ///
     /// The returned vector includes the delimiter when it is found. EOF before
     /// the delimiter is accepted as long as the accumulated bytes do not exceed
-    /// `max_len`.
+    /// `max_len`. If the limit is exceeded, this method may consume the
+    /// accepted prefix before reporting the error.
     ///
     /// # Parameters
     /// - `delimiter`: Delimiter byte to search for.
@@ -39,6 +40,32 @@ pub trait BufReadExt: BufRead {
     /// required before reaching `delimiter` or EOF. Returns the first I/O error
     /// reported by the underlying reader.
     fn read_until_limited(&mut self, delimiter: u8, max_len: usize) -> Result<Vec<u8>>;
+
+    /// Reads bytes through `delimiter` into `output` while enforcing `max_len`.
+    ///
+    /// This method appends at most `max_len` bytes from the current reader
+    /// position to `output`. The delimiter is included when it is found. If the
+    /// limit is exceeded, the accepted prefix may already have been appended to
+    /// `output` and consumed from the reader.
+    ///
+    /// # Parameters
+    /// - `delimiter`: Delimiter byte to search for.
+    /// - `output`: Destination vector to append to.
+    /// - `max_len`: Maximum accepted result length, including the delimiter.
+    ///
+    /// # Returns
+    /// Number of bytes appended to `output`.
+    ///
+    /// # Errors
+    /// Returns [`ErrorKind::InvalidData`] when more than `max_len` bytes are
+    /// required before reaching `delimiter` or EOF. Returns the first I/O error
+    /// reported by the underlying reader.
+    fn read_until_limited_into(
+        &mut self,
+        delimiter: u8,
+        output: &mut Vec<u8>,
+        max_len: usize,
+    ) -> Result<usize>;
 
     /// Reads one UTF-8 line while enforcing `max_len`.
     ///
@@ -57,6 +84,26 @@ pub trait BufReadExt: BufRead {
     /// not valid UTF-8. Returns the first I/O error reported by the underlying
     /// reader.
     fn read_line_limited(&mut self, max_len: usize) -> Result<String>;
+
+    /// Reads one UTF-8 line into `output` while enforcing `max_len`.
+    ///
+    /// This method reads at most `max_len` bytes, validates the line as UTF-8,
+    /// and appends it to `output`. If the line is oversized or invalid UTF-8,
+    /// `output` is left unchanged. Oversized input may still consume the
+    /// accepted prefix from the reader while detecting the limit violation.
+    ///
+    /// # Parameters
+    /// - `output`: Destination string to append to.
+    /// - `max_len`: Maximum accepted line length in bytes, including `\n`.
+    ///
+    /// # Returns
+    /// Number of bytes appended to `output`.
+    ///
+    /// # Errors
+    /// Returns [`ErrorKind::InvalidData`] when the line exceeds `max_len` or is
+    /// not valid UTF-8. Returns the first I/O error reported by the underlying
+    /// reader.
+    fn read_line_limited_into(&mut self, output: &mut String, max_len: usize) -> Result<usize>;
 
     /// Discards bytes through `delimiter` while enforcing `max_len`.
     ///
@@ -88,8 +135,23 @@ where
     }
 
     #[inline]
+    fn read_until_limited_into(
+        &mut self,
+        delimiter: u8,
+        output: &mut Vec<u8>,
+        max_len: usize,
+    ) -> Result<usize> {
+        read_until_limited_into_impl(self, delimiter, output, max_len)
+    }
+
+    #[inline]
     fn read_line_limited(&mut self, max_len: usize) -> Result<String> {
         read_line_limited_impl(self, max_len)
+    }
+
+    #[inline]
+    fn read_line_limited_into(&mut self, output: &mut String, max_len: usize) -> Result<usize> {
+        read_line_limited_into_impl(self, output, max_len)
     }
 
     #[inline]
@@ -116,15 +178,43 @@ where
     T: BufRead + ?Sized,
 {
     let mut output = Vec::with_capacity(max_len.min(8192));
+    read_until_limited_into_impl(reader, delimiter, &mut output, max_len)?;
+    Ok(output)
+}
+
+/// Reads bytes through `delimiter` into `output` with a maximum result size.
+///
+/// # Parameters
+/// - `reader`: Buffered source reader.
+/// - `delimiter`: Delimiter byte to search for.
+/// - `output`: Destination vector to append to.
+/// - `max_len`: Maximum accepted result length.
+///
+/// # Returns
+/// Number of bytes appended to `output`.
+///
+/// # Errors
+/// Returns an invalid-data error when the limit is exceeded, or an I/O error
+/// from `reader`.
+fn read_until_limited_into_impl<T>(
+    reader: &mut T,
+    delimiter: u8,
+    output: &mut Vec<u8>,
+    max_len: usize,
+) -> Result<usize>
+where
+    T: BufRead + ?Sized,
+{
+    let mut appended = 0;
     loop {
         let available = reader.fill_buf()?;
         if available.is_empty() {
-            return Ok(output);
+            return Ok(appended);
         }
 
         let delimiter_position = available.iter().position(|byte| *byte == delimiter);
         let requested = delimiter_position.map_or(available.len(), |position| position + 1);
-        let remaining = max_len.saturating_sub(output.len());
+        let remaining = max_len.saturating_sub(appended);
         if requested > remaining {
             if remaining > 0 {
                 output.extend_from_slice(&available[..remaining]);
@@ -135,8 +225,9 @@ where
 
         output.extend_from_slice(&available[..requested]);
         reader.consume(requested);
+        appended += requested;
         if delimiter_position.is_some() {
-            return Ok(output);
+            return Ok(appended);
         }
     }
 }
@@ -157,8 +248,37 @@ fn read_line_limited_impl<T>(reader: &mut T, max_len: usize) -> Result<String>
 where
     T: BufRead + ?Sized,
 {
-    let bytes = read_until_limited_impl(reader, b'\n', max_len)?;
-    String::from_utf8(bytes).map_err(invalid_utf8_error)
+    let mut output = String::new();
+    read_line_limited_into_impl(reader, &mut output, max_len)?;
+    Ok(output)
+}
+
+/// Reads one UTF-8 line into `output` with a maximum byte length.
+///
+/// # Parameters
+/// - `reader`: Buffered source reader.
+/// - `output`: Destination string to append to.
+/// - `max_len`: Maximum accepted line length in bytes.
+///
+/// # Returns
+/// Number of bytes appended to `output`.
+///
+/// # Errors
+/// Returns an invalid-data error when the line exceeds the limit or is not
+/// valid UTF-8, or an I/O error from `reader`.
+fn read_line_limited_into_impl<T>(
+    reader: &mut T,
+    output: &mut String,
+    max_len: usize,
+) -> Result<usize>
+where
+    T: BufRead + ?Sized,
+{
+    let mut bytes = Vec::with_capacity(max_len.min(8192));
+    let count = read_until_limited_into_impl(reader, b'\n', &mut bytes, max_len)?;
+    let line = String::from_utf8(bytes).map_err(invalid_utf8_error)?;
+    output.push_str(&line);
+    Ok(count)
 }
 
 /// Discards bytes through `delimiter` with a maximum consumed size.
