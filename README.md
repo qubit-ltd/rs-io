@@ -63,8 +63,7 @@ the caller's original position.
   - `read_to_end_limited` reads the remaining input into a `Vec<u8>` with a
     maximum accepted size.
 - **`SeekExt`**:
-  - `stream_len_preserving_position` measures stream length and restores the
-    original position.
+  - `stream_size` measures stream size and restores the original position.
 - **`ReadSeekExt`**:
   - `peek_exact_or_eof` reads from the current position and restores it.
   - `read_exact_or_eof_at` reads from an absolute offset and restores the
@@ -302,7 +301,7 @@ where
 | Extension trait | Methods | Typical use |
 |-----------------|---------|-------------|
 | `ReadExt` | `read_exact_or_eof`, `discard_exact_or_eof`, `copy_to`, `copy_to_limited`, `read_to_end_limited` | short-read-safe reads, bounded copies, and bounded reads |
-| `SeekExt` | `stream_len_preserving_position` | length checks that keep the original cursor |
+| `SeekExt` | `stream_size` | size checks that keep the original cursor |
 | `ReadSeekExt` | `peek_exact_or_eof`, `read_exact_or_eof_at` | non-consuming inspection and random-offset reads |
 | `WriteSeekExt` | `write_all_at_preserving_position` | random-access patch writes |
 | `BinaryReadExt` | `read_u16_be`, `read_u16_le`, `read_u16(order)`, and other scalar variants | binary scalar decoding |

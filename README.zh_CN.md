@@ -51,7 +51,7 @@ extension trait 覆盖的是保守、标准库优先的行为，例如：尽量�
   - `copy_to` 与 `copy_to_limited` 以方法形式把内容复制到 writer。
   - `read_to_end_limited` 在最大长度限制内把剩余输入读入 `Vec<u8>`。
 - **`SeekExt`**：
-  - `stream_len_preserving_position` 获取 stream 长度并恢复原位置。
+  - `stream_size` 获取 stream 大小并恢复原位置。
 - **`ReadSeekExt`**：
   - `peek_exact_or_eof` 从当前位置读取并恢复原位置。
   - `read_exact_or_eof_at` 从绝对 offset 读取并恢复原位置。
@@ -281,7 +281,7 @@ where
 | Extension trait | 方法 | 典型用途 |
 |-----------------|------|----------|
 | `ReadExt` | `read_exact_or_eof`、`discard_exact_or_eof`、`copy_to`、`copy_to_limited`、`read_to_end_limited` | 短读安全读取、有界复制和有界读取 |
-| `SeekExt` | `stream_len_preserving_position` | 获取长度但保持原 cursor |
+| `SeekExt` | `stream_size` | 获取大小但保持原 cursor |
 | `ReadSeekExt` | `peek_exact_or_eof`、`read_exact_or_eof_at` | 不消费位置的探测和随机 offset 读取 |
 | `WriteSeekExt` | `write_all_at_preserving_position` | 随机访问 patch 写入 |
 | `BinaryReadExt` | `read_u16_be`、`read_u16_le`、`read_u16(order)` 等标量方法 | 二进制标量解码 |
