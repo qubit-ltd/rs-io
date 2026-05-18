@@ -22,6 +22,16 @@ use crate::Leb128IntReadExt;
 /// guide:
 /// <https://protobuf.dev/programming-guides/encoding/#signed-integers>.
 pub trait ZigZagIntReadExt: Read {
+    /// Reads a ZigZag encoded `i16`.
+    ///
+    /// # Returns
+    /// The decoded signed value.
+    ///
+    /// # Errors
+    /// Returns `UnexpectedEof` for truncated input, `InvalidData` for malformed
+    /// unsigned LEB128 input, or another I/O error from the underlying reader.
+    fn read_zigzag_i16(&mut self) -> Result<i16>;
+
     /// Reads a ZigZag encoded `i32`.
     ///
     /// # Returns
@@ -58,6 +68,11 @@ where
     T: Read + ?Sized,
 {
     #[inline]
+    fn read_zigzag_i16(&mut self) -> Result<i16> {
+        self.read_uleb_u16().map(decode_zigzag_u16)
+    }
+
+    #[inline]
     fn read_zigzag_i32(&mut self) -> Result<i32> {
         self.read_uleb_u32().map(decode_zigzag_u32)
     }
@@ -71,6 +86,17 @@ where
     fn read_zigzag_isize(&mut self) -> Result<isize> {
         self.read_uleb_usize().map(decode_zigzag_usize)
     }
+}
+
+/// Decodes a ZigZag mapped `u16`.
+///
+/// # Parameters
+/// - `value`: ZigZag mapped unsigned value.
+///
+/// # Returns
+/// Decoded signed value.
+fn decode_zigzag_u16(value: u16) -> i16 {
+    ((value >> 1) as i16) ^ (-((value & 1) as i16))
 }
 
 /// Decodes a ZigZag mapped `u32`.
