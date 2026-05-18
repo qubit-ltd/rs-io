@@ -18,6 +18,24 @@ use std::io::{
 /// larger stream without relying on the caller to provide a pre-sliced buffer.
 /// Once the remaining limit reaches zero, reads return `Ok(0)` without touching
 /// the inner reader.
+///
+/// # Examples
+/// ```
+/// use std::io::{
+///     Cursor,
+///     Read,
+/// };
+///
+/// use qubit_io::LimitReader;
+///
+/// let mut reader = LimitReader::new(Cursor::new(b"abcdef"), 3);
+/// let mut data = Vec::new();
+/// reader.read_to_end(&mut data)?;
+///
+/// assert_eq!(b"abc", data.as_slice());
+/// assert_eq!(0, reader.remaining());
+/// # Ok::<(), std::io::Error>(())
+/// ```
 pub struct LimitReader<R> {
     inner: R,
     remaining: u64,

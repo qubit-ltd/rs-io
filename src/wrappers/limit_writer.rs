@@ -12,8 +12,26 @@ use std::io::{
     Write,
 };
 
-/// inner writer. Callers using [`Write::write_all`] will therefore receive the
-/// standard write-zero error when trying to write beyond the limit.
+/// Writer wrapper that accepts at most a fixed number of bytes.
+///
+/// Once the remaining limit reaches zero, writes return `Ok(0)` without
+/// touching the inner writer. Callers using [`Write::write_all`] will therefore
+/// receive the standard write-zero error when trying to write beyond the limit.
+///
+/// # Examples
+/// ```
+/// use std::io::Write;
+///
+/// use qubit_io::LimitWriter;
+///
+/// let mut writer = LimitWriter::new(Vec::new(), 3);
+///
+/// assert_eq!(3, writer.write(b"abcdef")?);
+/// assert_eq!(0, writer.remaining());
+/// assert_eq!(0, writer.write(b"x")?);
+/// assert_eq!(b"abc", writer.get_ref().as_slice());
+/// # Ok::<(), std::io::Error>(())
+/// ```
 pub struct LimitWriter<W> {
     inner: W,
     remaining: u64,

@@ -12,8 +12,28 @@ use std::io::{
     Result,
 };
 
+/// Reader wrapper that counts successfully read bytes.
+///
 /// The count is increased only after the wrapped reader reports a successful
 /// byte count. Failed reads do not change the counter.
+///
+/// # Examples
+/// ```
+/// use std::io::{
+///     Cursor,
+///     Read,
+/// };
+///
+/// use qubit_io::CountingReader;
+///
+/// let mut reader = CountingReader::new(Cursor::new(b"abc"));
+/// let mut data = Vec::new();
+/// reader.read_to_end(&mut data)?;
+///
+/// assert_eq!(b"abc", data.as_slice());
+/// assert_eq!(3, reader.bytes_read());
+/// # Ok::<(), std::io::Error>(())
+/// ```
 pub struct CountingReader<R> {
     inner: R,
     bytes_read: u64,

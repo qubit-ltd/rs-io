@@ -13,8 +13,34 @@ use std::io::{
     Write,
 };
 
-/// while it is consumed. If the branch writer fails, the source bytes have
-/// already been read from the inner reader and the branch error is returned.
+/// Reader wrapper that mirrors read bytes into a branch writer.
+///
+/// `TeeReader` forwards reads to the source reader and writes every
+/// successfully read byte into the branch writer while the stream is consumed.
+/// If the branch writer fails, the source bytes have already been read from the
+/// inner reader and the branch error is returned.
+///
+/// # Examples
+/// ```
+/// use std::io::{
+///     Cursor,
+///     Read,
+/// };
+///
+/// use qubit_io::TeeReader;
+///
+/// let source = Cursor::new(b"abc".to_vec());
+/// let branch = Vec::new();
+/// let mut reader = TeeReader::new(source, branch);
+///
+/// let mut data = Vec::new();
+/// reader.read_to_end(&mut data)?;
+/// let (_source, branch) = reader.into_inner();
+///
+/// assert_eq!(b"abc", data.as_slice());
+/// assert_eq!(b"abc", branch.as_slice());
+/// # Ok::<(), std::io::Error>(())
+/// ```
 pub struct TeeReader<R, W> {
     reader: R,
     branch: W,

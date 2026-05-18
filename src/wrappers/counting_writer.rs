@@ -12,7 +12,24 @@ use std::io::{
     Write,
 };
 
-/// writes do not change the counter.
+/// Writer wrapper that counts successfully written bytes.
+///
+/// The count is increased only after the wrapped writer reports a successful
+/// byte count. Failed writes do not change the counter.
+///
+/// # Examples
+/// ```
+/// use std::io::Write;
+///
+/// use qubit_io::CountingWriter;
+///
+/// let mut writer = CountingWriter::new(Vec::new());
+/// writer.write_all(b"abc")?;
+///
+/// assert_eq!(3, writer.bytes_written());
+/// assert_eq!(b"abc", writer.get_ref().as_slice());
+/// # Ok::<(), std::io::Error>(())
+/// ```
 pub struct CountingWriter<W> {
     inner: W,
     bytes_written: u64,
