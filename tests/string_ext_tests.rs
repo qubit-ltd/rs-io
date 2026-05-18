@@ -64,15 +64,15 @@ impl Write for FailAfterBytesWriter {
 }
 
 #[test]
-fn test_length_prefixed_utf8_strings_round_trip_uvar() {
+fn test_length_prefixed_utf8_strings_round_trip_uleb() {
     let mut buffer = Vec::new();
     buffer
-        .write_utf8_string_uvar("hello 世界")
+        .write_utf8_string_uleb("hello 世界")
         .expect("string should be written");
 
     let mut input = Cursor::new(buffer);
     let value = input
-        .read_utf8_string_uvar(64)
+        .read_utf8_string_uleb(64)
         .expect("string should be read");
 
     assert_eq!("hello 世界", value);
@@ -99,7 +99,7 @@ fn test_read_utf8_string_accepts_empty_string_with_zero_limit() {
     let mut input = Cursor::new(vec![0]);
 
     let value = input
-        .read_utf8_string_uvar(0)
+        .read_utf8_string_uleb(0)
         .expect("empty string should be accepted");
 
     assert_eq!("", value);
@@ -110,7 +110,7 @@ fn test_read_utf8_string_rejects_length_beyond_limit_before_reading_payload() {
     let mut input = Cursor::new(vec![3, b'a', b'b', b'c']);
 
     let error = input
-        .read_utf8_string_uvar(2)
+        .read_utf8_string_uleb(2)
         .expect_err("oversized string should be rejected");
 
     assert_eq!(ErrorKind::InvalidData, error.kind());
@@ -142,7 +142,7 @@ fn test_read_utf8_string_rejects_invalid_utf8() {
     let mut input = Cursor::new(vec![2, 0xFF, 0xFF]);
 
     let error = input
-        .read_utf8_string_uvar(8)
+        .read_utf8_string_uleb(8)
         .expect_err("invalid UTF-8 should be rejected");
 
     assert_eq!(ErrorKind::InvalidData, error.kind());
@@ -158,7 +158,7 @@ fn test_read_utf8_string_returns_payload_read_error() {
     let mut input = Cursor::new(vec![3, b'a']);
 
     let error = input
-        .read_utf8_string_uvar(8)
+        .read_utf8_string_uleb(8)
         .expect_err("short payload should be returned as EOF");
 
     assert_eq!(ErrorKind::UnexpectedEof, error.kind());
@@ -169,7 +169,7 @@ fn test_read_utf8_string_returns_underlying_read_error() {
     let mut input = FailingReader;
 
     let error = input
-        .read_utf8_string_uvar(8)
+        .read_utf8_string_uleb(8)
         .expect_err("length read error should be returned");
 
     assert_eq!(ErrorKind::Other, error.kind());
@@ -215,7 +215,7 @@ fn test_write_utf8_string_returns_underlying_write_error_after_length_prefix() {
     let mut output = FailingWriter;
 
     let error = output
-        .write_utf8_string_uvar("abc")
+        .write_utf8_string_uleb("abc")
         .expect_err("payload write error should be returned");
 
     assert_eq!(ErrorKind::Other, error.kind());
@@ -223,11 +223,11 @@ fn test_write_utf8_string_returns_underlying_write_error_after_length_prefix() {
 }
 
 #[test]
-fn test_write_utf8_string_returns_payload_write_error_after_uvar_length_prefix() {
+fn test_write_utf8_string_returns_payload_write_error_after_uleb_length_prefix() {
     let mut output = FailAfterBytesWriter { remaining: 1 };
 
     let error = output
-        .write_utf8_string_uvar("abc")
+        .write_utf8_string_uleb("abc")
         .expect_err("payload write error should be returned");
 
     assert_eq!(ErrorKind::Other, error.kind());

@@ -24,6 +24,8 @@ mod byte_order;
 mod compare;
 mod copy;
 mod file;
+mod leb128_int_read_ext;
+mod leb128_int_write_ext;
 mod read_ext;
 mod read_seek;
 mod read_seek_ext;
@@ -32,11 +34,11 @@ mod read_write_seek;
 mod seek_ext;
 mod string_read_ext;
 mod string_write_ext;
-mod var_int_read_ext;
-mod var_int_write_ext;
 mod wrappers;
 mod write_seek;
 mod write_seek_ext;
+mod zig_zag_int_read_ext;
+mod zig_zag_int_write_ext;
 
 pub use binary_read_ext::BinaryReadExt;
 pub use binary_write_ext::BinaryWriteExt;
@@ -56,6 +58,8 @@ pub use file::{
     create_file_with_parent,
     open_buffered_reader,
 };
+pub use leb128_int_read_ext::Leb128IntReadExt;
+pub use leb128_int_write_ext::Leb128IntWriteExt;
 pub use read_ext::ReadExt;
 pub use read_seek::ReadSeek;
 pub use read_seek_ext::ReadSeekExt;
@@ -66,8 +70,6 @@ pub use string_read_ext::StringReadExt;
 pub use string_write_ext::StringWriteExt;
 #[cfg(coverage)]
 pub use string_write_ext::coverage_checked_u32_len;
-pub use var_int_read_ext::VarIntReadExt;
-pub use var_int_write_ext::VarIntWriteExt;
 pub use wrappers::{
     ChecksumReader,
     ChecksumWriter,
@@ -81,3 +83,5 @@ pub use wrappers::{
 };
 pub use write_seek::WriteSeek;
 pub use write_seek_ext::WriteSeekExt;
+pub use zig_zag_int_read_ext::ZigZagIntReadExt;
+pub use zig_zag_int_write_ext::ZigZagIntWriteExt;

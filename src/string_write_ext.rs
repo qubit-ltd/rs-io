@@ -17,19 +17,19 @@ use std::io::{
 
 use crate::{
     BinaryWriteExt,
-    VarIntWriteExt,
+    Leb128IntWriteExt,
 };
 
 /// Extension methods for writing length-prefixed UTF-8 strings.
 pub trait StringWriteExt: Write {
-    /// Writes a UTF-8 string with an unsigned varint byte-length prefix.
+    /// Writes a UTF-8 string with an unsigned LEB128 byte-length prefix.
     ///
     /// # Parameters
     /// - `value`: String slice to write.
     ///
     /// # Errors
     /// Returns an I/O error from the underlying writer.
-    fn write_utf8_string_uvar(&mut self, value: &str) -> Result<()>;
+    fn write_utf8_string_uleb(&mut self, value: &str) -> Result<()>;
 
     /// Writes a UTF-8 string with a big-endian `u32` byte-length prefix.
     ///
@@ -56,8 +56,8 @@ impl<T> StringWriteExt for T
 where
     T: Write,
 {
-    fn write_utf8_string_uvar(&mut self, value: &str) -> Result<()> {
-        write_utf8_string_uvar_to(self, value)
+    fn write_utf8_string_uleb(&mut self, value: &str) -> Result<()> {
+        write_utf8_string_uleb_to(self, value)
     }
 
     fn write_utf8_string_u32_be(&mut self, value: &str) -> Result<()> {
@@ -69,9 +69,9 @@ where
     }
 }
 
-fn write_utf8_string_uvar_to(writer: &mut dyn Write, value: &str) -> Result<()> {
+fn write_utf8_string_uleb_to(writer: &mut dyn Write, value: &str) -> Result<()> {
     let bytes = value.as_bytes();
-    writer.write_uvar_usize(bytes.len())?;
+    writer.write_uleb_usize(bytes.len())?;
     writer.write_all(bytes)
 }
 
