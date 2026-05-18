@@ -118,7 +118,7 @@ where
     }
 }
 
-fn read_utf8_string_uleb_impl<T>(mut reader: &mut T, max_len: usize) -> Result<String>
+fn read_utf8_string_uleb_impl<T>(reader: &mut T, max_len: usize) -> Result<String>
 where
     T: Read + ?Sized,
 {

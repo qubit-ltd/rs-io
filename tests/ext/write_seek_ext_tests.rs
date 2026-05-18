@@ -48,6 +48,24 @@ impl FailingWriteSeek {
         }
     }
 
+    fn write_and_restore_error(original_position: u64) -> Self {
+        Self {
+            original_position,
+            rejected_offset: None,
+            fail_write: true,
+            fail_restore: true,
+        }
+    }
+
+    fn offset_seek_and_restore_error(original_position: u64, rejected_offset: u64) -> Self {
+        Self {
+            original_position,
+            rejected_offset: Some(rejected_offset),
+            fail_write: false,
+            fail_restore: true,
+        }
+    }
+
     fn restore_error(original_position: u64) -> Self {
         Self {
             original_position,
@@ -142,7 +160,7 @@ fn test_write_all_at_preserving_position_works_on_dyn_write_seek() {
     cursor
         .seek(SeekFrom::Start(4))
         .expect("cursor should seek to initial position");
-    let mut stream: &mut dyn WriteSeek = &mut cursor;
+    let stream: &mut dyn WriteSeek = &mut cursor;
 
     stream
         .write_all_at_preserving_position(2, b"YY")
@@ -154,6 +172,27 @@ fn test_write_all_at_preserving_position_works_on_dyn_write_seek() {
             .stream_position()
             .expect("stream position should be restored"),
     );
+    assert_eq!(b"abYYef", cursor.get_ref().as_slice());
+}
+
+#[test]
+fn test_write_all_at_preserving_position_ufcs_works_on_dyn_write_seek() {
+    let mut cursor = Cursor::new(b"abcdef".to_vec());
+    cursor
+        .seek(SeekFrom::Start(4))
+        .expect("cursor should seek to initial position");
+    {
+        let stream: &mut dyn WriteSeek = &mut cursor;
+        <dyn WriteSeek as WriteSeekExt>::write_all_at_preserving_position(stream, 2, b"YY")
+            .expect("UFCS write-seek extension should work on dyn WriteSeek");
+        assert_eq!(
+            4,
+            stream
+                .stream_position()
+                .expect("stream position should be restored"),
+        );
+    }
+
     assert_eq!(b"abYYef", cursor.get_ref().as_slice());
 }
 
@@ -170,6 +209,18 @@ fn test_write_all_at_preserving_position_returns_write_error_after_restore() {
 }
 
 #[test]
+fn test_write_all_at_preserving_position_prefers_restore_error_over_write_error() {
+    let mut writer = FailingWriteSeek::write_and_restore_error(4);
+
+    let error = writer
+        .write_all_at_preserving_position(1, b"abc")
+        .expect_err("restore errors should take precedence over write errors");
+
+    assert_eq!(ErrorKind::Other, error.kind());
+    assert_eq!("restore failed", error.to_string());
+}
+
+#[test]
 fn test_write_all_at_preserving_position_returns_offset_seek_error_after_restore() {
     let mut writer = FailingWriteSeek::offset_seek_error(4, 1);
 
@@ -179,6 +230,18 @@ fn test_write_all_at_preserving_position_returns_offset_seek_error_after_restore
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("offset seek failed", error.to_string());
+}
+
+#[test]
+fn test_write_all_at_preserving_position_prefers_restore_error_over_offset_seek_error() {
+    let mut writer = FailingWriteSeek::offset_seek_and_restore_error(4, 1);
+
+    let error = writer
+        .write_all_at_preserving_position(1, b"abc")
+        .expect_err("restore errors should take precedence over offset seek errors");
+
+    assert_eq!(ErrorKind::Other, error.kind());
+    assert_eq!("restore failed", error.to_string());
 }
 
 #[test]

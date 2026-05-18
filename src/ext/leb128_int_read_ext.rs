@@ -271,7 +271,7 @@ pub trait Leb128IntReadExt: Read {
 
 impl<T> Leb128IntReadExt for T
 where
-    T: Read,
+    T: Read + ?Sized,
 {
     #[inline]
     fn read_uleb_u8(&mut self) -> Result<u8> {
@@ -471,12 +471,10 @@ struct DecodedSleb {
 /// # Errors
 /// Returns `UnexpectedEof` for truncated input, `InvalidData` for malformed,
 /// overflowing, or non-canonical input, or another I/O error from `reader`.
-fn read_uleb(
-    reader: &mut dyn Read,
-    bits: u32,
-    type_name: &'static str,
-    strict: bool,
-) -> Result<u128> {
+fn read_uleb<T>(reader: &mut T, bits: u32, type_name: &'static str, strict: bool) -> Result<u128>
+where
+    T: Read + ?Sized,
+{
     let decoded = read_uleb_with_bytes(reader, bits, type_name)?;
     if strict && !is_canonical_uleb(decoded.value, &decoded.bytes) {
         return Err(noncanonical_leb128(type_name));
@@ -496,11 +494,14 @@ fn read_uleb(
 ///
 /// # Errors
 /// Returns an I/O error, truncated input error, or malformed data error.
-fn read_uleb_with_bytes(
-    reader: &mut dyn Read,
+fn read_uleb_with_bytes<T>(
+    reader: &mut T,
     bits: u32,
     type_name: &'static str,
-) -> Result<DecodedUleb> {
+) -> Result<DecodedUleb>
+where
+    T: Read + ?Sized,
+{
     let max_bytes = bits.div_ceil(7);
     let final_payload_bits = bits - (max_bytes - 1) * 7;
     let max_last_payload = ((1u16 << final_payload_bits) - 1) as u8;
@@ -538,12 +539,10 @@ fn read_uleb_with_bytes(
 /// # Errors
 /// Returns `UnexpectedEof` for truncated input, `InvalidData` for malformed,
 /// overflowing, or non-canonical input, or another I/O error from `reader`.
-fn read_sleb(
-    reader: &mut dyn Read,
-    bits: u32,
-    type_name: &'static str,
-    strict: bool,
-) -> Result<i128> {
+fn read_sleb<T>(reader: &mut T, bits: u32, type_name: &'static str, strict: bool) -> Result<i128>
+where
+    T: Read + ?Sized,
+{
     let decoded = read_sleb_with_bytes(reader, bits, type_name)?;
     if strict && !is_canonical_sleb(decoded.value, &decoded.bytes) {
         return Err(noncanonical_leb128(type_name));
@@ -563,11 +562,14 @@ fn read_sleb(
 ///
 /// # Errors
 /// Returns an I/O error, truncated input error, or malformed data error.
-fn read_sleb_with_bytes(
-    reader: &mut dyn Read,
+fn read_sleb_with_bytes<T>(
+    reader: &mut T,
     bits: u32,
     type_name: &'static str,
-) -> Result<DecodedSleb> {
+) -> Result<DecodedSleb>
+where
+    T: Read + ?Sized,
+{
     let max_bytes = bits.div_ceil(7);
     let mut value = 0i128;
     let mut shift = 0u32;
@@ -628,6 +630,7 @@ fn is_too_wide_signed_final_payload(payload: u8, index: u32, bits: u32) -> bool 
 ///
 /// # Returns
 /// `true` when re-encoding `value` produces the same bytes.
+#[inline]
 fn is_canonical_uleb(value: u128, bytes: &[u8]) -> bool {
     let mut expected = Vec::new();
     encode_uleb(value, &mut expected);

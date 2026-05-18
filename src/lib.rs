@@ -16,14 +16,12 @@
 //! standard-library I/O patterns. The concrete trait definitions live in
 //! dedicated modules and are re-exported from the crate root for ergonomic use.
 
-// qubit-style: allow coverage-cfg
 mod ext;
+pub mod prelude;
 mod traits;
 mod util;
 mod wrappers;
 
-#[cfg(coverage)]
-pub use ext::string_write_ext::coverage_checked_u32_len;
 pub use ext::{
     BinaryReadExt,
     BinaryWriteExt,
@@ -47,14 +45,13 @@ pub use traits::{
     ReadWriteSeek,
     WriteSeek,
 };
-#[cfg(coverage)]
-pub use util::file::coverage_exercise_file_helper_defensive_paths;
 pub use util::{
     atomic_write,
     atomic_write_with,
     compare_content,
     content_eq,
-    copy_limited,
+    copy_at_most,
+    copy_to_end_limited,
     create_buffered_writer_with_parent,
     create_file_with_parent,
     open_buffered_reader,

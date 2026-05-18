@@ -42,11 +42,12 @@ pub trait SeekExt: Seek {
 
 impl<T> SeekExt for T
 where
-    T: Seek,
+    T: Seek + ?Sized,
 {
     #[inline]
     fn stream_size(&mut self) -> Result<u64> {
-        stream_size_impl(self)
+        let mut stream = self;
+        stream_size_impl(&mut stream)
     }
 }
 

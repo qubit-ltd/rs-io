@@ -154,7 +154,7 @@ pub trait ZigZagIntReadExt: Read {
 
 impl<T> ZigZagIntReadExt for T
 where
-    T: Read,
+    T: Read + ?Sized,
 {
     #[inline]
     fn read_zigzag_i8(&mut self) -> Result<i8> {

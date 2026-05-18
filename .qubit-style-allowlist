@@ -1,3 +1,1 @@
-coverage-cfg | src/util/file.rs | Coverage-only entry exercises defensive path handling without process-wide cwd changes.
-coverage-cfg | src/lib.rs | Re-export coverage-only helper functions for integration coverage tests.
-coverage-cfg | src/ext/string_write_ext.rs | Coverage-only entry exercises impossible u32 string length overflow without allocating huge memory.
+coverage-cfg | src/ext/string_write_ext.rs | Coverage build avoids allocating an impossible u32-sized UTF-8 string only to cover length overflow.

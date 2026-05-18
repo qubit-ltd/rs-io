@@ -140,7 +140,7 @@ fn test_read_exact_or_eof_empty_buffer_does_not_read() {
 #[test]
 fn test_read_exact_or_eof_works_on_dyn_read() {
     let mut cursor = Cursor::new(b"abc".to_vec());
-    let mut reader: &mut dyn Read = &mut cursor;
+    let reader: &mut dyn Read = &mut cursor;
     let mut buffer = [0; 3];
 
     let count = reader
@@ -152,9 +152,78 @@ fn test_read_exact_or_eof_works_on_dyn_read() {
 }
 
 #[test]
+fn test_read_ext_ufcs_methods_work_on_dyn_read() {
+    let mut cursor = Cursor::new(b"abc".to_vec());
+    let reader: &mut dyn Read = &mut cursor;
+    let mut buffer = [0; 2];
+    let count = <dyn Read as ReadExt>::read_exact_or_eof(reader, &mut buffer)
+        .expect("UFCS read_exact_or_eof should work on dyn Read");
+    assert_eq!(2, count);
+    assert_eq!(b"ab", &buffer);
+
+    let mut cursor = Cursor::new(b"abc".to_vec());
+    let reader: &mut dyn Read = &mut cursor;
+    let count = <dyn Read as ReadExt>::discard_exact_or_eof(reader, 2)
+        .expect("UFCS discard_exact_or_eof should work on dyn Read");
+    assert_eq!(2, count);
+
+    let mut cursor = Cursor::new(b"abc".to_vec());
+    let reader: &mut dyn Read = &mut cursor;
+    let mut output = Vec::new();
+    let count = <dyn Read as ReadExt>::copy_to(reader, &mut output)
+        .expect("UFCS copy_to should work on dyn Read");
+    assert_eq!(3, count);
+    assert_eq!(b"abc", output.as_slice());
+
+    let mut cursor = Cursor::new(b"abc".to_vec());
+    let reader: &mut dyn Read = &mut cursor;
+    let mut output = Vec::new();
+    let count = <dyn Read as ReadExt>::copy_to_at_most(reader, &mut output, 2)
+        .expect("UFCS copy_to_at_most should work on dyn Read");
+    assert_eq!(2, count);
+    assert_eq!(b"ab", output.as_slice());
+
+    let mut cursor = Cursor::new(b"abc".to_vec());
+    let reader: &mut dyn Read = &mut cursor;
+    let mut output = Vec::new();
+    let count = <dyn Read as ReadExt>::copy_to_end_limited(reader, &mut output, 3)
+        .expect("UFCS copy_to_end_limited should work on dyn Read");
+    assert_eq!(3, count);
+    assert_eq!(b"abc", output.as_slice());
+
+    let mut cursor = Cursor::new(b"abc".to_vec());
+    let reader: &mut dyn Read = &mut cursor;
+    let data = <dyn Read as ReadExt>::read_to_end_limited(reader, 3)
+        .expect("UFCS read_to_end_limited should work on dyn Read");
+    assert_eq!(b"abc", data.as_slice());
+
+    let mut cursor = Cursor::new(b"abc".to_vec());
+    let reader: &mut dyn Read = &mut cursor;
+    let mut output = b"prefix-".to_vec();
+    let count = <dyn Read as ReadExt>::read_to_end_limited_into(reader, &mut output, 3)
+        .expect("UFCS read_to_end_limited_into should work on dyn Read");
+    assert_eq!(3, count);
+    assert_eq!(b"prefix-abc", output.as_slice());
+
+    let mut cursor = Cursor::new(b"abc".to_vec());
+    let reader: &mut dyn Read = &mut cursor;
+    let text = <dyn Read as ReadExt>::read_to_string_limited(reader, 3)
+        .expect("UFCS read_to_string_limited should work on dyn Read");
+    assert_eq!("abc", text);
+
+    let mut cursor = Cursor::new(b"abc".to_vec());
+    let reader: &mut dyn Read = &mut cursor;
+    let mut output = String::from("prefix-");
+    let count = <dyn Read as ReadExt>::read_to_string_limited_into(reader, &mut output, 3)
+        .expect("UFCS read_to_string_limited_into should work on dyn Read");
+    assert_eq!(3, count);
+    assert_eq!("prefix-abc", output);
+}
+
+#[test]
 fn test_discard_exact_or_eof_works_on_dyn_read() {
     let mut cursor = Cursor::new(b"abcdef".to_vec());
-    let mut reader: &mut dyn Read = &mut cursor;
+    let reader: &mut dyn Read = &mut cursor;
 
     let count = reader
         .discard_exact_or_eof(4)
@@ -171,7 +240,7 @@ fn test_discard_exact_or_eof_works_on_dyn_read() {
 #[test]
 fn test_copy_to_works_on_dyn_read() {
     let mut cursor = Cursor::new(b"abcdef".to_vec());
-    let mut reader: &mut dyn Read = &mut cursor;
+    let reader: &mut dyn Read = &mut cursor;
     let mut output = Vec::new();
 
     let count = reader
@@ -183,14 +252,28 @@ fn test_copy_to_works_on_dyn_read() {
 }
 
 #[test]
-fn test_copy_to_limited_works_on_dyn_read() {
+fn test_copy_to_at_most_works_on_dyn_read() {
     let mut cursor = Cursor::new(b"abcdef".to_vec());
-    let mut reader: &mut dyn Read = &mut cursor;
+    let reader: &mut dyn Read = &mut cursor;
     let mut output = Vec::new();
 
     let count = reader
-        .copy_to_limited(&mut output, 4)
+        .copy_to_at_most(&mut output, 4)
         .expect("limited copy extension should work on dyn Read");
+
+    assert_eq!(4, count);
+    assert_eq!(b"abcd", output.as_slice());
+}
+
+#[test]
+fn test_copy_to_end_limited_works_on_dyn_read() {
+    let mut cursor = Cursor::new(b"abcd".to_vec());
+    let reader: &mut dyn Read = &mut cursor;
+    let mut output = Vec::new();
+
+    let count = reader
+        .copy_to_end_limited(&mut output, 4)
+        .expect("end-limited copy extension should work on dyn Read");
 
     assert_eq!(4, count);
     assert_eq!(b"abcd", output.as_slice());
@@ -273,7 +356,7 @@ fn test_discard_exact_or_eof_returns_non_interrupted_error() {
 #[test]
 fn test_read_to_end_limited_works_on_dyn_read() {
     let mut cursor = Cursor::new(b"abc".to_vec());
-    let mut reader: &mut dyn Read = &mut cursor;
+    let reader: &mut dyn Read = &mut cursor;
 
     let data = reader
         .read_to_end_limited(3)
@@ -306,6 +389,48 @@ fn test_read_to_end_limited_returns_non_interrupted_error() {
 }
 
 #[test]
+fn test_read_to_end_limited_into_appends_to_existing_vec() {
+    let mut reader = Cursor::new(b"abc".to_vec());
+    let mut output = b"prefix-".to_vec();
+
+    let count = reader
+        .read_to_end_limited_into(&mut output, 3)
+        .expect("input within the limit should be appended");
+
+    assert_eq!(3, count);
+    assert_eq!(b"prefix-abc", output.as_slice());
+}
+
+#[test]
+fn test_read_to_end_limited_into_rejects_oversized_input_after_prefix() {
+    let mut reader = Cursor::new(b"abcd".to_vec());
+    let mut output = b"prefix-".to_vec();
+
+    let error = reader
+        .read_to_end_limited_into(&mut output, 3)
+        .expect_err("oversized input should be rejected");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!("input exceeds maximum length of 3 bytes", error.to_string());
+    assert_eq!(b"prefix-abc", output.as_slice());
+    assert_eq!(4, reader.position());
+}
+
+#[test]
+fn test_read_to_end_limited_into_returns_non_interrupted_error() {
+    let mut reader = FailingReader;
+    let mut output = b"prefix".to_vec();
+
+    let error = reader
+        .read_to_end_limited_into(&mut output, 3)
+        .expect_err("non-interrupted read errors should be returned");
+
+    assert_eq!(ErrorKind::Other, error.kind());
+    assert_eq!("read failed", error.to_string());
+    assert_eq!(b"prefix", output.as_slice());
+}
+
+#[test]
 fn test_read_to_end_limited_zero_limit_rejects_non_empty_input() {
     let mut reader = Cursor::new(b"a".to_vec());
 
@@ -314,6 +439,19 @@ fn test_read_to_end_limited_zero_limit_rejects_non_empty_input() {
         .expect_err("zero limit should reject non-empty input");
 
     assert_eq!(ErrorKind::InvalidData, error.kind());
+}
+
+#[test]
+fn test_read_to_end_limited_into_zero_limit_rejects_non_empty_input() {
+    let mut reader = Cursor::new(b"a".to_vec());
+    let mut output = b"prefix".to_vec();
+
+    let error = reader
+        .read_to_end_limited_into(&mut output, 0)
+        .expect_err("zero limit should reject non-empty input");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!(b"prefix", output.as_slice());
 }
 
 #[test]
@@ -328,6 +466,18 @@ fn test_read_to_end_limited_zero_limit_accepts_empty_input() {
 }
 
 #[test]
+fn test_read_to_string_limited_returns_non_interrupted_error() {
+    let mut reader = FailingReader;
+
+    let error = reader
+        .read_to_string_limited(3)
+        .expect_err("non-interrupted read errors should be returned");
+
+    assert_eq!(ErrorKind::Other, error.kind());
+    assert_eq!("read failed", error.to_string());
+}
+
+#[test]
 fn test_read_to_string_limited_reads_utf8_input() {
     let mut reader = Cursor::new("hello 世界".as_bytes().to_vec());
 
@@ -336,6 +486,33 @@ fn test_read_to_string_limited_reads_utf8_input() {
         .expect("UTF-8 input within the limit should be read");
 
     assert_eq!("hello 世界", value);
+}
+
+#[test]
+fn test_read_to_string_limited_into_returns_non_interrupted_error() {
+    let mut reader = FailingReader;
+    let mut output = String::from("prefix");
+
+    let error = reader
+        .read_to_string_limited_into(&mut output, 3)
+        .expect_err("non-interrupted read errors should be returned");
+
+    assert_eq!(ErrorKind::Other, error.kind());
+    assert_eq!("read failed", error.to_string());
+    assert_eq!("prefix", output);
+}
+
+#[test]
+fn test_read_to_string_limited_into_appends_utf8_input() {
+    let mut reader = Cursor::new("hello 世界".as_bytes().to_vec());
+    let mut output = String::from("prefix-");
+
+    let count = reader
+        .read_to_string_limited_into(&mut output, 16)
+        .expect("UTF-8 input within the limit should be appended");
+
+    assert_eq!("hello 世界".len(), count);
+    assert_eq!("prefix-hello 世界", output);
 }
 
 #[test]
@@ -362,6 +539,20 @@ fn test_read_to_string_limited_rejects_oversized_input() {
 }
 
 #[test]
+fn test_read_to_string_limited_into_rejects_oversized_input_without_appending() {
+    let mut reader = Cursor::new(b"abcd".to_vec());
+    let mut output = String::from("prefix");
+
+    let error = reader
+        .read_to_string_limited_into(&mut output, 3)
+        .expect_err("oversized string input should be rejected");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!("prefix", output);
+    assert_eq!(4, reader.position());
+}
+
+#[test]
 fn test_read_to_string_limited_rejects_invalid_utf8() {
     let mut reader = Cursor::new(vec![0xff]);
 
@@ -375,4 +566,22 @@ fn test_read_to_string_limited_rejects_invalid_utf8() {
             .to_string()
             .starts_with("limited input is not valid UTF-8")
     );
+}
+
+#[test]
+fn test_read_to_string_limited_into_rejects_invalid_utf8_without_appending() {
+    let mut reader = Cursor::new(vec![0xff]);
+    let mut output = String::from("prefix");
+
+    let error = reader
+        .read_to_string_limited_into(&mut output, 4)
+        .expect_err("invalid UTF-8 should be rejected");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert!(
+        error
+            .to_string()
+            .starts_with("limited input is not valid UTF-8")
+    );
+    assert_eq!("prefix", output);
 }

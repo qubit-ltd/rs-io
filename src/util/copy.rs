@@ -8,6 +8,7 @@
  *
  ******************************************************************************/
 use std::io::{
+    Error,
     ErrorKind,
     Read,
     Result,
@@ -33,7 +34,30 @@ const COPY_BUFFER_SIZE: usize = 16 * 1024;
 /// # Errors
 /// Returns the first non-interrupted read error or write error reported by the
 /// underlying streams. Interrupted reads are retried.
-pub fn copy_limited(reader: &mut dyn Read, writer: &mut dyn Write, max_bytes: u64) -> Result<u64> {
+pub fn copy_at_most<R, W>(reader: &mut R, writer: &mut W, max_bytes: u64) -> Result<u64>
+where
+    R: Read + ?Sized,
+    W: Write + ?Sized,
+{
+    let mut reader = reader;
+    let mut writer = writer;
+    copy_at_most_impl(&mut reader, &mut writer, max_bytes)
+}
+
+/// Copies at most `max_bytes` bytes using trait-object I/O endpoints.
+///
+/// # Parameters
+/// - `reader`: Source reader.
+/// - `writer`: Destination writer.
+/// - `max_bytes`: Maximum number of bytes to copy.
+///
+/// # Returns
+/// The number of bytes copied.
+///
+/// # Errors
+/// Returns the first non-interrupted read error or write error reported by the
+/// underlying streams. Interrupted reads are retried.
+fn copy_at_most_impl(reader: &mut dyn Read, writer: &mut dyn Write, max_bytes: u64) -> Result<u64> {
     let mut buffer = [0; COPY_BUFFER_SIZE];
     let mut remaining = max_bytes;
     let mut copied = 0;
@@ -56,4 +80,91 @@ pub fn copy_limited(reader: &mut dyn Read, writer: &mut dyn Write, max_bytes: u6
         }
     }
     Ok(copied)
+}
+
+/// Copies the remaining input if its total length is at most `max_bytes`.
+///
+/// This function copies from the current reader position until EOF. If EOF is
+/// not reached within `max_bytes` bytes, it returns [`ErrorKind::InvalidData`].
+/// Detecting oversized input consumes one excess byte from `reader`; that
+/// excess byte is not written to `writer`.
+///
+/// # Parameters
+/// - `reader`: Source reader.
+/// - `writer`: Destination writer.
+/// - `max_bytes`: Maximum accepted number of bytes in the remaining input.
+///
+/// # Returns
+/// The number of bytes copied when EOF is reached within the limit.
+///
+/// # Errors
+/// Returns [`ErrorKind::InvalidData`] when the remaining input is longer than
+/// `max_bytes`. Returns the first non-interrupted read error or write error
+/// reported by the underlying streams. Interrupted reads are retried.
+pub fn copy_to_end_limited<R, W>(reader: &mut R, writer: &mut W, max_bytes: u64) -> Result<u64>
+where
+    R: Read + ?Sized,
+    W: Write + ?Sized,
+{
+    let mut reader = reader;
+    let mut writer = writer;
+    copy_to_end_limited_impl(&mut reader, &mut writer, max_bytes)
+}
+
+/// Copies the remaining input through trait-object endpoints when it fits.
+///
+/// # Parameters
+/// - `reader`: Source reader.
+/// - `writer`: Destination writer.
+/// - `max_bytes`: Maximum accepted number of bytes in the remaining input.
+///
+/// # Returns
+/// The number of bytes copied when EOF is reached within the limit.
+///
+/// # Errors
+/// Returns [`ErrorKind::InvalidData`] when the remaining input is longer than
+/// `max_bytes`. Returns the first non-interrupted read error or write error
+/// reported by the underlying streams. Interrupted reads are retried.
+fn copy_to_end_limited_impl(
+    reader: &mut dyn Read,
+    writer: &mut dyn Write,
+    max_bytes: u64,
+) -> Result<u64> {
+    let copied = copy_at_most_impl(reader, writer, max_bytes)?;
+    if copied < max_bytes {
+        return Ok(copied);
+    }
+    if has_more_input(reader)? {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            format!("input exceeds maximum length of {max_bytes} bytes"),
+        ));
+    }
+    Ok(copied)
+}
+
+/// Returns whether `reader` has at least one more byte.
+///
+/// # Parameters
+/// - `reader`: Source reader to probe.
+///
+/// # Returns
+/// `true` when one extra byte was read, or `false` when EOF was reached.
+///
+/// # Errors
+/// Returns the first non-interrupted read error reported by `reader`.
+fn has_more_input(reader: &mut dyn Read) -> Result<bool> {
+    let mut byte = [0];
+    loop {
+        match reader.read(&mut byte) {
+            Ok(0) => return Ok(false),
+            Ok(_) => return Ok(true),
+            Err(error) => {
+                if error.kind() == ErrorKind::Interrupted {
+                    continue;
+                }
+                return Err(error);
+            }
+        }
+    }
 }
