@@ -7,24 +7,30 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![English Document](https://img.shields.io/badge/Document-English-blue.svg)](README.md)
 
-面向 Rust 的小型 I/O trait 工具库。
+面向 Rust 的小型 I/O trait 与扩展工具库。
 
 ## 概述
 
-Qubit IO 为常用 `std::io` trait 组合提供 object-safe 的组合 trait。
-当 API 需要使用 `&mut dyn ReadSeek` 或 `Box<dyn ReadWriteSeek>` 这类
-trait object，而不是 `R: Read + Seek` 这类泛型约束时，可以使用本 crate。
+Qubit IO 在 `std::io` 之上提供两层很小的能力：
 
-本 crate 刻意保持极小：它不包装 reader 或 writer，不进行分配，也不引入新的
-I/O 行为。它只为标准库 trait 的常用组合命名，使这些组合可以作为 trait object
-出现在公开 API 或内部抽象中。
+- 为常用 `std::io` 能力组合提供 object-safe 的组合 trait；
+- 为标准库留给调用方反复手写的底层 I/O 模式提供 extension trait。
+
+组合 trait 适合 API 需要使用 `&mut dyn ReadSeek` 或
+`Box<dyn ReadWriteSeek>` 这类 trait object，而不是 `R: Read + Seek`
+这类泛型约束的场景。
+
+extension trait 覆盖的是保守、标准库优先的行为，例如：尽量读满 buffer 但 EOF
+正常返回已读长度；从可 seek stream 中 peek 数据但不消费当前位置；在指定 offset
+写入后恢复调用方原来的位置。
 
 ## 设计目标
 
 - **object-safe 组合**：提供适合 trait object 使用的具名 I/O 约束。
 - **标准库优先**：直接基于 `std::io::{Read, Write, Seek}` 构建。
-- **零运行时开销**：使用 blanket implementation，不引入包装类型。
-- **极小 API 表面积**：只保留常用、可复用的 I/O trait 组合。
+- **不引入包装类型**：基于标准 I/O trait 做 blanket implementation。
+- **极小 API 表面积**：只保留跨 crate 复用价值高的通用底层操作。
+- **位置安全**：把不消费当前位置的探测和随机访问 patch 写入显式表达出来。
 - **便于集成**：可用于 cursor、文件、缓冲区、stream 和自定义 I/O 类型。
 
 ## 特性
@@ -32,9 +38,23 @@ I/O 行为。它只为标准库 trait 的常用组合命名，使这些组合可
 ### Object-Safe I/O Trait 组合
 
 - **`ReadSeek`**：组合 `Read` 与 `Seek`，用于可读取的随机访问输入。
+- **`BufReadSeek`**：组合 `BufRead` 与 `Seek`，用于带缓冲的随机访问输入。
 - **`ReadWrite`**：组合 `Read` 与 `Write`，用于双向 stream 或缓冲区。
 - **`WriteSeek`**：组合 `Write` 与 `Seek`，用于可写入的随机访问输出。
 - **`ReadWriteSeek`**：组合 `Read`、`Write` 与 `Seek`，用于完整可变的随机访问 I/O 对象。
+
+### I/O Extension Trait
+
+- **`ReadExt`**：
+  - `read_fully_or_eof` 会在短读时继续读取，直到目标 buffer 被填满或遇到 EOF。
+  - `discard_fully_or_eof` 不分配内存，最多消费并丢弃指定字节数。
+- **`SeekExt`**：
+  - `stream_len_preserving_position` 获取 stream 长度并恢复原位置。
+- **`ReadSeekExt`**：
+  - `peek_fully_or_eof` 从当前位置读取并恢复原位置。
+  - `read_fully_or_eof_at` 从绝对 offset 读取并恢复原位置。
+- **`WriteSeekExt`**：
+  - `write_all_at_preserving_position` 在绝对 offset 写入并恢复原位置。
 
 ### Blanket Implementation
 
@@ -48,7 +68,7 @@ adapter 代码。
 
 ```toml
 [dependencies]
-qubit-io = "0.1"
+qubit-io = "0.2"
 ```
 
 ## 快速开始
@@ -72,6 +92,54 @@ fn read_second_byte(input: &mut dyn ReadSeek) -> std::io::Result<u8> {
 fn main() -> std::io::Result<()> {
     let mut cursor = std::io::Cursor::new(b"abc".to_vec());
     assert_eq!(read_second_byte(&mut cursor)?, b'b');
+    Ok(())
+}
+```
+
+### 尽量读满，EOF 正常返回
+
+当短读需要继续读取，但 EOF 先到时又不希望返回 `UnexpectedEof`，可以使用
+`ReadExt::read_fully_or_eof`。
+
+```rust
+use qubit_io::ReadExt;
+
+fn read_prefix(input: &mut dyn std::io::Read) -> std::io::Result<Vec<u8>> {
+    let mut buffer = vec![0; 8];
+    let count = input.read_fully_or_eof(&mut buffer)?;
+    buffer.truncate(count);
+    Ok(buffer)
+}
+
+fn main() -> std::io::Result<()> {
+    let mut cursor = std::io::Cursor::new(b"abc".to_vec());
+    assert_eq!(read_prefix(&mut cursor)?, b"abc");
+    Ok(())
+}
+```
+
+### 不消费当前位置地探测内容
+
+当需要检查可 seek stream 的前缀或某段内容，但不能改变调用方可见的位置时，
+可以使用 `ReadSeekExt::peek_fully_or_eof`。
+
+```rust
+use qubit_io::ReadSeekExt;
+use std::io::{Seek, SeekFrom};
+
+fn peek_three(input: &mut std::io::Cursor<Vec<u8>>) -> std::io::Result<[u8; 3]> {
+    input.seek(SeekFrom::Start(2))?;
+
+    let mut buffer = [0; 3];
+    let count = input.peek_fully_or_eof(&mut buffer)?;
+    assert_eq!(3, count);
+    assert_eq!(2, input.stream_position()?);
+    Ok(buffer)
+}
+
+fn main() -> std::io::Result<()> {
+    let mut cursor = std::io::Cursor::new(b"abcdef".to_vec());
+    assert_eq!(peek_three(&mut cursor)?, *b"cde");
     Ok(())
 }
 ```
@@ -147,6 +215,33 @@ fn main() -> std::io::Result<()> {
 }
 ```
 
+### 在指定 offset 写入
+
+当需要回填 header、offset 表或长度字段，但不想打乱调用方当前写入位置时，可以使用
+`WriteSeekExt::write_all_at_preserving_position`。
+
+```rust
+use qubit_io::WriteSeekExt;
+use std::io::{Seek, Write};
+
+fn patch_length(output: &mut std::io::Cursor<Vec<u8>>) -> std::io::Result<()> {
+    output.write_all(&[0, 0])?;
+    output.write_all(b"payload")?;
+    let end = output.stream_position()?;
+
+    output.write_all_at_preserving_position(0, &[0, 7])?;
+    assert_eq!(end, output.stream_position()?);
+    Ok(())
+}
+
+fn main() -> std::io::Result<()> {
+    let mut cursor = std::io::Cursor::new(Vec::new());
+    patch_length(&mut cursor)?;
+    assert_eq!(cursor.into_inner(), b"\x00\x07payload");
+    Ok(())
+}
+```
+
 ## 何时使用这些 Trait
 
 适合使用 Qubit IO 组合 trait 的场景包括：
@@ -174,9 +269,17 @@ where
 | Trait | 标准库约束 | 典型用途 |
 |------|------------|----------|
 | `ReadSeek` | `Read + Seek` | 可读取的随机访问输入 |
+| `BufReadSeek` | `BufRead + Seek` | 带缓冲的随机访问输入 |
 | `ReadWrite` | `Read + Write` | 双向 stream 或缓冲区 |
 | `WriteSeek` | `Write + Seek` | 可写入的随机访问输出 |
 | `ReadWriteSeek` | `Read + Write + Seek` | 完整可变的随机访问 I/O |
+
+| Extension trait | 方法 | 典型用途 |
+|-----------------|------|----------|
+| `ReadExt` | `read_fully_or_eof`、`discard_fully_or_eof` | 短读安全读取和有界丢弃 |
+| `SeekExt` | `stream_len_preserving_position` | 获取长度但保持原 cursor |
+| `ReadSeekExt` | `peek_fully_or_eof`、`read_fully_or_eof_at` | 不消费位置的探测和随机 offset 读取 |
+| `WriteSeekExt` | `write_all_at_preserving_position` | 随机访问 patch 写入 |
 
 每个 trait 都通过 blanket implementation 自动实现：
 
@@ -199,12 +302,24 @@ Rust 的 trait alias 尚未稳定，而且类似 `dyn Read + Seek` 的多非 aut
 组合不能按很多 API 需要的方式直接使用。Qubit IO 通过定义带有目标 supertrait
 的具名 trait，并为所有满足约束的类型提供 blanket implementation 来解决这个问题。
 
-这些 trait 自身不添加新方法。`read_exact`、`write_all`、`seek` 等方法都来自
+组合 trait 自身不添加新方法。`read_exact`、`write_all`、`seek` 等方法都来自
 标准库 supertrait。
+
+## Extension Trait 说明
+
+使用扩展方法前，需要把对应 trait import 到当前作用域：
+
+```rust
+use qubit_io::ReadExt;
+```
+
+extension trait 使用 blanket implementation，所以任何实现了对应标准库 trait 的类型
+都会自动获得这些方法。这也适用于 `&mut dyn std::io::Read` 这类 trait object。
 
 ## 测试与代码覆盖率
 
-本项目的测试聚焦于 trait object 支持和 blanket implementation 行为。
+本项目的测试聚焦于 trait object 支持、blanket implementation 行为、短读处理、
+EOF 语义、interrupted I/O 重试以及位置恢复语义。
 
 ### 运行测试
 
