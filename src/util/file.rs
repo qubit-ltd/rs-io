@@ -28,7 +28,51 @@ use std::sync::atomic::{
     Ordering,
 };
 
+#[cfg(windows)]
+use std::ffi::c_void;
+#[cfg(windows)]
+use std::os::windows::ffi::OsStrExt;
+#[cfg(windows)]
+use std::os::windows::io::{
+    FromRawHandle,
+    RawHandle,
+};
+
 static TEMP_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+#[cfg(windows)]
+const MOVEFILE_REPLACE_EXISTING: u32 = 0x0000_0001;
+#[cfg(windows)]
+const MOVEFILE_WRITE_THROUGH: u32 = 0x0000_0008;
+#[cfg(windows)]
+const GENERIC_READ: u32 = 0x8000_0000;
+#[cfg(windows)]
+const FILE_SHARE_READ: u32 = 0x0000_0001;
+#[cfg(windows)]
+const FILE_SHARE_WRITE: u32 = 0x0000_0002;
+#[cfg(windows)]
+const FILE_SHARE_DELETE: u32 = 0x0000_0004;
+#[cfg(windows)]
+const OPEN_EXISTING: u32 = 3;
+#[cfg(windows)]
+const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+#[cfg(windows)]
+const INVALID_HANDLE_VALUE: RawHandle = -1isize as RawHandle;
+
+#[cfg(windows)]
+unsafe extern "system" {
+    fn MoveFileExW(existing_file_name: *const u16, new_file_name: *const u16, flags: u32) -> i32;
+
+    fn CreateFileW(
+        file_name: *const u16,
+        desired_access: u32,
+        share_mode: u32,
+        security_attributes: *mut c_void,
+        creation_disposition: u32,
+        flags_and_attributes: u32,
+        template_file: RawHandle,
+    ) -> RawHandle;
+}
 
 /// Opens a file as a buffered reader.
 ///
@@ -96,8 +140,11 @@ where
 ///
 /// Parent directories are created before writing. The data is written to a
 /// uniquely named temporary file, flushed and synced, and then renamed over the
-/// destination path. If writing or syncing fails, the temporary file is removed
-/// and the existing destination is left untouched.
+/// destination path with platform-specific replace semantics. After the
+/// replacement, the parent directory is synced so directory metadata reaches
+/// durable storage on platforms that support directory syncing. If writing or
+/// syncing the temporary file fails, the temporary file is removed and the
+/// existing destination is left untouched.
 ///
 /// # Parameters
 /// - `path`: Destination path.
@@ -105,7 +152,7 @@ where
 ///
 /// # Errors
 /// Returns the first I/O error reported while creating, writing, syncing,
-/// removing, or renaming the temporary file.
+/// removing, replacing, or syncing the temporary file or parent directory.
 pub fn atomic_write<P, B>(path: P, bytes: B) -> Result<()>
 where
     P: AsRef<Path>,
@@ -117,7 +164,8 @@ where
 /// Atomically writes a file using caller-provided write logic.
 ///
 /// The closure receives the temporary file. After the closure succeeds, the
-/// file is flushed, synced, closed, and renamed over the destination path.
+/// file is flushed, synced, closed, replaced over the destination path, and the
+/// parent directory is synced.
 ///
 /// # Parameters
 /// - `path`: Destination path.
@@ -126,7 +174,7 @@ where
 ///
 /// # Errors
 /// Returns the first I/O error reported while creating, writing, syncing,
-/// removing, or renaming the temporary file.
+/// removing, replacing, or syncing the temporary file or parent directory.
 #[cfg(not(coverage))]
 pub fn atomic_write_with<P, F>(path: P, write: F) -> Result<()>
 where
@@ -154,11 +202,11 @@ where
     }
 
     drop(file);
-    if let Err(error) = fs::rename(&temp_path, path) {
+    if let Err(error) = replace_file(&temp_path, path) {
         drop(fs::remove_file(&temp_path));
         return Err(error);
     }
-    Ok(())
+    sync_parent_dir(path)
 }
 
 /// Atomically writes a file using caller-provided write logic.
@@ -190,7 +238,7 @@ fn atomic_write_with_path_for_coverage(
     }
 
     drop(file);
-    if let Err(error) = fs::rename(&temp_path, path) {
+    if let Err(error) = replace_file(&temp_path, path) {
         drop(fs::remove_file(&temp_path));
         return Err(error);
     }
@@ -223,11 +271,112 @@ fn create_parent_dirs(path: &Path) -> Result<()> {
     }
 }
 
-fn create_temp_file(path: &Path) -> Result<(PathBuf, File)> {
-    let parent = path
-        .parent()
+/// Replaces `destination` with `source`.
+///
+/// # Parameters
+/// - `source`: Existing temporary file path.
+/// - `destination`: Destination file path.
+///
+/// # Errors
+/// Returns the platform I/O error reported while replacing the destination.
+#[cfg(not(windows))]
+fn replace_file(source: &Path, destination: &Path) -> Result<()> {
+    fs::rename(source, destination)
+}
+
+/// Replaces `destination` with `source`.
+///
+/// # Parameters
+/// - `source`: Existing temporary file path.
+/// - `destination`: Destination file path.
+///
+/// # Errors
+/// Returns the platform I/O error reported while replacing the destination.
+#[cfg(windows)]
+fn replace_file(source: &Path, destination: &Path) -> Result<()> {
+    let source = wide_path(source);
+    let destination = wide_path(destination);
+    let result = unsafe {
+        MoveFileExW(
+            source.as_ptr(),
+            destination.as_ptr(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+    };
+    if result == 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+/// Syncs the parent directory for `path`.
+///
+/// # Parameters
+/// - `path`: File path whose parent directory should be synced.
+///
+/// # Errors
+/// Returns an I/O error when opening or syncing the parent directory fails.
+#[cfg(not(windows))]
+fn sync_parent_dir(path: &Path) -> Result<()> {
+    File::open(parent_dir_for(path))?.sync_all()
+}
+
+/// Syncs the parent directory for `path`.
+///
+/// # Parameters
+/// - `path`: File path whose parent directory should be synced.
+///
+/// # Errors
+/// Returns an I/O error when opening or syncing the parent directory fails.
+#[cfg(windows)]
+fn sync_parent_dir(path: &Path) -> Result<()> {
+    let parent = wide_path(parent_dir_for(path));
+    let handle = unsafe {
+        CreateFileW(
+            parent.as_ptr(),
+            GENERIC_READ,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            std::ptr::null_mut(),
+            OPEN_EXISTING,
+            FILE_FLAG_BACKUP_SEMANTICS,
+            std::ptr::null_mut(),
+        )
+    };
+    if handle == INVALID_HANDLE_VALUE {
+        return Err(std::io::Error::last_os_error());
+    }
+    let directory = unsafe { File::from_raw_handle(handle) };
+    directory.sync_all()
+}
+
+/// Gets the parent directory that should be synced for `path`.
+///
+/// # Parameters
+/// - `path`: File path whose parent directory is needed.
+///
+/// # Returns
+/// The parent directory, or the current directory for parentless paths.
+fn parent_dir_for(path: &Path) -> &Path {
+    path.parent()
         .filter(|parent| !parent.as_os_str().is_empty())
-        .unwrap_or_else(|| Path::new("."));
+        .unwrap_or_else(|| Path::new("."))
+}
+
+/// Converts a path into a null-terminated Windows wide string.
+///
+/// # Parameters
+/// - `path`: Path to convert.
+///
+/// # Returns
+/// Null-terminated UTF-16 path buffer.
+#[cfg(windows)]
+fn wide_path(path: &Path) -> Vec<u16> {
+    path.as_os_str().encode_wide().chain(Some(0)).collect()
+}
+
+fn create_temp_file(path: &Path) -> Result<(PathBuf, File)> {
+    let parent = parent_dir_for(path);
     let temp_path = temp_path_for(parent);
     match OpenOptions::new()
         .write(true)
@@ -253,6 +402,7 @@ fn temp_path_for(parent: &Path) -> PathBuf {
 #[cfg(coverage)]
 pub fn coverage_exercise_file_helper_defensive_paths() {
     create_parent_dirs(Path::new("coverage-file.txt")).expect("parent path should be accepted");
+    drop(sync_parent_dir(Path::new("coverage-file.txt")));
 
     let invalid_parent = Path::new("coverage-temp-parent");
     File::create(invalid_parent).expect("invalid parent marker should be created");
