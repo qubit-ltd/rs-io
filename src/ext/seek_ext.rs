@@ -50,13 +50,6 @@ where
     }
 }
 
-impl SeekExt for dyn Seek + '_ {
-    #[inline]
-    fn stream_size(&mut self) -> Result<u64> {
-        stream_size_impl(self)
-    }
-}
-
 /// Gets the size of `stream` and restores its original position.
 ///
 /// # Parameters

@@ -142,7 +142,7 @@ fn test_write_all_at_preserving_position_works_on_dyn_write_seek() {
     cursor
         .seek(SeekFrom::Start(4))
         .expect("cursor should seek to initial position");
-    let stream: &mut dyn WriteSeek = &mut cursor;
+    let mut stream: &mut dyn WriteSeek = &mut cursor;
 
     stream
         .write_all_at_preserving_position(2, b"YY")

@@ -49,4 +49,4 @@ use std::io::{
 /// ```
 pub trait ReadWriteSeek: Read + Write + Seek {}
 
-impl<T> ReadWriteSeek for T where T: Read + Write + Seek {}
+impl<T> ReadWriteSeek for T where T: Read + Write + Seek + ?Sized {}

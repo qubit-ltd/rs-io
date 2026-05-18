@@ -48,13 +48,6 @@ where
     }
 }
 
-impl WriteSeekExt for dyn WriteSeek + '_ {
-    #[inline]
-    fn write_all_at_preserving_position(&mut self, offset: u64, buffer: &[u8]) -> Result<()> {
-        write_all_at_preserving_position_impl(self, offset, buffer)
-    }
-}
-
 /// Writes all bytes at `offset` and restores the original stream position.
 ///
 /// # Parameters

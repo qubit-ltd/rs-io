@@ -8,16 +8,14 @@
  *
  ******************************************************************************/
 use std::io::{
+    ErrorKind,
     Read,
     Result,
     Seek,
     SeekFrom,
 };
 
-use crate::{
-    ReadExt,
-    ReadSeek,
-};
+use crate::ReadSeek;
 
 /// Extension methods for values that implement both [`Read`] and [`Seek`].
 ///
@@ -79,18 +77,6 @@ where
     }
 }
 
-impl ReadSeekExt for dyn ReadSeek + '_ {
-    #[inline]
-    fn peek_exact_or_eof(&mut self, buffer: &mut [u8]) -> Result<usize> {
-        peek_exact_or_eof_impl(self, buffer)
-    }
-
-    #[inline]
-    fn read_exact_or_eof_at(&mut self, offset: u64, buffer: &mut [u8]) -> Result<usize> {
-        read_exact_or_eof_at_impl(self, offset, buffer)
-    }
-}
-
 /// Reads from the current stream position and restores that position.
 ///
 /// # Parameters
@@ -102,9 +88,9 @@ impl ReadSeekExt for dyn ReadSeek + '_ {
 ///
 /// # Errors
 /// Returns an error when position lookup, reading, or position restoration fails.
-fn peek_exact_or_eof_impl(mut reader: &mut dyn ReadSeek, buffer: &mut [u8]) -> Result<usize> {
+fn peek_exact_or_eof_impl(reader: &mut dyn ReadSeek, buffer: &mut [u8]) -> Result<usize> {
     let position = reader.stream_position()?;
-    let read_result = reader.read_exact_or_eof(buffer);
+    let read_result = read_exact_or_eof(reader, buffer);
     let restore_result = reader.seek(SeekFrom::Start(position));
     match (read_result, restore_result) {
         (Ok(count), Ok(_)) => Ok(count),
@@ -126,13 +112,13 @@ fn peek_exact_or_eof_impl(mut reader: &mut dyn ReadSeek, buffer: &mut [u8]) -> R
 /// # Errors
 /// Returns an error when position lookup, seeking, reading, or position restoration fails.
 fn read_exact_or_eof_at_impl(
-    mut reader: &mut dyn ReadSeek,
+    reader: &mut dyn ReadSeek,
     offset: u64,
     buffer: &mut [u8],
 ) -> Result<usize> {
     let position = reader.stream_position()?;
     let read_result = match reader.seek(SeekFrom::Start(offset)) {
-        Ok(_) => reader.read_exact_or_eof(buffer),
+        Ok(_) => read_exact_or_eof(reader, buffer),
         Err(error) => Err(error),
     };
     let restore_result = reader.seek(SeekFrom::Start(position));
@@ -141,4 +127,32 @@ fn read_exact_or_eof_at_impl(
         (Err(error), Ok(_)) => Err(error),
         (_, Err(error)) => Err(error),
     }
+}
+
+/// Reads from `reader` until `buffer` is full or EOF is reached.
+///
+/// # Parameters
+/// - `reader`: Source reader.
+/// - `buffer`: Destination buffer to fill.
+///
+/// # Returns
+/// The number of bytes written into `buffer`.
+///
+/// # Errors
+/// Returns the first non-interrupted read error reported by `reader`.
+fn read_exact_or_eof(reader: &mut dyn ReadSeek, buffer: &mut [u8]) -> Result<usize> {
+    let mut total = 0;
+    while total < buffer.len() {
+        match reader.read(&mut buffer[total..]) {
+            Ok(0) => break,
+            Ok(count) => total += count,
+            Err(error) => {
+                if error.kind() == ErrorKind::Interrupted {
+                    continue;
+                }
+                return Err(error);
+            }
+        }
+    }
+    Ok(total)
 }

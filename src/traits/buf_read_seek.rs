@@ -44,4 +44,4 @@ use std::io::{
 /// ```
 pub trait BufReadSeek: BufRead + Seek {}
 
-impl<T> BufReadSeek for T where T: BufRead + Seek {}
+impl<T> BufReadSeek for T where T: BufRead + Seek + ?Sized {}
