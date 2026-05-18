@@ -11,26 +11,28 @@ Small I/O trait and extension utilities for Rust.
 
 ## Overview
 
-Qubit IO provides two small layers on top of `std::io`:
+Qubit IO provides a compact set of low-level utilities on top of `std::io`:
 
 - object-safe composition traits for common `std::io` capability combinations;
 - extension traits for recurring low-level I/O patterns that the standard
-  library leaves to callers.
+  library leaves to callers;
+- utility functions and wrapper types for common stream instrumentation,
+  limiting, teeing, checksumming, and position restoration.
 
 The composition traits are useful when an API needs a trait object such as
 `&mut dyn ReadSeek` or `Box<dyn ReadWriteSeek>` instead of a generic bound like
 `R: Read + Seek`.
 
 The extension traits cover conservative, standard-library-first behavior such
-as reading until a buffer is full or EOF is reached, peeking from a seekable
-stream without consuming its position, and writing at an offset while restoring
-the caller's original position.
+as bounded reads, limited delimiter reads, binary scalar encoding, LEB128 and
+ZigZag integer encodings, and position-preserving seek operations.
 
 ## Design Goals
 
 - **Object-safe composition**: provide named trait-object-friendly I/O bounds.
 - **Standard-library first**: build directly on `std::io::{Read, Write, Seek}`.
-- **No wrapper types**: use blanket implementations on standard I/O traits.
+- **Practical wrappers**: include only small wrappers with clear stream-level
+  behavior.
 - **Tiny API surface**: keep only generic, low-level operations that are reused
   across crates.
 - **Position safety**: make non-consuming inspection and random-access patching
@@ -62,6 +64,10 @@ the caller's original position.
     ergonomics.
   - `read_to_end_limited` reads the remaining input into a `Vec<u8>` with a
     maximum accepted size.
+  - `read_to_string_limited` reads bounded UTF-8 text.
+- **`BufReadExt`**:
+  - `read_until_limited`, `read_line_limited`, and `discard_until_limited`
+    provide bounded delimiter-oriented operations.
 - **`SeekExt`**:
   - `stream_size` measures stream size and restores the original position.
 - **`ReadSeekExt`**:
@@ -72,20 +78,32 @@ the caller's original position.
   - `write_all_at_preserving_position` writes bytes at an absolute offset and
     restores the original position.
 - **`BinaryReadExt` / `BinaryWriteExt`**:
-  - read and write primitive numeric scalars with `_be` / `_le` suffix methods
-    or a runtime `ByteOrder`.
+  - read and write primitive numeric scalars through `u128` / `i128` with
+    `_be` / `_le` suffix methods or a runtime `ByteOrder`.
 - **`Leb128IntReadExt` / `Leb128IntWriteExt`**:
-  - read and write unsigned and signed LEB128 integers with `uleb` / `sleb`
-    method names.
+  - read and write unsigned and signed LEB128 integers through 128-bit values;
+    read methods also provide `_strict` canonical-decoding variants.
 - **`ZigZagIntReadExt` / `ZigZagIntWriteExt`**:
-  - read and write ZigZag-mapped signed integers using unsigned LEB128 payloads.
+  - read and write ZigZag-mapped signed integers through 128-bit values using
+    unsigned LEB128 payloads; read methods also provide `_strict` variants.
+- **`StringReadExt` / `StringWriteExt`**:
+  - read and write length-prefixed UTF-8 strings with ULEB128, `u16`, or `u32`
+    byte-length prefixes.
+
+### Utilities and Wrappers
+
+- file helpers create missing parent directories and provide durable
+  same-directory atomic writes;
+- content helpers compare readers and copy bounded byte ranges;
+- wrapper types provide counting, limiting, teeing, checksum updating, and
+  position-guard behavior.
 
 ### Blanket Implementations
 
 Every type that implements the corresponding standard-library traits
-automatically implements the Qubit IO composition trait. You do not need to
-write adapter code for `std::io::Cursor`, `std::fs::File`, or your own I/O
-types.
+automatically implements the Qubit IO composition and extension traits. You do
+not need to write adapter code for `std::io::Cursor`, `std::fs::File`, or your
+own I/O types.
 
 ## Installation
 
@@ -295,6 +313,8 @@ where
 
 ## API Reference
 
+For a complete method-level overview, see the [API matrix](doc/api-matrix.md).
+
 | Trait | Standard-library bounds | Typical use |
 |-------|-------------------------|-------------|
 | `ReadSeek` | `Read + Seek` | readable random-access input |
@@ -305,16 +325,19 @@ where
 
 | Extension trait | Methods | Typical use |
 |-----------------|---------|-------------|
-| `ReadExt` | `read_exact_or_eof`, `discard_exact_or_eof`, `copy_to`, `copy_to_limited`, `read_to_end_limited` | short-read-safe reads, bounded copies, and bounded reads |
+| `ReadExt` | `read_exact_or_eof`, `discard_exact_or_eof`, `copy_to`, `copy_to_limited`, `read_to_end_limited`, `read_to_string_limited` | short-read-safe reads, bounded copies, and bounded reads |
+| `BufReadExt` | `read_until_limited`, `read_line_limited`, `discard_until_limited` | bounded delimiter and line operations |
 | `SeekExt` | `stream_size` | size checks that keep the original cursor |
 | `ReadSeekExt` | `peek_exact_or_eof`, `read_exact_or_eof_at` | non-consuming inspection and random-offset reads |
 | `WriteSeekExt` | `write_all_at_preserving_position` | random-access patch writes |
-| `BinaryReadExt` | `read_u16_be`, `read_u16_le`, `read_u16(order)`, and other scalar variants | binary scalar decoding |
-| `BinaryWriteExt` | `write_u16_be`, `write_u16_le`, `write_u16(value, order)`, and other scalar variants | binary scalar encoding |
-| `Leb128IntReadExt` | `read_uleb_u32`, `read_sleb_i32`, and other integer variants | LEB128 integer decoding |
-| `Leb128IntWriteExt` | `write_uleb_u32`, `write_sleb_i32`, and other integer variants | LEB128 integer encoding |
-| `ZigZagIntReadExt` | `read_zigzag_i32`, `read_zigzag_i64`, `read_zigzag_isize` | ZigZag signed integer decoding |
-| `ZigZagIntWriteExt` | `write_zigzag_i32`, `write_zigzag_i64`, `write_zigzag_isize` | ZigZag signed integer encoding |
+| `BinaryReadExt` | `read_u16_be`, `read_u16_le`, `read_u16(order)`, and scalar variants through `u128` / `i128` | binary scalar decoding |
+| `BinaryWriteExt` | `write_u16_be`, `write_u16_le`, `write_u16(value, order)`, and scalar variants through `u128` / `i128` | binary scalar encoding |
+| `Leb128IntReadExt` | `read_uleb_u32`, `read_sleb_i32`, `_strict` variants, and other integer variants through 128-bit values | LEB128 integer decoding |
+| `Leb128IntWriteExt` | `write_uleb_u32`, `write_sleb_i32`, and other integer variants through 128-bit values | LEB128 integer encoding |
+| `ZigZagIntReadExt` | `read_zigzag_i32`, `read_zigzag_i128`, `_strict` variants, and other signed variants | ZigZag signed integer decoding |
+| `ZigZagIntWriteExt` | `write_zigzag_i32`, `write_zigzag_i128`, and other signed variants | ZigZag signed integer encoding |
+| `StringReadExt` | `read_utf8_string_uleb`, `read_utf8_string_u16_be`, `read_utf8_string_u16_le`, `read_utf8_string_u32_be`, `read_utf8_string_u32_le` | bounded length-prefixed UTF-8 decoding |
+| `StringWriteExt` | `write_utf8_string_uleb`, `write_utf8_string_u16_be`, `write_utf8_string_u16_le`, `write_utf8_string_u32_be`, `write_utf8_string_u32_le` | length-prefixed UTF-8 encoding |
 
 Each trait is implemented with a blanket implementation:
 
@@ -350,9 +373,9 @@ Extension methods are available after importing the corresponding trait:
 use qubit_io::ReadExt;
 ```
 
-The extension traits use blanket implementations, so any type implementing the
-matching standard-library trait automatically receives the methods. This also
-works for trait objects such as `&mut dyn std::io::Read`.
+The extension traits use `?Sized` blanket implementations, so any type
+implementing the matching standard-library trait automatically receives the
+methods. This also works for trait objects such as `&mut dyn std::io::Read`.
 
 ## Testing & Code Coverage
 

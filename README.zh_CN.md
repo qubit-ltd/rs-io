@@ -11,24 +11,24 @@
 
 ## 概述
 
-Qubit IO 在 `std::io` 之上提供两层很小的能力：
+Qubit IO 在 `std::io` 之上提供一组紧凑的底层能力：
 
 - 为常用 `std::io` 能力组合提供 object-safe 的组合 trait；
-- 为标准库留给调用方反复手写的底层 I/O 模式提供 extension trait。
+- 为标准库留给调用方反复手写的底层 I/O 模式提供 extension trait；
+- 为 stream 统计、限制、tee、checksum 和位置恢复提供工具函数与 wrapper 类型。
 
 组合 trait 适合 API 需要使用 `&mut dyn ReadSeek` 或
 `Box<dyn ReadWriteSeek>` 这类 trait object，而不是 `R: Read + Seek`
 这类泛型约束的场景。
 
-extension trait 覆盖的是保守、标准库优先的行为，例如：尽量读满 buffer 但 EOF
-正常返回已读长度；从可 seek stream 中 peek 数据但不消费当前位置；在指定 offset
-写入后恢复调用方原来的位置。
+extension trait 覆盖的是保守、标准库优先的行为，例如：有界读取、有界分隔符读取、
+二进制标量编码、LEB128 与 ZigZag 整数编码，以及保持位置不变的 seek 操作。
 
 ## 设计目标
 
 - **object-safe 组合**：提供适合 trait object 使用的具名 I/O 约束。
 - **标准库优先**：直接基于 `std::io::{Read, Write, Seek}` 构建。
-- **不引入包装类型**：基于标准 I/O trait 做 blanket implementation。
+- **实用 wrapper**：只提供 stream 层语义清楚的小型包装类型。
 - **极小 API 表面积**：只保留跨 crate 复用价值高的通用底层操作。
 - **位置安全**：把不消费当前位置的探测和随机访问 patch 写入显式表达出来。
 - **便于集成**：可用于 cursor、文件、缓冲区、stream 和自定义 I/O 类型。
@@ -50,6 +50,10 @@ extension trait 覆盖的是保守、标准库优先的行为，例如：尽量�
   - `discard_exact_or_eof` 不分配内存，最多消费并丢弃指定字节数。
   - `copy_to` 与 `copy_to_limited` 以方法形式把内容复制到 writer。
   - `read_to_end_limited` 在最大长度限制内把剩余输入读入 `Vec<u8>`。
+  - `read_to_string_limited` 读取有界 UTF-8 文本。
+- **`BufReadExt`**：
+  - `read_until_limited`、`read_line_limited` 与 `discard_until_limited`
+    提供有界分隔符读取和丢弃。
 - **`SeekExt`**：
   - `stream_size` 获取 stream 大小并恢复原位置。
 - **`ReadSeekExt`**：
@@ -58,15 +62,27 @@ extension trait 覆盖的是保守、标准库优先的行为，例如：尽量�
 - **`WriteSeekExt`**：
   - `write_all_at_preserving_position` 在绝对 offset 写入并恢复原位置。
 - **`BinaryReadExt` / `BinaryWriteExt`**：
-  - 支持通过 `_be` / `_le` 后缀方法或运行时 `ByteOrder` 读写基础数字标量。
+  - 支持通过 `_be` / `_le` 后缀方法或运行时 `ByteOrder` 读写到
+    `u128` / `i128` 的基础数字标量。
 - **`Leb128IntReadExt` / `Leb128IntWriteExt`**：
-  - 通过 `uleb` / `sleb` 方法读写 unsigned / signed LEB128 整数。
+  - 通过 `uleb` / `sleb` 方法读写到 128 位的 unsigned / signed LEB128 整数；
+    读取方法还提供 `_strict` canonical 解码变体。
 - **`ZigZagIntReadExt` / `ZigZagIntWriteExt`**：
-  - 使用 unsigned LEB128 payload 读写 ZigZag 映射后的有符号整数。
+  - 使用 unsigned LEB128 payload 读写到 128 位的 ZigZag 映射有符号整数；
+    读取方法还提供 `_strict` 变体。
+- **`StringReadExt` / `StringWriteExt`**：
+  - 使用 ULEB128、`u16` 或 `u32` 字节长度前缀读写 UTF-8 字符串。
+
+### 工具函数与 Wrapper
+
+- 文件 helper 可创建缺失父目录，并提供同目录临时文件驱动的持久化 atomic write；
+- 内容 helper 可比较 reader 内容并做有界复制；
+- wrapper 类型提供计数、限制、tee、checksum 更新和位置保护能力。
 
 ### Blanket Implementation
 
-所有实现了对应标准库 trait 的类型，都会自动实现 Qubit IO 的组合 trait。
+所有实现了对应标准库 trait 的类型，都会自动实现 Qubit IO 的组合 trait 和
+extension trait。
 对 `std::io::Cursor`、`std::fs::File` 或自定义 I/O 类型，都不需要额外编写
 adapter 代码。
 
@@ -274,6 +290,8 @@ where
 
 ## API 参考
 
+完整的方法级清单见 [API 矩阵](doc/api-matrix.zh_CN.md)。
+
 | Trait | 标准库约束 | 典型用途 |
 |------|------------|----------|
 | `ReadSeek` | `Read + Seek` | 可读取的随机访问输入 |
@@ -284,16 +302,19 @@ where
 
 | Extension trait | 方法 | 典型用途 |
 |-----------------|------|----------|
-| `ReadExt` | `read_exact_or_eof`、`discard_exact_or_eof`、`copy_to`、`copy_to_limited`、`read_to_end_limited` | 短读安全读取、有界复制和有界读取 |
+| `ReadExt` | `read_exact_or_eof`、`discard_exact_or_eof`、`copy_to`、`copy_to_limited`、`read_to_end_limited`、`read_to_string_limited` | 短读安全读取、有界复制和有界读取 |
+| `BufReadExt` | `read_until_limited`、`read_line_limited`、`discard_until_limited` | 有界分隔符和行操作 |
 | `SeekExt` | `stream_size` | 获取大小但保持原 cursor |
 | `ReadSeekExt` | `peek_exact_or_eof`、`read_exact_or_eof_at` | 不消费位置的探测和随机 offset 读取 |
 | `WriteSeekExt` | `write_all_at_preserving_position` | 随机访问 patch 写入 |
-| `BinaryReadExt` | `read_u16_be`、`read_u16_le`、`read_u16(order)` 等标量方法 | 二进制标量解码 |
-| `BinaryWriteExt` | `write_u16_be`、`write_u16_le`、`write_u16(value, order)` 等标量方法 | 二进制标量编码 |
-| `Leb128IntReadExt` | `read_uleb_u32`、`read_sleb_i32` 等整数方法 | LEB128 整数解码 |
-| `Leb128IntWriteExt` | `write_uleb_u32`、`write_sleb_i32` 等整数方法 | LEB128 整数编码 |
-| `ZigZagIntReadExt` | `read_zigzag_i32`、`read_zigzag_i64`、`read_zigzag_isize` | ZigZag 有符号整数解码 |
-| `ZigZagIntWriteExt` | `write_zigzag_i32`、`write_zigzag_i64`、`write_zigzag_isize` | ZigZag 有符号整数编码 |
+| `BinaryReadExt` | `read_u16_be`、`read_u16_le`、`read_u16(order)`，以及到 `u128` / `i128` 的标量变体 | 二进制标量解码 |
+| `BinaryWriteExt` | `write_u16_be`、`write_u16_le`、`write_u16(value, order)`，以及到 `u128` / `i128` 的标量变体 | 二进制标量编码 |
+| `Leb128IntReadExt` | `read_uleb_u32`、`read_sleb_i32`、`_strict` 变体，以及到 128 位的整数变体 | LEB128 整数解码 |
+| `Leb128IntWriteExt` | `write_uleb_u32`、`write_sleb_i32`，以及到 128 位的整数变体 | LEB128 整数编码 |
+| `ZigZagIntReadExt` | `read_zigzag_i32`、`read_zigzag_i128`、`_strict` 变体和其他有符号整数变体 | ZigZag 有符号整数解码 |
+| `ZigZagIntWriteExt` | `write_zigzag_i32`、`write_zigzag_i128` 和其他有符号整数变体 | ZigZag 有符号整数编码 |
+| `StringReadExt` | `read_utf8_string_uleb`、`read_utf8_string_u16_be`、`read_utf8_string_u16_le`、`read_utf8_string_u32_be`、`read_utf8_string_u32_le` | 有界长度前缀 UTF-8 解码 |
+| `StringWriteExt` | `write_utf8_string_uleb`、`write_utf8_string_u16_be`、`write_utf8_string_u16_le`、`write_utf8_string_u32_be`、`write_utf8_string_u32_le` | 长度前缀 UTF-8 编码 |
 
 每个 trait 都通过 blanket implementation 自动实现：
 
@@ -327,8 +348,8 @@ Rust 的 trait alias 尚未稳定，而且类似 `dyn Read + Seek` 的多非 aut
 use qubit_io::ReadExt;
 ```
 
-extension trait 使用 blanket implementation，所以任何实现了对应标准库 trait 的类型
-都会自动获得这些方法。这也适用于 `&mut dyn std::io::Read` 这类 trait object。
+extension trait 使用 `?Sized` blanket implementation，所以任何实现了对应标准库 trait
+的类型都会自动获得这些方法。这也适用于 `&mut dyn std::io::Read` 这类 trait object。
 
 ## 测试与代码覆盖率
 
