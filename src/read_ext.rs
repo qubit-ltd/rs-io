@@ -8,6 +8,7 @@
  *
  ******************************************************************************/
 use std::io::{
+    Error,
     ErrorKind,
     Read,
     Result,
@@ -15,6 +16,9 @@ use std::io::{
 
 /// Default stack buffer size used by discard operations.
 const DISCARD_BUFFER_SIZE: usize = 8 * 1024;
+
+/// Default stack buffer size used by bounded read operations.
+const READ_TO_VEC_BUFFER_SIZE: usize = 8 * 1024;
 
 /// Extension methods for [`Read`] values.
 ///
@@ -58,6 +62,25 @@ pub trait ReadExt: Read {
     /// Returns the first non-[`ErrorKind::Interrupted`] error reported by the
     /// underlying reader. Interrupted reads are retried.
     fn discard_fully_or_eof(&mut self, bytes: u64) -> Result<u64>;
+
+    /// Reads the remaining bytes into a vector with a maximum accepted length.
+    ///
+    /// This method consumes bytes from the current reader position until EOF is
+    /// reached. If the stream contains more than `max_len` bytes, it returns
+    /// [`ErrorKind::InvalidData`] after detecting the first excess byte.
+    ///
+    /// # Parameters
+    /// - `max_len`: Maximum number of bytes accepted in the returned vector.
+    ///
+    /// # Returns
+    /// A vector containing all remaining bytes when the stream length is within
+    /// the limit.
+    ///
+    /// # Errors
+    /// Returns [`ErrorKind::InvalidData`] when the stream contains more than
+    /// `max_len` bytes. Returns the first non-[`ErrorKind::Interrupted`] error
+    /// reported by the underlying reader; interrupted reads are retried.
+    fn read_to_vec_limited(&mut self, max_len: usize) -> Result<Vec<u8>>;
 }
 
 impl<T> ReadExt for T
@@ -73,6 +96,11 @@ where
     fn discard_fully_or_eof(&mut self, bytes: u64) -> Result<u64> {
         discard_fully_or_eof_from(self, bytes)
     }
+
+    #[inline]
+    fn read_to_vec_limited(&mut self, max_len: usize) -> Result<Vec<u8>> {
+        read_to_vec_limited_from(self, max_len)
+    }
 }
 
 impl ReadExt for dyn Read + '_ {
@@ -84,6 +112,11 @@ impl ReadExt for dyn Read + '_ {
     #[inline]
     fn discard_fully_or_eof(&mut self, bytes: u64) -> Result<u64> {
         discard_fully_or_eof_from(self, bytes)
+    }
+
+    #[inline]
+    fn read_to_vec_limited(&mut self, max_len: usize) -> Result<Vec<u8>> {
+        read_to_vec_limited_from(self, max_len)
     }
 }
 
@@ -148,4 +181,51 @@ pub(crate) fn discard_fully_or_eof_from(reader: &mut dyn Read, bytes: u64) -> Re
         }
     }
     Ok(discarded)
+}
+
+/// Reads all remaining bytes from `reader` when the result fits `max_len`.
+///
+/// # Parameters
+/// - `reader`: Source reader.
+/// - `max_len`: Maximum accepted result length.
+///
+/// # Returns
+/// A vector containing all remaining bytes.
+///
+/// # Errors
+/// Returns [`ErrorKind::InvalidData`] after detecting that the input contains
+/// more than `max_len` bytes. Returns the first non-interrupted read error
+/// reported by `reader`.
+fn read_to_vec_limited_from(reader: &mut dyn Read, max_len: usize) -> Result<Vec<u8>> {
+    let mut output = Vec::new();
+    let mut buffer = [0; READ_TO_VEC_BUFFER_SIZE];
+    loop {
+        let remaining = max_len.saturating_sub(output.len());
+        let requested = remaining.saturating_add(1).min(READ_TO_VEC_BUFFER_SIZE);
+        match reader.read(&mut buffer[..requested]) {
+            Ok(0) => return Ok(output),
+            Ok(count) if count <= remaining => output.extend_from_slice(&buffer[..count]),
+            Ok(_) => return Err(input_too_large(max_len)),
+            Err(error) => {
+                if error.kind() == ErrorKind::Interrupted {
+                    continue;
+                }
+                return Err(error);
+            }
+        }
+    }
+}
+
+/// Builds an invalid-data error for oversized bounded reads.
+///
+/// # Parameters
+/// - `max_len`: Maximum accepted input length.
+///
+/// # Returns
+/// An [`ErrorKind::InvalidData`] error.
+fn input_too_large(max_len: usize) -> Error {
+    Error::new(
+        ErrorKind::InvalidData,
+        format!("input exceeds maximum length of {max_len} bytes"),
+    )
 }
