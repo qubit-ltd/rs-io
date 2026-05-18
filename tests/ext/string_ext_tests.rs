@@ -95,6 +95,32 @@ fn test_length_prefixed_utf8_strings_round_trip_u32_be_and_le() {
 }
 
 #[test]
+fn test_length_prefixed_utf8_strings_round_trip_u16_be_and_le() {
+    let mut buffer = Vec::new();
+    buffer
+        .write_utf8_string_u16_be("big")
+        .expect("big-endian u16 string should be written");
+    buffer
+        .write_utf8_string_u16_le("little")
+        .expect("little-endian u16 string should be written");
+
+    let mut input = Cursor::new(buffer);
+
+    assert_eq!(
+        "big",
+        input
+            .read_utf8_string_u16_be(16)
+            .expect("big-endian u16 string should be read")
+    );
+    assert_eq!(
+        "little",
+        input
+            .read_utf8_string_u16_le(16)
+            .expect("little-endian u16 string should be read")
+    );
+}
+
+#[test]
 fn test_read_utf8_string_accepts_empty_string_with_zero_limit() {
     let mut input = Cursor::new(vec![0]);
 
@@ -135,6 +161,22 @@ fn test_read_utf8_string_u32_rejects_length_beyond_limit() {
         error.to_string()
     );
     assert_eq!(4, input.position());
+}
+
+#[test]
+fn test_read_utf8_string_u16_rejects_length_beyond_limit() {
+    let mut input = Cursor::new(vec![0, 3, b'a', b'b', b'c']);
+
+    let error = input
+        .read_utf8_string_u16_be(2)
+        .expect_err("oversized u16-prefixed string should be rejected");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!(
+        "string length 3 exceeds maximum length of 2 bytes",
+        error.to_string()
+    );
+    assert_eq!(2, input.position());
 }
 
 #[test]
@@ -194,6 +236,23 @@ fn test_read_utf8_string_u32_returns_length_read_error() {
 }
 
 #[test]
+fn test_read_utf8_string_u16_returns_length_read_error() {
+    let mut input = FailingReader;
+
+    let be_error = input
+        .read_utf8_string_u16_be(8)
+        .expect_err("big-endian u16 length read error should be returned");
+    assert_eq!(ErrorKind::Other, be_error.kind());
+    assert_eq!("read failed", be_error.to_string());
+
+    let le_error = input
+        .read_utf8_string_u16_le(8)
+        .expect_err("little-endian u16 length read error should be returned");
+    assert_eq!(ErrorKind::Other, le_error.kind());
+    assert_eq!("read failed", le_error.to_string());
+}
+
+#[test]
 fn test_write_utf8_string_u32_returns_length_write_error() {
     let mut output = FailingWriter;
 
@@ -208,6 +267,39 @@ fn test_write_utf8_string_u32_returns_length_write_error() {
         .expect_err("little-endian length write error should be returned");
     assert_eq!(ErrorKind::Other, le_error.kind());
     assert_eq!("write failed", le_error.to_string());
+}
+
+#[test]
+fn test_write_utf8_string_u16_returns_length_write_error() {
+    let mut output = FailingWriter;
+
+    let be_error = output
+        .write_utf8_string_u16_be("abc")
+        .expect_err("big-endian u16 length write error should be returned");
+    assert_eq!(ErrorKind::Other, be_error.kind());
+    assert_eq!("write failed", be_error.to_string());
+
+    let le_error = output
+        .write_utf8_string_u16_le("abc")
+        .expect_err("little-endian u16 length write error should be returned");
+    assert_eq!(ErrorKind::Other, le_error.kind());
+    assert_eq!("write failed", le_error.to_string());
+}
+
+#[test]
+fn test_write_utf8_string_u16_rejects_length_overflow() {
+    let mut output = Vec::new();
+    let oversized = "a".repeat(u16::MAX as usize + 1);
+
+    let error = output
+        .write_utf8_string_u16_be(&oversized)
+        .expect_err("u16 length overflow should be rejected");
+
+    assert_eq!(ErrorKind::InvalidInput, error.kind());
+    assert_eq!(
+        "string length 65536 exceeds maximum encodable u16 length",
+        error.to_string()
+    );
 }
 
 #[test]
@@ -247,6 +339,23 @@ fn test_write_utf8_string_returns_payload_write_error_after_u32_length_prefix() 
     let le_error = le_output
         .write_utf8_string_u32_le("abc")
         .expect_err("little-endian payload write error should be returned");
+    assert_eq!(ErrorKind::Other, le_error.kind());
+    assert_eq!("payload failed", le_error.to_string());
+}
+
+#[test]
+fn test_write_utf8_string_returns_payload_write_error_after_u16_length_prefix() {
+    let mut be_output = FailAfterBytesWriter { remaining: 2 };
+    let be_error = be_output
+        .write_utf8_string_u16_be("abc")
+        .expect_err("big-endian u16 payload write error should be returned");
+    assert_eq!(ErrorKind::Other, be_error.kind());
+    assert_eq!("payload failed", be_error.to_string());
+
+    let mut le_output = FailAfterBytesWriter { remaining: 2 };
+    let le_error = le_output
+        .write_utf8_string_u16_le("abc")
+        .expect_err("little-endian u16 payload write error should be returned");
     assert_eq!(ErrorKind::Other, le_error.kind());
     assert_eq!("payload failed", le_error.to_string());
 }

@@ -38,6 +38,12 @@ fn test_binary_read_write_ext_round_trips_big_endian_scalars() {
     output
         .write_i64_be(-0x0123_4567_89ab_cdef)
         .expect("i64 should be written");
+    output
+        .write_u128_be(0x0123_4567_89ab_cdef_fedc_ba98_7654_3210)
+        .expect("u128 should be written");
+    output
+        .write_i128_be(-0x0123_4567_89ab_cdef_fedc_ba98_7654_3210)
+        .expect("i128 should be written");
     output.write_f32_be(12.5).expect("f32 should be written");
     output.write_f64_be(-25.25).expect("f64 should be written");
 
@@ -61,6 +67,14 @@ fn test_binary_read_write_ext_round_trips_big_endian_scalars() {
     assert_eq!(
         -0x0123_4567_89ab_cdef,
         input.read_i64_be().expect("i64 should be read")
+    );
+    assert_eq!(
+        0x0123_4567_89ab_cdef_fedc_ba98_7654_3210,
+        input.read_u128_be().expect("u128 should be read")
+    );
+    assert_eq!(
+        -0x0123_4567_89ab_cdef_fedc_ba98_7654_3210,
+        input.read_i128_be().expect("i128 should be read")
     );
     assert_eq!(12.5, input.read_f32_be().expect("f32 should be read"));
     assert_eq!(-25.25, input.read_f64_be().expect("f64 should be read"));
@@ -190,6 +204,42 @@ fn test_binary_read_ext_reports_unexpected_eof_for_all_scalar_methods() {
             .kind()
     );
 
+    let mut input = Cursor::new([0x12, 0x34, 0x56, 0x78]);
+    assert_eq!(
+        ErrorKind::UnexpectedEof,
+        input
+            .read_u128_be()
+            .expect_err("u128 big endian should report EOF")
+            .kind()
+    );
+
+    let mut input = Cursor::new([0x12, 0x34, 0x56, 0x78]);
+    assert_eq!(
+        ErrorKind::UnexpectedEof,
+        input
+            .read_u128_le()
+            .expect_err("u128 little endian should report EOF")
+            .kind()
+    );
+
+    let mut input = Cursor::new([0x12, 0x34, 0x56, 0x78]);
+    assert_eq!(
+        ErrorKind::UnexpectedEof,
+        input
+            .read_i128_be()
+            .expect_err("i128 big endian should report EOF")
+            .kind()
+    );
+
+    let mut input = Cursor::new([0x12, 0x34, 0x56, 0x78]);
+    assert_eq!(
+        ErrorKind::UnexpectedEof,
+        input
+            .read_i128_le()
+            .expect_err("i128 little endian should report EOF")
+            .kind()
+    );
+
     let mut input = Cursor::new([0x12, 0x34, 0x56]);
     assert_eq!(
         ErrorKind::UnexpectedEof,
@@ -233,6 +283,7 @@ fn test_binary_read_write_ext_round_trips_little_endian_scalars() {
     let i16_value = -0x1234_i16;
     let i32_value = -0x0123_4567_i32;
     let i64_value = -0x0123_4567_89ab_cdef_i64;
+    let i128_value = -0x0123_4567_89ab_cdef_fedc_ba98_7654_3210_i128;
     let f32_value = 12.5_f32;
     let f64_value = -25.25_f64;
 
@@ -255,6 +306,12 @@ fn test_binary_read_write_ext_round_trips_little_endian_scalars() {
         .write_i64_le(i64_value)
         .expect("i64 little endian should be written");
     output
+        .write_u128_le(0x0123_4567_89ab_cdef_fedc_ba98_7654_3210)
+        .expect("u128 little endian should be written");
+    output
+        .write_i128_le(i128_value)
+        .expect("i128 little endian should be written");
+    output
         .write_f32_le(f32_value)
         .expect("f32 little endian should be written");
     output
@@ -268,6 +325,8 @@ fn test_binary_read_write_ext_round_trips_little_endian_scalars() {
     expected.extend_from_slice(&i32_value.to_le_bytes());
     expected.extend_from_slice(&0x0123_4567_89ab_cdef_u64.to_le_bytes());
     expected.extend_from_slice(&i64_value.to_le_bytes());
+    expected.extend_from_slice(&0x0123_4567_89ab_cdef_fedc_ba98_7654_3210_u128.to_le_bytes());
+    expected.extend_from_slice(&i128_value.to_le_bytes());
     expected.extend_from_slice(&f32_value.to_bits().to_le_bytes());
     expected.extend_from_slice(&f64_value.to_bits().to_le_bytes());
     assert_eq!(expected, output);
@@ -310,6 +369,18 @@ fn test_binary_read_write_ext_round_trips_little_endian_scalars() {
             .expect("i64 little endian should be read")
     );
     assert_eq!(
+        0x0123_4567_89ab_cdef_fedc_ba98_7654_3210,
+        input
+            .read_u128_le()
+            .expect("u128 little endian should be read")
+    );
+    assert_eq!(
+        i128_value,
+        input
+            .read_i128_le()
+            .expect("i128 little endian should be read")
+    );
+    assert_eq!(
         f32_value,
         input
             .read_f32_le()
@@ -329,6 +400,7 @@ fn test_binary_read_write_ext_round_trips_runtime_byte_order_scalars() {
     let i16_value = -0x1234_i16;
     let i32_value = -0x0123_4567_i32;
     let i64_value = -0x0123_4567_89ab_cdef_i64;
+    let i128_value = -0x0123_4567_89ab_cdef_fedc_ba98_7654_3210_i128;
     let f32_value = 12.5_f32;
     let f64_value = -25.25_f64;
 
@@ -351,6 +423,15 @@ fn test_binary_read_write_ext_round_trips_runtime_byte_order_scalars() {
         .write_i64(i64_value, ByteOrder::LittleEndian)
         .expect("i64 little endian should be written");
     output
+        .write_u128(
+            0x0123_4567_89ab_cdef_fedc_ba98_7654_3210,
+            ByteOrder::BigEndian,
+        )
+        .expect("u128 big endian should be written");
+    output
+        .write_i128(i128_value, ByteOrder::LittleEndian)
+        .expect("i128 little endian should be written");
+    output
         .write_f32(f32_value, ByteOrder::BigEndian)
         .expect("f32 big endian should be written");
     output
@@ -364,6 +445,8 @@ fn test_binary_read_write_ext_round_trips_runtime_byte_order_scalars() {
     expected.extend_from_slice(&i32_value.to_le_bytes());
     expected.extend_from_slice(&0x0123_4567_89ab_cdef_u64.to_be_bytes());
     expected.extend_from_slice(&i64_value.to_le_bytes());
+    expected.extend_from_slice(&0x0123_4567_89ab_cdef_fedc_ba98_7654_3210_u128.to_be_bytes());
+    expected.extend_from_slice(&i128_value.to_le_bytes());
     expected.extend_from_slice(&f32_value.to_bits().to_be_bytes());
     expected.extend_from_slice(&f64_value.to_bits().to_le_bytes());
     assert_eq!(expected, output);
@@ -406,6 +489,18 @@ fn test_binary_read_write_ext_round_trips_runtime_byte_order_scalars() {
             .expect("i64 little endian should be read")
     );
     assert_eq!(
+        0x0123_4567_89ab_cdef_fedc_ba98_7654_3210,
+        input
+            .read_u128(ByteOrder::BigEndian)
+            .expect("u128 big endian should be read")
+    );
+    assert_eq!(
+        i128_value,
+        input
+            .read_i128(ByteOrder::LittleEndian)
+            .expect("i128 little endian should be read")
+    );
+    assert_eq!(
         f32_value,
         input
             .read_f32(ByteOrder::BigEndian)
@@ -425,6 +520,7 @@ fn test_binary_read_write_ext_round_trips_opposite_runtime_byte_order_scalars() 
     let i16_value = -0x1234_i16;
     let i32_value = -0x0123_4567_i32;
     let i64_value = -0x0123_4567_89ab_cdef_i64;
+    let i128_value = -0x0123_4567_89ab_cdef_fedc_ba98_7654_3210_i128;
     let f32_value = 12.5_f32;
     let f64_value = -25.25_f64;
 
@@ -446,6 +542,15 @@ fn test_binary_read_write_ext_round_trips_opposite_runtime_byte_order_scalars() 
     output
         .write_i64(i64_value, ByteOrder::BigEndian)
         .expect("i64 big endian should be written");
+    output
+        .write_u128(
+            0x0123_4567_89ab_cdef_fedc_ba98_7654_3210,
+            ByteOrder::LittleEndian,
+        )
+        .expect("u128 little endian should be written");
+    output
+        .write_i128(i128_value, ByteOrder::BigEndian)
+        .expect("i128 big endian should be written");
     output
         .write_f32(f32_value, ByteOrder::LittleEndian)
         .expect("f32 little endian should be written");
@@ -489,6 +594,18 @@ fn test_binary_read_write_ext_round_trips_opposite_runtime_byte_order_scalars() 
         input
             .read_i64(ByteOrder::BigEndian)
             .expect("i64 big endian should be read")
+    );
+    assert_eq!(
+        0x0123_4567_89ab_cdef_fedc_ba98_7654_3210,
+        input
+            .read_u128(ByteOrder::LittleEndian)
+            .expect("u128 little endian should be read")
+    );
+    assert_eq!(
+        i128_value,
+        input
+            .read_i128(ByteOrder::BigEndian)
+            .expect("i128 big endian should be read")
     );
     assert_eq!(
         f32_value,

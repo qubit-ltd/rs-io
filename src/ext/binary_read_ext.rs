@@ -257,6 +257,78 @@ pub trait BinaryReadExt: Read {
     /// Returns an I/O error when eight bytes cannot be read.
     fn read_i64_le(&mut self) -> Result<i64>;
 
+    /// Reads a `u128` using `order`.
+    ///
+    /// # Parameters
+    /// - `order`: Byte order used to decode the value.
+    ///
+    /// # Returns
+    /// The decoded value.
+    ///
+    /// # Errors
+    /// Returns an I/O error when sixteen bytes cannot be read.
+    #[inline]
+    fn read_u128(&mut self, order: ByteOrder) -> Result<u128> {
+        match order {
+            ByteOrder::BigEndian => self.read_u128_be(),
+            ByteOrder::LittleEndian => self.read_u128_le(),
+        }
+    }
+
+    /// Reads a big-endian `u128`.
+    ///
+    /// # Returns
+    /// The decoded value.
+    ///
+    /// # Errors
+    /// Returns an I/O error when sixteen bytes cannot be read.
+    fn read_u128_be(&mut self) -> Result<u128>;
+
+    /// Reads a little-endian `u128`.
+    ///
+    /// # Returns
+    /// The decoded value.
+    ///
+    /// # Errors
+    /// Returns an I/O error when sixteen bytes cannot be read.
+    fn read_u128_le(&mut self) -> Result<u128>;
+
+    /// Reads an `i128` using `order`.
+    ///
+    /// # Parameters
+    /// - `order`: Byte order used to decode the value.
+    ///
+    /// # Returns
+    /// The decoded value.
+    ///
+    /// # Errors
+    /// Returns an I/O error when sixteen bytes cannot be read.
+    #[inline]
+    fn read_i128(&mut self, order: ByteOrder) -> Result<i128> {
+        match order {
+            ByteOrder::BigEndian => self.read_i128_be(),
+            ByteOrder::LittleEndian => self.read_i128_le(),
+        }
+    }
+
+    /// Reads a big-endian `i128`.
+    ///
+    /// # Returns
+    /// The decoded value.
+    ///
+    /// # Errors
+    /// Returns an I/O error when sixteen bytes cannot be read.
+    fn read_i128_be(&mut self) -> Result<i128>;
+
+    /// Reads a little-endian `i128`.
+    ///
+    /// # Returns
+    /// The decoded value.
+    ///
+    /// # Errors
+    /// Returns an I/O error when sixteen bytes cannot be read.
+    fn read_i128_le(&mut self) -> Result<i128>;
+
     /// Reads an IEEE-754 `f32` using `order`.
     ///
     /// # Parameters
@@ -402,6 +474,26 @@ where
     #[inline]
     fn read_i64_le(&mut self) -> Result<i64> {
         read_bytes::<_, 8>(self).map(i64::from_le_bytes)
+    }
+
+    #[inline]
+    fn read_u128_be(&mut self) -> Result<u128> {
+        read_bytes::<_, 16>(self).map(u128::from_be_bytes)
+    }
+
+    #[inline]
+    fn read_u128_le(&mut self) -> Result<u128> {
+        read_bytes::<_, 16>(self).map(u128::from_le_bytes)
+    }
+
+    #[inline]
+    fn read_i128_be(&mut self) -> Result<i128> {
+        read_bytes::<_, 16>(self).map(i128::from_be_bytes)
+    }
+
+    #[inline]
+    fn read_i128_le(&mut self) -> Result<i128> {
+        read_bytes::<_, 16>(self).map(i128::from_le_bytes)
     }
 
     #[inline]

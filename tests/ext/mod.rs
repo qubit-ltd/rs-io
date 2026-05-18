@@ -1,4 +1,5 @@
 mod binary_read_write_ext_tests;
+mod buf_read_ext_tests;
 mod read_ext_tests;
 mod read_seek_ext_tests;
 mod seek_ext_tests;
