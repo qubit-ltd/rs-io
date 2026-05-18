@@ -46,15 +46,19 @@ extension trait 覆盖的是保守、标准库优先的行为，例如：尽量�
 ### I/O Extension Trait
 
 - **`ReadExt`**：
-  - `read_fully_or_eof` 会在短读时继续读取，直到目标 buffer 被填满或遇到 EOF。
-  - `discard_fully_or_eof` 不分配内存，最多消费并丢弃指定字节数。
+  - `read_exact_or_eof` 会在短读时继续读取，直到目标 buffer 被填满或遇到 EOF。
+  - `discard_exact_or_eof` 不分配内存，最多消费并丢弃指定字节数。
+  - `copy_to` 与 `copy_to_limited` 以方法形式把内容复制到 writer。
+  - `read_to_end_limited` 在最大长度限制内把剩余输入读入 `Vec<u8>`。
 - **`SeekExt`**：
   - `stream_len_preserving_position` 获取 stream 长度并恢复原位置。
 - **`ReadSeekExt`**：
-  - `peek_fully_or_eof` 从当前位置读取并恢复原位置。
-  - `read_fully_or_eof_at` 从绝对 offset 读取并恢复原位置。
+  - `peek_exact_or_eof` 从当前位置读取并恢复原位置。
+  - `read_exact_or_eof_at` 从绝对 offset 读取并恢复原位置。
 - **`WriteSeekExt`**：
   - `write_all_at_preserving_position` 在绝对 offset 写入并恢复原位置。
+- **`BinaryReadExt` / `BinaryWriteExt`**：
+  - 支持通过 `_be` / `_le` 后缀方法或运行时 `ByteOrder` 读写基础数字标量。
 
 ### Blanket Implementation
 
@@ -96,17 +100,17 @@ fn main() -> std::io::Result<()> {
 }
 ```
 
-### 尽量读满，EOF 正常返回
+### 精确读取或 EOF 正常返回
 
 当短读需要继续读取，但 EOF 先到时又不希望返回 `UnexpectedEof`，可以使用
-`ReadExt::read_fully_or_eof`。
+`ReadExt::read_exact_or_eof`。
 
 ```rust
 use qubit_io::ReadExt;
 
 fn read_prefix(input: &mut dyn std::io::Read) -> std::io::Result<Vec<u8>> {
     let mut buffer = vec![0; 8];
-    let count = input.read_fully_or_eof(&mut buffer)?;
+    let count = input.read_exact_or_eof(&mut buffer)?;
     buffer.truncate(count);
     Ok(buffer)
 }
@@ -121,7 +125,7 @@ fn main() -> std::io::Result<()> {
 ### 不消费当前位置地探测内容
 
 当需要检查可 seek stream 的前缀或某段内容，但不能改变调用方可见的位置时，
-可以使用 `ReadSeekExt::peek_fully_or_eof`。
+可以使用 `ReadSeekExt::peek_exact_or_eof`。
 
 ```rust
 use qubit_io::ReadSeekExt;
@@ -131,7 +135,7 @@ fn peek_three(input: &mut std::io::Cursor<Vec<u8>>) -> std::io::Result<[u8; 3]> 
     input.seek(SeekFrom::Start(2))?;
 
     let mut buffer = [0; 3];
-    let count = input.peek_fully_or_eof(&mut buffer)?;
+    let count = input.peek_exact_or_eof(&mut buffer)?;
     assert_eq!(3, count);
     assert_eq!(2, input.stream_position()?);
     Ok(buffer)
@@ -276,10 +280,12 @@ where
 
 | Extension trait | 方法 | 典型用途 |
 |-----------------|------|----------|
-| `ReadExt` | `read_fully_or_eof`、`discard_fully_or_eof` | 短读安全读取和有界丢弃 |
+| `ReadExt` | `read_exact_or_eof`、`discard_exact_or_eof`、`copy_to`、`copy_to_limited`、`read_to_end_limited` | 短读安全读取、有界复制和有界读取 |
 | `SeekExt` | `stream_len_preserving_position` | 获取长度但保持原 cursor |
-| `ReadSeekExt` | `peek_fully_or_eof`、`read_fully_or_eof_at` | 不消费位置的探测和随机 offset 读取 |
+| `ReadSeekExt` | `peek_exact_or_eof`、`read_exact_or_eof_at` | 不消费位置的探测和随机 offset 读取 |
 | `WriteSeekExt` | `write_all_at_preserving_position` | 随机访问 patch 写入 |
+| `BinaryReadExt` | `read_u16_be`、`read_u16_le`、`read_u16(order)` 等标量方法 | 二进制标量解码 |
+| `BinaryWriteExt` | `write_u16_be`、`write_u16_le`、`write_u16(value, order)` 等标量方法 | 二进制标量编码 |
 
 每个 trait 都通过 blanket implementation 自动实现：
 

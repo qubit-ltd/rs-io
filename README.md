@@ -54,20 +54,27 @@ the caller's original position.
 ### I/O Extension Traits
 
 - **`ReadExt`**:
-  - `read_fully_or_eof` retries short reads until the destination buffer is
+  - `read_exact_or_eof` retries short reads until the destination buffer is
     full or EOF is reached.
-  - `discard_fully_or_eof` consumes and discards up to a requested number of
+  - `discard_exact_or_eof` consumes and discards up to a requested number of
     bytes without allocating.
+  - `copy_to` and `copy_to_limited` copy into a writer with method-style
+    ergonomics.
+  - `read_to_end_limited` reads the remaining input into a `Vec<u8>` with a
+    maximum accepted size.
 - **`SeekExt`**:
   - `stream_len_preserving_position` measures stream length and restores the
     original position.
 - **`ReadSeekExt`**:
-  - `peek_fully_or_eof` reads from the current position and restores it.
-  - `read_fully_or_eof_at` reads from an absolute offset and restores the
+  - `peek_exact_or_eof` reads from the current position and restores it.
+  - `read_exact_or_eof_at` reads from an absolute offset and restores the
     original position.
 - **`WriteSeekExt`**:
   - `write_all_at_preserving_position` writes bytes at an absolute offset and
     restores the original position.
+- **`BinaryReadExt` / `BinaryWriteExt`**:
+  - read and write primitive numeric scalars with `_be` / `_le` suffix methods
+    or a runtime `ByteOrder`.
 
 ### Blanket Implementations
 
@@ -111,9 +118,9 @@ fn main() -> std::io::Result<()> {
 }
 ```
 
-### Read Fully or EOF
+### Read Exact or EOF
 
-Use `ReadExt::read_fully_or_eof` when short reads should be retried, but EOF
+Use `ReadExt::read_exact_or_eof` when short reads should be retried, but EOF
 before the buffer is full should return a partial byte count instead of
 `UnexpectedEof`.
 
@@ -122,7 +129,7 @@ use qubit_io::ReadExt;
 
 fn read_prefix(input: &mut dyn std::io::Read) -> std::io::Result<Vec<u8>> {
     let mut buffer = vec![0; 8];
-    let count = input.read_fully_or_eof(&mut buffer)?;
+    let count = input.read_exact_or_eof(&mut buffer)?;
     buffer.truncate(count);
     Ok(buffer)
 }
@@ -136,7 +143,7 @@ fn main() -> std::io::Result<()> {
 
 ### Peek Without Consuming Position
 
-Use `ReadSeekExt::peek_fully_or_eof` when inspecting a seekable stream should
+Use `ReadSeekExt::peek_exact_or_eof` when inspecting a seekable stream should
 not change the caller-visible position.
 
 ```rust
@@ -147,7 +154,7 @@ fn peek_three(input: &mut std::io::Cursor<Vec<u8>>) -> std::io::Result<[u8; 3]> 
     input.seek(SeekFrom::Start(2))?;
 
     let mut buffer = [0; 3];
-    let count = input.peek_fully_or_eof(&mut buffer)?;
+    let count = input.peek_exact_or_eof(&mut buffer)?;
     assert_eq!(3, count);
     assert_eq!(2, input.stream_position()?);
     Ok(buffer)
@@ -294,10 +301,12 @@ where
 
 | Extension trait | Methods | Typical use |
 |-----------------|---------|-------------|
-| `ReadExt` | `read_fully_or_eof`, `discard_fully_or_eof` | short-read-safe reads and bounded discards |
+| `ReadExt` | `read_exact_or_eof`, `discard_exact_or_eof`, `copy_to`, `copy_to_limited`, `read_to_end_limited` | short-read-safe reads, bounded copies, and bounded reads |
 | `SeekExt` | `stream_len_preserving_position` | length checks that keep the original cursor |
-| `ReadSeekExt` | `peek_fully_or_eof`, `read_fully_or_eof_at` | non-consuming inspection and random-offset reads |
+| `ReadSeekExt` | `peek_exact_or_eof`, `read_exact_or_eof_at` | non-consuming inspection and random-offset reads |
 | `WriteSeekExt` | `write_all_at_preserving_position` | random-access patch writes |
+| `BinaryReadExt` | `read_u16_be`, `read_u16_le`, `read_u16(order)`, and other scalar variants | binary scalar decoding |
+| `BinaryWriteExt` | `write_u16_be`, `write_u16_le`, `write_u16(value, order)`, and other scalar variants | binary scalar encoding |
 
 Each trait is implemented with a blanket implementation:
 

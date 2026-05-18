@@ -12,13 +12,17 @@ use std::io::{
     ErrorKind,
     Read,
     Result,
+    Write,
+    copy as copy_all,
 };
+
+use crate::copy::copy_limited;
 
 /// Default stack buffer size used by discard operations.
 const DISCARD_BUFFER_SIZE: usize = 8 * 1024;
 
 /// Default stack buffer size used by bounded read operations.
-const READ_TO_VEC_BUFFER_SIZE: usize = 8 * 1024;
+const READ_TO_END_BUFFER_SIZE: usize = 8 * 1024;
 
 /// Extension methods for [`Read`] values.
 ///
@@ -43,7 +47,7 @@ pub trait ReadExt: Read {
     /// # Errors
     /// Returns the first non-[`ErrorKind::Interrupted`] error reported by the
     /// underlying reader. Interrupted reads are retried.
-    fn read_fully_or_eof(&mut self, buffer: &mut [u8]) -> Result<usize>;
+    fn read_exact_or_eof(&mut self, buffer: &mut [u8]) -> Result<usize>;
 
     /// Discards up to `bytes` bytes from this reader.
     ///
@@ -61,7 +65,42 @@ pub trait ReadExt: Read {
     /// # Errors
     /// Returns the first non-[`ErrorKind::Interrupted`] error reported by the
     /// underlying reader. Interrupted reads are retried.
-    fn discard_fully_or_eof(&mut self, bytes: u64) -> Result<u64>;
+    fn discard_exact_or_eof(&mut self, bytes: u64) -> Result<u64>;
+
+    /// Copies all remaining bytes from this reader into `writer`.
+    ///
+    /// This method is a method-style wrapper around [`std::io::copy`]. It
+    /// copies from the current reader position until EOF and does not close or
+    /// flush either stream.
+    ///
+    /// # Parameters
+    /// - `writer`: Destination writer.
+    ///
+    /// # Returns
+    /// The number of bytes copied.
+    ///
+    /// # Errors
+    /// Returns the first read or write error reported by the underlying
+    /// streams, using the same error behavior as [`std::io::copy`].
+    fn copy_to(&mut self, writer: &mut dyn Write) -> Result<u64>;
+
+    /// Copies at most `max_bytes` bytes from this reader into `writer`.
+    ///
+    /// This method stops successfully when either EOF is reached or
+    /// `max_bytes` bytes have been copied. It does not close or flush either
+    /// stream.
+    ///
+    /// # Parameters
+    /// - `writer`: Destination writer.
+    /// - `max_bytes`: Maximum number of bytes to copy.
+    ///
+    /// # Returns
+    /// The number of bytes copied.
+    ///
+    /// # Errors
+    /// Returns the first non-[`ErrorKind::Interrupted`] read error or write
+    /// error reported by the underlying streams. Interrupted reads are retried.
+    fn copy_to_limited(&mut self, writer: &mut dyn Write, max_bytes: u64) -> Result<u64>;
 
     /// Reads the remaining bytes into a vector with a maximum accepted length.
     ///
@@ -80,7 +119,7 @@ pub trait ReadExt: Read {
     /// Returns [`ErrorKind::InvalidData`] when the stream contains more than
     /// `max_len` bytes. Returns the first non-[`ErrorKind::Interrupted`] error
     /// reported by the underlying reader; interrupted reads are retried.
-    fn read_to_vec_limited(&mut self, max_len: usize) -> Result<Vec<u8>>;
+    fn read_to_end_limited(&mut self, max_len: usize) -> Result<Vec<u8>>;
 }
 
 impl<T> ReadExt for T
@@ -88,35 +127,55 @@ where
     T: Read,
 {
     #[inline]
-    fn read_fully_or_eof(&mut self, buffer: &mut [u8]) -> Result<usize> {
-        read_fully_or_eof_from(self, buffer)
+    fn read_exact_or_eof(&mut self, buffer: &mut [u8]) -> Result<usize> {
+        read_exact_or_eof_from(self, buffer)
     }
 
     #[inline]
-    fn discard_fully_or_eof(&mut self, bytes: u64) -> Result<u64> {
-        discard_fully_or_eof_from(self, bytes)
+    fn discard_exact_or_eof(&mut self, bytes: u64) -> Result<u64> {
+        discard_exact_or_eof_from(self, bytes)
     }
 
     #[inline]
-    fn read_to_vec_limited(&mut self, max_len: usize) -> Result<Vec<u8>> {
-        read_to_vec_limited_from(self, max_len)
+    fn copy_to(&mut self, writer: &mut dyn Write) -> Result<u64> {
+        copy_to_from(self, writer)
+    }
+
+    #[inline]
+    fn copy_to_limited(&mut self, writer: &mut dyn Write, max_bytes: u64) -> Result<u64> {
+        copy_to_limited_from(self, writer, max_bytes)
+    }
+
+    #[inline]
+    fn read_to_end_limited(&mut self, max_len: usize) -> Result<Vec<u8>> {
+        read_to_end_limited_from(self, max_len)
     }
 }
 
 impl ReadExt for dyn Read + '_ {
     #[inline]
-    fn read_fully_or_eof(&mut self, buffer: &mut [u8]) -> Result<usize> {
-        read_fully_or_eof_from(self, buffer)
+    fn read_exact_or_eof(&mut self, buffer: &mut [u8]) -> Result<usize> {
+        read_exact_or_eof_from(self, buffer)
     }
 
     #[inline]
-    fn discard_fully_or_eof(&mut self, bytes: u64) -> Result<u64> {
-        discard_fully_or_eof_from(self, bytes)
+    fn discard_exact_or_eof(&mut self, bytes: u64) -> Result<u64> {
+        discard_exact_or_eof_from(self, bytes)
     }
 
     #[inline]
-    fn read_to_vec_limited(&mut self, max_len: usize) -> Result<Vec<u8>> {
-        read_to_vec_limited_from(self, max_len)
+    fn copy_to(&mut self, writer: &mut dyn Write) -> Result<u64> {
+        copy_to_from(self, writer)
+    }
+
+    #[inline]
+    fn copy_to_limited(&mut self, writer: &mut dyn Write, max_bytes: u64) -> Result<u64> {
+        copy_to_limited_from(self, writer, max_bytes)
+    }
+
+    #[inline]
+    fn read_to_end_limited(&mut self, max_len: usize) -> Result<Vec<u8>> {
+        read_to_end_limited_from(self, max_len)
     }
 }
 
@@ -131,7 +190,7 @@ impl ReadExt for dyn Read + '_ {
 ///
 /// # Errors
 /// Returns the first non-interrupted read error reported by `reader`.
-pub(crate) fn read_fully_or_eof_from(reader: &mut dyn Read, buffer: &mut [u8]) -> Result<usize> {
+pub(crate) fn read_exact_or_eof_from(reader: &mut dyn Read, buffer: &mut [u8]) -> Result<usize> {
     let mut total = 0;
     while total < buffer.len() {
         match reader.read(&mut buffer[total..]) {
@@ -159,7 +218,7 @@ pub(crate) fn read_fully_or_eof_from(reader: &mut dyn Read, buffer: &mut [u8]) -
 ///
 /// # Errors
 /// Returns the first non-interrupted read error reported by `reader`.
-pub(crate) fn discard_fully_or_eof_from(reader: &mut dyn Read, bytes: u64) -> Result<u64> {
+pub(crate) fn discard_exact_or_eof_from(reader: &mut dyn Read, bytes: u64) -> Result<u64> {
     let mut buffer = [0; DISCARD_BUFFER_SIZE];
     let mut remaining = bytes;
     let mut discarded = 0;
@@ -183,6 +242,42 @@ pub(crate) fn discard_fully_or_eof_from(reader: &mut dyn Read, bytes: u64) -> Re
     Ok(discarded)
 }
 
+/// Copies all remaining bytes from `reader` to `writer`.
+///
+/// # Parameters
+/// - `reader`: Source reader.
+/// - `writer`: Destination writer.
+///
+/// # Returns
+/// The number of bytes copied.
+///
+/// # Errors
+/// Returns the first read or write error reported by [`std::io::copy`].
+fn copy_to_from(reader: &mut dyn Read, writer: &mut dyn Write) -> Result<u64> {
+    copy_all(reader, writer)
+}
+
+/// Copies at most `max_bytes` bytes from `reader` to `writer`.
+///
+/// # Parameters
+/// - `reader`: Source reader.
+/// - `writer`: Destination writer.
+/// - `max_bytes`: Maximum number of bytes to copy.
+///
+/// # Returns
+/// The number of bytes copied.
+///
+/// # Errors
+/// Returns the first non-interrupted read error or write error reported by the
+/// underlying streams.
+fn copy_to_limited_from(
+    reader: &mut dyn Read,
+    writer: &mut dyn Write,
+    max_bytes: u64,
+) -> Result<u64> {
+    copy_limited(reader, writer, max_bytes)
+}
+
 /// Reads all remaining bytes from `reader` when the result fits `max_len`.
 ///
 /// # Parameters
@@ -196,12 +291,12 @@ pub(crate) fn discard_fully_or_eof_from(reader: &mut dyn Read, bytes: u64) -> Re
 /// Returns [`ErrorKind::InvalidData`] after detecting that the input contains
 /// more than `max_len` bytes. Returns the first non-interrupted read error
 /// reported by `reader`.
-fn read_to_vec_limited_from(reader: &mut dyn Read, max_len: usize) -> Result<Vec<u8>> {
+fn read_to_end_limited_from(reader: &mut dyn Read, max_len: usize) -> Result<Vec<u8>> {
     let mut output = Vec::new();
-    let mut buffer = [0; READ_TO_VEC_BUFFER_SIZE];
+    let mut buffer = [0; READ_TO_END_BUFFER_SIZE];
     loop {
         let remaining = max_len.saturating_sub(output.len());
-        let requested = remaining.saturating_add(1).min(READ_TO_VEC_BUFFER_SIZE);
+        let requested = remaining.saturating_add(1).min(READ_TO_END_BUFFER_SIZE);
         match reader.read(&mut buffer[..requested]) {
             Ok(0) => return Ok(output),
             Ok(count) if count <= remaining => output.extend_from_slice(&buffer[..count]),

@@ -16,7 +16,7 @@ use std::io::{
 
 use crate::{
     ReadSeek,
-    read_ext::read_fully_or_eof_from,
+    read_ext::read_exact_or_eof_from,
 };
 
 /// Extension methods for values that implement both [`Read`] and [`Seek`].
@@ -28,7 +28,7 @@ pub trait ReadSeekExt: Read + Seek {
     /// Reads from the current position and restores the original position.
     ///
     /// This method has the same partial-EOF semantics as
-    /// [`crate::ReadExt::read_fully_or_eof`], but it leaves the stream positioned
+    /// [`crate::ReadExt::read_exact_or_eof`], but it leaves the stream positioned
     /// where it was before the call when restoration succeeds.
     ///
     /// # Parameters
@@ -42,7 +42,7 @@ pub trait ReadSeekExt: Read + Seek {
     /// restoring the original position fails. If both reading and restoration
     /// fail, the restoration error is returned because the caller's stream
     /// position contract was not preserved.
-    fn peek_fully_or_eof(&mut self, buffer: &mut [u8]) -> Result<usize>;
+    fn peek_exact_or_eof(&mut self, buffer: &mut [u8]) -> Result<usize>;
 
     /// Reads from `offset` and restores the original position.
     ///
@@ -61,7 +61,7 @@ pub trait ReadSeekExt: Read + Seek {
     /// Returns an error when reading the current position, seeking to `offset`,
     /// reading bytes, or restoring the original position fails. If restoration
     /// fails, the restoration error is returned.
-    fn read_fully_or_eof_at(&mut self, offset: u64, buffer: &mut [u8]) -> Result<usize>;
+    fn read_exact_or_eof_at(&mut self, offset: u64, buffer: &mut [u8]) -> Result<usize>;
 }
 
 impl<T> ReadSeekExt for T
@@ -69,25 +69,25 @@ where
     T: Read + Seek,
 {
     #[inline]
-    fn peek_fully_or_eof(&mut self, buffer: &mut [u8]) -> Result<usize> {
-        peek_fully_or_eof_from(self, buffer)
+    fn peek_exact_or_eof(&mut self, buffer: &mut [u8]) -> Result<usize> {
+        peek_exact_or_eof_from(self, buffer)
     }
 
     #[inline]
-    fn read_fully_or_eof_at(&mut self, offset: u64, buffer: &mut [u8]) -> Result<usize> {
-        read_fully_or_eof_at_from(self, offset, buffer)
+    fn read_exact_or_eof_at(&mut self, offset: u64, buffer: &mut [u8]) -> Result<usize> {
+        read_exact_or_eof_at_from(self, offset, buffer)
     }
 }
 
 impl ReadSeekExt for dyn ReadSeek + '_ {
     #[inline]
-    fn peek_fully_or_eof(&mut self, buffer: &mut [u8]) -> Result<usize> {
-        peek_fully_or_eof_from(self, buffer)
+    fn peek_exact_or_eof(&mut self, buffer: &mut [u8]) -> Result<usize> {
+        peek_exact_or_eof_from(self, buffer)
     }
 
     #[inline]
-    fn read_fully_or_eof_at(&mut self, offset: u64, buffer: &mut [u8]) -> Result<usize> {
-        read_fully_or_eof_at_from(self, offset, buffer)
+    fn read_exact_or_eof_at(&mut self, offset: u64, buffer: &mut [u8]) -> Result<usize> {
+        read_exact_or_eof_at_from(self, offset, buffer)
     }
 }
 
@@ -102,9 +102,9 @@ impl ReadSeekExt for dyn ReadSeek + '_ {
 ///
 /// # Errors
 /// Returns an error when position lookup, reading, or position restoration fails.
-fn peek_fully_or_eof_from(reader: &mut dyn ReadSeek, buffer: &mut [u8]) -> Result<usize> {
+fn peek_exact_or_eof_from(reader: &mut dyn ReadSeek, buffer: &mut [u8]) -> Result<usize> {
     let position = reader.stream_position()?;
-    let read_result = read_fully_or_eof_from(reader, buffer);
+    let read_result = read_exact_or_eof_from(reader, buffer);
     let restore_result = reader.seek(SeekFrom::Start(position));
     match (read_result, restore_result) {
         (Ok(count), Ok(_)) => Ok(count),
@@ -125,14 +125,14 @@ fn peek_fully_or_eof_from(reader: &mut dyn ReadSeek, buffer: &mut [u8]) -> Resul
 ///
 /// # Errors
 /// Returns an error when position lookup, seeking, reading, or position restoration fails.
-fn read_fully_or_eof_at_from(
+fn read_exact_or_eof_at_from(
     reader: &mut dyn ReadSeek,
     offset: u64,
     buffer: &mut [u8],
 ) -> Result<usize> {
     let position = reader.stream_position()?;
     let read_result = match reader.seek(SeekFrom::Start(offset)) {
-        Ok(_) => read_fully_or_eof_from(reader, buffer),
+        Ok(_) => read_exact_or_eof_from(reader, buffer),
         Err(error) => Err(error),
     };
     let restore_result = reader.seek(SeekFrom::Start(position));

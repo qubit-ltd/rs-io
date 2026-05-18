@@ -87,12 +87,12 @@ impl Read for FailingReader {
 }
 
 #[test]
-fn test_read_fully_or_eof_reads_across_short_reads() {
+fn test_read_exact_or_eof_reads_across_short_reads() {
     let mut reader = ShortReader::new(b"abcdef", 2);
     let mut buffer = [0; 6];
 
     let count = reader
-        .read_fully_or_eof(&mut buffer)
+        .read_exact_or_eof(&mut buffer)
         .expect("short reads should be retried until the buffer is full");
 
     assert_eq!(6, count);
@@ -100,12 +100,12 @@ fn test_read_fully_or_eof_reads_across_short_reads() {
 }
 
 #[test]
-fn test_read_fully_or_eof_returns_partial_count_at_eof() {
+fn test_read_exact_or_eof_returns_partial_count_at_eof() {
     let mut reader = ShortReader::new(b"abc", 2);
     let mut buffer = [b'x'; 5];
 
     let count = reader
-        .read_fully_or_eof(&mut buffer)
+        .read_exact_or_eof(&mut buffer)
         .expect("EOF after partial data should not be an error");
 
     assert_eq!(3, count);
@@ -113,12 +113,12 @@ fn test_read_fully_or_eof_returns_partial_count_at_eof() {
 }
 
 #[test]
-fn test_read_fully_or_eof_retries_interrupted_reads() {
+fn test_read_exact_or_eof_retries_interrupted_reads() {
     let mut reader = InterruptedOnceReader::new(b"abc");
     let mut buffer = [0; 3];
 
     let count = reader
-        .read_fully_or_eof(&mut buffer)
+        .read_exact_or_eof(&mut buffer)
         .expect("interrupted reads should be retried");
 
     assert_eq!(3, count);
@@ -126,25 +126,25 @@ fn test_read_fully_or_eof_retries_interrupted_reads() {
 }
 
 #[test]
-fn test_read_fully_or_eof_empty_buffer_does_not_read() {
+fn test_read_exact_or_eof_empty_buffer_does_not_read() {
     let mut reader = PanicOnRead;
     let mut buffer = [];
 
     let count = reader
-        .read_fully_or_eof(&mut buffer)
+        .read_exact_or_eof(&mut buffer)
         .expect("empty buffers should complete immediately");
 
     assert_eq!(0, count);
 }
 
 #[test]
-fn test_read_fully_or_eof_works_on_dyn_read() {
+fn test_read_exact_or_eof_works_on_dyn_read() {
     let mut cursor = Cursor::new(b"abc".to_vec());
     let reader: &mut dyn Read = &mut cursor;
     let mut buffer = [0; 3];
 
     let count = reader
-        .read_fully_or_eof(&mut buffer)
+        .read_exact_or_eof(&mut buffer)
         .expect("read extension should work on dyn Read");
 
     assert_eq!(3, count);
@@ -152,12 +152,12 @@ fn test_read_fully_or_eof_works_on_dyn_read() {
 }
 
 #[test]
-fn test_discard_fully_or_eof_works_on_dyn_read() {
+fn test_discard_exact_or_eof_works_on_dyn_read() {
     let mut cursor = Cursor::new(b"abcdef".to_vec());
     let reader: &mut dyn Read = &mut cursor;
 
     let count = reader
-        .discard_fully_or_eof(4)
+        .discard_exact_or_eof(4)
         .expect("discard extension should work on dyn Read");
 
     assert_eq!(4, count);
@@ -169,12 +169,40 @@ fn test_discard_fully_or_eof_works_on_dyn_read() {
 }
 
 #[test]
-fn test_read_fully_or_eof_returns_non_interrupted_error() {
+fn test_copy_to_works_on_dyn_read() {
+    let mut cursor = Cursor::new(b"abcdef".to_vec());
+    let reader: &mut dyn Read = &mut cursor;
+    let mut output = Vec::new();
+
+    let count = reader
+        .copy_to(&mut output)
+        .expect("copy extension should work on dyn Read");
+
+    assert_eq!(6, count);
+    assert_eq!(b"abcdef", output.as_slice());
+}
+
+#[test]
+fn test_copy_to_limited_works_on_dyn_read() {
+    let mut cursor = Cursor::new(b"abcdef".to_vec());
+    let reader: &mut dyn Read = &mut cursor;
+    let mut output = Vec::new();
+
+    let count = reader
+        .copy_to_limited(&mut output, 4)
+        .expect("limited copy extension should work on dyn Read");
+
+    assert_eq!(4, count);
+    assert_eq!(b"abcd", output.as_slice());
+}
+
+#[test]
+fn test_read_exact_or_eof_returns_non_interrupted_error() {
     let mut reader = FailingReader;
     let mut buffer = [0; 3];
 
     let error = reader
-        .read_fully_or_eof(&mut buffer)
+        .read_exact_or_eof(&mut buffer)
         .expect_err("non-interrupted read errors should be returned");
 
     assert_eq!(ErrorKind::Other, error.kind());
@@ -182,11 +210,11 @@ fn test_read_fully_or_eof_returns_non_interrupted_error() {
 }
 
 #[test]
-fn test_discard_fully_or_eof_discards_across_short_reads() {
+fn test_discard_exact_or_eof_discards_across_short_reads() {
     let mut reader = ShortReader::new(b"abcdef", 2);
 
     let count = reader
-        .discard_fully_or_eof(5)
+        .discard_exact_or_eof(5)
         .expect("short reads should be retried while discarding");
 
     assert_eq!(5, count);
@@ -198,44 +226,44 @@ fn test_discard_fully_or_eof_discards_across_short_reads() {
 }
 
 #[test]
-fn test_discard_fully_or_eof_returns_partial_count_at_eof() {
+fn test_discard_exact_or_eof_returns_partial_count_at_eof() {
     let mut reader = ShortReader::new(b"abc", 1);
 
     let count = reader
-        .discard_fully_or_eof(5)
+        .discard_exact_or_eof(5)
         .expect("EOF after partial discard should not be an error");
 
     assert_eq!(3, count);
 }
 
 #[test]
-fn test_discard_fully_or_eof_retries_interrupted_reads() {
+fn test_discard_exact_or_eof_retries_interrupted_reads() {
     let mut reader = InterruptedOnceReader::new(b"abc");
 
     let count = reader
-        .discard_fully_or_eof(3)
+        .discard_exact_or_eof(3)
         .expect("interrupted reads should be retried while discarding");
 
     assert_eq!(3, count);
 }
 
 #[test]
-fn test_discard_fully_or_eof_zero_bytes_does_not_read() {
+fn test_discard_exact_or_eof_zero_bytes_does_not_read() {
     let mut reader = PanicOnRead;
 
     let count = reader
-        .discard_fully_or_eof(0)
+        .discard_exact_or_eof(0)
         .expect("zero-byte discard should complete immediately");
 
     assert_eq!(0, count);
 }
 
 #[test]
-fn test_discard_fully_or_eof_returns_non_interrupted_error() {
+fn test_discard_exact_or_eof_returns_non_interrupted_error() {
     let mut reader = FailingReader;
 
     let error = reader
-        .discard_fully_or_eof(3)
+        .discard_exact_or_eof(3)
         .expect_err("non-interrupted read errors should be returned while discarding");
 
     assert_eq!(ErrorKind::Other, error.kind());
@@ -243,34 +271,34 @@ fn test_discard_fully_or_eof_returns_non_interrupted_error() {
 }
 
 #[test]
-fn test_read_to_vec_limited_works_on_dyn_read() {
+fn test_read_to_end_limited_works_on_dyn_read() {
     let mut cursor = Cursor::new(b"abc".to_vec());
     let reader: &mut dyn Read = &mut cursor;
 
     let data = reader
-        .read_to_vec_limited(3)
+        .read_to_end_limited(3)
         .expect("bounded read should work on dyn Read");
 
     assert_eq!(b"abc", data.as_slice());
 }
 
 #[test]
-fn test_read_to_vec_limited_retries_interrupted_reads() {
+fn test_read_to_end_limited_retries_interrupted_reads() {
     let mut reader = InterruptedOnceReader::new(b"abc");
 
     let data = reader
-        .read_to_vec_limited(3)
+        .read_to_end_limited(3)
         .expect("interrupted reads should be retried");
 
     assert_eq!(b"abc", data.as_slice());
 }
 
 #[test]
-fn test_read_to_vec_limited_returns_non_interrupted_error() {
+fn test_read_to_end_limited_returns_non_interrupted_error() {
     let mut reader = FailingReader;
 
     let error = reader
-        .read_to_vec_limited(3)
+        .read_to_end_limited(3)
         .expect_err("non-interrupted read errors should be returned");
 
     assert_eq!(ErrorKind::Other, error.kind());
@@ -278,11 +306,11 @@ fn test_read_to_vec_limited_returns_non_interrupted_error() {
 }
 
 #[test]
-fn test_read_to_vec_limited_zero_limit_rejects_non_empty_input() {
+fn test_read_to_end_limited_zero_limit_rejects_non_empty_input() {
     let mut reader = Cursor::new(b"a".to_vec());
 
     let error = reader
-        .read_to_vec_limited(0)
+        .read_to_end_limited(0)
         .expect_err("zero limit should reject non-empty input");
 
     assert_eq!(ErrorKind::InvalidData, error.kind());

@@ -20,6 +20,7 @@
 mod binary_read_ext;
 mod binary_write_ext;
 mod buf_read_seek;
+mod byte_order;
 mod compare;
 mod copy;
 mod file;
@@ -40,6 +41,7 @@ mod write_seek_ext;
 pub use binary_read_ext::BinaryReadExt;
 pub use binary_write_ext::BinaryWriteExt;
 pub use buf_read_seek::BufReadSeek;
+pub use byte_order::ByteOrder;
 pub use compare::{
     compare_content,
     content_eq,

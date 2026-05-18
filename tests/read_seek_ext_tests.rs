@@ -146,7 +146,7 @@ impl Seek for PositionFailingReadSeek {
 }
 
 #[test]
-fn test_peek_fully_or_eof_reads_prefix_without_moving_cursor() {
+fn test_peek_exact_or_eof_reads_prefix_without_moving_cursor() {
     let mut cursor = Cursor::new(b"abcdef".to_vec());
     cursor
         .seek(SeekFrom::Start(2))
@@ -154,7 +154,7 @@ fn test_peek_fully_or_eof_reads_prefix_without_moving_cursor() {
     let mut buffer = [0; 3];
 
     let count = cursor
-        .peek_fully_or_eof(&mut buffer)
+        .peek_exact_or_eof(&mut buffer)
         .expect("peek should read from the current position");
 
     assert_eq!(3, count);
@@ -168,7 +168,7 @@ fn test_peek_fully_or_eof_reads_prefix_without_moving_cursor() {
 }
 
 #[test]
-fn test_peek_fully_or_eof_returns_partial_count_at_eof() {
+fn test_peek_exact_or_eof_returns_partial_count_at_eof() {
     let mut cursor = Cursor::new(b"abc".to_vec());
     cursor
         .seek(SeekFrom::Start(1))
@@ -176,7 +176,7 @@ fn test_peek_fully_or_eof_returns_partial_count_at_eof() {
     let mut buffer = [b'x'; 4];
 
     let count = cursor
-        .peek_fully_or_eof(&mut buffer)
+        .peek_exact_or_eof(&mut buffer)
         .expect("peek should treat EOF as a partial result");
 
     assert_eq!(2, count);
@@ -190,12 +190,12 @@ fn test_peek_fully_or_eof_returns_partial_count_at_eof() {
 }
 
 #[test]
-fn test_peek_fully_or_eof_returns_restore_error_when_restore_fails() {
+fn test_peek_exact_or_eof_returns_restore_error_when_restore_fails() {
     let mut reader = RestoreFailingReader::new(7);
     let mut buffer = [0; 1];
 
     let error = reader
-        .peek_fully_or_eof(&mut buffer)
+        .peek_exact_or_eof(&mut buffer)
         .expect_err("restore failures should be reported");
 
     assert_eq!(ErrorKind::Other, error.kind());
@@ -203,12 +203,12 @@ fn test_peek_fully_or_eof_returns_restore_error_when_restore_fails() {
 }
 
 #[test]
-fn test_peek_fully_or_eof_returns_read_error_after_restore() {
+fn test_peek_exact_or_eof_returns_read_error_after_restore() {
     let mut reader = ReadFailingReadSeek::new(3);
     let mut buffer = [0; 1];
 
     let error = reader
-        .peek_fully_or_eof(&mut buffer)
+        .peek_exact_or_eof(&mut buffer)
         .expect_err("read errors should be returned after restoring position");
 
     assert_eq!(ErrorKind::Other, error.kind());
@@ -216,12 +216,12 @@ fn test_peek_fully_or_eof_returns_read_error_after_restore() {
 }
 
 #[test]
-fn test_peek_fully_or_eof_returns_position_error() {
+fn test_peek_exact_or_eof_returns_position_error() {
     let mut reader = PositionFailingReadSeek;
     let mut buffer = [0; 1];
 
     let error = reader
-        .peek_fully_or_eof(&mut buffer)
+        .peek_exact_or_eof(&mut buffer)
         .expect_err("position errors should be returned immediately");
 
     assert_eq!(ErrorKind::Other, error.kind());
@@ -229,7 +229,7 @@ fn test_peek_fully_or_eof_returns_position_error() {
 }
 
 #[test]
-fn test_read_fully_or_eof_at_reads_from_offset_without_moving_cursor() {
+fn test_read_exact_or_eof_at_reads_from_offset_without_moving_cursor() {
     let mut cursor = Cursor::new(b"abcdef".to_vec());
     cursor
         .seek(SeekFrom::Start(2))
@@ -237,7 +237,7 @@ fn test_read_fully_or_eof_at_reads_from_offset_without_moving_cursor() {
     let mut buffer = [0; 4];
 
     let count = cursor
-        .read_fully_or_eof_at(1, &mut buffer)
+        .read_exact_or_eof_at(1, &mut buffer)
         .expect("offset read should read from the requested position");
 
     assert_eq!(4, count);
@@ -251,7 +251,7 @@ fn test_read_fully_or_eof_at_reads_from_offset_without_moving_cursor() {
 }
 
 #[test]
-fn test_read_fully_or_eof_at_works_on_dyn_read_seek() {
+fn test_read_exact_or_eof_at_works_on_dyn_read_seek() {
     let mut cursor = Cursor::new(b"abcdef".to_vec());
     cursor
         .seek(SeekFrom::Start(4))
@@ -260,7 +260,7 @@ fn test_read_fully_or_eof_at_works_on_dyn_read_seek() {
     let mut buffer = [0; 3];
 
     let count = stream
-        .read_fully_or_eof_at(1, &mut buffer)
+        .read_exact_or_eof_at(1, &mut buffer)
         .expect("offset read extension should work on dyn ReadSeek");
 
     assert_eq!(3, count);
@@ -274,12 +274,12 @@ fn test_read_fully_or_eof_at_works_on_dyn_read_seek() {
 }
 
 #[test]
-fn test_read_fully_or_eof_at_returns_offset_seek_error_after_restore() {
+fn test_read_exact_or_eof_at_returns_offset_seek_error_after_restore() {
     let mut reader = OffsetSeekFailingReadSeek::new(5, 2);
     let mut buffer = [0; 1];
 
     let error = reader
-        .read_fully_or_eof_at(2, &mut buffer)
+        .read_exact_or_eof_at(2, &mut buffer)
         .expect_err("offset seek errors should be returned after restoring position");
 
     assert_eq!(ErrorKind::Other, error.kind());
@@ -287,12 +287,12 @@ fn test_read_fully_or_eof_at_returns_offset_seek_error_after_restore() {
 }
 
 #[test]
-fn test_read_fully_or_eof_at_returns_read_error_after_restore() {
+fn test_read_exact_or_eof_at_returns_read_error_after_restore() {
     let mut reader = ReadFailingReadSeek::new(3);
     let mut buffer = [0; 1];
 
     let error = reader
-        .read_fully_or_eof_at(1, &mut buffer)
+        .read_exact_or_eof_at(1, &mut buffer)
         .expect_err("read errors should be returned after restoring position");
 
     assert_eq!(ErrorKind::Other, error.kind());
@@ -300,12 +300,12 @@ fn test_read_fully_or_eof_at_returns_read_error_after_restore() {
 }
 
 #[test]
-fn test_read_fully_or_eof_at_returns_restore_error_when_restore_fails() {
+fn test_read_exact_or_eof_at_returns_restore_error_when_restore_fails() {
     let mut reader = RestoreFailingReader::new(7);
     let mut buffer = [0; 1];
 
     let error = reader
-        .read_fully_or_eof_at(1, &mut buffer)
+        .read_exact_or_eof_at(1, &mut buffer)
         .expect_err("restore failures should be reported");
 
     assert_eq!(ErrorKind::Other, error.kind());
@@ -313,12 +313,12 @@ fn test_read_fully_or_eof_at_returns_restore_error_when_restore_fails() {
 }
 
 #[test]
-fn test_read_fully_or_eof_at_returns_position_error() {
+fn test_read_exact_or_eof_at_returns_position_error() {
     let mut reader = PositionFailingReadSeek;
     let mut buffer = [0; 1];
 
     let error = reader
-        .read_fully_or_eof_at(1, &mut buffer)
+        .read_exact_or_eof_at(1, &mut buffer)
         .expect_err("position errors should be returned immediately");
 
     assert_eq!(ErrorKind::Other, error.kind());
@@ -326,7 +326,7 @@ fn test_read_fully_or_eof_at_returns_position_error() {
 }
 
 #[test]
-fn test_peek_fully_or_eof_works_on_dyn_read_seek() {
+fn test_peek_exact_or_eof_works_on_dyn_read_seek() {
     let mut cursor = Cursor::new(b"abcdef".to_vec());
     cursor
         .seek(SeekFrom::Start(1))
@@ -335,7 +335,7 @@ fn test_peek_fully_or_eof_works_on_dyn_read_seek() {
     let mut buffer = [0; 2];
 
     let count = stream
-        .peek_fully_or_eof(&mut buffer)
+        .peek_exact_or_eof(&mut buffer)
         .expect("read-seek extension should work on dyn ReadSeek");
 
     assert_eq!(2, count);
