@@ -241,3 +241,49 @@ fn test_discard_fully_or_eof_returns_non_interrupted_error() {
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("read failed", error.to_string());
 }
+
+#[test]
+fn test_read_to_vec_limited_works_on_dyn_read() {
+    let mut cursor = Cursor::new(b"abc".to_vec());
+    let reader: &mut dyn Read = &mut cursor;
+
+    let data = reader
+        .read_to_vec_limited(3)
+        .expect("bounded read should work on dyn Read");
+
+    assert_eq!(b"abc", data.as_slice());
+}
+
+#[test]
+fn test_read_to_vec_limited_retries_interrupted_reads() {
+    let mut reader = InterruptedOnceReader::new(b"abc");
+
+    let data = reader
+        .read_to_vec_limited(3)
+        .expect("interrupted reads should be retried");
+
+    assert_eq!(b"abc", data.as_slice());
+}
+
+#[test]
+fn test_read_to_vec_limited_returns_non_interrupted_error() {
+    let mut reader = FailingReader;
+
+    let error = reader
+        .read_to_vec_limited(3)
+        .expect_err("non-interrupted read errors should be returned");
+
+    assert_eq!(ErrorKind::Other, error.kind());
+    assert_eq!("read failed", error.to_string());
+}
+
+#[test]
+fn test_read_to_vec_limited_zero_limit_rejects_non_empty_input() {
+    let mut reader = Cursor::new(b"a".to_vec());
+
+    let error = reader
+        .read_to_vec_limited(0)
+        .expect_err("zero limit should reject non-empty input");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+}

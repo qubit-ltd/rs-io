@@ -1,0 +1,59 @@
+/*******************************************************************************
+ *
+ *    Copyright (c) 2026 Haixing Hu.
+ *
+ *    SPDX-License-Identifier: Apache-2.0
+ *
+ *    Licensed under the Apache License, Version 2.0.
+ *
+ ******************************************************************************/
+use std::io::{
+    ErrorKind,
+    Read,
+    Result,
+    Write,
+};
+
+/// Default buffer size used by copy operations.
+const COPY_BUFFER_SIZE: usize = 16 * 1024;
+
+/// Copies at most `max_bytes` bytes from `reader` to `writer`.
+///
+/// This function stops successfully when either EOF is reached or `max_bytes`
+/// bytes have been copied. It does not close or flush either stream.
+///
+/// # Parameters
+/// - `reader`: Source reader.
+/// - `writer`: Destination writer.
+/// - `max_bytes`: Maximum number of bytes to copy.
+///
+/// # Returns
+/// The number of bytes copied.
+///
+/// # Errors
+/// Returns the first non-interrupted read error or write error reported by the
+/// underlying streams. Interrupted reads are retried.
+pub fn copy_limited(reader: &mut dyn Read, writer: &mut dyn Write, max_bytes: u64) -> Result<u64> {
+    let mut buffer = [0; COPY_BUFFER_SIZE];
+    let mut remaining = max_bytes;
+    let mut copied = 0;
+    while remaining > 0 {
+        let requested = remaining.min(COPY_BUFFER_SIZE as u64) as usize;
+        match reader.read(&mut buffer[..requested]) {
+            Ok(0) => break,
+            Ok(count) => {
+                writer.write_all(&buffer[..count])?;
+                let count = count as u64;
+                remaining -= count;
+                copied += count;
+            }
+            Err(error) => {
+                if error.kind() == ErrorKind::Interrupted {
+                    continue;
+                }
+                return Err(error);
+            }
+        }
+    }
+    Ok(copied)
+}
