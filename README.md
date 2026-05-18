@@ -74,6 +74,11 @@ the caller's original position.
 - **`BinaryReadExt` / `BinaryWriteExt`**:
   - read and write primitive numeric scalars with `_be` / `_le` suffix methods
     or a runtime `ByteOrder`.
+- **`Leb128IntReadExt` / `Leb128IntWriteExt`**:
+  - read and write unsigned and signed LEB128 integers with `uleb` / `sleb`
+    method names.
+- **`ZigZagIntReadExt` / `ZigZagIntWriteExt`**:
+  - read and write ZigZag-mapped signed integers using unsigned LEB128 payloads.
 
 ### Blanket Implementations
 
@@ -306,6 +311,10 @@ where
 | `WriteSeekExt` | `write_all_at_preserving_position` | random-access patch writes |
 | `BinaryReadExt` | `read_u16_be`, `read_u16_le`, `read_u16(order)`, and other scalar variants | binary scalar decoding |
 | `BinaryWriteExt` | `write_u16_be`, `write_u16_le`, `write_u16(value, order)`, and other scalar variants | binary scalar encoding |
+| `Leb128IntReadExt` | `read_uleb_u32`, `read_sleb_i32`, and other integer variants | LEB128 integer decoding |
+| `Leb128IntWriteExt` | `write_uleb_u32`, `write_sleb_i32`, and other integer variants | LEB128 integer encoding |
+| `ZigZagIntReadExt` | `read_zigzag_i32`, `read_zigzag_i64`, `read_zigzag_isize` | ZigZag signed integer decoding |
+| `ZigZagIntWriteExt` | `write_zigzag_i32`, `write_zigzag_i64`, `write_zigzag_isize` | ZigZag signed integer encoding |
 
 Each trait is implemented with a blanket implementation:
 

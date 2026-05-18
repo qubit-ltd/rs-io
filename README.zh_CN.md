@@ -59,6 +59,10 @@ extension trait 覆盖的是保守、标准库优先的行为，例如：尽量�
   - `write_all_at_preserving_position` 在绝对 offset 写入并恢复原位置。
 - **`BinaryReadExt` / `BinaryWriteExt`**：
   - 支持通过 `_be` / `_le` 后缀方法或运行时 `ByteOrder` 读写基础数字标量。
+- **`Leb128IntReadExt` / `Leb128IntWriteExt`**：
+  - 通过 `uleb` / `sleb` 方法读写 unsigned / signed LEB128 整数。
+- **`ZigZagIntReadExt` / `ZigZagIntWriteExt`**：
+  - 使用 unsigned LEB128 payload 读写 ZigZag 映射后的有符号整数。
 
 ### Blanket Implementation
 
@@ -286,6 +290,10 @@ where
 | `WriteSeekExt` | `write_all_at_preserving_position` | 随机访问 patch 写入 |
 | `BinaryReadExt` | `read_u16_be`、`read_u16_le`、`read_u16(order)` 等标量方法 | 二进制标量解码 |
 | `BinaryWriteExt` | `write_u16_be`、`write_u16_le`、`write_u16(value, order)` 等标量方法 | 二进制标量编码 |
+| `Leb128IntReadExt` | `read_uleb_u32`、`read_sleb_i32` 等整数方法 | LEB128 整数解码 |
+| `Leb128IntWriteExt` | `write_uleb_u32`、`write_sleb_i32` 等整数方法 | LEB128 整数编码 |
+| `ZigZagIntReadExt` | `read_zigzag_i32`、`read_zigzag_i64`、`read_zigzag_isize` | ZigZag 有符号整数解码 |
+| `ZigZagIntWriteExt` | `write_zigzag_i32`、`write_zigzag_i64`、`write_zigzag_isize` | ZigZag 有符号整数编码 |
 
 每个 trait 都通过 blanket implementation 自动实现：
 
