@@ -7,25 +7,34 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Chinese Document](https://img.shields.io/badge/Document-Chinese-blue.svg)](README.zh_CN.md)
 
-Small I/O trait utilities for Rust.
+Small I/O trait and extension utilities for Rust.
 
 ## Overview
 
-Qubit IO provides object-safe composition traits for common `std::io` trait
-combinations. It is useful when an API needs a trait object such as
+Qubit IO provides two small layers on top of `std::io`:
+
+- object-safe composition traits for common `std::io` capability combinations;
+- extension traits for recurring low-level I/O patterns that the standard
+  library leaves to callers.
+
+The composition traits are useful when an API needs a trait object such as
 `&mut dyn ReadSeek` or `Box<dyn ReadWriteSeek>` instead of a generic bound like
 `R: Read + Seek`.
 
-The crate intentionally stays tiny: it does not wrap readers or writers, does
-not allocate, and does not introduce new I/O behavior. It only names common
-combinations of standard-library traits so they can be used as trait objects.
+The extension traits cover conservative, standard-library-first behavior such
+as reading until a buffer is full or EOF is reached, peeking from a seekable
+stream without consuming its position, and writing at an offset while restoring
+the caller's original position.
 
 ## Design Goals
 
 - **Object-safe composition**: provide named trait-object-friendly I/O bounds.
 - **Standard-library first**: build directly on `std::io::{Read, Write, Seek}`.
-- **Zero runtime overhead**: use blanket implementations with no wrapper type.
-- **Tiny API surface**: keep only the combinations that are commonly reused.
+- **No wrapper types**: use blanket implementations on standard I/O traits.
+- **Tiny API surface**: keep only generic, low-level operations that are reused
+  across crates.
+- **Position safety**: make non-consuming inspection and random-access patching
+  explicit.
 - **Integration friendly**: work with cursors, files, buffers, streams, and
   custom types implementing the standard I/O traits.
 
@@ -34,11 +43,31 @@ combinations of standard-library traits so they can be used as trait objects.
 ### Object-Safe I/O Trait Combinations
 
 - **`ReadSeek`**: combines `Read` and `Seek` for readable random-access inputs.
+- **`BufReadSeek`**: combines `BufRead` and `Seek` for buffered random-access
+  inputs.
 - **`ReadWrite`**: combines `Read` and `Write` for duplex streams or buffers.
 - **`WriteSeek`**: combines `Write` and `Seek` for writable random-access
   outputs.
 - **`ReadWriteSeek`**: combines `Read`, `Write`, and `Seek` for fully mutable
   random-access I/O objects.
+
+### I/O Extension Traits
+
+- **`ReadExt`**:
+  - `read_fully_or_eof` retries short reads until the destination buffer is
+    full or EOF is reached.
+  - `discard_fully_or_eof` consumes and discards up to a requested number of
+    bytes without allocating.
+- **`SeekExt`**:
+  - `stream_len_preserving_position` measures stream length and restores the
+    original position.
+- **`ReadSeekExt`**:
+  - `peek_fully_or_eof` reads from the current position and restores it.
+  - `read_fully_or_eof_at` reads from an absolute offset and restores the
+    original position.
+- **`WriteSeekExt`**:
+  - `write_all_at_preserving_position` writes bytes at an absolute offset and
+    restores the original position.
 
 ### Blanket Implementations
 
@@ -53,7 +82,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-qubit-io = "0.1"
+qubit-io = "0.2"
 ```
 
 ## Quick Start
@@ -78,6 +107,55 @@ fn read_second_byte(input: &mut dyn ReadSeek) -> std::io::Result<u8> {
 fn main() -> std::io::Result<()> {
     let mut cursor = std::io::Cursor::new(b"abc".to_vec());
     assert_eq!(read_second_byte(&mut cursor)?, b'b');
+    Ok(())
+}
+```
+
+### Read Fully or EOF
+
+Use `ReadExt::read_fully_or_eof` when short reads should be retried, but EOF
+before the buffer is full should return a partial byte count instead of
+`UnexpectedEof`.
+
+```rust
+use qubit_io::ReadExt;
+
+fn read_prefix(input: &mut dyn std::io::Read) -> std::io::Result<Vec<u8>> {
+    let mut buffer = vec![0; 8];
+    let count = input.read_fully_or_eof(&mut buffer)?;
+    buffer.truncate(count);
+    Ok(buffer)
+}
+
+fn main() -> std::io::Result<()> {
+    let mut cursor = std::io::Cursor::new(b"abc".to_vec());
+    assert_eq!(read_prefix(&mut cursor)?, b"abc");
+    Ok(())
+}
+```
+
+### Peek Without Consuming Position
+
+Use `ReadSeekExt::peek_fully_or_eof` when inspecting a seekable stream should
+not change the caller-visible position.
+
+```rust
+use qubit_io::ReadSeekExt;
+use std::io::{Seek, SeekFrom};
+
+fn peek_three(input: &mut std::io::Cursor<Vec<u8>>) -> std::io::Result<[u8; 3]> {
+    input.seek(SeekFrom::Start(2))?;
+
+    let mut buffer = [0; 3];
+    let count = input.peek_fully_or_eof(&mut buffer)?;
+    assert_eq!(3, count);
+    assert_eq!(2, input.stream_position()?);
+    Ok(buffer)
+}
+
+fn main() -> std::io::Result<()> {
+    let mut cursor = std::io::Cursor::new(b"abcdef".to_vec());
+    assert_eq!(peek_three(&mut cursor)?, *b"cde");
     Ok(())
 }
 ```
@@ -154,6 +232,34 @@ fn main() -> std::io::Result<()> {
 }
 ```
 
+### Write at an Offset
+
+Use `WriteSeekExt::write_all_at_preserving_position` when patching a header,
+offset table, or length field should not disturb the caller's current write
+position.
+
+```rust
+use qubit_io::WriteSeekExt;
+use std::io::{Seek, Write};
+
+fn patch_length(output: &mut std::io::Cursor<Vec<u8>>) -> std::io::Result<()> {
+    output.write_all(&[0, 0])?;
+    output.write_all(b"payload")?;
+    let end = output.stream_position()?;
+
+    output.write_all_at_preserving_position(0, &[0, 7])?;
+    assert_eq!(end, output.stream_position()?);
+    Ok(())
+}
+
+fn main() -> std::io::Result<()> {
+    let mut cursor = std::io::Cursor::new(Vec::new());
+    patch_length(&mut cursor)?;
+    assert_eq!(cursor.into_inner(), b"\x00\x07payload");
+    Ok(())
+}
+```
+
 ## When to Use These Traits
 
 Use Qubit IO composition traits when:
@@ -181,9 +287,17 @@ where
 | Trait | Standard-library bounds | Typical use |
 |-------|-------------------------|-------------|
 | `ReadSeek` | `Read + Seek` | readable random-access input |
+| `BufReadSeek` | `BufRead + Seek` | buffered random-access input |
 | `ReadWrite` | `Read + Write` | bidirectional stream or buffer |
 | `WriteSeek` | `Write + Seek` | writable random-access output |
 | `ReadWriteSeek` | `Read + Write + Seek` | fully mutable random-access I/O |
+
+| Extension trait | Methods | Typical use |
+|-----------------|---------|-------------|
+| `ReadExt` | `read_fully_or_eof`, `discard_fully_or_eof` | short-read-safe reads and bounded discards |
+| `SeekExt` | `stream_len_preserving_position` | length checks that keep the original cursor |
+| `ReadSeekExt` | `peek_fully_or_eof`, `read_fully_or_eof_at` | non-consuming inspection and random-offset reads |
+| `WriteSeekExt` | `write_all_at_preserving_position` | random-access patch writes |
 
 Each trait is implemented with a blanket implementation:
 
@@ -207,13 +321,27 @@ Rust trait aliases are not stable, and a direct expression such as
 APIs need. Qubit IO solves this by defining a named trait with the desired
 supertraits and implementing it for every matching type.
 
-The traits do not add methods of their own. Method calls such as `read_exact`,
-`write_all`, and `seek` come from the standard-library supertraits.
+The composition traits do not add methods of their own. Method calls such as
+`read_exact`, `write_all`, and `seek` come from the standard-library
+supertraits.
+
+## Extension Trait Notes
+
+Extension methods are available after importing the corresponding trait:
+
+```rust
+use qubit_io::ReadExt;
+```
+
+The extension traits use blanket implementations, so any type implementing the
+matching standard-library trait automatically receives the methods. This also
+works for trait objects such as `&mut dyn std::io::Read`.
 
 ## Testing & Code Coverage
 
-This project keeps tests focused on trait-object support and blanket
-implementation behavior.
+This project keeps tests focused on trait-object support, blanket
+implementation behavior, short-read handling, EOF behavior, interrupted I/O
+retry behavior, and position restoration semantics.
 
 ### Running Tests
 
