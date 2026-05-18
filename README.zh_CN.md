@@ -48,12 +48,14 @@ extension trait 覆盖的是保守、标准库优先的行为，例如：有界�
 - **`ReadExt`**：
   - `read_exact_or_eof` 会在短读时继续读取，直到目标 buffer 被填满或遇到 EOF。
   - `discard_exact_or_eof` 不分配内存，最多消费并丢弃指定字节数。
-  - `copy_to` 与 `copy_to_limited` 以方法形式把内容复制到 writer。
-  - `read_to_end_limited` 在最大长度限制内把剩余输入读入 `Vec<u8>`。
-  - `read_to_string_limited` 读取有界 UTF-8 文本。
+  - `copy_to`、`copy_to_at_most` 与 `copy_to_end_limited` 以方法形式把内容
+    复制到 writer。
+  - `read_to_end_limited` 与 `read_to_end_limited_into` 在最大长度限制内读取
+    剩余输入。
+  - `read_to_string_limited` 与 `read_to_string_limited_into` 读取有界 UTF-8 文本。
 - **`BufReadExt`**：
-  - `read_until_limited`、`read_line_limited` 与 `discard_until_limited`
-    提供有界分隔符读取和丢弃。
+  - `read_until_limited`、`read_until_limited_into`、`read_line_limited`、
+    `read_line_limited_into` 与 `discard_until_limited` 提供有界分隔符读取和丢弃。
 - **`SeekExt`**：
   - `stream_size` 获取 stream 大小并恢复原位置。
 - **`ReadSeekExt`**：
@@ -78,6 +80,7 @@ extension trait 覆盖的是保守、标准库优先的行为，例如：有界�
 - 文件 helper 可创建缺失父目录，并提供同目录临时文件驱动的持久化 atomic write；
 - 内容 helper 可比较 reader 内容并做有界复制；
 - wrapper 类型提供计数、限制、tee、checksum 更新和位置保护能力。
+- `qubit_io::prelude` 重导出 extension trait 和组合 trait，适合方法式调用场景。
 
 ### Blanket Implementation
 
@@ -302,8 +305,8 @@ where
 
 | Extension trait | 方法 | 典型用途 |
 |-----------------|------|----------|
-| `ReadExt` | `read_exact_or_eof`、`discard_exact_or_eof`、`copy_to`、`copy_to_limited`、`read_to_end_limited`、`read_to_string_limited` | 短读安全读取、有界复制和有界读取 |
-| `BufReadExt` | `read_until_limited`、`read_line_limited`、`discard_until_limited` | 有界分隔符和行操作 |
+| `ReadExt` | `read_exact_or_eof`、`discard_exact_or_eof`、`copy_to`、`copy_to_at_most`、`copy_to_end_limited`、`read_to_end_limited`、`read_to_end_limited_into`、`read_to_string_limited`、`read_to_string_limited_into` | 短读安全读取、有界复制和有界读取 |
+| `BufReadExt` | `read_until_limited`、`read_until_limited_into`、`read_line_limited`、`read_line_limited_into`、`discard_until_limited` | 有界分隔符和行操作 |
 | `SeekExt` | `stream_size` | 获取大小但保持原 cursor |
 | `ReadSeekExt` | `peek_exact_or_eof`、`read_exact_or_eof_at` | 不消费位置的探测和随机 offset 读取 |
 | `WriteSeekExt` | `write_all_at_preserving_position` | 随机访问 patch 写入 |

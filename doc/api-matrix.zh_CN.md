@@ -2,6 +2,12 @@
 
 本文档汇总 `qubit_io` 从 crate root 对外重导出的公开 API。
 
+## Prelude
+
+| 模块 | 重导出内容 |
+|------|------------|
+| `qubit_io::prelude` | `BinaryReadExt`、`BinaryWriteExt`、`BufReadExt`、`BufReadSeek`、`Leb128IntReadExt`、`Leb128IntWriteExt`、`ReadExt`、`ReadSeek`、`ReadSeekExt`、`ReadWrite`、`ReadWriteSeek`、`SeekExt`、`StringReadExt`、`StringWriteExt`、`WriteSeek`、`WriteSeekExt`、`ZigZagIntReadExt`、`ZigZagIntWriteExt` |
+
 ## 组合 Trait
 
 | Trait | 标准库约束 | 用途 |
@@ -16,27 +22,29 @@
 
 | Trait | 方法 | 说明 |
 |------|------|------|
-| `ReadExt` | `read_exact_or_eof`、`discard_exact_or_eof`、`copy_to`、`copy_to_limited`、`read_to_end_limited`、`read_to_string_limited` | 短读安全读取、有界复制、有界字节读取和有界 UTF-8 文本读取。 |
-| `BufReadExt` | `read_until_limited`、`read_line_limited`、`discard_until_limited` | 面向 buffered reader 的有界分隔符和行读取/丢弃。 |
+| `ReadExt` | `read_exact_or_eof`、`discard_exact_or_eof`、`copy_to`、`copy_to_at_most`、`copy_to_end_limited`、`read_to_end_limited`、`read_to_end_limited_into`、`read_to_string_limited`、`read_to_string_limited_into` | 短读安全读取、有界复制、有界字节读取和有界 UTF-8 文本读取。 |
+| `BufReadExt` | `read_until_limited`、`read_until_limited_into`、`read_line_limited`、`read_line_limited_into`、`discard_until_limited` | 面向 buffered reader 的有界分隔符和行读取/丢弃。 |
 | `SeekExt` | `stream_size` | 获取 stream 大小并恢复原位置；如果标准库未来加入 `Seek::stream_size`，该方法可能被弃用。 |
 | `ReadSeekExt` | `peek_exact_or_eof`、`read_exact_or_eof_at` | 保持位置不变的 peek 和随机 offset 读取。 |
 | `WriteSeekExt` | `write_all_at_preserving_position` | 保持位置不变的随机 offset 写入。 |
 
 ## 二进制标量
 
-| Trait | 支持的值 | 字节序支持 |
-|------|----------|------------|
-| `BinaryReadExt` | `u8`、`i8`、`u16`、`i16`、`u32`、`i32`、`u64`、`i64`、`u128`、`i128`、`f32`、`f64` | 多字节值支持 `_be`、`_le` 和运行时 `ByteOrder` 方法。 |
-| `BinaryWriteExt` | `u8`、`i8`、`u16`、`i16`、`u32`、`i32`、`u64`、`i64`、`u128`、`i128`、`f32`、`f64` | 多字节值支持 `_be`、`_le` 和运行时 `ByteOrder` 方法。 |
+| Trait | 方法 |
+|------|------|
+| `BinaryReadExt` | `read_u8`、`read_i8`；`read_u16`、`read_u16_be`、`read_u16_le`；`read_i16`、`read_i16_be`、`read_i16_le`；`read_u32`、`read_u32_be`、`read_u32_le`；`read_i32`、`read_i32_be`、`read_i32_le`；`read_u64`、`read_u64_be`、`read_u64_le`；`read_i64`、`read_i64_be`、`read_i64_le`；`read_u128`、`read_u128_be`、`read_u128_le`；`read_i128`、`read_i128_be`、`read_i128_le`；`read_f32`、`read_f32_be`、`read_f32_le`；`read_f64`、`read_f64_be`、`read_f64_le` |
+| `BinaryWriteExt` | `write_u8`、`write_i8`；`write_u16`、`write_u16_be`、`write_u16_le`；`write_i16`、`write_i16_be`、`write_i16_le`；`write_u32`、`write_u32_be`、`write_u32_le`；`write_i32`、`write_i32_be`、`write_i32_le`；`write_u64`、`write_u64_be`、`write_u64_le`；`write_i64`、`write_i64_be`、`write_i64_le`；`write_u128`、`write_u128_be`、`write_u128_le`；`write_i128`、`write_i128_be`、`write_i128_le`；`write_f32`、`write_f32_be`、`write_f32_le`；`write_f64`、`write_f64_be`、`write_f64_le` |
+
+多字节运行时字节序方法使用 `ByteOrder::{BigEndian, LittleEndian}`。
 
 ## 整数编码
 
-| Trait | 支持的值 | strict 解码 |
-|------|----------|-------------|
-| `Leb128IntReadExt` | unsigned `u8`、`u16`、`u32`、`u64`、`u128`、`usize`；signed `i8`、`i16`、`i32`、`i64`、`i128`、`isize` | 每个读取方法都有 `_strict` 变体，用于拒绝非 canonical LEB128 编码。 |
-| `Leb128IntWriteExt` | unsigned `u8`、`u16`、`u32`、`u64`、`u128`、`usize`；signed `i8`、`i16`、`i32`、`i64`、`i128`、`isize` | 写入方法始终输出 canonical LEB128 编码。 |
-| `ZigZagIntReadExt` | `i8`、`i16`、`i32`、`i64`、`i128`、`isize` | 每个读取方法都有 `_strict` 变体，要求 unsigned LEB128 payload 为 canonical 编码。 |
-| `ZigZagIntWriteExt` | `i8`、`i16`、`i32`、`i64`、`i128`、`isize` | 写入方法输出 ZigZag 映射后的 canonical unsigned LEB128 payload。 |
+| Trait | 方法 |
+|------|------|
+| `Leb128IntReadExt` | `read_uleb_u8`、`read_uleb_u8_strict`；`read_uleb_u16`、`read_uleb_u16_strict`；`read_uleb_u32`、`read_uleb_u32_strict`；`read_uleb_u64`、`read_uleb_u64_strict`；`read_uleb_u128`、`read_uleb_u128_strict`；`read_uleb_usize`、`read_uleb_usize_strict`；`read_sleb_i8`、`read_sleb_i8_strict`；`read_sleb_i16`、`read_sleb_i16_strict`；`read_sleb_i32`、`read_sleb_i32_strict`；`read_sleb_i64`、`read_sleb_i64_strict`；`read_sleb_i128`、`read_sleb_i128_strict`；`read_sleb_isize`、`read_sleb_isize_strict` |
+| `Leb128IntWriteExt` | `write_uleb_u8`、`write_uleb_u16`、`write_uleb_u32`、`write_uleb_u64`、`write_uleb_u128`、`write_uleb_usize`、`write_sleb_i8`、`write_sleb_i16`、`write_sleb_i32`、`write_sleb_i64`、`write_sleb_i128`、`write_sleb_isize` |
+| `ZigZagIntReadExt` | `read_zigzag_i8`、`read_zigzag_i8_strict`；`read_zigzag_i16`、`read_zigzag_i16_strict`；`read_zigzag_i32`、`read_zigzag_i32_strict`；`read_zigzag_i64`、`read_zigzag_i64_strict`；`read_zigzag_i128`、`read_zigzag_i128_strict`；`read_zigzag_isize`、`read_zigzag_isize_strict` |
+| `ZigZagIntWriteExt` | `write_zigzag_i8`、`write_zigzag_i16`、`write_zigzag_i32`、`write_zigzag_i64`、`write_zigzag_i128`、`write_zigzag_isize` |
 
 LEB128 参考 WebAssembly Core binary value encoding：
 <https://webassembly.github.io/spec/core/binary/values.html#integers>。
@@ -55,7 +63,8 @@ ZigZag 参考 Protocol Buffers signed integer mapping：
 
 | 函数 | 用途 |
 |------|------|
-| `copy_limited` | 从 reader 向 writer 最多复制 `max_bytes` 字节。 |
+| `copy_at_most` | 从 reader 向 writer 最多复制 `max_bytes` 字节。 |
+| `copy_to_end_limited` | 一直复制到 EOF；如果输入长度超过 `max_bytes`，返回 `InvalidData`。 |
 | `content_eq` | 判断两个 reader 的内容是否逐字节相同。 |
 | `compare_content` | 对两个 reader 的内容做字典序比较。 |
 | `open_buffered_reader` | 以 `BufReader<File>` 形式打开文件。 |
@@ -66,14 +75,14 @@ ZigZag 参考 Protocol Buffers signed integer mapping：
 
 ## Wrapper 类型
 
-| 类型 | 实现 | 用途 |
-|------|------|------|
-| `CountingReader` | `Read` | 统计成功读取的字节数。 |
-| `CountingWriter` | `Write` | 统计成功写入的字节数。 |
-| `LimitReader` | `Read` | 限制从 inner reader 读取的字节数。 |
-| `LimitWriter` | `Write` | 限制写入 inner writer 的字节数。 |
-| `TeeReader` | `Read` | 把成功读取的字节复制到 branch writer。 |
-| `TeeWriter` | `Write` | 写入 primary writer，并把字节镜像到 branch writer。 |
-| `ChecksumReader` | `Read` | 对成功读取的字节更新调用方提供的 checksum 状态。 |
-| `ChecksumWriter` | `Write` | 对成功写入的字节更新调用方提供的 checksum 状态。 |
-| `PositionGuard` | `Seek` guard | 在 drop 时恢复原 stream 位置，除非被 dismiss。 |
+| 类型 | 实现 | 公开方法 |
+|------|------|----------|
+| `CountingReader` | `Read` | `new`、`bytes_read`、`get_ref`、`get_mut`、`into_inner` |
+| `CountingWriter` | `Write` | `new`、`bytes_written`、`get_ref`、`get_mut`、`into_inner` |
+| `LimitReader` | `Read` | `new`、`remaining`、`get_ref`、`get_mut`、`into_inner` |
+| `LimitWriter` | `Write` | `new`、`remaining`、`get_ref`、`get_mut`、`into_inner` |
+| `TeeReader` | `Read` | `new`、`reader_ref`、`reader_mut`、`branch_ref`、`branch_mut`、`into_inner` |
+| `TeeWriter` | `Write` | `new`、`primary_ref`、`primary_mut`、`branch_ref`、`branch_mut`、`into_inner` |
+| `ChecksumReader` | `Read` | `new`、`checksum`、`get_ref`、`get_mut`、`hasher_ref`、`hasher_mut`、`into_inner` |
+| `ChecksumWriter` | `Write` | `new`、`checksum`、`get_ref`、`get_mut`、`hasher_ref`、`hasher_mut`、`into_inner` |
+| `PositionGuard` | `Seek` drop guard | `new`、`position`、`get_mut`、`restore`、`dismiss` |

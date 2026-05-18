@@ -18,6 +18,11 @@ use std::io::{
 /// The wrapped hasher is updated only after the inner writer accepts bytes.
 /// Failed writes do not update the hasher.
 ///
+/// The checksum value is whatever the supplied [`Hasher`] reports. The Rust
+/// standard-library hashers are not specified as stable file formats and are
+/// not cryptographic digests; use this wrapper for stream instrumentation
+/// unless the chosen hasher explicitly documents stronger guarantees.
+///
 /// # Examples
 /// ```
 /// use std::collections::hash_map::DefaultHasher;
