@@ -146,22 +146,49 @@ fn test_copy_limited_returns_write_error() {
 }
 
 #[test]
-fn test_read_to_vec_limited_returns_vec_when_input_fits() {
+fn test_copy_to_method_copies_remaining_bytes() {
+    let mut input = Cursor::new(b"abcdef".to_vec());
+    let mut output = Vec::new();
+
+    let copied = input
+        .copy_to(&mut output)
+        .expect("copy_to should copy until EOF");
+
+    assert_eq!(6, copied);
+    assert_eq!(b"abcdef", output.as_slice());
+}
+
+#[test]
+fn test_copy_to_limited_method_copies_at_most_requested_bytes() {
+    let mut input = Cursor::new(b"abcdef".to_vec());
+    let mut output = Vec::new();
+
+    let copied = input
+        .copy_to_limited(&mut output, 4)
+        .expect("copy_to_limited should stop at the limit");
+
+    assert_eq!(4, copied);
+    assert_eq!(b"abcd", output.as_slice());
+    assert_eq!(4, input.position());
+}
+
+#[test]
+fn test_read_to_end_limited_returns_vec_when_input_fits() {
     let mut input = Cursor::new(b"abc".to_vec());
 
     let data = input
-        .read_to_vec_limited(3)
+        .read_to_end_limited(3)
         .expect("input within limit should be read");
 
     assert_eq!(b"abc", data.as_slice());
 }
 
 #[test]
-fn test_read_to_vec_limited_rejects_input_beyond_limit() {
+fn test_read_to_end_limited_rejects_input_beyond_limit() {
     let mut input = Cursor::new(b"abcd".to_vec());
 
     let error = input
-        .read_to_vec_limited(3)
+        .read_to_end_limited(3)
         .expect_err("input beyond limit should fail");
 
     assert_eq!(ErrorKind::InvalidData, error.kind());

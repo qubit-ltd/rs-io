@@ -12,11 +12,14 @@ use std::io::{
     Write,
 };
 
+use crate::ByteOrder;
+
 /// Extension methods for writing binary scalar values to [`Write`] streams.
 ///
-/// The methods use explicit byte-order suffixes for multi-byte values and
-/// delegate to [`Write::write_all`], so they either write the complete encoded
-/// value or return the first I/O error.
+/// Multi-byte values can be written either with explicit byte-order suffixes
+/// or with a runtime [`ByteOrder`] argument. All methods delegate to
+/// [`Write::write_all`], so they either write the complete encoded value or
+/// return the first I/O error.
 pub trait BinaryWriteExt: Write {
     /// Writes one unsigned byte.
     ///
@@ -36,6 +39,22 @@ pub trait BinaryWriteExt: Write {
     /// Returns an I/O error from the underlying writer.
     fn write_i8(&mut self, value: i8) -> Result<()>;
 
+    /// Writes a `u16` using `order`.
+    ///
+    /// # Parameters
+    /// - `value`: Value to encode.
+    /// - `order`: Byte order used to encode the value.
+    ///
+    /// # Errors
+    /// Returns an I/O error from the underlying writer.
+    #[inline]
+    fn write_u16(&mut self, value: u16, order: ByteOrder) -> Result<()> {
+        match order {
+            ByteOrder::BigEndian => self.write_u16_be(value),
+            ByteOrder::LittleEndian => self.write_u16_le(value),
+        }
+    }
+
     /// Writes a big-endian `u16`.
     ///
     /// # Parameters
@@ -53,6 +72,22 @@ pub trait BinaryWriteExt: Write {
     /// # Errors
     /// Returns an I/O error from the underlying writer.
     fn write_u16_le(&mut self, value: u16) -> Result<()>;
+
+    /// Writes an `i16` using `order`.
+    ///
+    /// # Parameters
+    /// - `value`: Value to encode.
+    /// - `order`: Byte order used to encode the value.
+    ///
+    /// # Errors
+    /// Returns an I/O error from the underlying writer.
+    #[inline]
+    fn write_i16(&mut self, value: i16, order: ByteOrder) -> Result<()> {
+        match order {
+            ByteOrder::BigEndian => self.write_i16_be(value),
+            ByteOrder::LittleEndian => self.write_i16_le(value),
+        }
+    }
 
     /// Writes a big-endian `i16`.
     ///
@@ -72,6 +107,22 @@ pub trait BinaryWriteExt: Write {
     /// Returns an I/O error from the underlying writer.
     fn write_i16_le(&mut self, value: i16) -> Result<()>;
 
+    /// Writes a `u32` using `order`.
+    ///
+    /// # Parameters
+    /// - `value`: Value to encode.
+    /// - `order`: Byte order used to encode the value.
+    ///
+    /// # Errors
+    /// Returns an I/O error from the underlying writer.
+    #[inline]
+    fn write_u32(&mut self, value: u32, order: ByteOrder) -> Result<()> {
+        match order {
+            ByteOrder::BigEndian => self.write_u32_be(value),
+            ByteOrder::LittleEndian => self.write_u32_le(value),
+        }
+    }
+
     /// Writes a big-endian `u32`.
     ///
     /// # Parameters
@@ -89,6 +140,22 @@ pub trait BinaryWriteExt: Write {
     /// # Errors
     /// Returns an I/O error from the underlying writer.
     fn write_u32_le(&mut self, value: u32) -> Result<()>;
+
+    /// Writes an `i32` using `order`.
+    ///
+    /// # Parameters
+    /// - `value`: Value to encode.
+    /// - `order`: Byte order used to encode the value.
+    ///
+    /// # Errors
+    /// Returns an I/O error from the underlying writer.
+    #[inline]
+    fn write_i32(&mut self, value: i32, order: ByteOrder) -> Result<()> {
+        match order {
+            ByteOrder::BigEndian => self.write_i32_be(value),
+            ByteOrder::LittleEndian => self.write_i32_le(value),
+        }
+    }
 
     /// Writes a big-endian `i32`.
     ///
@@ -108,6 +175,22 @@ pub trait BinaryWriteExt: Write {
     /// Returns an I/O error from the underlying writer.
     fn write_i32_le(&mut self, value: i32) -> Result<()>;
 
+    /// Writes a `u64` using `order`.
+    ///
+    /// # Parameters
+    /// - `value`: Value to encode.
+    /// - `order`: Byte order used to encode the value.
+    ///
+    /// # Errors
+    /// Returns an I/O error from the underlying writer.
+    #[inline]
+    fn write_u64(&mut self, value: u64, order: ByteOrder) -> Result<()> {
+        match order {
+            ByteOrder::BigEndian => self.write_u64_be(value),
+            ByteOrder::LittleEndian => self.write_u64_le(value),
+        }
+    }
+
     /// Writes a big-endian `u64`.
     ///
     /// # Parameters
@@ -125,6 +208,22 @@ pub trait BinaryWriteExt: Write {
     /// # Errors
     /// Returns an I/O error from the underlying writer.
     fn write_u64_le(&mut self, value: u64) -> Result<()>;
+
+    /// Writes an `i64` using `order`.
+    ///
+    /// # Parameters
+    /// - `value`: Value to encode.
+    /// - `order`: Byte order used to encode the value.
+    ///
+    /// # Errors
+    /// Returns an I/O error from the underlying writer.
+    #[inline]
+    fn write_i64(&mut self, value: i64, order: ByteOrder) -> Result<()> {
+        match order {
+            ByteOrder::BigEndian => self.write_i64_be(value),
+            ByteOrder::LittleEndian => self.write_i64_le(value),
+        }
+    }
 
     /// Writes a big-endian `i64`.
     ///
@@ -144,6 +243,22 @@ pub trait BinaryWriteExt: Write {
     /// Returns an I/O error from the underlying writer.
     fn write_i64_le(&mut self, value: i64) -> Result<()>;
 
+    /// Writes an IEEE-754 `f32` using `order`.
+    ///
+    /// # Parameters
+    /// - `value`: Value to encode.
+    /// - `order`: Byte order used to encode the value.
+    ///
+    /// # Errors
+    /// Returns an I/O error from the underlying writer.
+    #[inline]
+    fn write_f32(&mut self, value: f32, order: ByteOrder) -> Result<()> {
+        match order {
+            ByteOrder::BigEndian => self.write_f32_be(value),
+            ByteOrder::LittleEndian => self.write_f32_le(value),
+        }
+    }
+
     /// Writes a big-endian IEEE-754 `f32`.
     ///
     /// # Parameters
@@ -161,6 +276,22 @@ pub trait BinaryWriteExt: Write {
     /// # Errors
     /// Returns an I/O error from the underlying writer.
     fn write_f32_le(&mut self, value: f32) -> Result<()>;
+
+    /// Writes an IEEE-754 `f64` using `order`.
+    ///
+    /// # Parameters
+    /// - `value`: Value to encode.
+    /// - `order`: Byte order used to encode the value.
+    ///
+    /// # Errors
+    /// Returns an I/O error from the underlying writer.
+    #[inline]
+    fn write_f64(&mut self, value: f64, order: ByteOrder) -> Result<()> {
+        match order {
+            ByteOrder::BigEndian => self.write_f64_be(value),
+            ByteOrder::LittleEndian => self.write_f64_le(value),
+        }
+    }
 
     /// Writes a big-endian IEEE-754 `f64`.
     ///

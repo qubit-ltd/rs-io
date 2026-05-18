@@ -12,11 +12,14 @@ use std::io::{
     Result,
 };
 
+use crate::ByteOrder;
+
 /// Extension methods for reading binary scalar values from [`Read`] streams.
 ///
-/// The methods use explicit byte-order suffixes for multi-byte values. They
-/// read exactly the required number of bytes and therefore return
-/// [`std::io::ErrorKind::UnexpectedEof`] when the stream ends early.
+/// Multi-byte values can be read either with explicit byte-order suffixes or
+/// with a runtime [`ByteOrder`] argument. All methods read exactly the required
+/// number of bytes and therefore return [`std::io::ErrorKind::UnexpectedEof`]
+/// when the stream ends early.
 pub trait BinaryReadExt: Read {
     /// Reads one unsigned byte.
     ///
@@ -38,6 +41,24 @@ pub trait BinaryReadExt: Read {
     /// `UnexpectedEof` when no byte is available.
     fn read_i8(&mut self) -> Result<i8>;
 
+    /// Reads a `u16` using `order`.
+    ///
+    /// # Parameters
+    /// - `order`: Byte order used to decode the value.
+    ///
+    /// # Returns
+    /// The decoded value.
+    ///
+    /// # Errors
+    /// Returns an I/O error when two bytes cannot be read.
+    #[inline]
+    fn read_u16(&mut self, order: ByteOrder) -> Result<u16> {
+        match order {
+            ByteOrder::BigEndian => self.read_u16_be(),
+            ByteOrder::LittleEndian => self.read_u16_le(),
+        }
+    }
+
     /// Reads a big-endian `u16`.
     ///
     /// # Returns
@@ -55,6 +76,24 @@ pub trait BinaryReadExt: Read {
     /// # Errors
     /// Returns an I/O error when two bytes cannot be read.
     fn read_u16_le(&mut self) -> Result<u16>;
+
+    /// Reads an `i16` using `order`.
+    ///
+    /// # Parameters
+    /// - `order`: Byte order used to decode the value.
+    ///
+    /// # Returns
+    /// The decoded value.
+    ///
+    /// # Errors
+    /// Returns an I/O error when two bytes cannot be read.
+    #[inline]
+    fn read_i16(&mut self, order: ByteOrder) -> Result<i16> {
+        match order {
+            ByteOrder::BigEndian => self.read_i16_be(),
+            ByteOrder::LittleEndian => self.read_i16_le(),
+        }
+    }
 
     /// Reads a big-endian `i16`.
     ///
@@ -74,6 +113,24 @@ pub trait BinaryReadExt: Read {
     /// Returns an I/O error when two bytes cannot be read.
     fn read_i16_le(&mut self) -> Result<i16>;
 
+    /// Reads a `u32` using `order`.
+    ///
+    /// # Parameters
+    /// - `order`: Byte order used to decode the value.
+    ///
+    /// # Returns
+    /// The decoded value.
+    ///
+    /// # Errors
+    /// Returns an I/O error when four bytes cannot be read.
+    #[inline]
+    fn read_u32(&mut self, order: ByteOrder) -> Result<u32> {
+        match order {
+            ByteOrder::BigEndian => self.read_u32_be(),
+            ByteOrder::LittleEndian => self.read_u32_le(),
+        }
+    }
+
     /// Reads a big-endian `u32`.
     ///
     /// # Returns
@@ -91,6 +148,24 @@ pub trait BinaryReadExt: Read {
     /// # Errors
     /// Returns an I/O error when four bytes cannot be read.
     fn read_u32_le(&mut self) -> Result<u32>;
+
+    /// Reads an `i32` using `order`.
+    ///
+    /// # Parameters
+    /// - `order`: Byte order used to decode the value.
+    ///
+    /// # Returns
+    /// The decoded value.
+    ///
+    /// # Errors
+    /// Returns an I/O error when four bytes cannot be read.
+    #[inline]
+    fn read_i32(&mut self, order: ByteOrder) -> Result<i32> {
+        match order {
+            ByteOrder::BigEndian => self.read_i32_be(),
+            ByteOrder::LittleEndian => self.read_i32_le(),
+        }
+    }
 
     /// Reads a big-endian `i32`.
     ///
@@ -110,6 +185,24 @@ pub trait BinaryReadExt: Read {
     /// Returns an I/O error when four bytes cannot be read.
     fn read_i32_le(&mut self) -> Result<i32>;
 
+    /// Reads a `u64` using `order`.
+    ///
+    /// # Parameters
+    /// - `order`: Byte order used to decode the value.
+    ///
+    /// # Returns
+    /// The decoded value.
+    ///
+    /// # Errors
+    /// Returns an I/O error when eight bytes cannot be read.
+    #[inline]
+    fn read_u64(&mut self, order: ByteOrder) -> Result<u64> {
+        match order {
+            ByteOrder::BigEndian => self.read_u64_be(),
+            ByteOrder::LittleEndian => self.read_u64_le(),
+        }
+    }
+
     /// Reads a big-endian `u64`.
     ///
     /// # Returns
@@ -127,6 +220,24 @@ pub trait BinaryReadExt: Read {
     /// # Errors
     /// Returns an I/O error when eight bytes cannot be read.
     fn read_u64_le(&mut self) -> Result<u64>;
+
+    /// Reads an `i64` using `order`.
+    ///
+    /// # Parameters
+    /// - `order`: Byte order used to decode the value.
+    ///
+    /// # Returns
+    /// The decoded value.
+    ///
+    /// # Errors
+    /// Returns an I/O error when eight bytes cannot be read.
+    #[inline]
+    fn read_i64(&mut self, order: ByteOrder) -> Result<i64> {
+        match order {
+            ByteOrder::BigEndian => self.read_i64_be(),
+            ByteOrder::LittleEndian => self.read_i64_le(),
+        }
+    }
 
     /// Reads a big-endian `i64`.
     ///
@@ -146,6 +257,24 @@ pub trait BinaryReadExt: Read {
     /// Returns an I/O error when eight bytes cannot be read.
     fn read_i64_le(&mut self) -> Result<i64>;
 
+    /// Reads an IEEE-754 `f32` using `order`.
+    ///
+    /// # Parameters
+    /// - `order`: Byte order used to decode the value.
+    ///
+    /// # Returns
+    /// The decoded value.
+    ///
+    /// # Errors
+    /// Returns an I/O error when four bytes cannot be read.
+    #[inline]
+    fn read_f32(&mut self, order: ByteOrder) -> Result<f32> {
+        match order {
+            ByteOrder::BigEndian => self.read_f32_be(),
+            ByteOrder::LittleEndian => self.read_f32_le(),
+        }
+    }
+
     /// Reads a big-endian IEEE-754 `f32`.
     ///
     /// # Returns
@@ -163,6 +292,24 @@ pub trait BinaryReadExt: Read {
     /// # Errors
     /// Returns an I/O error when four bytes cannot be read.
     fn read_f32_le(&mut self) -> Result<f32>;
+
+    /// Reads an IEEE-754 `f64` using `order`.
+    ///
+    /// # Parameters
+    /// - `order`: Byte order used to decode the value.
+    ///
+    /// # Returns
+    /// The decoded value.
+    ///
+    /// # Errors
+    /// Returns an I/O error when eight bytes cannot be read.
+    #[inline]
+    fn read_f64(&mut self, order: ByteOrder) -> Result<f64> {
+        match order {
+            ByteOrder::BigEndian => self.read_f64_be(),
+            ByteOrder::LittleEndian => self.read_f64_le(),
+        }
+    }
 
     /// Reads a big-endian IEEE-754 `f64`.
     ///
