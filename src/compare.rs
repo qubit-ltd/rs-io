@@ -13,7 +13,7 @@ use std::io::{
     Result,
 };
 
-use crate::read_ext::read_exact_or_eof_from;
+use crate::ReadExt;
 
 /// Buffer size used by stream comparison operations.
 const COMPARE_BUFFER_SIZE: usize = 16 * 1024;
@@ -54,8 +54,8 @@ pub fn compare_content(left: &mut dyn Read, right: &mut dyn Read) -> Result<Orde
     let mut left_buffer = [0; COMPARE_BUFFER_SIZE];
     let mut right_buffer = [0; COMPARE_BUFFER_SIZE];
     loop {
-        let left_count = read_exact_or_eof_from(left, &mut left_buffer)?;
-        let right_count = read_exact_or_eof_from(right, &mut right_buffer)?;
+        let left_count = left.read_exact_or_eof(&mut left_buffer)?;
+        let right_count = right.read_exact_or_eof(&mut right_buffer)?;
         let n = left_count.min(right_count);
         for index in 0..n {
             match left_buffer[index].cmp(&right_buffer[index]) {

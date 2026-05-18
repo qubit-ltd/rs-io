@@ -42,14 +42,14 @@ where
 {
     #[inline]
     fn stream_len_preserving_position(&mut self) -> Result<u64> {
-        stream_len_preserving_position_from(self)
+        stream_len_preserving_position_impl(self)
     }
 }
 
 impl SeekExt for dyn Seek + '_ {
     #[inline]
     fn stream_len_preserving_position(&mut self) -> Result<u64> {
-        stream_len_preserving_position_from(self)
+        stream_len_preserving_position_impl(self)
     }
 }
 
@@ -63,7 +63,7 @@ impl SeekExt for dyn Seek + '_ {
 ///
 /// # Errors
 /// Returns an error when position lookup, end seeking, or restoration fails.
-fn stream_len_preserving_position_from(stream: &mut dyn Seek) -> Result<u64> {
+fn stream_len_preserving_position_impl(stream: &mut dyn Seek) -> Result<u64> {
     let position = stream.stream_position()?;
     let length_result = stream.seek(SeekFrom::End(0));
     let restore_result = stream.seek(SeekFrom::Start(position));

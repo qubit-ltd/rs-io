@@ -128,12 +128,12 @@ where
 {
     #[inline]
     fn read_exact_or_eof(&mut self, buffer: &mut [u8]) -> Result<usize> {
-        read_exact_or_eof_from(self, buffer)
+        read_exact_or_eof_impl(self, buffer)
     }
 
     #[inline]
     fn discard_exact_or_eof(&mut self, bytes: u64) -> Result<u64> {
-        discard_exact_or_eof_from(self, bytes)
+        discard_exact_or_eof_impl(self, bytes)
     }
 
     #[inline]
@@ -148,19 +148,19 @@ where
 
     #[inline]
     fn read_to_end_limited(&mut self, max_len: usize) -> Result<Vec<u8>> {
-        read_to_end_limited_from(self, max_len)
+        read_to_end_limited_impl(self, max_len)
     }
 }
 
 impl ReadExt for dyn Read + '_ {
     #[inline]
     fn read_exact_or_eof(&mut self, buffer: &mut [u8]) -> Result<usize> {
-        read_exact_or_eof_from(self, buffer)
+        read_exact_or_eof_impl(self, buffer)
     }
 
     #[inline]
     fn discard_exact_or_eof(&mut self, bytes: u64) -> Result<u64> {
-        discard_exact_or_eof_from(self, bytes)
+        discard_exact_or_eof_impl(self, bytes)
     }
 
     #[inline]
@@ -175,7 +175,7 @@ impl ReadExt for dyn Read + '_ {
 
     #[inline]
     fn read_to_end_limited(&mut self, max_len: usize) -> Result<Vec<u8>> {
-        read_to_end_limited_from(self, max_len)
+        read_to_end_limited_impl(self, max_len)
     }
 }
 
@@ -190,7 +190,7 @@ impl ReadExt for dyn Read + '_ {
 ///
 /// # Errors
 /// Returns the first non-interrupted read error reported by `reader`.
-pub(crate) fn read_exact_or_eof_from(reader: &mut dyn Read, buffer: &mut [u8]) -> Result<usize> {
+fn read_exact_or_eof_impl(reader: &mut dyn Read, buffer: &mut [u8]) -> Result<usize> {
     let mut total = 0;
     while total < buffer.len() {
         match reader.read(&mut buffer[total..]) {
@@ -218,7 +218,7 @@ pub(crate) fn read_exact_or_eof_from(reader: &mut dyn Read, buffer: &mut [u8]) -
 ///
 /// # Errors
 /// Returns the first non-interrupted read error reported by `reader`.
-pub(crate) fn discard_exact_or_eof_from(reader: &mut dyn Read, bytes: u64) -> Result<u64> {
+fn discard_exact_or_eof_impl(reader: &mut dyn Read, bytes: u64) -> Result<u64> {
     let mut buffer = [0; DISCARD_BUFFER_SIZE];
     let mut remaining = bytes;
     let mut discarded = 0;
@@ -255,7 +255,7 @@ pub(crate) fn discard_exact_or_eof_from(reader: &mut dyn Read, bytes: u64) -> Re
 /// Returns [`ErrorKind::InvalidData`] after detecting that the input contains
 /// more than `max_len` bytes. Returns the first non-interrupted read error
 /// reported by `reader`.
-fn read_to_end_limited_from(reader: &mut dyn Read, max_len: usize) -> Result<Vec<u8>> {
+fn read_to_end_limited_impl(reader: &mut dyn Read, max_len: usize) -> Result<Vec<u8>> {
     let mut output = Vec::new();
     let mut buffer = [0; READ_TO_END_BUFFER_SIZE];
     loop {

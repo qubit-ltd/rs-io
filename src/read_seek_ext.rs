@@ -15,8 +15,8 @@ use std::io::{
 };
 
 use crate::{
+    ReadExt,
     ReadSeek,
-    read_ext::read_exact_or_eof_from,
 };
 
 /// Extension methods for values that implement both [`Read`] and [`Seek`].
@@ -70,24 +70,24 @@ where
 {
     #[inline]
     fn peek_exact_or_eof(&mut self, buffer: &mut [u8]) -> Result<usize> {
-        peek_exact_or_eof_from(self, buffer)
+        peek_exact_or_eof_impl(self, buffer)
     }
 
     #[inline]
     fn read_exact_or_eof_at(&mut self, offset: u64, buffer: &mut [u8]) -> Result<usize> {
-        read_exact_or_eof_at_from(self, offset, buffer)
+        read_exact_or_eof_at_impl(self, offset, buffer)
     }
 }
 
 impl ReadSeekExt for dyn ReadSeek + '_ {
     #[inline]
     fn peek_exact_or_eof(&mut self, buffer: &mut [u8]) -> Result<usize> {
-        peek_exact_or_eof_from(self, buffer)
+        peek_exact_or_eof_impl(self, buffer)
     }
 
     #[inline]
     fn read_exact_or_eof_at(&mut self, offset: u64, buffer: &mut [u8]) -> Result<usize> {
-        read_exact_or_eof_at_from(self, offset, buffer)
+        read_exact_or_eof_at_impl(self, offset, buffer)
     }
 }
 
@@ -102,9 +102,9 @@ impl ReadSeekExt for dyn ReadSeek + '_ {
 ///
 /// # Errors
 /// Returns an error when position lookup, reading, or position restoration fails.
-fn peek_exact_or_eof_from(reader: &mut dyn ReadSeek, buffer: &mut [u8]) -> Result<usize> {
+fn peek_exact_or_eof_impl(mut reader: &mut dyn ReadSeek, buffer: &mut [u8]) -> Result<usize> {
     let position = reader.stream_position()?;
-    let read_result = read_exact_or_eof_from(reader, buffer);
+    let read_result = reader.read_exact_or_eof(buffer);
     let restore_result = reader.seek(SeekFrom::Start(position));
     match (read_result, restore_result) {
         (Ok(count), Ok(_)) => Ok(count),
@@ -125,14 +125,14 @@ fn peek_exact_or_eof_from(reader: &mut dyn ReadSeek, buffer: &mut [u8]) -> Resul
 ///
 /// # Errors
 /// Returns an error when position lookup, seeking, reading, or position restoration fails.
-fn read_exact_or_eof_at_from(
-    reader: &mut dyn ReadSeek,
+fn read_exact_or_eof_at_impl(
+    mut reader: &mut dyn ReadSeek,
     offset: u64,
     buffer: &mut [u8],
 ) -> Result<usize> {
     let position = reader.stream_position()?;
     let read_result = match reader.seek(SeekFrom::Start(offset)) {
-        Ok(_) => read_exact_or_eof_from(reader, buffer),
+        Ok(_) => reader.read_exact_or_eof(buffer),
         Err(error) => Err(error),
     };
     let restore_result = reader.seek(SeekFrom::Start(position));
