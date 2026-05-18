@@ -25,18 +25,18 @@ struct FailingSeek {
 }
 
 impl FailingSeek {
-    fn length_error(original_position: u64) -> Self {
+    fn size_error(original_position: u64) -> Self {
         Self {
             original_position,
-            end_result: Err(Error::other("length failed")),
+            end_result: Err(Error::other("size failed")),
             restore_result: Ok(original_position),
         }
     }
 
-    fn restore_error(original_position: u64, length: u64) -> Self {
+    fn restore_error(original_position: u64, size: u64) -> Self {
         Self {
             original_position,
-            end_result: Ok(length),
+            end_result: Ok(size),
             restore_result: Err(Error::other("restore failed")),
         }
     }
@@ -79,17 +79,17 @@ impl Seek for PositionFailingSeek {
 }
 
 #[test]
-fn test_stream_len_preserving_position_returns_length_without_moving_cursor() {
+fn test_stream_size_returns_size_without_moving_cursor() {
     let mut cursor = Cursor::new(b"abcdef".to_vec());
     cursor
         .seek(SeekFrom::Start(2))
         .expect("cursor should seek to initial position");
 
-    let length = cursor
-        .stream_len_preserving_position()
-        .expect("stream length should be readable");
+    let size = cursor
+        .stream_size()
+        .expect("stream size should be readable");
 
-    assert_eq!(6, length);
+    assert_eq!(6, size);
     assert_eq!(
         2,
         cursor
@@ -99,23 +99,23 @@ fn test_stream_len_preserving_position_returns_length_without_moving_cursor() {
 }
 
 #[test]
-fn test_stream_len_preserving_position_returns_length_error_after_restore() {
-    let mut stream = FailingSeek::length_error(4);
+fn test_stream_size_returns_size_error_after_restore() {
+    let mut stream = FailingSeek::size_error(4);
 
     let error = stream
-        .stream_len_preserving_position()
-        .expect_err("length errors should be returned after restoring position");
+        .stream_size()
+        .expect_err("size errors should be returned after restoring position");
 
     assert_eq!(ErrorKind::Other, error.kind());
-    assert_eq!("length failed", error.to_string());
+    assert_eq!("size failed", error.to_string());
 }
 
 #[test]
-fn test_stream_len_preserving_position_returns_restore_error() {
+fn test_stream_size_returns_restore_error() {
     let mut stream = FailingSeek::restore_error(4, 10);
 
     let error = stream
-        .stream_len_preserving_position()
+        .stream_size()
         .expect_err("restore errors should be reported");
 
     assert_eq!(ErrorKind::Other, error.kind());
@@ -123,11 +123,11 @@ fn test_stream_len_preserving_position_returns_restore_error() {
 }
 
 #[test]
-fn test_stream_len_preserving_position_returns_position_error() {
+fn test_stream_size_returns_position_error() {
     let mut stream = PositionFailingSeek;
 
     let error = stream
-        .stream_len_preserving_position()
+        .stream_size()
         .expect_err("position errors should be returned immediately");
 
     assert_eq!(ErrorKind::Other, error.kind());
@@ -135,18 +135,18 @@ fn test_stream_len_preserving_position_returns_position_error() {
 }
 
 #[test]
-fn test_stream_len_preserving_position_works_on_dyn_seek() {
+fn test_stream_size_works_on_dyn_seek() {
     let mut cursor = Cursor::new(b"abcdef".to_vec());
     cursor
         .seek(SeekFrom::Start(3))
         .expect("cursor should seek to initial position");
     let stream: &mut dyn Seek = &mut cursor;
 
-    let length = stream
-        .stream_len_preserving_position()
+    let size = stream
+        .stream_size()
         .expect("seek extension should work on dyn Seek");
 
-    assert_eq!(6, length);
+    assert_eq!(6, size);
     assert_eq!(
         3,
         stream
