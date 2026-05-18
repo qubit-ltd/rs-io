@@ -44,14 +44,14 @@ where
 {
     #[inline]
     fn write_all_at_preserving_position(&mut self, offset: u64, buffer: &[u8]) -> Result<()> {
-        write_all_at_preserving_position_from(self, offset, buffer)
+        write_all_at_preserving_position_impl(self, offset, buffer)
     }
 }
 
 impl WriteSeekExt for dyn WriteSeek + '_ {
     #[inline]
     fn write_all_at_preserving_position(&mut self, offset: u64, buffer: &[u8]) -> Result<()> {
-        write_all_at_preserving_position_from(self, offset, buffer)
+        write_all_at_preserving_position_impl(self, offset, buffer)
     }
 }
 
@@ -64,7 +64,7 @@ impl WriteSeekExt for dyn WriteSeek + '_ {
 ///
 /// # Errors
 /// Returns an error when position lookup, seeking, writing, or restoration fails.
-fn write_all_at_preserving_position_from(
+fn write_all_at_preserving_position_impl(
     writer: &mut dyn WriteSeek,
     offset: u64,
     buffer: &[u8],

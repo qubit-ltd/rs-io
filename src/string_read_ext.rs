@@ -70,29 +70,29 @@ where
     T: Read,
 {
     fn read_utf8_string_uvar(&mut self, max_len: usize) -> Result<String> {
-        read_utf8_string_uvar_from(self, max_len)
+        read_utf8_string_uvar_impl(self, max_len)
     }
 
     fn read_utf8_string_u32_be(&mut self, max_len: usize) -> Result<String> {
-        read_utf8_string_u32_be_from(self, max_len)
+        read_utf8_string_u32_be_impl(self, max_len)
     }
 
     fn read_utf8_string_u32_le(&mut self, max_len: usize) -> Result<String> {
-        read_utf8_string_u32_le_from(self, max_len)
+        read_utf8_string_u32_le_impl(self, max_len)
     }
 }
 
-fn read_utf8_string_uvar_from(reader: &mut dyn Read, max_len: usize) -> Result<String> {
+fn read_utf8_string_uvar_impl(reader: &mut dyn Read, max_len: usize) -> Result<String> {
     let len = reader.read_uvar_usize()?;
     read_utf8_payload(reader, len, max_len)
 }
 
-fn read_utf8_string_u32_be_from(reader: &mut dyn Read, max_len: usize) -> Result<String> {
+fn read_utf8_string_u32_be_impl(reader: &mut dyn Read, max_len: usize) -> Result<String> {
     let len = reader.read_u32_be()? as usize;
     read_utf8_payload(reader, len, max_len)
 }
 
-fn read_utf8_string_u32_le_from(reader: &mut dyn Read, max_len: usize) -> Result<String> {
+fn read_utf8_string_u32_le_impl(reader: &mut dyn Read, max_len: usize) -> Result<String> {
     let len = reader.read_u32_le()? as usize;
     read_utf8_payload(reader, len, max_len)
 }
