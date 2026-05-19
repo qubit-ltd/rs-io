@@ -156,10 +156,12 @@ assert_eq!(b"abcd", output.as_slice());
 
 ## 文件名工具
 
-`Filenames` 用于不访问文件系统的 lexical 文件名操作：
+`Filenames` 用于不访问文件系统的 lexical 文件名操作。返回文件名数据的公开方法
+都返回 UTF-8 字符串值（`&str` 或 `String`），不返回 `OsStr`；无效 UTF-8 路径
+component 返回 `None`：
 
-- `file_name`、`file_name_str`、`file_stem_str`、`file_prefix_str` 和
-  `extension_str` 暴露常用 `Path` component。
+- `file_name`、`file_stem`、`file_prefix` 和 `extension` 以 `&str` 暴露常用
+  `Path` component。
 - `dot_extension`、`has_extension` 和 `has_extension_ignore_ascii_case`
   覆盖常见扩展名判断。
 - `file_name_from_path` 从包含 `/` 或 `\` 分隔符的字符串中提取最后一段。
@@ -175,8 +177,8 @@ use std::path::Path;
 
 let path = Path::new("/tmp/archive.tar.gz");
 
-assert_eq!(Some("archive.tar"), Filenames::file_stem_str(path));
-assert_eq!(Some("gz"), Filenames::extension_str(path));
+assert_eq!(Some("archive.tar"), Filenames::file_stem(path));
+assert_eq!(Some("gz"), Filenames::extension(path));
 assert!(Filenames::has_extension(path, ".gz"));
 assert_eq!(
     "my file.txt",
@@ -308,12 +310,11 @@ ZigZag 参考 Protocol Buffers signed integer mapping：
 
 | API | 用途 |
 |-----|------|
-| `Filenames::file_name` | 返回最终文件名 component，类型为 `OsStr`。 |
-| `Filenames::file_name_str` | 返回 UTF-8 最终文件名 component。 |
-| `Filenames::file_stem_str` | 按 `Path::file_stem` 语义返回 UTF-8 file stem。 |
-| `Filenames::file_prefix_str` | 按 `Path::file_prefix` 语义返回 UTF-8 file prefix。 |
-| `Filenames::extension_str` | 按 `Path::extension` 语义返回 UTF-8 最终扩展名。 |
-| `Filenames::dot_extension` | 返回带点号前缀的最终扩展名。 |
+| `Filenames::file_name` | 以 `&str` 返回最终文件名 component。 |
+| `Filenames::file_stem` | 按 `Path::file_stem` 语义以 `&str` 返回 file stem。 |
+| `Filenames::file_prefix` | 按 `Path::file_prefix` 语义以 `&str` 返回 file prefix。 |
+| `Filenames::extension` | 按 `Path::extension` 语义以 `&str` 返回最终扩展名。 |
+| `Filenames::dot_extension` | 以 `String` 返回带点号前缀的最终扩展名。 |
 | `Filenames::has_extension` | 做大小写敏感的最终扩展名判断。 |
 | `Filenames::has_extension_ignore_ascii_case` | 做 ASCII 大小写不敏感的最终扩展名判断。 |
 | `Filenames::file_name_from_path` | 从包含 `/` 或 `\` 分隔符的字符串中提取最后一段。 |

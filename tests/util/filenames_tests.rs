@@ -7,7 +7,6 @@
  *    Licensed under the Apache License, Version 2.0.
  *
  ******************************************************************************/
-use std::ffi::OsStr;
 use std::path::Path;
 
 use qubit_io::Filenames;
@@ -16,11 +15,7 @@ use qubit_io::Filenames;
 fn test_file_name_returns_final_component() {
     let path = Path::new("/tmp/archive.tar.gz");
 
-    assert_eq!(
-        Some(OsStr::new("archive.tar.gz")),
-        Filenames::file_name(path)
-    );
-    assert_eq!(Some("archive.tar.gz"), Filenames::file_name_str(path));
+    assert_eq!(Some("archive.tar.gz"), Filenames::file_name(path));
     assert_eq!(None, Filenames::file_name(Path::new("/")));
 }
 
@@ -28,17 +23,17 @@ fn test_file_name_returns_final_component() {
 fn test_file_stem_prefix_and_extension_follow_path_semantics() {
     let path = Path::new("/tmp/archive.tar.gz");
 
-    assert_eq!(Some("archive.tar"), Filenames::file_stem_str(path));
-    assert_eq!(Some("archive"), Filenames::file_prefix_str(path));
-    assert_eq!(Some("gz"), Filenames::extension_str(path));
+    assert_eq!(Some("archive.tar"), Filenames::file_stem(path));
+    assert_eq!(Some("archive"), Filenames::file_prefix(path));
+    assert_eq!(Some("gz"), Filenames::extension(path));
     assert_eq!(Some(".gz".to_owned()), Filenames::dot_extension(path));
 }
 
 #[test]
 fn test_extension_helpers_handle_missing_and_empty_extensions() {
-    assert_eq!(None, Filenames::extension_str(Path::new("README")));
+    assert_eq!(None, Filenames::extension(Path::new("README")));
     assert_eq!(None, Filenames::dot_extension(Path::new("README")));
-    assert_eq!(Some(""), Filenames::extension_str(Path::new("name.")));
+    assert_eq!(Some(""), Filenames::extension(Path::new("name.")));
     assert_eq!(
         Some(String::new()),
         Filenames::dot_extension(Path::new("name."))
@@ -47,16 +42,16 @@ fn test_extension_helpers_handle_missing_and_empty_extensions() {
 
 #[test]
 fn test_dotfiles_follow_rust_path_semantics() {
-    assert_eq!(Some(".env"), Filenames::file_stem_str(Path::new(".env")));
-    assert_eq!(None, Filenames::extension_str(Path::new(".env")));
+    assert_eq!(Some(".env"), Filenames::file_stem(Path::new(".env")));
+    assert_eq!(None, Filenames::extension(Path::new(".env")));
 
     assert_eq!(
         Some(".config"),
-        Filenames::file_stem_str(Path::new(".config.toml"))
+        Filenames::file_stem(Path::new(".config.toml"))
     );
     assert_eq!(
         Some("toml"),
-        Filenames::extension_str(Path::new(".config.toml"))
+        Filenames::extension(Path::new(".config.toml"))
     );
 }
 
