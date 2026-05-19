@@ -149,7 +149,10 @@ wrapper 会透明包裹底层 reader 或 writer，并实现对应标准库 I/O t
 
 这些 wrapper 持有底层 stream，提供 `get_ref`、`get_mut` 和 `into_inner`，
 并复用与 extension trait 相同的编码实现。`BinaryReader` 和 `BinaryWriter`
-还保存运行时 `ByteOrder`。
+还保存运行时 `ByteOrder`。`Leb128Reader` 和 `ZigZagReader` 保存运行时
+strictness flag，因此 object 风格 API 使用 `read_u16`、`read_i32` 这类短
+方法名；需要 canonical LEB128 校验时，用 `with_strict` 创建，或通过
+`set_strict` 切换。
 
 ## API 矩阵
 
@@ -263,9 +266,9 @@ ZigZag 参考 Protocol Buffers signed integer mapping：
 |------|----------|
 | `BinaryReader` | 用于二进制标量和固定宽度长度前缀字符串解码的 reader object。 |
 | `BinaryWriter` | 用于二进制标量和固定宽度长度前缀字符串编码的 writer object。 |
-| `Leb128Reader` | 用于 LEB128 整数和 ULEB128 长度前缀字符串解码的 reader object。 |
+| `Leb128Reader` | 用于 LEB128 整数和 ULEB128 长度前缀字符串解码的 reader object，可配置 strict canonical 解码。 |
 | `Leb128Writer` | 用于 LEB128 整数和 ULEB128 长度前缀字符串编码的 writer object。 |
-| `ZigZagReader` | 用于 ZigZag 有符号整数解码的 reader object。 |
+| `ZigZagReader` | 用于 ZigZag 有符号整数解码的 reader object，可配置底层 ULEB128 strict 校验。 |
 | `ZigZagWriter` | 用于 ZigZag 有符号整数编码的 writer object。 |
 
 ## 依赖项
