@@ -88,12 +88,12 @@ extension trait 覆盖的是保守、标准库优先的行为，例如：精确�
 - wrapper 类型提供计数、限制、tee、checksum 更新和位置保护能力。
 - `qubit_io::prelude` 重导出 extension trait 和组合 trait，适合方法式调用场景。
 
-### Planned Codec Wrapper
+### Codec Wrapper
 
-Phase 2 还为偏好 reader/writer object 调用风格的用户预留 root-level codec
-wrapper 名称：`BinaryReader`、`BinaryWriter`、`Leb128Reader`、`Leb128Writer`、
-`ZigZagReader` 和 `ZigZagWriter`。在这些 wrapper 的源码实现落地前，请使用上面列出的
-extension trait。
+偏好 reader/writer object 调用风格的用户可以直接使用 root-level codec
+wrapper：`BinaryReader`、`BinaryWriter`、`Leb128Reader`、`Leb128Writer`、
+`ZigZagReader` 和 `ZigZagWriter`。这些 wrapper 持有底层 stream，并复用与
+extension trait 相同的编码实现。
 
 ### Blanket Implementation
 

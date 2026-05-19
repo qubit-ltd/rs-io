@@ -109,13 +109,13 @@ position-preserving seek operations.
 - `qubit_io::prelude` re-exports the extension traits and composition traits
   for method-oriented call sites.
 
-### Planned Codec Wrappers
+### Codec Wrappers
 
-Phase 2 also reserves root-level codec wrapper names for callers who prefer
-reader/writer objects over extension-method calls: `BinaryReader`,
-`BinaryWriter`, `Leb128Reader`, `Leb128Writer`, `ZigZagReader`, and
-`ZigZagWriter`. Until those wrappers land in source, use the extension traits
-listed above.
+Callers who prefer reader/writer objects over extension-method calls can use
+root-level codec wrappers: `BinaryReader`, `BinaryWriter`, `Leb128Reader`,
+`Leb128Writer`, `ZigZagReader`, and `ZigZagWriter`. These wrappers own the
+underlying stream and delegate to the same encoding implementations as the
+extension traits.
 
 ### Blanket Implementations
 

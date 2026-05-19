@@ -150,17 +150,18 @@ corresponding standard-library I/O trait:
 - `PositionGuard` restores a seekable stream to its captured position on drop
   unless restored or dismissed explicitly.
 
-## Planned Codec Wrappers
+## Codec Wrappers
 
-Phase 2 also reserves root-level wrapper names for object-oriented codec use:
+Use the root-level wrapper types when explicit reader/writer objects are clearer
+than importing extension traits at the call site:
 
 - `BinaryReader` and `BinaryWriter`
 - `Leb128Reader` and `Leb128Writer`
 - `ZigZagReader` and `ZigZagWriter`
 
-These wrappers are planned as convenience layers over the same semantics as the
-extension traits. Until their source implementation lands, use the extension
-traits for stable call sites.
+These wrappers own the underlying stream, expose `get_ref`, `get_mut`, and
+`into_inner`, and delegate to the same encoding implementations as the extension
+traits. `BinaryReader` and `BinaryWriter` also store a runtime `ByteOrder`.
 
 ## API Matrix
 
@@ -268,14 +269,14 @@ ZigZag follows the Protocol Buffers signed integer mapping:
 | `ChecksumWriter` | `Write` | `new`, `checksum`, `get_ref`, `get_mut`, `hasher_ref`, `hasher_mut`, `into_inner` |
 | `PositionGuard` | drop guard for `Seek` | `new`, `position`, `get_mut`, `restore`, `dismiss` |
 
-### Planned Codec Wrapper Types
+### Codec Wrapper Types
 
-| Type | Planned purpose |
+| Type | Purpose |
 |------|-----------------|
-| `BinaryReader` | Reader object for binary scalar decoding. |
-| `BinaryWriter` | Writer object for binary scalar encoding. |
-| `Leb128Reader` | Reader object for LEB128 integer decoding. |
-| `Leb128Writer` | Writer object for LEB128 integer encoding. |
+| `BinaryReader` | Reader object for binary scalar and fixed-width length-prefixed string decoding. |
+| `BinaryWriter` | Writer object for binary scalar and fixed-width length-prefixed string encoding. |
+| `Leb128Reader` | Reader object for LEB128 integer and ULEB128 length-prefixed string decoding. |
+| `Leb128Writer` | Writer object for LEB128 integer and ULEB128 length-prefixed string encoding. |
 | `ZigZagReader` | Reader object for ZigZag signed integer decoding. |
 | `ZigZagWriter` | Writer object for ZigZag signed integer encoding. |
 
