@@ -19,7 +19,7 @@ include = [
     "/README.zh_CN.md",
     "/RUST_CODING_STYLE.md",
     "/RUST_CODING_STYLE.zh_CN.md",
-    "/doc/**/*.md",
+    "/doc/**/user_guide*.md",
     "/examples/**",
     "/resources/**",
     "/src/**",
