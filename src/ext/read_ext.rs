@@ -53,6 +53,64 @@ pub trait ReadExt: Read {
     /// underlying reader. Interrupted reads are retried.
     fn read_exact_or_eof(&mut self, buffer: &mut [u8]) -> Result<usize>;
 
+    /// Reads exactly `N` bytes into a stack-allocated array.
+    ///
+    /// This method uses [`Read::read_exact`] and therefore requires the reader
+    /// to provide exactly `N` bytes before EOF.
+    ///
+    /// # Returns
+    /// An array containing exactly `N` bytes read from this reader.
+    ///
+    /// # Errors
+    /// Returns the error reported by [`Read::read_exact`], including
+    /// [`ErrorKind::UnexpectedEof`] when EOF is reached before the array is
+    /// full.
+    fn read_exact_array<const N: usize>(&mut self) -> Result<[u8; N]>;
+
+    /// Reads exactly `len` bytes into a new vector after checking a limit.
+    ///
+    /// If `len` is greater than `max_len`, this method returns
+    /// [`ErrorKind::InvalidData`] before reading any bytes.
+    ///
+    /// # Parameters
+    /// - `len`: Exact number of bytes to read.
+    /// - `max_len`: Maximum accepted exact read length.
+    ///
+    /// # Returns
+    /// A vector containing exactly `len` bytes.
+    ///
+    /// # Errors
+    /// Returns [`ErrorKind::InvalidData`] when `len > max_len`. Returns the
+    /// error reported by [`Read::read_exact`], including
+    /// [`ErrorKind::UnexpectedEof`] when EOF is reached before `len` bytes are
+    /// read.
+    fn read_exact_vec_limited(&mut self, len: usize, max_len: usize) -> Result<Vec<u8>>;
+
+    /// Reads exactly `len` bytes and appends them to `output`.
+    ///
+    /// If `len` is greater than `max_len`, this method returns
+    /// [`ErrorKind::InvalidData`] before reading any bytes and leaves `output`
+    /// unchanged. On a read error, `output` is truncated back to its original
+    /// length. The underlying reader may still have consumed bytes before the
+    /// error because [`Read`] does not provide rollback.
+    ///
+    /// # Parameters
+    /// - `output`: Destination vector to append to.
+    /// - `len`: Exact number of bytes to read.
+    /// - `max_len`: Maximum accepted exact read length.
+    ///
+    /// # Errors
+    /// Returns [`ErrorKind::InvalidData`] when `len > max_len`. Returns the
+    /// error reported by [`Read::read_exact`], including
+    /// [`ErrorKind::UnexpectedEof`] when EOF is reached before `len` bytes are
+    /// read.
+    fn read_exact_vec_limited_into(
+        &mut self,
+        output: &mut Vec<u8>,
+        len: usize,
+        max_len: usize,
+    ) -> Result<()>;
+
     /// Discards up to `bytes` bytes from this reader.
     ///
     /// The method repeatedly reads into an internal stack buffer until the
@@ -222,6 +280,29 @@ where
     }
 
     #[inline]
+    fn read_exact_array<const N: usize>(&mut self) -> Result<[u8; N]> {
+        let mut reader = self;
+        read_exact_array_impl::<N>(&mut reader)
+    }
+
+    #[inline]
+    fn read_exact_vec_limited(&mut self, len: usize, max_len: usize) -> Result<Vec<u8>> {
+        let mut reader = self;
+        read_exact_vec_limited_impl(&mut reader, len, max_len)
+    }
+
+    #[inline]
+    fn read_exact_vec_limited_into(
+        &mut self,
+        output: &mut Vec<u8>,
+        len: usize,
+        max_len: usize,
+    ) -> Result<()> {
+        let mut reader = self;
+        read_exact_vec_limited_into_impl(&mut reader, output, len, max_len)
+    }
+
+    #[inline]
     fn discard_exact_or_eof(&mut self, bytes: u64) -> Result<u64> {
         let mut reader = self;
         discard_exact_or_eof_impl(&mut reader, bytes)
@@ -300,6 +381,95 @@ fn read_exact_or_eof_impl(reader: &mut dyn Read, buffer: &mut [u8]) -> Result<us
         }
     }
     Ok(total)
+}
+
+/// Reads exactly `N` bytes from `reader` into an array.
+///
+/// # Parameters
+/// - `reader`: Source reader.
+///
+/// # Returns
+/// A stack-allocated array containing exactly `N` bytes.
+///
+/// # Errors
+/// Returns the error reported by [`Read::read_exact`].
+fn read_exact_array_impl<const N: usize>(reader: &mut dyn Read) -> Result<[u8; N]> {
+    let mut buffer = [0; N];
+    reader.read_exact(&mut buffer)?;
+    Ok(buffer)
+}
+
+/// Reads exactly `len` bytes from `reader` when `len` is within `max_len`.
+///
+/// # Parameters
+/// - `reader`: Source reader.
+/// - `len`: Exact number of bytes to read.
+/// - `max_len`: Maximum accepted exact read length.
+///
+/// # Returns
+/// A vector containing exactly `len` bytes.
+///
+/// # Errors
+/// Returns [`ErrorKind::InvalidData`] when `len > max_len`. Returns the error
+/// reported by [`Read::read_exact`] for read failures.
+fn read_exact_vec_limited_impl(
+    reader: &mut dyn Read,
+    len: usize,
+    max_len: usize,
+) -> Result<Vec<u8>> {
+    validate_exact_read_len(len, max_len)?;
+    let mut output = Vec::with_capacity(len);
+    read_exact_vec_limited_into_impl(reader, &mut output, len, max_len)?;
+    Ok(output)
+}
+
+/// Reads exactly `len` bytes from `reader` and appends them to `output`.
+///
+/// # Parameters
+/// - `reader`: Source reader.
+/// - `output`: Destination vector to append to.
+/// - `len`: Exact number of bytes to read.
+/// - `max_len`: Maximum accepted exact read length.
+///
+/// # Errors
+/// Returns [`ErrorKind::InvalidData`] when `len > max_len` before reading and
+/// leaves `output` unchanged. Returns the error reported by
+/// [`Read::read_exact`] for read failures and truncates `output` back to its
+/// original length.
+fn read_exact_vec_limited_into_impl(
+    reader: &mut dyn Read,
+    output: &mut Vec<u8>,
+    len: usize,
+    max_len: usize,
+) -> Result<()> {
+    validate_exact_read_len(len, max_len)?;
+    let original_len = output.len();
+    output.resize(original_len + len, 0);
+    match reader.read_exact(&mut output[original_len..]) {
+        Ok(()) => Ok(()),
+        Err(error) => {
+            output.truncate(original_len);
+            Err(error)
+        }
+    }
+}
+
+/// Validates that an exact read length is within the configured maximum.
+///
+/// # Parameters
+/// - `len`: Exact number of bytes requested by the caller.
+/// - `max_len`: Maximum accepted exact read length.
+///
+/// # Errors
+/// Returns [`ErrorKind::InvalidData`] when `len > max_len`.
+fn validate_exact_read_len(len: usize, max_len: usize) -> Result<()> {
+    if len > max_len {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            format!("requested length {len} exceeds maximum length {max_len}"),
+        ));
+    }
+    Ok(())
 }
 
 /// Discards up to `bytes` bytes from `reader`.

@@ -86,6 +86,213 @@ impl Read for FailingReader {
     }
 }
 
+struct PartialThenFailReader {
+    data: Vec<u8>,
+    position: usize,
+}
+
+impl PartialThenFailReader {
+    fn new(data: &[u8]) -> Self {
+        Self {
+            data: data.to_vec(),
+            position: 0,
+        }
+    }
+}
+
+impl Read for PartialThenFailReader {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        if self.position < self.data.len() {
+            let count = (self.data.len() - self.position).min(buffer.len());
+            buffer[..count].copy_from_slice(&self.data[self.position..self.position + count]);
+            self.position += count;
+            return Ok(count);
+        }
+        Err(Error::other("read failed after prefix"))
+    }
+}
+
+#[test]
+fn test_read_exact_array_reads_array() {
+    let mut reader = ShortReader::new(b"abcdef", 2);
+
+    let array = reader
+        .read_exact_array::<6>()
+        .expect("array should be filled across short reads");
+
+    assert_eq!(*b"abcdef", array);
+}
+
+#[test]
+fn test_read_exact_array_zero_length_does_not_read() {
+    let mut reader = PanicOnRead;
+
+    let array = reader
+        .read_exact_array::<0>()
+        .expect("zero-length arrays should complete immediately");
+
+    assert!(array.is_empty());
+}
+
+#[test]
+fn test_read_exact_array_returns_unexpected_eof() {
+    let mut reader = Cursor::new(b"ab".to_vec());
+
+    let error = reader
+        .read_exact_array::<3>()
+        .expect_err("short input should return the standard read_exact EOF error");
+
+    assert_eq!(ErrorKind::UnexpectedEof, error.kind());
+}
+
+#[test]
+fn test_read_exact_vec_limited_reads_exact_length() {
+    let mut reader = ShortReader::new(b"abcdef", 2);
+
+    let data = reader
+        .read_exact_vec_limited(6, 8)
+        .expect("exact vector should be filled across short reads");
+
+    assert_eq!(b"abcdef", data.as_slice());
+}
+
+#[test]
+fn test_read_exact_vec_limited_zero_length_does_not_read() {
+    let mut reader = PanicOnRead;
+
+    let data = reader
+        .read_exact_vec_limited(0, 0)
+        .expect("zero-length exact reads should complete immediately");
+
+    assert!(data.is_empty());
+}
+
+#[test]
+fn test_read_exact_vec_limited_rejects_len_over_max_before_reading() {
+    let mut reader = PanicOnRead;
+
+    let error = reader
+        .read_exact_vec_limited(4, 3)
+        .expect_err("requested length over max should be rejected before reading");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!(
+        "requested length 4 exceeds maximum length 3",
+        error.to_string()
+    );
+}
+
+#[test]
+fn test_read_exact_vec_limited_returns_unexpected_eof() {
+    let mut reader = Cursor::new(b"ab".to_vec());
+
+    let error = reader
+        .read_exact_vec_limited(3, 3)
+        .expect_err("short input should return the standard read_exact EOF error");
+
+    assert_eq!(ErrorKind::UnexpectedEof, error.kind());
+}
+
+#[test]
+fn test_read_exact_vec_limited_returns_read_error() {
+    let mut reader = FailingReader;
+
+    let error = reader
+        .read_exact_vec_limited(3, 3)
+        .expect_err("non-EOF read errors should be returned");
+
+    assert_eq!(ErrorKind::Other, error.kind());
+    assert_eq!("read failed", error.to_string());
+}
+
+#[test]
+fn test_read_exact_vec_limited_into_appends_exact_length() {
+    let mut reader = ShortReader::new(b"abcdef", 2);
+    let mut output = b"prefix-".to_vec();
+
+    reader
+        .read_exact_vec_limited_into(&mut output, 6, 8)
+        .expect("exact vector should be appended across short reads");
+
+    assert_eq!(b"prefix-abcdef", output.as_slice());
+}
+
+#[test]
+fn test_read_exact_vec_limited_into_zero_length_does_not_read() {
+    let mut reader = PanicOnRead;
+    let mut output = b"prefix".to_vec();
+
+    reader
+        .read_exact_vec_limited_into(&mut output, 0, 0)
+        .expect("zero-length exact reads should leave output unchanged");
+
+    assert_eq!(b"prefix", output.as_slice());
+}
+
+#[test]
+fn test_read_exact_vec_limited_into_rejects_len_over_max_without_changing_output() {
+    let mut reader = PanicOnRead;
+    let mut output = b"prefix".to_vec();
+
+    let error = reader
+        .read_exact_vec_limited_into(&mut output, 4, 3)
+        .expect_err("requested length over max should be rejected before reading");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!(
+        "requested length 4 exceeds maximum length 3",
+        error.to_string()
+    );
+    assert_eq!(b"prefix", output.as_slice());
+}
+
+#[test]
+fn test_read_exact_vec_limited_into_rolls_back_on_unexpected_eof() {
+    let mut reader = Cursor::new(b"ab".to_vec());
+    let mut output = b"prefix".to_vec();
+
+    let error = reader
+        .read_exact_vec_limited_into(&mut output, 3, 3)
+        .expect_err("short input should return the standard read_exact EOF error");
+
+    assert_eq!(ErrorKind::UnexpectedEof, error.kind());
+    assert_eq!(b"prefix", output.as_slice());
+}
+
+#[test]
+fn test_read_exact_vec_limited_into_rolls_back_on_read_error() {
+    let mut reader = PartialThenFailReader::new(b"ab");
+    let mut output = b"prefix".to_vec();
+
+    let error = reader
+        .read_exact_vec_limited_into(&mut output, 3, 3)
+        .expect_err("read errors after partial append should roll back output");
+
+    assert_eq!(ErrorKind::Other, error.kind());
+    assert_eq!("read failed after prefix", error.to_string());
+    assert_eq!(b"prefix", output.as_slice());
+    assert_eq!(2, reader.position);
+}
+
+#[test]
+fn test_read_exact_helpers_work_on_dyn_read_with_ufcs() {
+    let mut cursor = Cursor::new(b"abcdef".to_vec());
+    let reader: &mut dyn Read = &mut cursor;
+
+    let array = <dyn Read as ReadExt>::read_exact_array::<2>(reader)
+        .expect("UFCS read_exact_array should work on dyn Read");
+    assert_eq!(*b"ab", array);
+
+    let data = <dyn Read as ReadExt>::read_exact_vec_limited(reader, 2, 4)
+        .expect("UFCS read_exact_vec_limited should work on dyn Read");
+    assert_eq!(b"cd", data.as_slice());
+
+    let mut output = b"prefix-".to_vec();
+    <dyn Read as ReadExt>::read_exact_vec_limited_into(reader, &mut output, 2, 4)
+        .expect("UFCS read_exact_vec_limited_into should work on dyn Read");
+    assert_eq!(b"prefix-ef", output.as_slice());
+}
+
 #[test]
 fn test_read_exact_or_eof_reads_across_short_reads() {
     let mut reader = ShortReader::new(b"abcdef", 2);
