@@ -17,10 +17,7 @@ use std::io::{
 };
 use std::string::FromUtf8Error;
 
-use crate::{
-    copy_at_most,
-    copy_to_end_limited as copy_to_end_limited_fn,
-};
+use crate::Streams;
 
 /// Default stack buffer size used by discard operations.
 const DISCARD_BUFFER_SIZE: usize = 8 * 1024;
@@ -331,13 +328,13 @@ where
     #[inline]
     fn copy_to_at_most(&mut self, writer: &mut dyn Write, max_bytes: u64) -> Result<u64> {
         let mut reader = self;
-        copy_at_most(&mut reader, writer, max_bytes)
+        Streams::copy_at_most(&mut reader, writer, max_bytes)
     }
 
     #[inline]
     fn copy_to_end_limited(&mut self, writer: &mut dyn Write, max_bytes: u64) -> Result<u64> {
         let mut reader = self;
-        copy_to_end_limited_fn(&mut reader, writer, max_bytes)
+        Streams::copy_to_end_limited(&mut reader, writer, max_bytes)
     }
 
     #[inline]

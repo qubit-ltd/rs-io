@@ -17,6 +17,8 @@ Qubit IO 在 `std::io` 之上提供一组紧凑的底层能力：
 - 为标准库留给调用方反复手写的底层 I/O 模式提供 extension trait；
 - 提供 `Files` 命名空间，用于父目录创建、随机临时条目、buffered file helper
   和持久化 atomic write；
+- 提供 `Streams` 和 `Filenames` 命名空间，用于 stream 层复制/比较操作和
+  lexical 文件名 helper；
 - 为 stream 统计、限制、tee、checksum 和位置恢复提供 wrapper 类型。
 
 组合 trait 适合 API 需要使用 `&mut dyn ReadSeek` 或
@@ -84,7 +86,10 @@ extension trait 覆盖的是保守、标准库优先的行为，例如：精确�
 - `Files` associated method 可创建缺失目录、打开 buffered file、构造随机临时
   名称和路径、使用 `getrandom` 支持的 OS 随机源创建随机临时文件和目录，并提供
   持久化同目录 atomic write，包括临时文件 sync 和支持平台上的父目录 sync；
-- 内容 helper 可比较 reader 内容并做有界复制；
+- `Streams` associated method 包装 `std::io::copy`，提供有界复制、必须在限制内
+  到达 EOF 的复制，以及 reader 内容比较；
+- `Filenames` associated method 提供常用 lexical 文件名操作，包括 UTF-8 路径
+  component、扩展名判断和 URL 文件名提取；
 - wrapper 类型提供计数、限制、tee、checksum 更新和位置保护能力。
 - `qubit_io::prelude` 重导出 extension trait 和组合 trait，适合方法式调用场景。
 
@@ -333,6 +338,12 @@ where
 | `ZigZagWriteExt` | `write_zigzag_i32`、`write_zigzag_i128` 和其他有符号整数变体 | ZigZag 有符号整数编码 |
 | `StringReadExt` | `read_utf8_string_uleb`、`read_utf8_string_uleb_strict`、`read_utf8_string_u16_be`、`read_utf8_string_u16_le`、`read_utf8_string_u32_be`、`read_utf8_string_u32_le` | 有界长度前缀 UTF-8 解码 |
 | `StringWriteExt` | `write_utf8_string_uleb`、`write_utf8_string_u16_be`、`write_utf8_string_u16_le`、`write_utf8_string_u32_be`、`write_utf8_string_u32_le` | 长度前缀 UTF-8 编码 |
+
+| 工具命名空间 | 方法 | 典型用途 |
+|-------------|------|----------|
+| `Files` | `open_buffered_reader`、`ensure_dir`、`ensure_parent`、`create_file_with_parent`、`create_buffered_writer_with_parent`、`random_file_name`、`temp_dir`、`temp_path`、`create_temp_file`、`create_temp_file_with`、`create_temp_file_in`、`create_temp_dir_with`、`create_temp_dir_in`、`atomic_write`、`atomic_write_with` | 文件系统 helper 和持久化写入 |
+| `Streams` | `copy`、`copy_at_most`、`copy_to_end_limited`、`content_eq`、`compare_content` | stream 复制和内容比较 |
+| `Filenames` | `file_name`、`file_name_str`、`file_stem_str`、`file_prefix_str`、`extension_str`、`dot_extension`、`has_extension`、`has_extension_ignore_ascii_case`、`file_name_from_path`、`file_name_from_url` | lexical 文件名检查 |
 
 每个 trait 都通过 blanket implementation 自动实现：
 

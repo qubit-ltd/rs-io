@@ -11,8 +11,10 @@ instrumentation 与有界 I/O wrapper。
   和长度前缀 UTF-8 字符串的 extension trait。
 - `Files` 命名空间，用于父目录创建、随机临时条目、buffered file helper
   和同目录持久化 atomic write。
+- `Streams` 和 `Filenames` 命名空间，用于 stream 复制/比较操作和 lexical
+  文件名 helper。
 - 用于计数、限制、tee、checksum 和恢复 seek 位置的 wrapper 类型。
-- 面向偏好 reader/writer object 调用风格的 planned codec wrapper 类型。
+- 面向偏好 reader/writer object 调用风格的 codec wrapper 类型。
 
 ## 导入方式
 
@@ -20,8 +22,10 @@ instrumentation 与有界 I/O wrapper。
 
 ```rust
 use qubit_io::{
+    Filenames,
     Files,
     ReadExt,
+    Streams,
     WriteSeekExt,
 };
 ```
@@ -32,8 +36,8 @@ use qubit_io::{
 use qubit_io::prelude::*;
 ```
 
-prelude 只重导出组合 trait、extension trait 和 `ByteOrder`。wrapper 类型和
-`Files` 仍然建议从 crate root 显式导入。
+prelude 只重导出组合 trait、extension trait 和 `ByteOrder`。wrapper 类型、
+`Files`、`Streams` 和 `Filenames` 仍然建议从 crate root 显式导入。
 
 ## 组合 Trait
 
@@ -127,6 +131,59 @@ std::fs::remove_dir_all(dir)?;
 # Ok::<(), std::io::Error>(())
 ```
 
+## Stream 工具
+
+当一个操作涉及多个 stream，或作为命名空间级 helper 更清晰时，使用 `Streams`：
+
+- `copy` 转发到 `std::io::copy`，保留标准库的优化复制路径。
+- `copy_at_most` 最多复制指定字节数。
+- `copy_to_end_limited` 要求剩余输入必须在长度限制内到达 EOF。
+- `content_eq` 和 `compare_content` 在比较两个 reader 剩余字节时消费它们。
+
+```rust
+use qubit_io::Streams;
+use std::io::Cursor;
+
+let mut input = Cursor::new(b"abcdef".to_vec());
+let mut output = Vec::new();
+
+let copied = Streams::copy_at_most(&mut input, &mut output, 4)?;
+
+assert_eq!(4, copied);
+assert_eq!(b"abcd", output.as_slice());
+# Ok::<(), std::io::Error>(())
+```
+
+## 文件名工具
+
+`Filenames` 用于不访问文件系统的 lexical 文件名操作：
+
+- `file_name`、`file_name_str`、`file_stem_str`、`file_prefix_str` 和
+  `extension_str` 暴露常用 `Path` component。
+- `dot_extension`、`has_extension` 和 `has_extension_ignore_ascii_case`
+  覆盖常见扩展名判断。
+- `file_name_from_path` 从包含 `/` 或 `\` 分隔符的字符串中提取最后一段。
+- `file_name_from_url` 移除 query/fragment 后缀，并解码 URL 最后一段中的
+  percent-encoded UTF-8。
+
+基于 `Path` 的 helper 遵循 `std::path::Path` 语义。尤其是 `.env` 这类
+dotfile 没有扩展名，除非文件名中还有另一个点号。
+
+```rust
+use qubit_io::Filenames;
+use std::path::Path;
+
+let path = Path::new("/tmp/archive.tar.gz");
+
+assert_eq!(Some("archive.tar"), Filenames::file_stem_str(path));
+assert_eq!(Some("gz"), Filenames::extension_str(path));
+assert!(Filenames::has_extension(path, ".gz"));
+assert_eq!(
+    "my file.txt",
+    Filenames::file_name_from_url("https://example.com/my%20file.txt")
+);
+```
+
 ## Stream Wrapper
 
 wrapper 会透明包裹底层 reader 或 writer，并实现对应标准库 I/O trait：
@@ -156,7 +213,7 @@ strictness flag，因此 object 风格 API 使用 `read_u16`、`read_i32` 这类
 
 ## API 矩阵
 
-本矩阵汇总 Phase 2 后预期的 crate root 公开 API。
+本矩阵汇总 crate root 公开 API。
 
 ### Prelude
 
@@ -237,14 +294,30 @@ ZigZag 参考 Protocol Buffers signed integer mapping：
 | `Files::atomic_write` | 使用同目录临时文件写入，sync 临时文件，替换目标文件，并在支持的平台上 sync 父目录。 |
 | `Files::atomic_write_with` | 与 `atomic_write` 相同，但由调用方提供临时文件写入逻辑。 |
 
-### 内容工具
+### Stream 工具
 
-| 函数 | 用途 |
-|------|------|
-| `copy_at_most` | 从 reader 向 writer 最多复制 `max_bytes` 字节。 |
-| `copy_to_end_limited` | 一直复制到 EOF；如果输入长度超过 `max_bytes`，返回 `InvalidData`。 |
-| `content_eq` | 判断两个 reader 的内容是否逐字节相同。 |
-| `compare_content` | 对两个 reader 的内容做字典序比较。 |
+| API | 用途 |
+|-----|------|
+| `Streams::copy` | `std::io::copy` 的命名空间式包装。 |
+| `Streams::copy_at_most` | 从 reader 向 writer 最多复制 `max_bytes` 字节。 |
+| `Streams::copy_to_end_limited` | 一直复制到 EOF；如果输入长度超过 `max_bytes`，返回 `InvalidData`。 |
+| `Streams::content_eq` | 判断两个 reader 的内容是否逐字节相同。 |
+| `Streams::compare_content` | 对两个 reader 的内容做字典序比较。 |
+
+### 文件名工具
+
+| API | 用途 |
+|-----|------|
+| `Filenames::file_name` | 返回最终文件名 component，类型为 `OsStr`。 |
+| `Filenames::file_name_str` | 返回 UTF-8 最终文件名 component。 |
+| `Filenames::file_stem_str` | 按 `Path::file_stem` 语义返回 UTF-8 file stem。 |
+| `Filenames::file_prefix_str` | 按 `Path::file_prefix` 语义返回 UTF-8 file prefix。 |
+| `Filenames::extension_str` | 按 `Path::extension` 语义返回 UTF-8 最终扩展名。 |
+| `Filenames::dot_extension` | 返回带点号前缀的最终扩展名。 |
+| `Filenames::has_extension` | 做大小写敏感的最终扩展名判断。 |
+| `Filenames::has_extension_ignore_ascii_case` | 做 ASCII 大小写不敏感的最终扩展名判断。 |
+| `Filenames::file_name_from_path` | 从包含 `/` 或 `\` 分隔符的字符串中提取最后一段。 |
+| `Filenames::file_name_from_url` | 提取并 percent-decode URL 最后一段。 |
 
 ### Wrapper 类型
 

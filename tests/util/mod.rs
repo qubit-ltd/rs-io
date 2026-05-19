@@ -1,2 +1,3 @@
 mod file_helper_tests;
-mod read_write_utility_tests;
+mod filenames_tests;
+mod streams_tests;
