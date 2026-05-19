@@ -121,13 +121,13 @@ Use `Files` associated methods instead of free functions:
 - `ensure_dir` and `ensure_parent` create missing directories.
 - `open_buffered_reader`, `create_file_with_parent`, and
   `create_buffered_writer_with_parent` handle common file-open patterns.
-- `random_file_name`, `try_random_file_name`, `temp_dir`, and `temp_path`
-  construct random temporary names and paths. `try_random_file_name` reports
-  invalid path-like prefix or suffix fragments through `Result`.
-- `create_temp_file`, `create_temp_file_with`, `create_temp_file_in`,
-  `create_temp_dir_with`, and `create_temp_dir_in` create collision-resistant
-  random temporary entries with `getrandom`-backed OS randomness and reject
-  path-like name fragments before joining with the target directory.
+- `Filenames::random`, `Filenames::random_with`, and
+  `Filenames::try_random_with` construct random file-name components and reject
+  path-like prefix or suffix fragments before those fragments are joined with a
+  directory.
+- `TempFile` and `TempDir` create collision-resistant random temporary entries
+  with `getrandom`-backed OS randomness and remove those entries automatically
+  when their guards are dropped unless callers explicitly keep or persist them.
 - `dir_size` sums regular-file byte lengths under a directory without following
   symbolic links.
 - `clean_dir` removes a directory's children while keeping the directory itself.
@@ -138,6 +138,104 @@ Use `Files` associated methods instead of free functions:
   through a random same-directory temporary file, preserve existing regular-file
   permissions, flush and sync the temporary file, replace the destination, and
   sync the parent directory when the platform supports directory syncing.
+
+### Temporary Files and Directories
+
+Use `TempFile` and `TempDir` when a temporary path should normally be cleaned up
+automatically. They are RAII guards: construction creates a real file or
+directory, `path` exposes the path for normal `std::fs` calls, and `Drop`
+performs best-effort cleanup.
+
+This is a good default for tests, staging directories, generated intermediate
+artifacts, upload/download scratch space, and any workflow where temporary data
+should not survive successful or failed control-flow exits. If cleanup in
+`Drop` fails, the guard does not panic; it logs a warning through the default
+`log` facade with `warn!`. Applications can route that warning by installing
+their normal logger, such as `env_logger`, `tracing-log`, or `log4rs`.
+
+```rust
+use qubit_io::TempDir;
+
+let scratch_path = {
+    let dir = TempDir::with_prefix(Some("qubit-io-work-"))?;
+    let path = dir.path().join("scratch.txt");
+    std::fs::write(&path, b"scratch data")?;
+    assert_eq!(b"scratch data", std::fs::read(&path)?.as_slice());
+    path
+};
+
+assert!(!scratch_path.exists());
+# Ok::<(), std::io::Error>(())
+```
+
+Use `TempFile` when you need an already-created file handle and a unique path.
+The file is opened with read/write access and create-new semantics, so another
+process cannot win a race by creating the same name between name generation and
+open.
+
+```rust
+use std::io::Write;
+
+use qubit_io::TempFile;
+
+let generated_path = {
+    let mut file = TempFile::with_name(Some("qubit-io-"), Some(".txt"))?;
+    writeln!(file.file_mut()?, "temporary payload")?;
+    let path = file.path().to_owned();
+    assert!(path.exists());
+    path
+};
+
+assert!(!generated_path.exists());
+# Ok::<(), std::io::Error>(())
+```
+
+Use `keep` when the generated temporary path should remain exactly where it was
+created. Calling `keep` disables automatic deletion and returns the generated
+path, so the caller becomes responsible for later cleanup.
+
+```rust
+use std::io::Write;
+
+use qubit_io::TempFile;
+
+let mut file = TempFile::with_name(Some("qubit-io-kept-"), Some(".txt"))?;
+writeln!(file.file_mut()?, "kept payload")?;
+let path = file.keep();
+
+assert!(path.exists());
+std::fs::remove_file(path)?;
+# Ok::<(), std::io::Error>(())
+```
+
+Use `persist` when the temporary entry should be moved to a final path after the
+work succeeds. This is useful for workflows that build data under a temporary
+name and only publish the result at the end. For durable replacement of an
+existing file, prefer `Files::atomic_write` because it also handles flushing,
+syncing, and destination replacement semantics.
+
+```rust
+use std::io::Write;
+
+use qubit_io::{
+    TempDir,
+    TempFile,
+};
+
+let dir = TempDir::with_prefix(Some("qubit-io-result-"))?;
+let final_path = dir.path().join("result.txt");
+
+let mut file = TempFile::with_name(Some("qubit-io-"), Some(".txt"))?;
+writeln!(file.file_mut()?, "final payload")?;
+file.persist(&final_path)?;
+
+assert_eq!("final payload\n", std::fs::read_to_string(&final_path)?);
+# Ok::<(), std::io::Error>(())
+```
+
+If another API needs to reopen the temporary file while the `TempFile` guard is
+still alive, call `close` first. This is especially relevant on Windows, where
+an open file handle can affect rename or reopen behavior.
 
 ### Atomic Writes
 
@@ -165,10 +263,13 @@ concurrent writers, and is not an append-log helper. Use a file lock or a
 higher-level protocol if several writers may update the same path.
 
 ```rust
-use qubit_io::Files;
+use qubit_io::{
+    Files,
+    TempDir,
+};
 
-let dir = Files::create_temp_dir_with(Some("qubit-io-guide-"), 16)?;
-let path = dir.join("state").join("manifest.json");
+let dir = TempDir::with_prefix(Some("qubit-io-guide-"))?;
+let path = dir.path().join("state").join("manifest.json");
 
 Files::atomic_write(&path, br#"{"version":1,"complete":true}"#)?;
 assert_eq!(
@@ -176,7 +277,6 @@ assert_eq!(
     std::fs::read(&path)?.as_slice(),
 );
 
-std::fs::remove_dir_all(dir)?;
 # Ok::<(), std::io::Error>(())
 ```
 
@@ -187,10 +287,13 @@ slice:
 ```rust
 use std::io::Write;
 
-use qubit_io::Files;
+use qubit_io::{
+    Files,
+    TempDir,
+};
 
-let dir = Files::create_temp_dir_with(Some("qubit-io-guide-"), 16)?;
-let path = dir.join("state").join("index.txt");
+let dir = TempDir::with_prefix(Some("qubit-io-guide-"))?;
+let path = dir.path().join("state").join("index.txt");
 
 Files::atomic_write_with(&path, |file| {
     writeln!(file, "id,name")?;
@@ -201,7 +304,6 @@ Files::atomic_write_with(&path, |file| {
 
 assert_eq!("id,name\n1,alpha\n2,beta\n", std::fs::read_to_string(&path)?);
 
-std::fs::remove_dir_all(dir)?;
 # Ok::<(), std::io::Error>(())
 ```
 
@@ -367,21 +469,18 @@ ZigZag follows the Protocol Buffers signed integer mapping:
 | `Files::ensure_parent` | Creates missing parent directories for a file path. |
 | `Files::create_file_with_parent` | Creates missing parent directories, then creates a file. |
 | `Files::create_buffered_writer_with_parent` | Creates missing parent directories, then creates `BufWriter<File>`. |
-| `Files::random_file_name` | Builds a random name from an optional prefix and suffix. |
-| `Files::try_random_file_name` | Builds a random name through a `Result`-returning API and rejects path-like fragments. |
-| `Files::temp_dir` | Returns the process temporary directory. |
-| `Files::temp_path` | Builds a random path under the process temporary directory. |
-| `Files::create_temp_file` | Creates a random temporary file under the process temporary directory. |
-| `Files::create_temp_file_with` | Creates a random temporary file under the process temporary directory with caller-provided naming and retry options. |
-| `Files::create_temp_file_in` | Creates a random temporary file in a caller-provided directory. |
-| `Files::create_temp_dir_with` | Creates a random temporary directory under the process temporary directory. |
-| `Files::create_temp_dir_in` | Creates a random temporary directory in a caller-provided directory. |
 | `Files::dir_size` | Sums regular-file byte lengths below a directory without following symbolic links. |
 | `Files::clean_dir` | Removes all children from a directory while keeping the directory itself. |
 | `Files::remove_any` | Removes a file, directory tree, or symbolic link. |
 | `Files::copy_dir_all_with` | Recursively copies a local directory tree with explicit copy options and returns copy statistics. |
 | `Files::atomic_write` | Writes bytes through a same-directory temporary file, preserves existing regular-file permissions, syncs the temporary file, replaces the destination, and syncs the parent directory when supported. |
 | `Files::atomic_write_with` | Same as `atomic_write`, but accepts caller-provided write logic for the temporary file. |
+| `TempFile` | Creates a temporary file guard that removes the file on drop unless `keep` or `persist` is called. |
+| `TempDir` | Creates a temporary directory guard that removes the directory tree on drop unless `keep` or `persist` is called. |
+| `Filenames::random` | Builds a random file-name component with the default prefix. |
+| `Filenames::random_with` | Builds a random file-name component from optional prefix and suffix and panics on invalid fragments or random-source failure. |
+| `Filenames::try_random` | Builds a random file-name component with the default prefix through a `Result`-returning API. |
+| `Filenames::try_random_with` | Builds a random file-name component through a `Result`-returning API and rejects path-like fragments. |
 | `CopyDirOptions` | Options controlling recursive directory copy behavior. |
 | `CopyDirStats` | Statistics returned by recursive directory copy operations. |
 

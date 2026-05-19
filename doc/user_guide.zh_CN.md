@@ -111,12 +111,11 @@ ZigZag 映射后的有符号整数。严格读取方法要求底层 unsigned LEB
 - `ensure_dir` 和 `ensure_parent` 创建缺失目录。
 - `open_buffered_reader`、`create_file_with_parent` 和
   `create_buffered_writer_with_parent` 处理常见文件打开模式。
-- `random_file_name`、`try_random_file_name`、`temp_dir` 和 `temp_path` 构造
-  随机临时名称和路径。`try_random_file_name` 通过 `Result` 返回无效路径型
-  prefix 或 suffix 片段。
-- `create_temp_file`、`create_temp_file_with`、`create_temp_file_in`、
-  `create_temp_dir_with` 和 `create_temp_dir_in` 使用 `getrandom` 支持的
-  OS 随机源创建抗碰撞随机临时条目，并在拼接目标目录前拒绝路径型名称片段。
+- `Filenames::random`、`Filenames::random_with` 和
+  `Filenames::try_random_with` 构造随机文件名片段，并在把这些片段拼接到目录前
+  拒绝路径型 prefix 或 suffix。
+- `TempFile` 和 `TempDir` 使用 `getrandom` 支持的 OS 随机源创建抗碰撞随机临时
+  条目，并在 guard drop 时自动删除，除非调用方显式 keep 或 persist。
 - `dir_size` 统计目录下普通文件的总字节数，不跟随 symbolic link。
 - `clean_dir` 删除目录中的所有子项，但保留目录本身。
 - `remove_any` 删除文件、目录树或 symbolic link。
@@ -125,6 +124,96 @@ ZigZag 映射后的有符号整数。严格读取方法要求底层 unsigned LEB
 - `atomic_write` 和 `atomic_write_with` 通过随机同目录临时文件整体替换目标文件，
   保留既有普通目标文件权限，flush 并 sync 临时文件，替换目标文件，并在平台支持时
   sync 父目录。
+
+### 临时文件和临时目录
+
+当临时路径通常应该自动清理时，优先使用 `TempFile` 和 `TempDir`。它们是 RAII
+guard：构造时立即创建真实文件或目录，`path` 暴露路径给普通 `std::fs` 调用，
+`Drop` 执行 best-effort 清理。
+
+这适合测试、临时工作目录、中间生成产物、上传/下载 scratch space，以及任何临时数据
+不应该在成功或失败控制流之后继续遗留的场景。如果 `Drop` 中清理失败，guard 不会
+panic；它会通过默认的 `log` 门面以 `warn!` 记录告警。应用侧只需要安装自己的日志
+实现，例如 `env_logger`、`tracing-log` 或 `log4rs`，就能接收这类告警。
+
+```rust
+use qubit_io::TempDir;
+
+let scratch_path = {
+    let dir = TempDir::with_prefix(Some("qubit-io-work-"))?;
+    let path = dir.path().join("scratch.txt");
+    std::fs::write(&path, b"scratch data")?;
+    assert_eq!(b"scratch data", std::fs::read(&path)?.as_slice());
+    path
+};
+
+assert!(!scratch_path.exists());
+# Ok::<(), std::io::Error>(())
+```
+
+当你既需要唯一临时路径，又需要一个已经打开的文件句柄时，使用 `TempFile`。
+它用 read/write 和 create-new 语义创建文件，因此不会出现“先生成名字，再打开文件”
+之间被其他进程抢先创建同名文件的竞态。
+
+```rust
+use std::io::Write;
+
+use qubit_io::TempFile;
+
+let generated_path = {
+    let mut file = TempFile::with_name(Some("qubit-io-"), Some(".txt"))?;
+    writeln!(file.file_mut()?, "temporary payload")?;
+    let path = file.path().to_owned();
+    assert!(path.exists());
+    path
+};
+
+assert!(!generated_path.exists());
+# Ok::<(), std::io::Error>(())
+```
+
+如果希望生成出来的临时路径原地保留，使用 `keep`。调用 `keep` 会关闭自动删除语义并
+返回生成路径，之后由调用方负责清理。
+
+```rust
+use std::io::Write;
+
+use qubit_io::TempFile;
+
+let mut file = TempFile::with_name(Some("qubit-io-kept-"), Some(".txt"))?;
+writeln!(file.file_mut()?, "kept payload")?;
+let path = file.keep();
+
+assert!(path.exists());
+std::fs::remove_file(path)?;
+# Ok::<(), std::io::Error>(())
+```
+
+如果希望工作成功后把临时条目移动到最终路径，使用 `persist`。这适合先用临时名称
+构建数据，最后再发布结果的流程。如果目标是持久化替换一个既有文件，优先使用
+`Files::atomic_write`，因为它还处理 flush、sync 和目标替换语义。
+
+```rust
+use std::io::Write;
+
+use qubit_io::{
+    TempDir,
+    TempFile,
+};
+
+let dir = TempDir::with_prefix(Some("qubit-io-result-"))?;
+let final_path = dir.path().join("result.txt");
+
+let mut file = TempFile::with_name(Some("qubit-io-"), Some(".txt"))?;
+writeln!(file.file_mut()?, "final payload")?;
+file.persist(&final_path)?;
+
+assert_eq!("final payload\n", std::fs::read_to_string(&final_path)?);
+# Ok::<(), std::io::Error>(())
+```
+
+如果其他 API 需要在 `TempFile` guard 仍然存活时重新打开这个临时文件，先调用
+`close`。这在 Windows 上尤其重要，因为打开的文件句柄会影响 rename 或 reopen 行为。
 
 ### Atomic Write
 
@@ -148,10 +237,13 @@ sync 父目录。同目录很重要，因为常见平台通常只保证同一文
 helper。如果多个 writer 可能同时更新同一路径，应使用文件锁或更高层协议。
 
 ```rust
-use qubit_io::Files;
+use qubit_io::{
+    Files,
+    TempDir,
+};
 
-let dir = Files::create_temp_dir_with(Some("qubit-io-guide-"), 16)?;
-let path = dir.join("state").join("manifest.json");
+let dir = TempDir::with_prefix(Some("qubit-io-guide-"))?;
+let path = dir.path().join("state").join("manifest.json");
 
 Files::atomic_write(&path, br#"{"version":1,"complete":true}"#)?;
 assert_eq!(
@@ -159,7 +251,6 @@ assert_eq!(
     std::fs::read(&path)?.as_slice(),
 );
 
-std::fs::remove_dir_all(dir)?;
 # Ok::<(), std::io::Error>(())
 ```
 
@@ -169,10 +260,13 @@ std::fs::remove_dir_all(dir)?;
 ```rust
 use std::io::Write;
 
-use qubit_io::Files;
+use qubit_io::{
+    Files,
+    TempDir,
+};
 
-let dir = Files::create_temp_dir_with(Some("qubit-io-guide-"), 16)?;
-let path = dir.join("state").join("index.txt");
+let dir = TempDir::with_prefix(Some("qubit-io-guide-"))?;
+let path = dir.path().join("state").join("index.txt");
 
 Files::atomic_write_with(&path, |file| {
     writeln!(file, "id,name")?;
@@ -183,7 +277,6 @@ Files::atomic_write_with(&path, |file| {
 
 assert_eq!("id,name\n1,alpha\n2,beta\n", std::fs::read_to_string(&path)?);
 
-std::fs::remove_dir_all(dir)?;
 # Ok::<(), std::io::Error>(())
 ```
 
@@ -341,21 +434,18 @@ ZigZag 参考 Protocol Buffers signed integer mapping：
 | `Files::ensure_parent` | 为文件路径创建缺失父目录。 |
 | `Files::create_file_with_parent` | 创建缺失父目录后创建文件。 |
 | `Files::create_buffered_writer_with_parent` | 创建缺失父目录后创建 `BufWriter<File>`。 |
-| `Files::random_file_name` | 基于可选前缀和后缀生成随机名称。 |
-| `Files::try_random_file_name` | 使用 `Result` 返回错误生成随机名称，并拒绝路径型名称片段。 |
-| `Files::temp_dir` | 返回进程临时目录。 |
-| `Files::temp_path` | 在进程临时目录下构造随机路径。 |
-| `Files::create_temp_file` | 在进程临时目录下创建随机临时文件。 |
-| `Files::create_temp_file_with` | 使用调用方提供的命名和重试参数，在进程临时目录下创建随机临时文件。 |
-| `Files::create_temp_file_in` | 在调用方提供的目录下创建随机临时文件。 |
-| `Files::create_temp_dir_with` | 在进程临时目录下创建随机临时目录。 |
-| `Files::create_temp_dir_in` | 在调用方提供的目录下创建随机临时目录。 |
 | `Files::dir_size` | 统计目录下普通文件的总字节数，不跟随 symbolic link。 |
 | `Files::clean_dir` | 删除目录中的所有子项，但保留目录本身。 |
 | `Files::remove_any` | 删除文件、目录树或 symbolic link。 |
 | `Files::copy_dir_all_with` | 使用显式复制选项递归复制本地目录树，并返回复制统计。 |
 | `Files::atomic_write` | 使用同目录临时文件写入，保留既有普通目标文件权限，sync 临时文件，替换目标文件，并在支持的平台上 sync 父目录。 |
 | `Files::atomic_write_with` | 与 `atomic_write` 相同，但由调用方提供临时文件写入逻辑。 |
+| `TempFile` | 创建临时文件 guard，drop 时删除文件，除非调用了 `keep` 或 `persist`。 |
+| `TempDir` | 创建临时目录 guard，drop 时递归删除目录树，除非调用了 `keep` 或 `persist`。 |
+| `Filenames::random` | 使用默认前缀构造随机文件名片段。 |
+| `Filenames::random_with` | 使用可选 prefix 和 suffix 构造随机文件名片段；遇到无效片段或随机源失败会 panic。 |
+| `Filenames::try_random` | 使用默认前缀，通过 `Result` 返回错误构造随机文件名片段。 |
+| `Filenames::try_random_with` | 通过 `Result` 返回错误构造随机文件名片段，并拒绝路径型片段。 |
 | `CopyDirOptions` | 控制递归目录复制行为的选项。 |
 | `CopyDirStats` | 递归目录复制操作返回的统计信息。 |
 
