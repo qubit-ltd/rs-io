@@ -54,15 +54,7 @@ pub use traits::{
     ReadWriteSeek,
     WriteSeek,
 };
-pub use util::{
-    CopyDirOptions,
-    CopyDirStats,
-    Filenames,
-    Files,
-    Streams,
-    TempDir,
-    TempFile,
-};
+pub use util::Streams;
 pub use wrappers::{
     ChecksumReader,
     ChecksumWriter,

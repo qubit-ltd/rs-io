@@ -6,12 +6,12 @@ rust-version = "1.94"
 authors = ["Haixing Hu <starfish.hu@gmail.com>"]
 license = "Apache-2.0"
 repository = "https://github.com/qubit-ltd/rs-io"
-description = "Small I/O trait utilities for Rust"
+description = "Small stream I/O trait utilities for Rust"
 homepage = "https://github.com/qubit-ltd/rs-io"
 documentation = "https://docs.rs/qubit-io"
 readme = "README.md"
 keywords = ["io", "read", "write", "seek", "qubit"]
-categories = ["filesystem", "rust-patterns"]
+categories = ["rust-patterns"]
 include = [
     "/Cargo.toml",
     "/LICENSE",
@@ -29,10 +29,6 @@ include = [
 [lib]
 name = "qubit_io"
 doctest = true
-
-[dependencies]
-getrandom = "0.4"
-log = "0.4"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage)'] }
