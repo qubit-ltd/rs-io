@@ -8,7 +8,11 @@
  *
  ******************************************************************************/
 use std::fs;
-use std::io::Result;
+use std::io::{
+    Error,
+    ErrorKind,
+    Result,
+};
 use std::path::{
     Path,
     PathBuf,
@@ -119,14 +123,25 @@ impl TempDir {
     /// The final directory path.
     ///
     /// # Errors
-    /// Returns an I/O error when the parent directory cannot be created or the
-    /// temporary directory cannot be renamed to `target`.
+    /// Returns an I/O error when the parent directory cannot be created, the
+    /// target already exists, or the temporary directory cannot be renamed to
+    /// `target`.
     pub fn persist<P>(mut self, target: P) -> Result<PathBuf>
     where
         P: AsRef<Path>,
     {
         let target = target.as_ref().to_path_buf();
         Files::ensure_parent(&target)?;
+        match fs::symlink_metadata(&target) {
+            Ok(_) => {
+                return Err(Error::new(
+                    ErrorKind::AlreadyExists,
+                    format!("target already exists: {}", target.display()),
+                ));
+            }
+            Err(error) if error.kind() == ErrorKind::NotFound => {}
+            Err(error) => return Err(error),
+        }
         let source = self
             .path
             .as_ref()
