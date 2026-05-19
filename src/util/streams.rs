@@ -168,7 +168,6 @@ impl Streams {
     ///
     /// # Errors
     /// Returns the first read error reported by either stream.
-    #[inline]
     pub fn compare_content(left: &mut dyn Read, right: &mut dyn Read) -> Result<Ordering> {
         let mut left_buffer = [0; COMPARE_BUFFER_SIZE];
         let mut right_buffer = [0; COMPARE_BUFFER_SIZE];
