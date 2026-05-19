@@ -162,6 +162,10 @@ than importing extension traits at the call site:
 These wrappers own the underlying stream, expose `get_ref`, `get_mut`, and
 `into_inner`, and delegate to the same encoding implementations as the extension
 traits. `BinaryReader` and `BinaryWriter` also store a runtime `ByteOrder`.
+`Leb128Reader` and `ZigZagReader` store a runtime strictness flag, so their
+object-style APIs use concise names such as `read_u16` and `read_i32`; create
+them with `with_strict` or change the flag with `set_strict` when canonical
+LEB128 validation is required.
 
 ## API Matrix
 
@@ -275,9 +279,9 @@ ZigZag follows the Protocol Buffers signed integer mapping:
 |------|-----------------|
 | `BinaryReader` | Reader object for binary scalar and fixed-width length-prefixed string decoding. |
 | `BinaryWriter` | Writer object for binary scalar and fixed-width length-prefixed string encoding. |
-| `Leb128Reader` | Reader object for LEB128 integer and ULEB128 length-prefixed string decoding. |
+| `Leb128Reader` | Reader object for LEB128 integer and ULEB128 length-prefixed string decoding, with configurable strict canonical decoding. |
 | `Leb128Writer` | Writer object for LEB128 integer and ULEB128 length-prefixed string encoding. |
-| `ZigZagReader` | Reader object for ZigZag signed integer decoding. |
+| `ZigZagReader` | Reader object for ZigZag signed integer decoding, with configurable strict validation of the underlying ULEB128 integer. |
 | `ZigZagWriter` | Writer object for ZigZag signed integer encoding. |
 
 ## Dependencies

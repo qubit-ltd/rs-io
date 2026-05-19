@@ -93,7 +93,9 @@ extension trait 覆盖的是保守、标准库优先的行为，例如：精确�
 偏好 reader/writer object 调用风格的用户可以直接使用 root-level codec
 wrapper：`BinaryReader`、`BinaryWriter`、`Leb128Reader`、`Leb128Writer`、
 `ZigZagReader` 和 `ZigZagWriter`。这些 wrapper 持有底层 stream，并复用与
-extension trait 相同的编码实现。
+extension trait 相同的编码实现。`Leb128Reader` 和 `ZigZagReader` 把 strict
+canonical 解码作为 reader 配置，因此 wrapper 调用点可以使用 `read_u16`、
+`read_i32` 这类短方法名。
 
 ### Blanket Implementation
 

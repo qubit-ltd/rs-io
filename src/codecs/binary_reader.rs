@@ -53,6 +53,7 @@ impl<R> BinaryReader<R> {
     ///
     /// # Returns
     /// A new binary reader.
+    #[inline]
     pub fn new(inner: R, byte_order: ByteOrder) -> Self {
         Self { inner, byte_order }
     }
@@ -61,6 +62,7 @@ impl<R> BinaryReader<R> {
     ///
     /// # Returns
     /// The wrapped reader reference.
+    #[inline]
     pub fn get_ref(&self) -> &R {
         &self.inner
     }
@@ -69,6 +71,7 @@ impl<R> BinaryReader<R> {
     ///
     /// # Returns
     /// The wrapped reader reference.
+    #[inline]
     pub fn get_mut(&mut self) -> &mut R {
         &mut self.inner
     }
@@ -77,6 +80,7 @@ impl<R> BinaryReader<R> {
     ///
     /// # Returns
     /// The wrapped reader.
+    #[inline]
     pub fn into_inner(self) -> R {
         self.inner
     }
@@ -85,6 +89,7 @@ impl<R> BinaryReader<R> {
     ///
     /// # Returns
     /// The configured byte order.
+    #[inline]
     pub fn byte_order(&self) -> ByteOrder {
         self.byte_order
     }
@@ -93,6 +98,7 @@ impl<R> BinaryReader<R> {
     ///
     /// # Parameters
     /// - `byte_order`: New byte order.
+    #[inline]
     pub fn set_byte_order(&mut self, byte_order: ByteOrder) {
         self.byte_order = byte_order;
     }
@@ -106,6 +112,7 @@ where
     ///
     /// # Errors
     /// Returns an I/O error from the wrapped reader.
+    #[inline]
     pub fn read_u8(&mut self) -> Result<u8> {
         self.inner.read_u8()
     }
@@ -114,6 +121,7 @@ where
     ///
     /// # Errors
     /// Returns an I/O error from the wrapped reader.
+    #[inline]
     pub fn read_i8(&mut self) -> Result<i8> {
         self.inner.read_i8()
     }
@@ -122,6 +130,7 @@ where
     ///
     /// # Errors
     /// Returns an I/O error from the wrapped reader.
+    #[inline]
     pub fn read_u16(&mut self) -> Result<u16> {
         self.inner.read_u16(self.byte_order)
     }
@@ -130,6 +139,7 @@ where
     ///
     /// # Errors
     /// Returns an I/O error from the wrapped reader.
+    #[inline]
     pub fn read_i16(&mut self) -> Result<i16> {
         self.inner.read_i16(self.byte_order)
     }
@@ -138,6 +148,7 @@ where
     ///
     /// # Errors
     /// Returns an I/O error from the wrapped reader.
+    #[inline]
     pub fn read_u32(&mut self) -> Result<u32> {
         self.inner.read_u32(self.byte_order)
     }
@@ -146,6 +157,7 @@ where
     ///
     /// # Errors
     /// Returns an I/O error from the wrapped reader.
+    #[inline]
     pub fn read_i32(&mut self) -> Result<i32> {
         self.inner.read_i32(self.byte_order)
     }
@@ -154,6 +166,7 @@ where
     ///
     /// # Errors
     /// Returns an I/O error from the wrapped reader.
+    #[inline]
     pub fn read_u64(&mut self) -> Result<u64> {
         self.inner.read_u64(self.byte_order)
     }
@@ -162,6 +175,7 @@ where
     ///
     /// # Errors
     /// Returns an I/O error from the wrapped reader.
+    #[inline]
     pub fn read_i64(&mut self) -> Result<i64> {
         self.inner.read_i64(self.byte_order)
     }
@@ -170,6 +184,7 @@ where
     ///
     /// # Errors
     /// Returns an I/O error from the wrapped reader.
+    #[inline]
     pub fn read_u128(&mut self) -> Result<u128> {
         self.inner.read_u128(self.byte_order)
     }
@@ -178,6 +193,7 @@ where
     ///
     /// # Errors
     /// Returns an I/O error from the wrapped reader.
+    #[inline]
     pub fn read_i128(&mut self) -> Result<i128> {
         self.inner.read_i128(self.byte_order)
     }
@@ -186,6 +202,7 @@ where
     ///
     /// # Errors
     /// Returns an I/O error from the wrapped reader.
+    #[inline]
     pub fn read_f32(&mut self) -> Result<f32> {
         self.inner.read_f32(self.byte_order)
     }
@@ -194,6 +211,7 @@ where
     ///
     /// # Errors
     /// Returns an I/O error from the wrapped reader.
+    #[inline]
     pub fn read_f64(&mut self) -> Result<f64> {
         self.inner.read_f64(self.byte_order)
     }
@@ -206,6 +224,7 @@ where
     /// # Errors
     /// Returns an I/O error from the wrapped reader, or `InvalidData` when the
     /// payload length exceeds `max_len` or the payload is not valid UTF-8.
+    #[inline]
     pub fn read_utf8_string_u16(&mut self, max_len: usize) -> Result<String> {
         match self.byte_order {
             ByteOrder::BigEndian => self.inner.read_utf8_string_u16_be(max_len),
@@ -221,6 +240,7 @@ where
     /// # Errors
     /// Returns an I/O error from the wrapped reader, or `InvalidData` when the
     /// payload length exceeds `max_len` or the payload is not valid UTF-8.
+    #[inline]
     pub fn read_utf8_string_u32(&mut self, max_len: usize) -> Result<String> {
         match self.byte_order {
             ByteOrder::BigEndian => self.inner.read_utf8_string_u32_be(max_len),
@@ -233,6 +253,7 @@ impl<R> Read for BinaryReader<R>
 where
     R: Read,
 {
+    #[inline]
     fn read(&mut self, buffer: &mut [u8]) -> Result<usize> {
         self.inner.read(buffer)
     }

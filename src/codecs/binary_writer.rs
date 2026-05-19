@@ -49,6 +49,7 @@ impl<W> BinaryWriter<W> {
     ///
     /// # Returns
     /// A new binary writer.
+    #[inline]
     pub fn new(inner: W, byte_order: ByteOrder) -> Self {
         Self { inner, byte_order }
     }
@@ -57,6 +58,7 @@ impl<W> BinaryWriter<W> {
     ///
     /// # Returns
     /// The wrapped writer reference.
+    #[inline]
     pub fn get_ref(&self) -> &W {
         &self.inner
     }
@@ -65,6 +67,7 @@ impl<W> BinaryWriter<W> {
     ///
     /// # Returns
     /// The wrapped writer reference.
+    #[inline]
     pub fn get_mut(&mut self) -> &mut W {
         &mut self.inner
     }
@@ -73,6 +76,7 @@ impl<W> BinaryWriter<W> {
     ///
     /// # Returns
     /// The wrapped writer.
+    #[inline]
     pub fn into_inner(self) -> W {
         self.inner
     }
@@ -81,6 +85,7 @@ impl<W> BinaryWriter<W> {
     ///
     /// # Returns
     /// The configured byte order.
+    #[inline]
     pub fn byte_order(&self) -> ByteOrder {
         self.byte_order
     }
@@ -89,6 +94,7 @@ impl<W> BinaryWriter<W> {
     ///
     /// # Parameters
     /// - `byte_order`: New byte order.
+    #[inline]
     pub fn set_byte_order(&mut self, byte_order: ByteOrder) {
         self.byte_order = byte_order;
     }
@@ -102,6 +108,7 @@ where
     ///
     /// # Errors
     /// Returns an I/O error from the wrapped writer.
+    #[inline]
     pub fn write_u8(&mut self, value: u8) -> Result<()> {
         self.inner.write_u8(value)
     }
@@ -110,6 +117,7 @@ where
     ///
     /// # Errors
     /// Returns an I/O error from the wrapped writer.
+    #[inline]
     pub fn write_i8(&mut self, value: i8) -> Result<()> {
         self.inner.write_i8(value)
     }
@@ -118,6 +126,7 @@ where
     ///
     /// # Errors
     /// Returns an I/O error from the wrapped writer.
+    #[inline]
     pub fn write_u16(&mut self, value: u16) -> Result<()> {
         self.inner.write_u16(value, self.byte_order)
     }
@@ -126,6 +135,7 @@ where
     ///
     /// # Errors
     /// Returns an I/O error from the wrapped writer.
+    #[inline]
     pub fn write_i16(&mut self, value: i16) -> Result<()> {
         self.inner.write_i16(value, self.byte_order)
     }
@@ -134,6 +144,7 @@ where
     ///
     /// # Errors
     /// Returns an I/O error from the wrapped writer.
+    #[inline]
     pub fn write_u32(&mut self, value: u32) -> Result<()> {
         self.inner.write_u32(value, self.byte_order)
     }
@@ -142,6 +153,7 @@ where
     ///
     /// # Errors
     /// Returns an I/O error from the wrapped writer.
+    #[inline]
     pub fn write_i32(&mut self, value: i32) -> Result<()> {
         self.inner.write_i32(value, self.byte_order)
     }
@@ -150,6 +162,7 @@ where
     ///
     /// # Errors
     /// Returns an I/O error from the wrapped writer.
+    #[inline]
     pub fn write_u64(&mut self, value: u64) -> Result<()> {
         self.inner.write_u64(value, self.byte_order)
     }
@@ -158,6 +171,7 @@ where
     ///
     /// # Errors
     /// Returns an I/O error from the wrapped writer.
+    #[inline]
     pub fn write_i64(&mut self, value: i64) -> Result<()> {
         self.inner.write_i64(value, self.byte_order)
     }
@@ -166,6 +180,7 @@ where
     ///
     /// # Errors
     /// Returns an I/O error from the wrapped writer.
+    #[inline]
     pub fn write_u128(&mut self, value: u128) -> Result<()> {
         self.inner.write_u128(value, self.byte_order)
     }
@@ -174,6 +189,7 @@ where
     ///
     /// # Errors
     /// Returns an I/O error from the wrapped writer.
+    #[inline]
     pub fn write_i128(&mut self, value: i128) -> Result<()> {
         self.inner.write_i128(value, self.byte_order)
     }
@@ -182,6 +198,7 @@ where
     ///
     /// # Errors
     /// Returns an I/O error from the wrapped writer.
+    #[inline]
     pub fn write_f32(&mut self, value: f32) -> Result<()> {
         self.inner.write_f32(value, self.byte_order)
     }
@@ -190,6 +207,7 @@ where
     ///
     /// # Errors
     /// Returns an I/O error from the wrapped writer.
+    #[inline]
     pub fn write_f64(&mut self, value: f64) -> Result<()> {
         self.inner.write_f64(value, self.byte_order)
     }
@@ -202,6 +220,7 @@ where
     /// # Errors
     /// Returns an I/O error from the wrapped writer, or `InvalidInput` when
     /// the UTF-8 byte length does not fit into `u16`.
+    #[inline]
     pub fn write_utf8_string_u16(&mut self, value: &str) -> Result<()> {
         match self.byte_order {
             ByteOrder::BigEndian => self.inner.write_utf8_string_u16_be(value),
@@ -217,6 +236,7 @@ where
     /// # Errors
     /// Returns an I/O error from the wrapped writer, or `InvalidInput` when
     /// the UTF-8 byte length does not fit into `u32`.
+    #[inline]
     pub fn write_utf8_string_u32(&mut self, value: &str) -> Result<()> {
         match self.byte_order {
             ByteOrder::BigEndian => self.inner.write_utf8_string_u32_be(value),
@@ -229,10 +249,12 @@ impl<W> Write for BinaryWriter<W>
 where
     W: Write,
 {
+    #[inline]
     fn write(&mut self, buffer: &[u8]) -> Result<usize> {
         self.inner.write(buffer)
     }
 
+    #[inline]
     fn flush(&mut self) -> Result<()> {
         self.inner.flush()
     }

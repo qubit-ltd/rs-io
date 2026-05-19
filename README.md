@@ -115,7 +115,9 @@ Callers who prefer reader/writer objects over extension-method calls can use
 root-level codec wrappers: `BinaryReader`, `BinaryWriter`, `Leb128Reader`,
 `Leb128Writer`, `ZigZagReader`, and `ZigZagWriter`. These wrappers own the
 underlying stream and delegate to the same encoding implementations as the
-extension traits.
+extension traits. `Leb128Reader` and `ZigZagReader` keep strict canonical
+decoding as reader configuration, so wrapper call sites can use short method
+names such as `read_u16` and `read_i32`.
 
 ### Blanket Implementations
 
