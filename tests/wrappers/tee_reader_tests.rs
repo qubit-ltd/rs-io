@@ -216,3 +216,27 @@ fn test_tee_reader_returns_branch_write_error() {
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("branch write failed", error.to_string());
 }
+
+#[test]
+fn test_tee_reader_forwards_seek_to_source_reader() {
+    use std::io::{
+        Cursor,
+        Seek,
+        SeekFrom,
+    };
+
+    let source = Cursor::new(b"abcdef".to_vec());
+    let branch = Vec::new();
+    let mut reader = TeeReader::new(source, branch);
+
+    reader
+        .seek(SeekFrom::Start(2))
+        .expect("seek should be forwarded");
+    let mut buffer = [0; 2];
+    reader
+        .read_exact(&mut buffer)
+        .expect("read after seek should succeed");
+
+    assert_eq!(b"cd", &buffer);
+    assert_eq!(b"cd", reader.branch_ref().as_slice());
+}

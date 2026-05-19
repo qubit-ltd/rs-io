@@ -9,6 +9,8 @@
  ******************************************************************************/
 use std::io::{
     Result,
+    Seek,
+    SeekFrom,
     Write,
 };
 
@@ -115,5 +117,17 @@ where
     fn flush(&mut self) -> Result<()> {
         self.primary.flush()?;
         self.branch.flush()
+    }
+}
+
+impl<P, B> Seek for TeeWriter<P, B>
+where
+    P: Seek,
+    B: Seek,
+{
+    fn seek(&mut self, position: SeekFrom) -> Result<u64> {
+        let primary_position = self.primary.seek(position)?;
+        self.branch.seek(SeekFrom::Start(primary_position))?;
+        Ok(primary_position)
     }
 }

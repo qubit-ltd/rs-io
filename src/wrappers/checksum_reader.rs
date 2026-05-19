@@ -11,6 +11,8 @@ use std::hash::Hasher;
 use std::io::{
     Read,
     Result,
+    Seek,
+    SeekFrom,
 };
 
 /// Reader wrapper that updates a checksum hasher with bytes read.
@@ -132,5 +134,16 @@ where
         let count = self.inner.read(buffer)?;
         self.hasher.write(&buffer[..count]);
         Ok(count)
+    }
+}
+
+impl<R, H> Seek for ChecksumReader<R, H>
+where
+    R: Seek,
+    H: Hasher,
+{
+    #[inline]
+    fn seek(&mut self, position: SeekFrom) -> Result<u64> {
+        self.inner.seek(position)
     }
 }

@@ -156,3 +156,33 @@ fn test_leb128_reader_rejects_non_canonical_values_and_strings() {
         .expect_err("non-canonical string length should fail");
     assert_eq!(ErrorKind::InvalidData, error.kind());
 }
+
+#[test]
+fn test_leb128_reader_forwards_buf_read_and_seek() {
+    use std::io::{
+        BufRead,
+        BufReader,
+        Seek,
+        SeekFrom,
+    };
+
+    let inner = BufReader::new(Cursor::new(vec![0x00, 0x01, 0x02, 0x03]));
+    let mut reader = Leb128Reader::new(inner);
+
+    assert_eq!(
+        &[0x00, 0x01, 0x02, 0x03],
+        reader.fill_buf().expect("buffer should be exposed")
+    );
+    reader.consume(2);
+    assert_eq!(
+        &[0x02, 0x03],
+        reader.fill_buf().expect("buffer should advance")
+    );
+    reader
+        .seek(SeekFrom::Start(1))
+        .expect("seek should be forwarded");
+    assert_eq!(
+        1,
+        reader.read_u8().expect("value after seek should be read")
+    );
+}

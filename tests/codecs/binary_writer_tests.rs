@@ -148,3 +148,24 @@ fn test_binary_writer_covers_opposite_scalar_byte_order_branches() {
 
     assert!(!writer.into_inner().is_empty());
 }
+
+#[test]
+fn test_binary_writer_forwards_seek() {
+    use std::io::{
+        Cursor,
+        Seek,
+        SeekFrom,
+    };
+
+    let mut writer = BinaryWriter::new(Cursor::new(Vec::new()), ByteOrder::BigEndian);
+
+    writer
+        .write_all(b"abc")
+        .expect("initial write should succeed");
+    writer
+        .seek(SeekFrom::Start(1))
+        .expect("seek should be forwarded");
+    writer.write_all(b"z").expect("patch write should succeed");
+
+    assert_eq!(b"azc", writer.into_inner().into_inner().as_slice());
+}

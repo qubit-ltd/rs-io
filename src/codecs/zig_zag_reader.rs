@@ -8,8 +8,11 @@
  *
  ******************************************************************************/
 use std::io::{
+    BufRead,
     Read,
     Result,
+    Seek,
+    SeekFrom,
 };
 
 use crate::ZigZagReadExt;
@@ -157,5 +160,30 @@ where
     #[inline]
     fn read(&mut self, buffer: &mut [u8]) -> Result<usize> {
         self.inner.read(buffer)
+    }
+}
+
+impl<R> BufRead for ZigZagReader<R>
+where
+    R: BufRead,
+{
+    #[inline]
+    fn fill_buf(&mut self) -> Result<&[u8]> {
+        self.inner.fill_buf()
+    }
+
+    #[inline]
+    fn consume(&mut self, amount: usize) {
+        self.inner.consume(amount);
+    }
+}
+
+impl<R> Seek for ZigZagReader<R>
+where
+    R: Seek,
+{
+    #[inline]
+    fn seek(&mut self, position: SeekFrom) -> Result<u64> {
+        self.inner.seek(position)
     }
 }

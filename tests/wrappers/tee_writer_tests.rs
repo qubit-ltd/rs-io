@@ -212,3 +212,26 @@ fn test_tee_writer_returns_primary_flush_error() {
     assert_eq!("primary flush failed", error.to_string());
     assert!(writer.branch_ref().as_slice().is_empty());
 }
+
+#[test]
+fn test_tee_writer_forwards_seek_to_both_writers() {
+    use std::io::{
+        Cursor,
+        Seek,
+        SeekFrom,
+    };
+
+    let primary = Cursor::new(Vec::new());
+    let branch = Cursor::new(Vec::new());
+    let mut writer = TeeWriter::new(primary, branch);
+
+    writer.write_all(b"abc").unwrap();
+    writer
+        .seek(SeekFrom::Start(1))
+        .expect("seek should be forwarded");
+    writer.write_all(b"z").unwrap();
+
+    let (primary, branch) = writer.into_inner();
+    assert_eq!(b"azc", primary.into_inner().as_slice());
+    assert_eq!(b"azc", branch.into_inner().as_slice());
+}

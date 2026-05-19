@@ -9,6 +9,8 @@
  ******************************************************************************/
 use std::io::{
     Result,
+    Seek,
+    SeekFrom,
     Write,
 };
 
@@ -257,5 +259,15 @@ where
     #[inline]
     fn flush(&mut self) -> Result<()> {
         self.inner.flush()
+    }
+}
+
+impl<W> Seek for BinaryWriter<W>
+where
+    W: Seek,
+{
+    #[inline]
+    fn seek(&mut self, position: SeekFrom) -> Result<u64> {
+        self.inner.seek(position)
     }
 }
