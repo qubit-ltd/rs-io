@@ -1,540 +1,107 @@
 # Qubit IO User Guide
 
-Qubit IO is a small standard-library-first I/O helper crate. It does not try to
-replace `std::io`; instead, it gives names to common capability combinations,
-adds conservative extension methods, and provides a few wrappers for stream
-instrumentation and bounded I/O.
+Qubit IO is the stream and byte-I/O crate in the Qubit Rust family. It focuses on
+`std::io` traits, extension methods, wrappers, and small codec helpers.
 
-## What This Crate Provides
+Filesystem-oriented helpers have moved to `qubit-local-fs`.
 
-- Object-safe composition traits such as `ReadSeek` and `ReadWriteSeek`.
-- Extension traits for exact reads, bounded reads, bounded delimiter reads,
-  binary scalars, LEB128, ZigZag, and length-prefixed UTF-8 strings.
-- A `Files` namespace for parent directory creation, random temporary entries
-  with safe file-name fragment validation, buffered file helpers, and durable
-  same-directory atomic writes.
-- `Streams` and `Filenames` namespaces for stream copy/compare operations and
-  lexical file-name helpers.
-- Wrapper types for counting, limiting, teeing, checksumming, and restoring a
-  seekable stream position.
-- Codec wrapper types for users who prefer reader/writer objects over
-  extension-method calls.
+## Imports
 
-## Import Patterns
-
-Use individual imports when a module only needs a few APIs:
+Use the crate root for concrete wrappers and utility namespaces:
 
 ```rust
 use qubit_io::{
-    Filenames,
-    Files,
+    CountingReader,
     ReadExt,
+    ReadSeek,
     Streams,
-    WriteSeekExt,
 };
 ```
 
-Use the prelude for method-heavy call sites that use several extension traits:
+Use the prelude when a module mostly needs method-providing extension traits and
+composition traits:
 
 ```rust
 use qubit_io::prelude::*;
 ```
 
-The prelude intentionally re-exports composition and extension traits, plus
-`ByteOrder`. Wrapper types, `Files`, `Streams`, and `Filenames` remain explicit
-root-level imports.
+## Stream Helpers
 
-## Composition Traits
+`Streams` provides associated functions around `std::io::Read` and
+`std::io::Write`:
 
-Rust trait aliases are not stable, and trait objects cannot directly combine
-multiple non-auto traits in every shape APIs need. Qubit IO defines named,
-object-safe traits and implements them for every matching type:
-
-```rust
-use qubit_io::ReadSeek;
-use std::io::{
-    Read,
-    Seek,
-};
-
-fn as_read_seek<T>(value: &mut T) -> &mut dyn ReadSeek
-where
-    T: Read + Seek,
-{
-    value
-}
-```
-
-Use these traits when an API stores or passes heterogeneous I/O values behind a
-trait object. Prefer ordinary generic bounds when the concrete type can remain
-generic.
-
-## Exact and Bounded Reads
-
-`ReadExt` covers short-read-safe helpers and allocation guards:
-
-- `read_exact_or_eof` fills a caller-provided buffer or returns a successful
-  partial byte count at EOF.
-- `read_exact_array::<N>` reads exactly `N` bytes into a stack array.
-- `read_exact_vec_limited` and `read_exact_vec_limited_into` reject oversized
-  exact reads before allocating.
-- `read_to_end_limited` and string variants detect oversized inputs by reading
-  at most one excess byte.
+- `copy` delegates to `std::io::copy`;
+- `copy_at_most` copies no more than a specified number of bytes;
+- `copy_to_end_limited` copies only if the remaining input reaches EOF within a
+  limit;
+- `content_eq` and `compare_content` compare readable stream contents.
 
 ```rust
-use qubit_io::ReadExt;
 use std::io::Cursor;
 
-let mut input = Cursor::new(b"abcdef".to_vec());
-let header = input.read_exact_array::<2>()?;
-let payload = input.read_exact_vec_limited(4, 16)?;
-
-assert_eq!(*b"ab", header);
-assert_eq!(b"cdef", payload.as_slice());
-# Ok::<(), std::io::Error>(())
-```
-
-## Binary Scalars, LEB128, ZigZag, and Strings
-
-`BinaryReadExt` and `BinaryWriteExt` read and write primitive scalar values
-with `_be`, `_le`, or runtime `ByteOrder` methods.
-
-`Leb128ReadExt` and `Leb128WriteExt` encode unsigned and signed LEB128 values
-through integer-specific methods such as `read_uleb_u32` and
-`write_sleb_i64`. Read methods with the `_strict` suffix reject non-canonical
-encodings.
-
-`ZigZagReadExt` and `ZigZagWriteExt` read and write ZigZag-mapped signed
-integers using unsigned LEB128 payloads. Their strict read methods require the
-underlying unsigned LEB128 payload to be canonical.
-
-`StringReadExt` and `StringWriteExt` read and write UTF-8 strings with ULEB128,
-`u16`, or `u32` byte-length prefixes. ULEB string reads include
-`read_utf8_string_uleb_strict`, which rejects non-canonical ULEB length
-prefixes before reading the payload. Every string read requires `max_len` and
-rejects oversized payload lengths before allocation.
-
-## File Utilities
-
-Use `Files` associated methods instead of free functions:
-
-- `ensure_dir` and `ensure_parent` create missing directories.
-- `open_buffered_reader`, `create_file_with_parent`, and
-  `create_buffered_writer_with_parent` handle common file-open patterns.
-- `Filenames::random`, `Filenames::random_with`, and
-  `Filenames::try_random_with` construct random file-name components and reject
-  path-like prefix or suffix fragments before those fragments are joined with a
-  directory.
-- `TempFile` and `TempDir` create collision-resistant random temporary entries
-  with `getrandom`-backed OS randomness and remove those entries automatically
-  when their guards are dropped unless callers explicitly keep or persist them.
-- `dir_size` sums regular-file byte lengths under a directory without following
-  symbolic links.
-- `clean_dir` removes a directory's children while keeping the directory itself.
-- `remove_any` removes a file, directory tree, or symbolic link.
-- `copy_dir_all_with` recursively copies a local directory tree with explicit
-  overwrite, symlink-following, and permission-preservation options.
-- `atomic_write` and `atomic_write_with` replace a whole destination file
-  through a random same-directory temporary file, preserve existing regular-file
-  permissions, flush and sync the temporary file, replace the destination, and
-  sync the parent directory when the platform supports directory syncing.
-
-### Temporary Files and Directories
-
-Use `TempFile` and `TempDir` when a temporary path should normally be cleaned up
-automatically. They are RAII guards: construction creates a real file or
-directory, `path` exposes the path for normal `std::fs` calls, and `Drop`
-performs best-effort cleanup.
-
-This is a good default for tests, staging directories, generated intermediate
-artifacts, upload/download scratch space, and any workflow where temporary data
-should not survive successful or failed control-flow exits. If cleanup in
-`Drop` fails, the guard does not panic; it logs a warning through the default
-`log` facade with `warn!`. Applications can route that warning by installing
-their normal logger, such as `env_logger`, `tracing-log`, or `log4rs`.
-
-```rust
-use qubit_io::TempDir;
-
-let scratch_path = {
-    let dir = TempDir::with_prefix(Some("qubit-io-work-"))?;
-    let path = dir.path().join("scratch.txt");
-    std::fs::write(&path, b"scratch data")?;
-    assert_eq!(b"scratch data", std::fs::read(&path)?.as_slice());
-    path
-};
-
-assert!(!scratch_path.exists());
-# Ok::<(), std::io::Error>(())
-```
-
-Use `TempFile` when you need an already-created file handle and a unique path.
-The file is opened with read/write access and create-new semantics, so another
-process cannot win a race by creating the same name between name generation and
-open.
-
-```rust
-use std::io::Write;
-
-use qubit_io::TempFile;
-
-let generated_path = {
-    let mut file = TempFile::with_name(Some("qubit-io-"), Some(".txt"))?;
-    writeln!(file.file_mut()?, "temporary payload")?;
-    let path = file.path().to_owned();
-    assert!(path.exists());
-    path
-};
-
-assert!(!generated_path.exists());
-# Ok::<(), std::io::Error>(())
-```
-
-Use `keep` when the generated temporary path should remain exactly where it was
-created. Calling `keep` disables automatic deletion and returns the generated
-path, so the caller becomes responsible for later cleanup.
-
-```rust
-use std::io::Write;
-
-use qubit_io::TempFile;
-
-let mut file = TempFile::with_name(Some("qubit-io-kept-"), Some(".txt"))?;
-writeln!(file.file_mut()?, "kept payload")?;
-let path = file.keep();
-
-assert!(path.exists());
-std::fs::remove_file(path)?;
-# Ok::<(), std::io::Error>(())
-```
-
-Use `persist` when the temporary entry should be moved to a final path after the
-work succeeds. This is useful for workflows that build data under a temporary
-name and only publish the result at the end. For durable replacement of an
-existing file, prefer `Files::atomic_write` because it also handles flushing,
-syncing, and destination replacement semantics.
-
-```rust
-use std::io::Write;
-
-use qubit_io::{
-    TempDir,
-    TempFile,
-};
-
-let dir = TempDir::with_prefix(Some("qubit-io-result-"))?;
-let final_path = dir.path().join("result.txt");
-
-let mut file = TempFile::with_name(Some("qubit-io-"), Some(".txt"))?;
-writeln!(file.file_mut()?, "final payload")?;
-file.persist(&final_path)?;
-
-assert_eq!("final payload\n", std::fs::read_to_string(&final_path)?);
-# Ok::<(), std::io::Error>(())
-```
-
-If another API needs to reopen the temporary file while the `TempFile` guard is
-still alive, call `close` first. This is especially relevant on Windows, where
-an open file handle can affect rename or reopen behavior.
-
-### Atomic Writes
-
-Use `Files::atomic_write` when a file must never be observed half-written. The
-common failure mode it avoids is truncating an existing destination and then
-crashing, losing power, or returning an error before all bytes have been written.
-With atomic replacement, readers see either the previous complete file or the
-new complete file.
-
-Good fits include:
-
-- application configuration files;
-- cache manifests and generated indexes;
-- checkpoint or state snapshots;
-- small generated artifacts that should replace an older version all at once.
-
-The operation writes the new contents to a random temporary file in the same
-directory, flushes and syncs that temporary file, renames it over the
-destination, and then syncs the parent directory when supported. The same
-directory matters because common platforms only provide atomic replacement
-within the same filesystem.
-
-`atomic_write` does not provide a multi-file transaction, does not serialize
-concurrent writers, and is not an append-log helper. Use a file lock or a
-higher-level protocol if several writers may update the same path.
-
-```rust
-use qubit_io::{
-    Files,
-    TempDir,
-};
-
-let dir = TempDir::with_prefix(Some("qubit-io-guide-"))?;
-let path = dir.path().join("state").join("manifest.json");
-
-Files::atomic_write(&path, br#"{"version":1,"complete":true}"#)?;
-assert_eq!(
-    br#"{"version":1,"complete":true}"#,
-    std::fs::read(&path)?.as_slice(),
-);
-
-# Ok::<(), std::io::Error>(())
-```
-
-Use `atomic_write_with` when the content is produced incrementally and should be
-streamed into the temporary file instead of being materialized as one byte
-slice:
-
-```rust
-use std::io::Write;
-
-use qubit_io::{
-    Files,
-    TempDir,
-};
-
-let dir = TempDir::with_prefix(Some("qubit-io-guide-"))?;
-let path = dir.path().join("state").join("index.txt");
-
-Files::atomic_write_with(&path, |file| {
-    writeln!(file, "id,name")?;
-    writeln!(file, "1,alpha")?;
-    writeln!(file, "2,beta")?;
-    Ok(())
-})?;
-
-assert_eq!("id,name\n1,alpha\n2,beta\n", std::fs::read_to_string(&path)?);
-
-# Ok::<(), std::io::Error>(())
-```
-
-## Stream Utilities
-
-Use `Streams` when an operation involves more than one stream or is clearer as
-a namespace-level helper:
-
-- `copy` delegates to `std::io::copy`, preserving standard-library optimized
-  copy paths.
-- `copy_at_most` copies no more than the requested byte count.
-- `copy_to_end_limited` requires the remaining input to reach EOF within the
-  limit.
-- `content_eq` and `compare_content` consume two readers while comparing their
-  remaining bytes.
-
-```rust
 use qubit_io::Streams;
-use std::io::Cursor;
 
-let mut input = Cursor::new(b"abcdef".to_vec());
-let mut output = Vec::new();
+let mut left = Cursor::new(b"abc".to_vec());
+let mut right = Cursor::new(Vec::new());
 
-let copied = Streams::copy_at_most(&mut input, &mut output, 4)?;
+Streams::copy(&mut left, &mut right)?;
+assert_eq!(b"abc", right.into_inner().as_slice());
 
-assert_eq!(4, copied);
-assert_eq!(b"abcd", output.as_slice());
 # Ok::<(), std::io::Error>(())
 ```
 
-## Filename Utilities
+## Extension Traits
 
-Use `Filenames` for lexical file-name operations that do not touch the
-filesystem. Public methods that return filename data return UTF-8 string values
-(`&str` or `String`), not `OsStr`; invalid UTF-8 path components return `None`:
-
-- `file_name`, `file_stem`, `file_prefix`, and `extension` expose common
-  `Path` components as `&str`.
-- `dot_extension`, `has_extension`, and `has_extension_ignore_ascii_case`
-  cover frequent extension checks.
-- `file_name_from_path` extracts the final segment from a string containing
-  `/` or `\` separators.
-- `file_name_from_url` removes query/fragment suffixes and decodes
-  percent-encoded UTF-8 in the final URL path segment.
-
-Path-based helpers follow `std::path::Path` semantics. In particular, dotfiles
-such as `.env` do not have an extension unless they contain another dot.
+`ReadExt`, `BufReadExt`, `SeekExt`, `ReadSeekExt`, and `WriteSeekExt` add common
+low-level operations that remain generic over standard-library I/O traits.
 
 ```rust
-use qubit_io::Filenames;
-use std::path::Path;
+use std::io::Cursor;
 
-let path = Path::new("/tmp/archive.tar.gz");
+use qubit_io::{ReadExt, WriteSeekExt};
 
-assert_eq!(Some("archive.tar"), Filenames::file_stem(path));
-assert_eq!(Some("gz"), Filenames::extension(path));
-assert!(Filenames::has_extension(path, ".gz"));
-assert_eq!(
-    "my file.txt",
-    Filenames::file_name_from_url("https://example.com/my%20file.txt")
-);
+let mut input = Cursor::new(b"hello".to_vec());
+let bytes = input.read_to_end_limited(16)?;
+assert_eq!(b"hello", bytes.as_slice());
+
+let mut output = Cursor::new(vec![0; 8]);
+output.write_all_at_preserving_position(2, b"rs")?;
+
+# Ok::<(), std::io::Error>(())
 ```
 
-## Stream Wrappers
+## Codec Helpers
 
-Wrappers are transparent around the wrapped reader or writer and implement the
-corresponding standard-library I/O trait:
+Binary, LEB128, ZigZag, and length-prefixed string helpers are available as both
+extension traits and reader/writer wrapper types.
 
-- `CountingReader` and `CountingWriter` track successfully transferred bytes.
-- `LimitReader` and `LimitWriter` expose or accept at most a fixed number of
-  bytes.
-- `TeeReader` and `TeeWriter` mirror accepted bytes into a branch writer.
-- `ChecksumReader` and `ChecksumWriter` update a caller-provided `Hasher`.
-- `PositionGuard` restores a seekable stream to its captured position on drop
-  unless restored or dismissed explicitly.
+```rust
+use std::io::Cursor;
 
-## Codec Wrappers
+use qubit_io::{BinaryReadExt, BinaryWriteExt};
 
-Use the root-level wrapper types when explicit reader/writer objects are clearer
-than importing extension traits at the call site:
+let mut buffer = Vec::new();
+buffer.write_u32_be(0x0102_0304)?;
 
-- `BinaryReader` and `BinaryWriter`
-- `Leb128Reader` and `Leb128Writer`
-- `ZigZagReader` and `ZigZagWriter`
+let mut cursor = Cursor::new(buffer);
+assert_eq!(0x0102_0304, cursor.read_u32_be()?);
 
-These wrappers own the underlying stream, expose `get_ref`, `get_mut`, and
-`into_inner`, and delegate to the same encoding implementations as the extension
-traits. `BinaryReader` and `BinaryWriter` also store a runtime `ByteOrder`.
-`Leb128Reader` and `ZigZagReader` store a runtime strictness flag, so their
-object-style APIs use concise names such as `read_u16` and `read_i32`; create
-them with `with_strict` or change the flag with `set_strict` when canonical
-LEB128 validation is required.
+# Ok::<(), std::io::Error>(())
+```
 
-## API Matrix
+## Wrappers
 
-This matrix summarizes the root-level public API.
+Use wrappers when stream behavior should be part of the type instead of a single
+function call:
 
-### Prelude
+- `CountingReader` and `CountingWriter` count successful bytes;
+- `LimitReader` and `LimitWriter` enforce byte budgets;
+- `TeeReader` and `TeeWriter` duplicate traffic to a branch writer;
+- `ChecksumReader` and `ChecksumWriter` update caller-provided checksum state;
+- `PositionGuard` restores seek position on drop unless dismissed.
 
-| Module | Re-exports |
-|--------|------------|
-| `qubit_io::prelude` | `BinaryReadExt`, `BinaryWriteExt`, `BufReadExt`, `BufReadSeek`, `ByteOrder`, `Leb128ReadExt`, `Leb128WriteExt`, `ReadExt`, `ReadSeek`, `ReadSeekExt`, `ReadWrite`, `ReadWriteSeek`, `SeekExt`, `StringReadExt`, `StringWriteExt`, `WriteSeek`, `WriteSeekExt`, `ZigZagReadExt`, `ZigZagWriteExt` |
+## Crate Boundary
 
-### Composition Traits
-
-| Trait | Standard-library bounds | Purpose |
-|-------|-------------------------|---------|
-| `ReadSeek` | `Read + Seek` | Readable random-access inputs. |
-| `BufReadSeek` | `BufRead + Seek` | Buffered readable random-access inputs. |
-| `ReadWrite` | `Read + Write` | Duplex streams and mutable buffers. |
-| `WriteSeek` | `Write + Seek` | Writable random-access outputs. |
-| `ReadWriteSeek` | `Read + Write + Seek` | Fully mutable random-access I/O objects. |
-
-### Extension Traits
-
-| Trait | Methods | Notes |
-|-------|---------|-------|
-| `ReadExt` | `read_exact_or_eof`, `read_exact_array`, `read_exact_vec_limited`, `read_exact_vec_limited_into`, `discard_exact_or_eof`, `copy_to`, `copy_to_at_most`, `copy_to_end_limited`, `read_to_end_limited`, `read_to_end_limited_into`, `read_to_string_limited`, `read_to_string_limited_into` | Short-read-safe reads, exact reads, bounded copies, bounded byte reads, and bounded UTF-8 reads. |
-| `BufReadExt` | `read_until_limited`, `read_until_limited_into`, `read_line_limited`, `read_line_limited_into`, `discard_until_limited` | Bounded delimiter and line operations for buffered readers. |
-| `SeekExt` | `stream_size` | Measures stream size while restoring the original position. |
-| `ReadSeekExt` | `peek_exact_or_eof`, `read_exact_or_eof_at` | Position-preserving peek and random-offset reads. |
-| `WriteSeekExt` | `write_all_at_preserving_position` | Position-preserving random-offset writes. |
-
-### Binary Scalars
-
-| Trait | Methods |
-|-------|---------|
-| `BinaryReadExt` | `read_u8`, `read_i8`; `read_u16`, `read_u16_be`, `read_u16_le`; `read_i16`, `read_i16_be`, `read_i16_le`; `read_u32`, `read_u32_be`, `read_u32_le`; `read_i32`, `read_i32_be`, `read_i32_le`; `read_u64`, `read_u64_be`, `read_u64_le`; `read_i64`, `read_i64_be`, `read_i64_le`; `read_u128`, `read_u128_be`, `read_u128_le`; `read_i128`, `read_i128_be`, `read_i128_le`; `read_f32`, `read_f32_be`, `read_f32_le`; `read_f64`, `read_f64_be`, `read_f64_le` |
-| `BinaryWriteExt` | `write_u8`, `write_i8`; `write_u16`, `write_u16_be`, `write_u16_le`; `write_i16`, `write_i16_be`, `write_i16_le`; `write_u32`, `write_u32_be`, `write_u32_le`; `write_i32`, `write_i32_be`, `write_i32_le`; `write_u64`, `write_u64_be`, `write_u64_le`; `write_i64`, `write_i64_be`, `write_i64_le`; `write_u128`, `write_u128_be`, `write_u128_le`; `write_i128`, `write_i128_be`, `write_i128_le`; `write_f32`, `write_f32_be`, `write_f32_le`; `write_f64`, `write_f64_be`, `write_f64_le` |
-
-Multi-byte runtime-order methods use `ByteOrder::{BigEndian, LittleEndian}`.
-
-### Integer Encodings
-
-| Trait | Methods |
-|-------|---------|
-| `Leb128ReadExt` | `read_uleb_u8`, `read_uleb_u8_strict`; `read_uleb_u16`, `read_uleb_u16_strict`; `read_uleb_u32`, `read_uleb_u32_strict`; `read_uleb_u64`, `read_uleb_u64_strict`; `read_uleb_u128`, `read_uleb_u128_strict`; `read_uleb_usize`, `read_uleb_usize_strict`; `read_sleb_i8`, `read_sleb_i8_strict`; `read_sleb_i16`, `read_sleb_i16_strict`; `read_sleb_i32`, `read_sleb_i32_strict`; `read_sleb_i64`, `read_sleb_i64_strict`; `read_sleb_i128`, `read_sleb_i128_strict`; `read_sleb_isize`, `read_sleb_isize_strict` |
-| `Leb128WriteExt` | `write_uleb_u8`, `write_uleb_u16`, `write_uleb_u32`, `write_uleb_u64`, `write_uleb_u128`, `write_uleb_usize`, `write_sleb_i8`, `write_sleb_i16`, `write_sleb_i32`, `write_sleb_i64`, `write_sleb_i128`, `write_sleb_isize` |
-| `ZigZagReadExt` | `read_zigzag_i8`, `read_zigzag_i8_strict`; `read_zigzag_i16`, `read_zigzag_i16_strict`; `read_zigzag_i32`, `read_zigzag_i32_strict`; `read_zigzag_i64`, `read_zigzag_i64_strict`; `read_zigzag_i128`, `read_zigzag_i128_strict`; `read_zigzag_isize`, `read_zigzag_isize_strict` |
-| `ZigZagWriteExt` | `write_zigzag_i8`, `write_zigzag_i16`, `write_zigzag_i32`, `write_zigzag_i64`, `write_zigzag_i128`, `write_zigzag_isize` |
-
-LEB128 follows the WebAssembly Core binary value encoding:
-<https://webassembly.github.io/spec/core/binary/values.html#integers>.
-
-ZigZag follows the Protocol Buffers signed integer mapping:
-<https://protobuf.dev/programming-guides/encoding/#signed-integers>.
-
-### Length-Prefixed UTF-8 Strings
-
-| Trait | Methods | Limit behavior |
-|-------|---------|----------------|
-| `StringReadExt` | `read_utf8_string_uleb`, `read_utf8_string_uleb_strict`, `read_utf8_string_u16_be`, `read_utf8_string_u16_le`, `read_utf8_string_u32_be`, `read_utf8_string_u32_le` | Every read method requires `max_len` and rejects encoded payload lengths above that limit before allocating the payload buffer. The strict ULEB variant also rejects non-canonical length prefixes. |
-| `StringWriteExt` | `write_utf8_string_uleb`, `write_utf8_string_u16_be`, `write_utf8_string_u16_le`, `write_utf8_string_u32_be`, `write_utf8_string_u32_le` | Fixed-width length methods reject strings whose UTF-8 byte length does not fit the prefix type. |
-
-### File Utilities
-
-| API | Purpose |
-|-----|---------|
-| `Files::DEFAULT_TEMP_FILE_PREFIX` | Default prefix for random temporary file names. |
-| `Files::DEFAULT_TEMP_FILE_RETRIES` | Default retry count for random temporary entry creation. |
-| `Files::open_buffered_reader` | Opens a file as `BufReader<File>`. |
-| `Files::ensure_dir` | Creates a directory and missing ancestors. |
-| `Files::ensure_parent` | Creates missing parent directories for a file path. |
-| `Files::create_file_with_parent` | Creates missing parent directories, then creates a file. |
-| `Files::create_buffered_writer_with_parent` | Creates missing parent directories, then creates `BufWriter<File>`. |
-| `Files::dir_size` | Sums regular-file byte lengths below a directory without following symbolic links. |
-| `Files::clean_dir` | Removes all children from a directory while keeping the directory itself. |
-| `Files::remove_any` | Removes a file, directory tree, or symbolic link. |
-| `Files::copy_dir_all_with` | Recursively copies a local directory tree with explicit copy options and returns copy statistics. |
-| `Files::atomic_write` | Writes bytes through a same-directory temporary file, preserves existing regular-file permissions, syncs the temporary file, replaces the destination, and syncs the parent directory when supported. |
-| `Files::atomic_write_with` | Same as `atomic_write`, but accepts caller-provided write logic for the temporary file. |
-| `TempFile` | Creates a temporary file guard that removes the file on drop unless `keep` or `persist` is called. |
-| `TempDir` | Creates a temporary directory guard that removes the directory tree on drop unless `keep` or `persist` is called. |
-| `Filenames::random` | Builds a random file-name component with the default prefix. |
-| `Filenames::random_with` | Builds a random file-name component from optional prefix and suffix and panics on invalid fragments or random-source failure. |
-| `Filenames::try_random` | Builds a random file-name component with the default prefix through a `Result`-returning API. |
-| `Filenames::try_random_with` | Builds a random file-name component through a `Result`-returning API and rejects path-like fragments. |
-| `CopyDirOptions` | Options controlling recursive directory copy behavior. |
-| `CopyDirStats` | Statistics returned by recursive directory copy operations. |
-
-### Stream Utilities
-
-| API | Purpose |
-|-----|---------|
-| `Streams::copy` | Namespace-style wrapper around `std::io::copy`. |
-| `Streams::copy_at_most` | Copies at most `max_bytes` bytes from a reader to a writer. |
-| `Streams::copy_to_end_limited` | Copies until EOF, returning `InvalidData` if input is longer than `max_bytes`. |
-| `Streams::content_eq` | Compares two readers for byte-for-byte equality. |
-| `Streams::compare_content` | Lexicographically compares two readers. |
-
-### Filename Utilities
-
-| API | Purpose |
-|-----|---------|
-| `Filenames::file_name` | Returns the final file-name component as `&str`. |
-| `Filenames::file_stem` | Returns the file stem as `&str` using `Path::file_stem` semantics. |
-| `Filenames::file_prefix` | Returns the file prefix as `&str` using `Path::file_prefix` semantics. |
-| `Filenames::extension` | Returns the final extension as `&str` using `Path::extension` semantics. |
-| `Filenames::dot_extension` | Returns the final extension with a leading dot as `String`. |
-| `Filenames::has_extension` | Performs a case-sensitive final-extension check. |
-| `Filenames::has_extension_ignore_ascii_case` | Performs an ASCII-case-insensitive final-extension check. |
-| `Filenames::file_name_from_path` | Extracts the final segment from a string with `/` or `\` separators. |
-| `Filenames::file_name_from_url` | Extracts and percent-decodes the final URL path segment. |
-
-### Wrapper Types
-
-| Type | Implements | Public methods |
-|------|------------|----------------|
-| `CountingReader` | `Read` | `new`, `bytes_read`, `get_ref`, `get_mut`, `into_inner` |
-| `CountingWriter` | `Write` | `new`, `bytes_written`, `get_ref`, `get_mut`, `into_inner` |
-| `LimitReader` | `Read` | `new`, `remaining`, `get_ref`, `get_mut`, `into_inner` |
-| `LimitWriter` | `Write` | `new`, `remaining`, `get_ref`, `get_mut`, `into_inner` |
-| `TeeReader` | `Read` | `new`, `reader_ref`, `reader_mut`, `branch_ref`, `branch_mut`, `into_inner` |
-| `TeeWriter` | `Write` | `new`, `primary_ref`, `primary_mut`, `branch_ref`, `branch_mut`, `into_inner` |
-| `ChecksumReader` | `Read` | `new`, `checksum`, `get_ref`, `get_mut`, `hasher_ref`, `hasher_mut`, `into_inner` |
-| `ChecksumWriter` | `Write` | `new`, `checksum`, `get_ref`, `get_mut`, `hasher_ref`, `hasher_mut`, `into_inner` |
-| `PositionGuard` | drop guard for `Seek` | `new`, `position`, `get_mut`, `restore`, `dismiss` |
-
-### Codec Wrapper Types
-
-| Type | Purpose |
-|------|-----------------|
-| `BinaryReader` | Reader object for binary scalar and fixed-width length-prefixed string decoding. |
-| `BinaryWriter` | Writer object for binary scalar and fixed-width length-prefixed string encoding. |
-| `Leb128Reader` | Reader object for LEB128 integer and ULEB128 length-prefixed string decoding, with configurable strict canonical decoding. |
-| `Leb128Writer` | Writer object for LEB128 integer and ULEB128 length-prefixed string encoding. |
-| `ZigZagReader` | Reader object for ZigZag signed integer decoding, with configurable strict validation of the underlying ULEB128 integer. |
-| `ZigZagWriter` | Writer object for ZigZag signed integer encoding. |
-
-## Dependencies
-
-Qubit IO depends on the Rust standard library and `getrandom` at runtime. The
-`getrandom` dependency is used to generate random temporary file and directory
-names for the `Files` helpers.
+`qubit-io` deliberately does not contain local filesystem utilities. Use
+`qubit-local-fs` for `Files`, `Filenames`, `TempFile`, `TempDir`, recursive
+directory copy, cleanup helpers, and atomic file writes.
