@@ -23,18 +23,14 @@ use std::io::{
     Write,
 };
 use std::path::{
-    Component,
     Path,
     PathBuf,
-};
-use std::time::{
-    SystemTime,
-    UNIX_EPOCH,
 };
 
 use crate::{
     CopyDirOptions,
     CopyDirStats,
+    Filenames,
 };
 
 #[cfg(windows)]
@@ -72,9 +68,6 @@ const ATOMIC_WRITE_TEMP_SUFFIX: &str = ".tmp";
 /// Prefix used by atomic-write temporary files.
 const ATOMIC_WRITE_TEMP_PREFIX: &str = ".atomic-write-";
 
-/// Number of random bytes encoded into generated temporary file names.
-const RANDOM_NAME_BYTES: usize = 16;
-
 #[cfg(windows)]
 unsafe extern "system" {
     fn MoveFileExW(existing_file_name: *const u16, new_file_name: *const u16, flags: u32) -> i32;
@@ -93,20 +86,21 @@ unsafe extern "system" {
 /// File-system utility namespace.
 ///
 /// This type is an uninstantiable namespace. Use its associated methods for
-/// small recurring file operations, including parent creation, random temporary
-/// paths, and atomic replacement writes.
+/// small recurring file operations, including parent creation, local directory
+/// operations, and atomic replacement writes.
 ///
 /// # Examples
 /// ```
-/// use qubit_io::Files;
+/// use qubit_io::{
+///     Files,
+///     TempDir,
+/// };
 ///
-/// let dir = Files::create_temp_dir_with(Some("qubit-io-doc-"), 16)?;
-/// let path = dir.join("nested").join("data.txt");
+/// let dir = TempDir::with_prefix(Some("qubit-io-doc-"))?;
+/// let path = dir.path().join("nested").join("data.txt");
 ///
 /// Files::atomic_write(&path, b"payload")?;
 /// assert_eq!(b"payload", std::fs::read(&path)?.as_slice());
-///
-/// std::fs::remove_dir_all(dir)?;
 /// # Ok::<(), std::io::Error>(())
 /// ```
 pub enum Files {}
@@ -305,198 +299,6 @@ impl Files {
         copy_dir_all_with_paths(src.as_ref(), dst.as_ref(), options)
     }
 
-    /// Builds a random file name from an optional prefix and suffix.
-    ///
-    /// The generated name contains a timestamp, process id, and random
-    /// hexadecimal payload. The default prefix is
-    /// [`Files::DEFAULT_TEMP_FILE_PREFIX`]; the default suffix is empty.
-    ///
-    /// # Parameters
-    /// - `prefix`: Optional name prefix.
-    /// - `suffix`: Optional name suffix.
-    ///
-    /// # Returns
-    /// A random file name string that does not contain path separators added by
-    /// this function.
-    ///
-    /// # Panics
-    /// Panics if `prefix` or `suffix` is not a safe file-name fragment, or if
-    /// the operating system random source cannot provide bytes.
-    #[inline]
-    pub fn random_file_name(prefix: Option<&str>, suffix: Option<&str>) -> String {
-        Self::try_random_file_name(prefix, suffix).expect("failed to build random file name")
-    }
-
-    /// Tries to build a random file name from an optional prefix and suffix.
-    ///
-    /// The generated name contains a timestamp, process id, and random
-    /// hexadecimal payload. The caller-provided prefix and suffix must be file
-    /// name fragments, not paths. Path separators, root components, parent
-    /// directory components, platform prefixes, and NUL bytes are rejected.
-    ///
-    /// # Parameters
-    /// - `prefix`: Optional name prefix.
-    /// - `suffix`: Optional name suffix.
-    ///
-    /// # Returns
-    /// A random file name string.
-    ///
-    /// # Errors
-    /// Returns [`ErrorKind::InvalidInput`] when `prefix` or `suffix` is not a
-    /// safe file-name fragment. Returns [`ErrorKind::Other`] when the operating
-    /// system random source cannot provide bytes.
-    pub fn try_random_file_name(prefix: Option<&str>, suffix: Option<&str>) -> Result<String> {
-        validate_file_name_fragment("prefix", prefix.unwrap_or(Self::DEFAULT_TEMP_FILE_PREFIX))?;
-        validate_file_name_fragment("suffix", suffix.unwrap_or(""))?;
-        let timestamp = unix_timestamp_nanos();
-        let process_id = std::process::id();
-        let random = try_random_hex()?;
-        Ok(format!(
-            "{}{timestamp:x}-{process_id:x}-{random}{}",
-            prefix.unwrap_or(Self::DEFAULT_TEMP_FILE_PREFIX),
-            suffix.unwrap_or("")
-        ))
-    }
-
-    /// Returns the process temporary directory.
-    ///
-    /// # Returns
-    /// The path reported by [`std::env::temp_dir`].
-    #[inline]
-    pub fn temp_dir() -> PathBuf {
-        std::env::temp_dir()
-    }
-
-    /// Builds a random path inside the process temporary directory.
-    ///
-    /// This method only constructs a path. It does not create the file or
-    /// directory, and the path may already exist by the time callers use it.
-    ///
-    /// # Parameters
-    /// - `prefix`: Optional file-name prefix.
-    /// - `suffix`: Optional file-name suffix.
-    ///
-    /// # Returns
-    /// A random path under [`Files::temp_dir`].
-    #[inline]
-    pub fn temp_path(prefix: Option<&str>, suffix: Option<&str>) -> PathBuf {
-        Self::temp_dir().join(Self::random_file_name(prefix, suffix))
-    }
-
-    /// Creates a random temporary file in the process temporary directory.
-    ///
-    /// This method returns both the created path and the open file handle so
-    /// callers can write to the file and later remove or publish it. The file is
-    /// created with `create_new` semantics and opened for reading and writing.
-    ///
-    /// # Returns
-    /// The created path and file handle.
-    ///
-    /// # Errors
-    /// Returns an I/O error when the temporary directory cannot be created, the
-    /// retry limit is zero, all generated names collide, or file creation fails.
-    #[inline]
-    pub fn create_temp_file() -> Result<(PathBuf, File)> {
-        Self::create_temp_file_with(None, None, Self::DEFAULT_TEMP_FILE_RETRIES)
-    }
-
-    /// Creates a random temporary file in the process temporary directory.
-    ///
-    /// # Parameters
-    /// - `prefix`: Optional file-name prefix.
-    /// - `suffix`: Optional file-name suffix.
-    /// - `max_tries`: Maximum number of random names to try.
-    ///
-    /// # Returns
-    /// The created path and file handle.
-    ///
-    /// # Errors
-    /// Returns an I/O error when the temporary directory cannot be created, the
-    /// retry limit is zero, all generated names collide, or file creation fails.
-    #[inline]
-    pub fn create_temp_file_with(
-        prefix: Option<&str>,
-        suffix: Option<&str>,
-        max_tries: usize,
-    ) -> Result<(PathBuf, File)> {
-        Self::create_temp_file_in(Self::temp_dir(), prefix, suffix, max_tries)
-    }
-
-    /// Creates a random temporary file in `dir`.
-    ///
-    /// This method creates `dir` if it is missing. It returns both the created
-    /// path and the open file handle so callers can write to the file and later
-    /// remove or publish it. The file is created with `create_new` semantics and
-    /// opened for reading and writing.
-    ///
-    /// # Parameters
-    /// - `dir`: Directory in which to create the temporary file.
-    /// - `prefix`: Optional file-name prefix.
-    /// - `suffix`: Optional file-name suffix.
-    /// - `max_tries`: Maximum number of random names to try.
-    ///
-    /// # Returns
-    /// The created path and file handle.
-    ///
-    /// # Errors
-    /// Returns an I/O error when `dir` cannot be created, the retry limit is
-    /// zero, all generated names collide, or file creation fails.
-    #[inline]
-    pub fn create_temp_file_in<P>(
-        dir: P,
-        prefix: Option<&str>,
-        suffix: Option<&str>,
-        max_tries: usize,
-    ) -> Result<(PathBuf, File)>
-    where
-        P: AsRef<Path>,
-    {
-        create_temp_file_in_dir(dir.as_ref(), prefix, suffix, max_tries)
-    }
-
-    /// Creates a random temporary directory in the process temporary directory.
-    ///
-    /// # Parameters
-    /// - `prefix`: Optional directory-name prefix.
-    /// - `max_tries`: Maximum number of random names to try.
-    ///
-    /// # Returns
-    /// The created directory path.
-    ///
-    /// # Errors
-    /// Returns an I/O error when the temporary directory cannot be created, the
-    /// retry limit is zero, all generated names collide, or directory creation
-    /// fails.
-    #[inline]
-    pub fn create_temp_dir_with(prefix: Option<&str>, max_tries: usize) -> Result<PathBuf> {
-        Self::create_temp_dir_in(Self::temp_dir(), prefix, max_tries)
-    }
-
-    /// Creates a random temporary directory in `dir`.
-    ///
-    /// This method creates `dir` if it is missing. The random child directory is
-    /// created with non-recursive creation semantics so name collisions can be
-    /// detected and retried.
-    ///
-    /// # Parameters
-    /// - `dir`: Directory in which to create the temporary directory.
-    /// - `prefix`: Optional directory-name prefix.
-    /// - `max_tries`: Maximum number of random names to try.
-    ///
-    /// # Returns
-    /// The created directory path.
-    ///
-    /// # Errors
-    /// Returns an I/O error when `dir` cannot be created, the retry limit is
-    /// zero, all generated names collide, or directory creation fails.
-    #[inline]
-    pub fn create_temp_dir_in<P>(dir: P, prefix: Option<&str>, max_tries: usize) -> Result<PathBuf>
-    where
-        P: AsRef<Path>,
-    {
-        create_temp_dir_in_dir(dir.as_ref(), prefix, max_tries)
-    }
-
     /// Atomically writes bytes to a path using a temporary file in the same
     /// directory.
     ///
@@ -529,10 +331,13 @@ impl Files {
     ///
     /// # Examples
     /// ```
-    /// use qubit_io::Files;
+    /// use qubit_io::{
+    ///     Files,
+    ///     TempDir,
+    /// };
     ///
-    /// let dir = Files::create_temp_dir_with(Some("qubit-io-atomic-"), 16)?;
-    /// let path = dir.join("state").join("manifest.json");
+    /// let dir = TempDir::with_prefix(Some("qubit-io-atomic-"))?;
+    /// let path = dir.path().join("state").join("manifest.json");
     ///
     /// Files::atomic_write(&path, br#"{"version":1,"complete":true}"#)?;
     ///
@@ -540,8 +345,6 @@ impl Files {
     ///     br#"{"version":1,"complete":true}"#,
     ///     std::fs::read(&path)?.as_slice(),
     /// );
-    ///
-    /// std::fs::remove_dir_all(dir)?;
     /// # Ok::<(), std::io::Error>(())
     /// ```
     ///
@@ -647,7 +450,7 @@ fn atomic_write_with_path(
     ensure_parent_path(path)?;
     let existing_permissions = existing_file_permissions(path)?;
     let parent = parent_dir_for(path);
-    let (temp_path, mut file) = Files::create_temp_file_in(
+    let (temp_path, mut file) = create_temp_file_in_dir(
         parent,
         Some(ATOMIC_WRITE_TEMP_PREFIX),
         Some(ATOMIC_WRITE_TEMP_SUFFIX),
@@ -705,14 +508,17 @@ fn apply_existing_permissions(
     permissions: Option<&fs::Permissions>,
     temp_path: &Path,
 ) -> Result<()> {
-    if let Some(permissions) = permissions
-        && let Err(error) = file.set_permissions(permissions.clone())
-    {
-        return Err(add_path_context(
-            error,
-            "set temporary file permissions",
-            temp_path,
-        ));
+    if let Some(permissions) = permissions {
+        match file.set_permissions(permissions.clone()) {
+            Ok(()) => {}
+            Err(error) => {
+                return Err(add_path_context(
+                    error,
+                    "set temporary file permissions",
+                    temp_path,
+                ));
+            }
+        }
     }
     Ok(())
 }
@@ -731,7 +537,7 @@ fn apply_existing_permissions(
 /// # Errors
 /// Returns an I/O error when `dir` cannot be created, `max_tries` is zero, all
 /// generated names collide, or file creation fails.
-fn create_temp_file_in_dir(
+pub(crate) fn create_temp_file_in_dir(
     dir: &Path,
     prefix: Option<&str>,
     suffix: Option<&str>,
@@ -742,7 +548,7 @@ fn create_temp_file_in_dir(
     let mut attempt = 0;
     loop {
         attempt += 1;
-        let path = dir.join(Files::try_random_file_name(prefix, suffix)?);
+        let path = dir.join(Filenames::try_random_with(prefix, suffix)?);
         match OpenOptions::new()
             .read(true)
             .write(true)
@@ -750,8 +556,12 @@ fn create_temp_file_in_dir(
             .open(&path)
         {
             Ok(file) => return Ok((path, file)),
-            Err(error) if error.kind() == ErrorKind::AlreadyExists && attempt < max_tries => {}
-            Err(error) => return Err(add_path_context(error, "create temporary file", &path)),
+            Err(error) => {
+                if error.kind() == ErrorKind::AlreadyExists && attempt < max_tries {
+                    continue;
+                }
+                return Err(add_path_context(error, "create temporary file", &path));
+            }
         }
     }
 }
@@ -769,17 +579,25 @@ fn create_temp_file_in_dir(
 /// # Errors
 /// Returns an I/O error when `dir` cannot be created, `max_tries` is zero, all
 /// generated names collide, or directory creation fails.
-fn create_temp_dir_in_dir(dir: &Path, prefix: Option<&str>, max_tries: usize) -> Result<PathBuf> {
+pub(crate) fn create_temp_dir_in_dir(
+    dir: &Path,
+    prefix: Option<&str>,
+    max_tries: usize,
+) -> Result<PathBuf> {
     validate_max_tries(max_tries)?;
     ensure_dir_path(dir)?;
     let mut attempt = 0;
     loop {
         attempt += 1;
-        let path = dir.join(Files::try_random_file_name(prefix, None)?);
+        let path = dir.join(Filenames::try_random_with(prefix, None)?);
         match fs::create_dir(&path) {
             Ok(()) => return Ok(path),
-            Err(error) if error.kind() == ErrorKind::AlreadyExists && attempt < max_tries => {}
-            Err(error) => return Err(add_path_context(error, "create temporary directory", &path)),
+            Err(error) => {
+                if error.kind() == ErrorKind::AlreadyExists && attempt < max_tries {
+                    continue;
+                }
+                return Err(add_path_context(error, "create temporary directory", &path));
+            }
         }
     }
 }
@@ -801,57 +619,6 @@ fn validate_max_tries(max_tries: usize) -> Result<()> {
     Ok(())
 }
 
-/// Validates a caller-provided file-name fragment.
-///
-/// # Parameters
-/// - `role`: Fragment role used in error messages.
-/// - `fragment`: File-name fragment to validate.
-///
-/// # Errors
-/// Returns [`ErrorKind::InvalidInput`] when `fragment` can behave like a path
-/// instead of a plain file-name fragment.
-fn validate_file_name_fragment(role: &str, fragment: &str) -> Result<()> {
-    if fragment.contains('\0') {
-        return Err(invalid_file_name_fragment_error(
-            role,
-            "NUL bytes are not allowed",
-        ));
-    }
-    if fragment.contains('/') || fragment.contains('\\') {
-        return Err(invalid_file_name_fragment_error(
-            role,
-            "path separators are not allowed",
-        ));
-    }
-    if Path::new(fragment).components().any(|component| {
-        matches!(
-            component,
-            Component::Prefix(_) | Component::RootDir | Component::ParentDir
-        )
-    }) {
-        return Err(invalid_file_name_fragment_error(
-            role,
-            "path components are not allowed",
-        ));
-    }
-    Ok(())
-}
-
-/// Builds an invalid file-name fragment error.
-///
-/// # Parameters
-/// - `role`: Fragment role used in error messages.
-/// - `reason`: Validation failure reason.
-///
-/// # Returns
-/// An [`ErrorKind::InvalidInput`] error.
-fn invalid_file_name_fragment_error(role: &str, reason: &str) -> Error {
-    Error::new(
-        ErrorKind::InvalidInput,
-        format!("temporary file name {role} is invalid: {reason}"),
-    )
-}
-
 /// Adds path context to an I/O error while preserving its kind.
 ///
 /// # Parameters
@@ -866,61 +633,6 @@ fn add_path_context(error: Error, operation: &str, path: &Path) -> Error {
         error.kind(),
         format!("failed to {operation} '{}': {error}", path.display()),
     )
-}
-
-/// Returns the current Unix timestamp in nanoseconds.
-///
-/// # Returns
-/// Nanoseconds since the Unix epoch, or zero if the system clock is earlier than
-/// the epoch.
-fn unix_timestamp_nanos() -> u128 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_nanos())
-        .unwrap_or_default()
-}
-
-/// Tries to return random bytes encoded as lowercase hexadecimal.
-///
-/// # Returns
-/// A hexadecimal string derived from operating-system randomness.
-///
-/// # Errors
-/// Returns [`ErrorKind::Other`] if the operating system random source cannot
-/// provide bytes.
-fn try_random_hex() -> Result<String> {
-    let mut bytes = [0_u8; RANDOM_NAME_BYTES];
-    fill_random_bytes(&mut bytes)?;
-    Ok(hex_encode(&bytes))
-}
-
-/// Fills a byte slice with random bytes.
-///
-/// # Parameters
-/// - `bytes`: Destination buffer.
-///
-/// # Errors
-/// Returns [`ErrorKind::Other`] if the operating system random source cannot
-/// provide bytes.
-fn fill_random_bytes(bytes: &mut [u8]) -> Result<()> {
-    getrandom::fill(bytes).map_err(Error::other)
-}
-
-/// Encodes bytes as lowercase hexadecimal.
-///
-/// # Parameters
-/// - `bytes`: Bytes to encode.
-///
-/// # Returns
-/// Lowercase hexadecimal string.
-fn hex_encode(bytes: &[u8]) -> String {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    let mut result = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        result.push(HEX[(byte >> 4) as usize] as char);
-        result.push(HEX[(byte & 0x0f) as usize] as char);
-    }
-    result
 }
 
 /// Replaces `destination` with `source`.
@@ -971,7 +683,9 @@ fn replace_file(source: &Path, destination: &Path) -> Result<()> {
 /// Returns an I/O error when opening or syncing the parent directory fails.
 #[cfg(not(windows))]
 fn sync_parent_dir(path: &Path) -> Result<()> {
-    File::open(parent_dir_for(path))?.sync_all()
+    let parent_dir = parent_dir_for(path);
+    let parent = File::open(parent_dir)?;
+    parent.sync_all()
 }
 
 /// Syncs the parent directory for `path`.
@@ -1096,9 +810,9 @@ fn dir_size_recursive(path: &Path) -> Result<u64> {
             continue;
         }
         if metadata.is_dir() {
-            total = total.saturating_add(dir_size_recursive(&entry.path())?);
+            total += dir_size_recursive(&entry.path())?;
         } else if metadata.is_file() {
-            total = total.saturating_add(metadata.len());
+            total += metadata.len();
         }
     }
     Ok(total)

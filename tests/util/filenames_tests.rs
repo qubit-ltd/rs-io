@@ -12,6 +12,16 @@ use std::path::Path;
 use qubit_io::Filenames;
 
 #[test]
+fn test_random_and_try_random_use_default_prefix() {
+    let infallible_name = Filenames::random();
+    let fallible_name = Filenames::try_random().expect("random name should be generated");
+
+    assert!(infallible_name.starts_with(Filenames::DEFAULT_RANDOM_PREFIX));
+    assert!(fallible_name.starts_with(Filenames::DEFAULT_RANDOM_PREFIX));
+    assert_ne!(infallible_name, fallible_name);
+}
+
+#[test]
 fn test_validate_portable_file_name_accepts_safe_names() {
     for name in [
         "report.txt",

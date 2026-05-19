@@ -32,6 +32,7 @@ doctest = true
 
 [dependencies]
 getrandom = "0.4"
+log = "0.4"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage)'] }

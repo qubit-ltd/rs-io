@@ -60,6 +60,8 @@ pub use util::{
     Filenames,
     Files,
     Streams,
+    TempDir,
+    TempFile,
 };
 pub use wrappers::{
     ChecksumReader,
