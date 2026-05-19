@@ -423,6 +423,18 @@ fn test_content_eq_compares_streams() {
 }
 
 #[test]
+fn test_content_eq_returns_read_error() {
+    let mut left = FailingReader;
+    let mut right = Cursor::new(b"abc".to_vec());
+
+    let error = Streams::content_eq(&mut left, &mut right)
+        .expect_err("content_eq should return compare read errors");
+
+    assert_eq!(ErrorKind::Other, error.kind());
+    assert_eq!("read failed", error.to_string());
+}
+
+#[test]
 fn test_compare_content_returns_lexicographic_ordering() {
     let mut less = Cursor::new(b"abc".to_vec());
     let mut greater = Cursor::new(b"abd".to_vec());
