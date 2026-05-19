@@ -27,7 +27,7 @@ use crate::BinaryReadExt;
 ///
 /// Methods with the `_strict` suffix also reject non-canonical encodings, such
 /// as values encoded with unnecessary continuation bytes.
-pub trait Leb128IntReadExt: Read {
+pub trait Leb128ReadExt: Read {
     /// Reads an unsigned LEB128 `u8`.
     ///
     /// # Returns
@@ -269,7 +269,7 @@ pub trait Leb128IntReadExt: Read {
     fn read_sleb_isize_strict(&mut self) -> Result<isize>;
 }
 
-impl<T> Leb128IntReadExt for T
+impl<T> Leb128ReadExt for T
 where
     T: Read + ?Sized,
 {

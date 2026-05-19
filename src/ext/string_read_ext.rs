@@ -17,7 +17,7 @@ use std::string::FromUtf8Error;
 
 use crate::{
     BinaryReadExt,
-    Leb128IntReadExt,
+    Leb128ReadExt,
 };
 
 /// Extension methods for reading length-prefixed UTF-8 strings.
@@ -35,6 +35,21 @@ pub trait StringReadExt: Read {
     /// when the encoded length exceeds `max_len`, or [`ErrorKind::InvalidData`]
     /// when the payload is not valid UTF-8.
     fn read_utf8_string_uleb(&mut self, max_len: usize) -> Result<String>;
+
+    /// Reads a UTF-8 string with a canonical unsigned LEB128 byte-length prefix.
+    ///
+    /// # Parameters
+    /// - `max_len`: Maximum accepted UTF-8 payload length in bytes.
+    ///
+    /// # Returns
+    /// The decoded string.
+    ///
+    /// # Errors
+    /// Returns an I/O error for length or payload reads, [`ErrorKind::InvalidData`]
+    /// when the length prefix is malformed or non-canonical, [`ErrorKind::InvalidData`]
+    /// when the encoded length exceeds `max_len`, or [`ErrorKind::InvalidData`]
+    /// when the payload is not valid UTF-8.
+    fn read_utf8_string_uleb_strict(&mut self, max_len: usize) -> Result<String>;
 
     /// Reads a UTF-8 string with a big-endian `u16` byte-length prefix.
     ///
@@ -101,6 +116,10 @@ where
         read_utf8_string_uleb_impl(self, max_len)
     }
 
+    fn read_utf8_string_uleb_strict(&mut self, max_len: usize) -> Result<String> {
+        read_utf8_string_uleb_strict_impl(self, max_len)
+    }
+
     fn read_utf8_string_u16_be(&mut self, max_len: usize) -> Result<String> {
         read_utf8_string_u16_be_impl(self, max_len)
     }
@@ -123,6 +142,14 @@ where
     T: Read + ?Sized,
 {
     let len = reader.read_uleb_usize()?;
+    read_utf8_payload(reader, len, max_len)
+}
+
+fn read_utf8_string_uleb_strict_impl<T>(reader: &mut T, max_len: usize) -> Result<String>
+where
+    T: Read + ?Sized,
+{
+    let len = reader.read_uleb_usize_strict()?;
     read_utf8_payload(reader, len, max_len)
 }
 

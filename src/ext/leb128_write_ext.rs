@@ -20,7 +20,7 @@ use std::io::{
 /// continuation. The integer encoding is described by the WebAssembly Core
 /// binary format:
 /// <https://webassembly.github.io/spec/core/binary/values.html#integers>.
-pub trait Leb128IntWriteExt: Write {
+pub trait Leb128WriteExt: Write {
     /// Writes an unsigned LEB128 `u8`.
     ///
     /// # Parameters
@@ -130,7 +130,7 @@ pub trait Leb128IntWriteExt: Write {
     fn write_sleb_isize(&mut self, value: isize) -> Result<()>;
 }
 
-impl<T> Leb128IntWriteExt for T
+impl<T> Leb128WriteExt for T
 where
     T: Write + ?Sized,
 {
