@@ -85,35 +85,39 @@ fn test_atomic_write_creates_parent_directories_and_replaces_file() {
 
 #[cfg(windows)]
 #[test]
-fn test_atomic_write_parentless_relative_path_ignores_parent_sync_permission_denied() {
+fn test_atomic_write_ignores_windows_parent_sync_sharing_violation() {
     use std::os::windows::fs::OpenOptionsExt;
 
-    const FILE_ADD_FILE: u32 = 0x0002;
     const FILE_LIST_DIRECTORY: u32 = 0x0001;
     const FILE_SHARE_WRITE: u32 = 0x0000_0002;
     const FILE_SHARE_DELETE: u32 = 0x0000_0004;
     const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+    const ERROR_SHARING_VIOLATION: i32 = 32;
 
-    let _lock = CURRENT_DIR_LOCK
-        .lock()
-        .expect("current dir lock should be acquired");
-    let dir = temp_dir("atomic-parentless-sync-denied");
-    let _guard = CurrentDirGuard::change_to(&dir);
+    let dir = temp_dir("atomic-parent-sync-sharing-violation");
+    let parent = dir.join("locked-parent");
+    fs::create_dir(&parent).unwrap();
 
-    let _locked_parent = std::fs::OpenOptions::new()
+    let locked_parent = match std::fs::OpenOptions::new()
         .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
-        .access_mode(FILE_LIST_DIRECTORY | FILE_ADD_FILE)
+        .access_mode(FILE_LIST_DIRECTORY)
         .share_mode(FILE_SHARE_WRITE | FILE_SHARE_DELETE)
-        .open(".")
-        .expect("current directory should be locked for restricted sharing");
+        .open(&parent)
+    {
+        Ok(file) => file,
+        Err(error) if error.raw_os_error() == Some(ERROR_SHARING_VIOLATION) => {
+            fs::remove_dir_all(dir).unwrap();
+            return;
+        }
+        Err(error) => panic!("parent directory should be locked for restricted sharing: {error}"),
+    };
 
-    Files::atomic_write("out.txt", b"data").expect(
-        "parentless atomic write should still succeed when parent sync cannot be opened for sync",
-    );
-    assert_eq!(b"data", fs::read(dir.join("out.txt")).unwrap().as_slice());
+    let path = parent.join("out.txt");
+    Files::atomic_write(&path, b"data")
+        .expect("atomic write should ignore unavailable Windows parent directory sync");
+    assert_eq!(b"data", fs::read(&path).unwrap().as_slice());
 
-    drop(_locked_parent);
-    drop(_guard);
+    drop(locked_parent);
     fs::remove_dir_all(dir).unwrap();
 }
 

@@ -7,6 +7,8 @@
  *    Licensed under the Apache License, Version 2.0.
  *
  ******************************************************************************/
+use std::env;
+use std::ffi::OsString;
 use std::fs::{
     self,
     File,
@@ -67,6 +69,59 @@ const ATOMIC_WRITE_TEMP_PREFIX: &str = ".atomic-write-";
 
 /// Number of random bytes encoded into generated temporary file names.
 const RANDOM_NAME_BYTES: usize = 16;
+
+/// Options controlling recursive directory copy behavior.
+///
+/// The default is conservative: existing destination entries are not
+/// overwritten, symbolic links are not followed, and source permissions are not
+/// copied to destination entries.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CopyDirOptions {
+    /// Whether existing destination files may be overwritten.
+    pub overwrite: bool,
+
+    /// Whether symbolic links in the source tree should be followed.
+    ///
+    /// When this is `false`, encountering a symbolic link returns
+    /// [`ErrorKind::Unsupported`]. This avoids accidentally copying data outside
+    /// the requested source tree.
+    pub follow_symlinks: bool,
+
+    /// Whether to copy source permissions to destination entries after copying.
+    ///
+    /// This uses [`fs::set_permissions`] and therefore only preserves the
+    /// portable permission bits exposed by the Rust standard library.
+    pub preserve_permissions: bool,
+}
+
+impl Default for CopyDirOptions {
+    /// Returns conservative directory copy options.
+    ///
+    /// # Returns
+    /// Options that do not overwrite existing destination entries, do not
+    /// follow symbolic links, and do not preserve source permissions.
+    #[inline]
+    fn default() -> Self {
+        Self {
+            overwrite: false,
+            follow_symlinks: false,
+            preserve_permissions: false,
+        }
+    }
+}
+
+/// Statistics reported by recursive directory copy operations.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct CopyDirStats {
+    /// Number of regular files copied.
+    pub files: u64,
+
+    /// Number of destination directories created.
+    pub directories: u64,
+
+    /// Number of bytes copied from regular files.
+    pub bytes: u64,
+}
 
 #[cfg(windows)]
 unsafe extern "system" {
@@ -201,6 +256,105 @@ impl Files {
         P: AsRef<Path>,
     {
         Self::create_file_with_parent(path).map(BufWriter::new)
+    }
+
+    /// Computes the total size of regular files under a directory.
+    ///
+    /// The root path must be a directory. This method walks the directory tree
+    /// recursively, sums the byte length of regular files, and does not follow
+    /// symbolic links. Symbolic links are ignored.
+    ///
+    /// # Parameters
+    /// - `path`: Directory whose regular-file contents should be measured.
+    ///
+    /// # Returns
+    /// Total byte length of regular files contained in the directory tree.
+    ///
+    /// # Errors
+    /// Returns an I/O error when `path` cannot be inspected, is not a directory,
+    /// or one of the directory entries cannot be read.
+    #[inline]
+    pub fn dir_size<P>(path: P) -> Result<u64>
+    where
+        P: AsRef<Path>,
+    {
+        dir_size_path(path.as_ref())
+    }
+
+    /// Removes all entries from a directory while keeping the directory itself.
+    ///
+    /// This method deletes files, directories, and symbolic links directly
+    /// contained in `path`. Nested directories are removed recursively. Symbolic
+    /// links are removed as links and are not followed.
+    ///
+    /// # Parameters
+    /// - `path`: Directory to clean.
+    ///
+    /// # Errors
+    /// Returns an I/O error when `path` cannot be read, is not a directory, or
+    /// one of its entries cannot be removed.
+    #[inline]
+    pub fn clean_dir<P>(path: P) -> Result<()>
+    where
+        P: AsRef<Path>,
+    {
+        clean_dir_path(path.as_ref())
+    }
+
+    /// Removes a file, directory, or symbolic link.
+    ///
+    /// Directories are removed recursively. Symbolic links are removed as links
+    /// and are not followed, including links that point to directories.
+    ///
+    /// # Parameters
+    /// - `path`: Path to remove.
+    ///
+    /// # Errors
+    /// Returns an I/O error when `path` cannot be inspected or removed.
+    #[inline]
+    pub fn remove_any<P>(path: P) -> Result<()>
+    where
+        P: AsRef<Path>,
+    {
+        remove_any_path(path.as_ref())
+    }
+
+    /// Recursively copies a directory tree.
+    ///
+    /// The source path must be a directory. The destination directory is created
+    /// when missing. Existing files are rejected unless
+    /// [`CopyDirOptions::overwrite`] is enabled. By default, symbolic links are
+    /// rejected instead of followed so a copy cannot accidentally leave the
+    /// requested source tree.
+    ///
+    /// This method also rejects destinations located inside the source tree,
+    /// because copying a directory into itself can recurse indefinitely.
+    ///
+    /// # Parameters
+    /// - `src`: Source directory.
+    /// - `dst`: Destination directory.
+    /// - `options`: Copy behavior options.
+    ///
+    /// # Returns
+    /// Statistics describing copied files, created directories, and copied
+    /// bytes.
+    ///
+    /// # Errors
+    /// Returns an I/O error when the source is not a directory, the destination
+    /// is inside the source tree, a destination entry exists without overwrite
+    /// permission, a symbolic link is encountered while `follow_symlinks` is
+    /// `false`, or an underlying filesystem operation fails.
+    #[inline]
+    pub fn copy_dir_all_with<S, D>(
+        src: S,
+        dst: D,
+        options: CopyDirOptions,
+    ) -> Result<CopyDirStats>
+    where
+        S: AsRef<Path>,
+        D: AsRef<Path>,
+    {
+        copy_dir_all_with_paths(src.as_ref(), dst.as_ref(), options)
     }
 
     /// Builds a random file name from an optional prefix and suffix.
@@ -397,16 +551,50 @@ impl Files {
     /// Atomically writes bytes to a path using a temporary file in the same
     /// directory.
     ///
+    /// This method is intended for replacing a whole file with newly generated
+    /// contents without exposing a partially written destination. Typical use
+    /// cases include configuration files, cache manifests, checkpoint files,
+    /// generated indexes, and other small to medium state files where callers
+    /// want readers to observe either the old complete file or the new complete
+    /// file.
+    ///
     /// Parent directories are created before writing. The data is written to a
     /// randomly named same-directory temporary file, flushed and synced, and
     /// then renamed over the destination path with platform-specific replace
-    /// semantics. After the replacement, the parent directory is synced so
-    /// directory metadata reaches durable storage on platforms that support
-    /// directory syncing. If writing or syncing the temporary file fails, the
-    /// temporary file is removed and the existing destination is left untouched.
-    /// If replacement succeeds but syncing the parent directory fails, the
-    /// destination may already contain the new contents even though this method
-    /// returns an error.
+    /// semantics. Using the same directory keeps the temporary file on the same
+    /// filesystem as the destination, which is required for atomic replacement
+    /// on common platforms. After the replacement, the parent directory is
+    /// synced so directory metadata reaches durable storage on platforms that
+    /// support directory syncing.
+    ///
+    /// If writing or syncing the temporary file fails, the temporary file is
+    /// removed and the existing destination is left untouched. If replacement
+    /// succeeds but syncing the parent directory fails, the destination may
+    /// already contain the new contents even though this method returns an
+    /// error.
+    ///
+    /// This method is not a multi-file transaction and does not coordinate
+    /// concurrent writers. Use an external lock if multiple processes or
+    /// threads may replace the same path at the same time. It is also not an
+    /// append helper; append-only logs should use normal append-mode writes.
+    ///
+    /// # Examples
+    /// ```
+    /// use qubit_io::Files;
+    ///
+    /// let dir = Files::create_temp_dir_with(Some("qubit-io-atomic-"), 16)?;
+    /// let path = dir.join("state").join("manifest.json");
+    ///
+    /// Files::atomic_write(&path, br#"{"version":1,"complete":true}"#)?;
+    ///
+    /// assert_eq!(
+    ///     br#"{"version":1,"complete":true}"#,
+    ///     std::fs::read(&path)?.as_slice(),
+    /// );
+    ///
+    /// std::fs::remove_dir_all(dir)?;
+    /// # Ok::<(), std::io::Error>(())
+    /// ```
     ///
     /// # Parameters
     /// - `path`: Destination path.
@@ -860,7 +1048,7 @@ fn sync_parent_dir(path: &Path) -> Result<()> {
     };
     if handle == INVALID_HANDLE_VALUE {
         let error = std::io::Error::last_os_error();
-        return if error.kind() == ErrorKind::PermissionDenied {
+        return if is_ignorable_windows_parent_sync_error(&error) {
             Ok(())
         } else {
             Err(error)
@@ -869,9 +1057,25 @@ fn sync_parent_dir(path: &Path) -> Result<()> {
     let directory = unsafe { File::from_raw_handle(handle) };
     match directory.sync_all() {
         Ok(()) => Ok(()),
-        Err(error) if error.kind() == ErrorKind::PermissionDenied => Ok(()),
+        Err(error) if is_ignorable_windows_parent_sync_error(&error) => Ok(()),
         Err(error) => Err(error),
     }
+}
+
+/// Tests whether a Windows parent-directory sync error should be ignored.
+///
+/// # Parameters
+/// - `error`: Error reported while opening or syncing the parent directory.
+///
+/// # Returns
+/// `true` when the error only means the best-effort parent directory sync is
+/// unavailable on Windows.
+#[cfg(windows)]
+fn is_ignorable_windows_parent_sync_error(error: &Error) -> bool {
+    const ERROR_SHARING_VIOLATION: i32 = 32;
+
+    error.kind() == ErrorKind::PermissionDenied
+        || error.raw_os_error() == Some(ERROR_SHARING_VIOLATION)
 }
 
 /// Gets the parent directory that should be synced for `path`.
