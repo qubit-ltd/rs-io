@@ -85,8 +85,8 @@ extension trait 覆盖的是保守、标准库优先的行为，例如：精确�
 
 - `Files` associated method 可创建缺失目录、打开 buffered file、构造随机临时
   名称和路径、拒绝路径型名称片段、使用 `getrandom` 支持的 OS 随机源创建随机临时
-  文件和目录，并提供保留既有普通文件权限的持久化同目录 atomic write，包括临时文件
-  sync 和支持平台上的父目录 sync；
+  文件和目录，清理和删除本地路径、计算目录大小、复制目录树，并提供保留既有普通文件
+  权限的持久化同目录 atomic write，包括临时文件 sync 和支持平台上的父目录 sync；
 - `Streams` associated method 包装 `std::io::copy`，提供有界复制、必须在限制内
   到达 EOF 的复制，以及 reader 内容比较；
 - `Filenames` associated method 提供常用 lexical 文件名操作，包括 UTF-8 路径
@@ -343,7 +343,7 @@ where
 
 | 工具命名空间 | 方法 | 典型用途 |
 |-------------|------|----------|
-| `Files` | `open_buffered_reader`、`ensure_dir`、`ensure_parent`、`create_file_with_parent`、`create_buffered_writer_with_parent`、`random_file_name`、`try_random_file_name`、`temp_dir`、`temp_path`、`create_temp_file`、`create_temp_file_with`、`create_temp_file_in`、`create_temp_dir_with`、`create_temp_dir_in`、`atomic_write`、`atomic_write_with` | 文件系统 helper 和持久化写入 |
+| `Files` | `open_buffered_reader`、`ensure_dir`、`ensure_parent`、`create_file_with_parent`、`create_buffered_writer_with_parent`、`dir_size`、`clean_dir`、`remove_any`、`copy_dir_all_with`、`random_file_name`、`try_random_file_name`、`temp_dir`、`temp_path`、`create_temp_file`、`create_temp_file_with`、`create_temp_file_in`、`create_temp_dir_with`、`create_temp_dir_in`、`atomic_write`、`atomic_write_with` | 文件系统 helper 和持久化写入 |
 | `Streams` | `copy`、`copy_at_most`、`copy_to_end_limited`、`content_eq`、`compare_content` | stream 复制和内容比较 |
 | `Filenames` | `file_name`、`file_stem`、`file_prefix`、`extension`、`dot_extension`、`has_extension`、`has_extension_ignore_ascii_case`、`file_name_from_path`、`file_name_from_url` | lexical UTF-8 文件名检查 |
 
