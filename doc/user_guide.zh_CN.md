@@ -138,16 +138,18 @@ wrapper 会透明包裹底层 reader 或 writer，并实现对应标准库 I/O t
 - `PositionGuard` 在 drop 时把 seekable stream 恢复到捕获的位置，除非显式
   restore 或 dismiss。
 
-## Planned Codec Wrapper
+## Codec Wrapper
 
-Phase 2 还为 object-oriented codec 用法预留以下 root-level wrapper 名称：
+当显式 reader/writer object 比在调用点导入 extension trait 更清晰时，可以使用
+这些 root-level wrapper 类型：
 
 - `BinaryReader` 和 `BinaryWriter`
 - `Leb128Reader` 和 `Leb128Writer`
 - `ZigZagReader` 和 `ZigZagWriter`
 
-这些 wrapper 计划作为 extension trait 同等语义上的便利层。在源码实现落地前，
-稳定调用点应继续使用 extension trait。
+这些 wrapper 持有底层 stream，提供 `get_ref`、`get_mut` 和 `into_inner`，
+并复用与 extension trait 相同的编码实现。`BinaryReader` 和 `BinaryWriter`
+还保存运行时 `ByteOrder`。
 
 ## API 矩阵
 
@@ -255,14 +257,14 @@ ZigZag 参考 Protocol Buffers signed integer mapping：
 | `ChecksumWriter` | `Write` | `new`、`checksum`、`get_ref`、`get_mut`、`hasher_ref`、`hasher_mut`、`into_inner` |
 | `PositionGuard` | `Seek` drop guard | `new`、`position`、`get_mut`、`restore`、`dismiss` |
 
-### Planned Codec Wrapper 类型
+### Codec Wrapper 类型
 
-| 类型 | 计划用途 |
+| 类型 | 用途 |
 |------|----------|
-| `BinaryReader` | 用于二进制标量解码的 reader object。 |
-| `BinaryWriter` | 用于二进制标量编码的 writer object。 |
-| `Leb128Reader` | 用于 LEB128 整数解码的 reader object。 |
-| `Leb128Writer` | 用于 LEB128 整数编码的 writer object。 |
+| `BinaryReader` | 用于二进制标量和固定宽度长度前缀字符串解码的 reader object。 |
+| `BinaryWriter` | 用于二进制标量和固定宽度长度前缀字符串编码的 writer object。 |
+| `Leb128Reader` | 用于 LEB128 整数和 ULEB128 长度前缀字符串解码的 reader object。 |
+| `Leb128Writer` | 用于 LEB128 整数和 ULEB128 长度前缀字符串编码的 writer object。 |
 | `ZigZagReader` | 用于 ZigZag 有符号整数解码的 reader object。 |
 | `ZigZagWriter` | 用于 ZigZag 有符号整数编码的 writer object。 |
 
