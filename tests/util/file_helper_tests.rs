@@ -83,6 +83,40 @@ fn test_atomic_write_creates_parent_directories_and_replaces_file() {
     fs::remove_dir_all(dir).unwrap();
 }
 
+#[cfg(windows)]
+#[test]
+fn test_atomic_write_parentless_relative_path_ignores_parent_sync_permission_denied() {
+    use std::os::windows::fs::OpenOptionsExt;
+
+    const FILE_ADD_FILE: u32 = 0x0002;
+    const FILE_LIST_DIRECTORY: u32 = 0x0001;
+    const FILE_SHARE_WRITE: u32 = 0x0000_0002;
+    const FILE_SHARE_DELETE: u32 = 0x0000_0004;
+    const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+
+    let _lock = CURRENT_DIR_LOCK
+        .lock()
+        .expect("current dir lock should be acquired");
+    let dir = temp_dir("atomic-parentless-sync-denied");
+    let _guard = CurrentDirGuard::change_to(&dir);
+
+    let _locked_parent = std::fs::OpenOptions::new()
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+        .access_mode(FILE_LIST_DIRECTORY | FILE_ADD_FILE)
+        .share_mode(FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+        .open(".")
+        .expect("current directory should be locked for restricted sharing");
+
+    Files::atomic_write("out.txt", b"data").expect(
+        "parentless atomic write should still succeed when parent sync cannot be opened for sync",
+    );
+    assert_eq!(b"data", fs::read(dir.join("out.txt")).unwrap().as_slice());
+
+    drop(_locked_parent);
+    drop(_guard);
+    fs::remove_dir_all(dir).unwrap();
+}
+
 #[cfg(unix)]
 #[test]
 fn test_atomic_write_preserves_existing_file_permissions() {

@@ -859,10 +859,19 @@ fn sync_parent_dir(path: &Path) -> Result<()> {
         )
     };
     if handle == INVALID_HANDLE_VALUE {
-        return Err(std::io::Error::last_os_error());
+        let error = std::io::Error::last_os_error();
+        return if error.kind() == ErrorKind::PermissionDenied {
+            Ok(())
+        } else {
+            Err(error)
+        };
     }
     let directory = unsafe { File::from_raw_handle(handle) };
-    directory.sync_all()
+    match directory.sync_all() {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == ErrorKind::PermissionDenied => Ok(()),
+        Err(error) => Err(error),
+    }
 }
 
 /// Gets the parent directory that should be synced for `path`.
