@@ -117,18 +117,71 @@ ZigZag 映射后的有符号整数。严格读取方法要求底层 unsigned LEB
 - `create_temp_file`、`create_temp_file_with`、`create_temp_file_in`、
   `create_temp_dir_with` 和 `create_temp_dir_in` 使用 `getrandom` 支持的
   OS 随机源创建抗碰撞随机临时条目，并在拼接目标目录前拒绝路径型名称片段。
-- `atomic_write` 和 `atomic_write_with` 通过随机同目录临时文件写入，保留既有
-  普通目标文件权限，flush 并 sync 临时文件，替换目标文件，并在平台支持时 sync
-  父目录。
+- `dir_size` 统计目录下普通文件的总字节数，不跟随 symbolic link。
+- `clean_dir` 删除目录中的所有子项，但保留目录本身。
+- `remove_any` 删除文件、目录树或 symbolic link。
+- `copy_dir_all_with` 使用显式 overwrite、symlink-following 和权限保留选项递归
+  复制本地目录树。
+- `atomic_write` 和 `atomic_write_with` 通过随机同目录临时文件整体替换目标文件，
+  保留既有普通目标文件权限，flush 并 sync 临时文件，替换目标文件，并在平台支持时
+  sync 父目录。
+
+### Atomic Write
+
+当一个文件不能被外部观察到“只写了一半”的状态时，使用 `Files::atomic_write`。
+它主要规避的失败模式是：先截断旧文件，再写新内容；如果进程崩溃、机器断电或写入
+中途返回错误，目标文件可能只剩半截。通过 atomic replacement，读者看到的要么是
+旧的完整文件，要么是新的完整文件。
+
+典型场景包括：
+
+- 应用配置文件；
+- cache manifest 和生成出来的索引文件；
+- checkpoint 或状态快照；
+- 需要一次性替换旧版本的小型生成产物。
+
+这个操作会先在目标文件同一目录创建随机临时文件，把新内容写入临时文件，flush 并
+sync 这个临时文件，然后把临时文件 rename/replace 到目标路径，最后在平台支持时
+sync 父目录。同目录很重要，因为常见平台通常只保证同一文件系统内的替换是原子的。
+
+`atomic_write` 不提供多文件事务，不负责串行化多个并发 writer，也不是 append log
+helper。如果多个 writer 可能同时更新同一路径，应使用文件锁或更高层协议。
 
 ```rust
 use qubit_io::Files;
 
 let dir = Files::create_temp_dir_with(Some("qubit-io-guide-"), 16)?;
-let path = dir.join("nested").join("data.bin");
+let path = dir.join("state").join("manifest.json");
 
-Files::atomic_write(&path, b"payload")?;
-assert_eq!(b"payload", std::fs::read(&path)?.as_slice());
+Files::atomic_write(&path, br#"{"version":1,"complete":true}"#)?;
+assert_eq!(
+    br#"{"version":1,"complete":true}"#,
+    std::fs::read(&path)?.as_slice(),
+);
+
+std::fs::remove_dir_all(dir)?;
+# Ok::<(), std::io::Error>(())
+```
+
+当内容是逐步生成的，不希望先在内存中拼成一个完整 byte slice 时，使用
+`atomic_write_with` 直接把内容写入临时文件：
+
+```rust
+use std::io::Write;
+
+use qubit_io::Files;
+
+let dir = Files::create_temp_dir_with(Some("qubit-io-guide-"), 16)?;
+let path = dir.join("state").join("index.txt");
+
+Files::atomic_write_with(&path, |file| {
+    writeln!(file, "id,name")?;
+    writeln!(file, "1,alpha")?;
+    writeln!(file, "2,beta")?;
+    Ok(())
+})?;
+
+assert_eq!("id,name\n1,alpha\n2,beta\n", std::fs::read_to_string(&path)?);
 
 std::fs::remove_dir_all(dir)?;
 # Ok::<(), std::io::Error>(())
@@ -297,8 +350,14 @@ ZigZag 参考 Protocol Buffers signed integer mapping：
 | `Files::create_temp_file_in` | 在调用方提供的目录下创建随机临时文件。 |
 | `Files::create_temp_dir_with` | 在进程临时目录下创建随机临时目录。 |
 | `Files::create_temp_dir_in` | 在调用方提供的目录下创建随机临时目录。 |
+| `Files::dir_size` | 统计目录下普通文件的总字节数，不跟随 symbolic link。 |
+| `Files::clean_dir` | 删除目录中的所有子项，但保留目录本身。 |
+| `Files::remove_any` | 删除文件、目录树或 symbolic link。 |
+| `Files::copy_dir_all_with` | 使用显式复制选项递归复制本地目录树，并返回复制统计。 |
 | `Files::atomic_write` | 使用同目录临时文件写入，保留既有普通目标文件权限，sync 临时文件，替换目标文件，并在支持的平台上 sync 父目录。 |
 | `Files::atomic_write_with` | 与 `atomic_write` 相同，但由调用方提供临时文件写入逻辑。 |
+| `CopyDirOptions` | 控制递归目录复制行为的选项。 |
+| `CopyDirStats` | 递归目录复制操作返回的统计信息。 |
 
 ### Stream 工具
 

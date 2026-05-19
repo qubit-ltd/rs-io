@@ -128,19 +128,78 @@ Use `Files` associated methods instead of free functions:
   `create_temp_dir_with`, and `create_temp_dir_in` create collision-resistant
   random temporary entries with `getrandom`-backed OS randomness and reject
   path-like name fragments before joining with the target directory.
-- `atomic_write` and `atomic_write_with` write through a random same-directory
-  temporary file, preserve existing regular-file permissions, flush and sync it,
-  replace the destination, and sync the parent directory when the platform
-  supports directory syncing.
+- `dir_size` sums regular-file byte lengths under a directory without following
+  symbolic links.
+- `clean_dir` removes a directory's children while keeping the directory itself.
+- `remove_any` removes a file, directory tree, or symbolic link.
+- `copy_dir_all_with` recursively copies a local directory tree with explicit
+  overwrite, symlink-following, and permission-preservation options.
+- `atomic_write` and `atomic_write_with` replace a whole destination file
+  through a random same-directory temporary file, preserve existing regular-file
+  permissions, flush and sync the temporary file, replace the destination, and
+  sync the parent directory when the platform supports directory syncing.
+
+### Atomic Writes
+
+Use `Files::atomic_write` when a file must never be observed half-written. The
+common failure mode it avoids is truncating an existing destination and then
+crashing, losing power, or returning an error before all bytes have been written.
+With atomic replacement, readers see either the previous complete file or the
+new complete file.
+
+Good fits include:
+
+- application configuration files;
+- cache manifests and generated indexes;
+- checkpoint or state snapshots;
+- small generated artifacts that should replace an older version all at once.
+
+The operation writes the new contents to a random temporary file in the same
+directory, flushes and syncs that temporary file, renames it over the
+destination, and then syncs the parent directory when supported. The same
+directory matters because common platforms only provide atomic replacement
+within the same filesystem.
+
+`atomic_write` does not provide a multi-file transaction, does not serialize
+concurrent writers, and is not an append-log helper. Use a file lock or a
+higher-level protocol if several writers may update the same path.
 
 ```rust
 use qubit_io::Files;
 
 let dir = Files::create_temp_dir_with(Some("qubit-io-guide-"), 16)?;
-let path = dir.join("nested").join("data.bin");
+let path = dir.join("state").join("manifest.json");
 
-Files::atomic_write(&path, b"payload")?;
-assert_eq!(b"payload", std::fs::read(&path)?.as_slice());
+Files::atomic_write(&path, br#"{"version":1,"complete":true}"#)?;
+assert_eq!(
+    br#"{"version":1,"complete":true}"#,
+    std::fs::read(&path)?.as_slice(),
+);
+
+std::fs::remove_dir_all(dir)?;
+# Ok::<(), std::io::Error>(())
+```
+
+Use `atomic_write_with` when the content is produced incrementally and should be
+streamed into the temporary file instead of being materialized as one byte
+slice:
+
+```rust
+use std::io::Write;
+
+use qubit_io::Files;
+
+let dir = Files::create_temp_dir_with(Some("qubit-io-guide-"), 16)?;
+let path = dir.join("state").join("index.txt");
+
+Files::atomic_write_with(&path, |file| {
+    writeln!(file, "id,name")?;
+    writeln!(file, "1,alpha")?;
+    writeln!(file, "2,beta")?;
+    Ok(())
+})?;
+
+assert_eq!("id,name\n1,alpha\n2,beta\n", std::fs::read_to_string(&path)?);
 
 std::fs::remove_dir_all(dir)?;
 # Ok::<(), std::io::Error>(())
@@ -317,8 +376,14 @@ ZigZag follows the Protocol Buffers signed integer mapping:
 | `Files::create_temp_file_in` | Creates a random temporary file in a caller-provided directory. |
 | `Files::create_temp_dir_with` | Creates a random temporary directory under the process temporary directory. |
 | `Files::create_temp_dir_in` | Creates a random temporary directory in a caller-provided directory. |
+| `Files::dir_size` | Sums regular-file byte lengths below a directory without following symbolic links. |
+| `Files::clean_dir` | Removes all children from a directory while keeping the directory itself. |
+| `Files::remove_any` | Removes a file, directory tree, or symbolic link. |
+| `Files::copy_dir_all_with` | Recursively copies a local directory tree with explicit copy options and returns copy statistics. |
 | `Files::atomic_write` | Writes bytes through a same-directory temporary file, preserves existing regular-file permissions, syncs the temporary file, replaces the destination, and syncs the parent directory when supported. |
 | `Files::atomic_write_with` | Same as `atomic_write`, but accepts caller-provided write logic for the temporary file. |
+| `CopyDirOptions` | Options controlling recursive directory copy behavior. |
+| `CopyDirStats` | Statistics returned by recursive directory copy operations. |
 
 ### Stream Utilities
 
