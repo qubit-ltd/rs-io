@@ -559,7 +559,7 @@ fn test_temp_dir_persist_cleans_up_when_parent_creation_fails() {
 }
 
 #[test]
-fn test_temp_dir_persist_cleans_up_when_rename_fails() {
+fn test_temp_dir_persist_cleans_up_when_target_exists() {
     let dir = temp_dir("temp-dir-persist-rename-error");
     let temp_dir = TempDir::in_dir(&dir, Some("source-"), 4).expect("temp dir should be created");
     let source = temp_dir.path().to_owned();
@@ -568,7 +568,7 @@ fn test_temp_dir_persist_cleans_up_when_rename_fails() {
 
     let error = temp_dir
         .persist(&target)
-        .expect_err("renaming directory over file should fail");
+        .expect_err("existing target should be rejected");
 
     assert!(matches!(
         error.kind(),
