@@ -12,6 +12,88 @@ use std::path::Path;
 use qubit_io::Filenames;
 
 #[test]
+fn test_validate_portable_file_name_accepts_safe_names() {
+    for name in [
+        "report.txt",
+        "archive.tar.gz",
+        ".env",
+        "my file.txt",
+        "data_2026-05-19.csv",
+        "caf\u{00e9}.txt",
+    ] {
+        Filenames::validate_portable_file_name(name)
+            .expect("safe portable file name should be accepted");
+    }
+}
+
+#[test]
+fn test_validate_portable_file_name_rejects_empty_dot_and_dot_dot() {
+    for name in ["", ".", ".."] {
+        let error = Filenames::validate_portable_file_name(name)
+            .expect_err("invalid dot segment should be rejected");
+
+        assert_eq!(std::io::ErrorKind::InvalidInput, error.kind());
+    }
+}
+
+#[test]
+fn test_validate_portable_file_name_rejects_path_and_reserved_characters() {
+    for name in [
+        "dir/file.txt",
+        r"dir\file.txt",
+        "name\0.txt",
+        "bad:name.txt",
+        "bad<name>.txt",
+        "bad|name.txt",
+        "bad?name.txt",
+        "bad*name.txt",
+        "bad\"name.txt",
+        "line\nbreak.txt",
+    ] {
+        let error = Filenames::validate_portable_file_name(name)
+            .expect_err("forbidden character should be rejected");
+
+        assert_eq!(std::io::ErrorKind::InvalidInput, error.kind());
+    }
+}
+
+#[test]
+fn test_validate_portable_file_name_rejects_windows_reserved_names() {
+    for name in [
+        "CON", "con", "CON.txt", "PRN", "AUX", "NUL", "COM1", "com9.log", "LPT1", "lpt9.txt",
+        "CONIN$", "CONOUT$",
+    ] {
+        let error = Filenames::validate_portable_file_name(name)
+            .expect_err("Windows reserved device name should be rejected");
+
+        assert_eq!(std::io::ErrorKind::InvalidInput, error.kind());
+    }
+
+    Filenames::validate_portable_file_name("COM0.txt").expect("COM0 should not be reserved");
+    Filenames::validate_portable_file_name("COM10.txt").expect("COM10 should not be reserved");
+    Filenames::validate_portable_file_name("LPT0.txt").expect("LPT0 should not be reserved");
+}
+
+#[test]
+fn test_validate_portable_file_name_rejects_trailing_space_dot_and_long_names() {
+    for name in ["file.", "file "] {
+        let error = Filenames::validate_portable_file_name(name)
+            .expect_err("trailing space or dot should be rejected");
+
+        assert_eq!(std::io::ErrorKind::InvalidInput, error.kind());
+    }
+
+    let max_name = "a".repeat(255);
+    let too_long_name = "a".repeat(256);
+
+    Filenames::validate_portable_file_name(&max_name).expect("255-byte name should be accepted");
+    let error = Filenames::validate_portable_file_name(&too_long_name)
+        .expect_err("name longer than 255 bytes should be rejected");
+
+    assert_eq!(std::io::ErrorKind::InvalidInput, error.kind());
+}
+
+#[test]
 fn test_file_name_returns_final_component() {
     let path = Path::new("/tmp/archive.tar.gz");
 

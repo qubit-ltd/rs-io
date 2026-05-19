@@ -8,7 +8,14 @@
  *
  ******************************************************************************/
 use std::ffi::OsStr;
+use std::io::{
+    Error,
+    ErrorKind,
+    Result,
+};
 use std::path::Path;
+
+const MAX_PORTABLE_FILE_NAME_BYTES: usize = 255;
 
 /// File-name utility namespace.
 ///
@@ -32,6 +39,78 @@ use std::path::Path;
 pub enum Filenames {}
 
 impl Filenames {
+    /// Validates that `name` is a portable single-component file name.
+    ///
+    /// This is a lexical, conservative validation helper for names that should
+    /// be safe to use as one file-name component across common platforms. It
+    /// does not check whether the current filesystem can actually create the
+    /// file, and it does not inspect permissions, existing paths, mount options,
+    /// Unicode normalization, or filesystem-specific limits beyond a conservative
+    /// 255-byte UTF-8 length cap.
+    ///
+    /// A portable file name must:
+    /// - be non-empty;
+    /// - not be `.` or `..`;
+    /// - be at most 255 UTF-8 bytes;
+    /// - not contain NUL, path separators, ASCII control characters, or Windows
+    ///   reserved file-name characters;
+    /// - not end with a space or dot;
+    /// - not use a Windows reserved device name such as `CON`, `NUL`, `COM1`,
+    ///   or `LPT1`, including names with extensions such as `CON.txt`.
+    ///
+    /// # Parameters
+    /// - `name`: File-name component to validate.
+    ///
+    /// # Errors
+    /// Returns [`ErrorKind::InvalidInput`] when `name` is not a portable
+    /// file-name component.
+    #[inline]
+    pub fn validate_portable_file_name(name: &str) -> Result<()> {
+        if name.is_empty() {
+            return Err(Error::new(
+                ErrorKind::InvalidInput,
+                "portable file name must not be empty",
+            ));
+        }
+        if name == "." || name == ".." {
+            return Err(Error::new(
+                ErrorKind::InvalidInput,
+                "portable file name must not be a dot segment",
+            ));
+        }
+        if name.len() > MAX_PORTABLE_FILE_NAME_BYTES {
+            return Err(Error::new(
+                ErrorKind::InvalidInput,
+                format!("portable file name exceeds {MAX_PORTABLE_FILE_NAME_BYTES} UTF-8 bytes"),
+            ));
+        }
+        if name.ends_with([' ', '.']) {
+            return Err(Error::new(
+                ErrorKind::InvalidInput,
+                "portable file name must not end with a space or dot",
+            ));
+        }
+        if let Some(character) = name.chars().find(|character| {
+            character.is_control()
+                || matches!(
+                    character,
+                    '/' | '\\' | '<' | '>' | ':' | '"' | '|' | '?' | '*'
+                )
+        }) {
+            return Err(Error::new(
+                ErrorKind::InvalidInput,
+                format!("portable file name contains forbidden character {character:?}"),
+            ));
+        }
+        if is_windows_reserved_file_name(name) {
+            return Err(Error::new(
+                ErrorKind::InvalidInput,
+                "portable file name must not be a Windows reserved device name",
+            ));
+        }
+        Ok(())
+    }
+
     /// Returns the final file-name component of `path` as UTF-8.
     ///
     /// # Parameters
@@ -200,6 +279,41 @@ impl Filenames {
 /// The extension without one leading dot.
 fn normalize_extension(extension: &str) -> &str {
     extension.strip_prefix('.').unwrap_or(extension)
+}
+
+/// Tests whether a single-component file name is reserved by Windows.
+///
+/// # Parameters
+/// - `name`: File name to inspect.
+///
+/// # Returns
+/// `true` when `name` uses a reserved device name, including a reserved base
+/// name followed by an extension.
+fn is_windows_reserved_file_name(name: &str) -> bool {
+    let base_name = name
+        .split_once('.')
+        .map_or(name, |(base_name, _)| base_name);
+    let base_name = base_name.trim_end_matches([' ', '.']);
+
+    if base_name.eq_ignore_ascii_case("CON")
+        || base_name.eq_ignore_ascii_case("PRN")
+        || base_name.eq_ignore_ascii_case("AUX")
+        || base_name.eq_ignore_ascii_case("NUL")
+        || base_name.eq_ignore_ascii_case("CONIN$")
+        || base_name.eq_ignore_ascii_case("CONOUT$")
+    {
+        return true;
+    }
+
+    let bytes = base_name.as_bytes();
+    if bytes.len() != 4 {
+        return false;
+    }
+
+    let prefix = &bytes[..3];
+    let suffix = bytes[3];
+    (prefix.eq_ignore_ascii_case(b"COM") || prefix.eq_ignore_ascii_case(b"LPT"))
+        && (b'1'..=b'9').contains(&suffix)
 }
 
 /// Removes query and fragment suffixes from a URL-like string.
