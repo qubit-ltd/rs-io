@@ -21,6 +21,7 @@ use std::io::{
     Write,
 };
 use std::path::{
+    Component,
     Path,
     PathBuf,
 };
@@ -217,16 +218,41 @@ impl Files {
     /// this function.
     ///
     /// # Panics
-    /// Panics if the operating system random source cannot provide bytes.
+    /// Panics if `prefix` or `suffix` is not a safe file-name fragment, or if
+    /// the operating system random source cannot provide bytes.
     pub fn random_file_name(prefix: Option<&str>, suffix: Option<&str>) -> String {
+        Self::try_random_file_name(prefix, suffix).expect("failed to build random file name")
+    }
+
+    /// Tries to build a random file name from an optional prefix and suffix.
+    ///
+    /// The generated name contains a timestamp, process id, and random
+    /// hexadecimal payload. The caller-provided prefix and suffix must be file
+    /// name fragments, not paths. Path separators, root components, parent
+    /// directory components, platform prefixes, and NUL bytes are rejected.
+    ///
+    /// # Parameters
+    /// - `prefix`: Optional name prefix.
+    /// - `suffix`: Optional name suffix.
+    ///
+    /// # Returns
+    /// A random file name string.
+    ///
+    /// # Errors
+    /// Returns [`ErrorKind::InvalidInput`] when `prefix` or `suffix` is not a
+    /// safe file-name fragment. Returns [`ErrorKind::Other`] when the operating
+    /// system random source cannot provide bytes.
+    pub fn try_random_file_name(prefix: Option<&str>, suffix: Option<&str>) -> Result<String> {
+        validate_file_name_fragment("prefix", prefix.unwrap_or(Self::DEFAULT_TEMP_FILE_PREFIX))?;
+        validate_file_name_fragment("suffix", suffix.unwrap_or(""))?;
         let timestamp = unix_timestamp_nanos();
         let process_id = std::process::id();
-        let random = random_hex();
-        format!(
+        let random = try_random_hex()?;
+        Ok(format!(
             "{}{timestamp:x}-{process_id:x}-{random}{}",
             prefix.unwrap_or(Self::DEFAULT_TEMP_FILE_PREFIX),
             suffix.unwrap_or("")
-        )
+        ))
     }
 
     /// Returns the process temporary directory.
@@ -482,6 +508,7 @@ fn atomic_write_with_path(
     write: &mut dyn FnMut(&mut File) -> Result<()>,
 ) -> Result<()> {
     ensure_parent_path(path)?;
+    let existing_permissions = existing_file_permissions(path)?;
     let parent = parent_dir_for(path);
     let (temp_path, mut file) = Files::create_temp_file_in(
         parent,
@@ -491,6 +518,7 @@ fn atomic_write_with_path(
     )?;
 
     let result = write(&mut file)
+        .and_then(|()| apply_existing_permissions(&file, existing_permissions.as_ref(), &temp_path))
         .and_then(|()| file.flush())
         .and_then(|()| file.sync_all());
     if let Err(error) = result {
@@ -505,6 +533,51 @@ fn atomic_write_with_path(
         return Err(error);
     }
     sync_parent_dir(path)
+}
+
+/// Returns existing destination permissions to preserve during atomic writes.
+///
+/// # Parameters
+/// - `path`: Destination file path.
+///
+/// # Returns
+/// Existing file permissions when `path` points to a regular file.
+///
+/// # Errors
+/// Returns an I/O error when destination metadata exists but cannot be read.
+fn existing_file_permissions(path: &Path) -> Result<Option<fs::Permissions>> {
+    match fs::metadata(path) {
+        Ok(metadata) if metadata.is_file() => Ok(Some(metadata.permissions())),
+        Ok(_) => Ok(None),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(add_path_context(error, "read destination metadata", path)),
+    }
+}
+
+/// Applies preserved destination permissions to the temporary file.
+///
+/// # Parameters
+/// - `file`: Temporary file handle.
+/// - `permissions`: Optional permissions to apply.
+/// - `temp_path`: Temporary file path used for error context.
+///
+/// # Errors
+/// Returns an I/O error when permissions cannot be applied.
+fn apply_existing_permissions(
+    file: &File,
+    permissions: Option<&fs::Permissions>,
+    temp_path: &Path,
+) -> Result<()> {
+    if let Some(permissions) = permissions
+        && let Err(error) = file.set_permissions(permissions.clone())
+    {
+        return Err(add_path_context(
+            error,
+            "set temporary file permissions",
+            temp_path,
+        ));
+    }
+    Ok(())
 }
 
 /// Creates a unique temporary file in `dir`.
@@ -532,7 +605,7 @@ fn create_temp_file_in_dir(
     let mut attempt = 0;
     loop {
         attempt += 1;
-        let path = dir.join(Files::random_file_name(prefix, suffix));
+        let path = dir.join(Files::try_random_file_name(prefix, suffix)?);
         match OpenOptions::new()
             .read(true)
             .write(true)
@@ -565,7 +638,7 @@ fn create_temp_dir_in_dir(dir: &Path, prefix: Option<&str>, max_tries: usize) ->
     let mut attempt = 0;
     loop {
         attempt += 1;
-        let path = dir.join(Files::random_file_name(prefix, None));
+        let path = dir.join(Files::try_random_file_name(prefix, None)?);
         match fs::create_dir(&path) {
             Ok(()) => return Ok(path),
             Err(error) if error.kind() == ErrorKind::AlreadyExists && attempt < max_tries => {}
@@ -589,6 +662,57 @@ fn validate_max_tries(max_tries: usize) -> Result<()> {
         ));
     }
     Ok(())
+}
+
+/// Validates a caller-provided file-name fragment.
+///
+/// # Parameters
+/// - `role`: Fragment role used in error messages.
+/// - `fragment`: File-name fragment to validate.
+///
+/// # Errors
+/// Returns [`ErrorKind::InvalidInput`] when `fragment` can behave like a path
+/// instead of a plain file-name fragment.
+fn validate_file_name_fragment(role: &str, fragment: &str) -> Result<()> {
+    if fragment.contains('\0') {
+        return Err(invalid_file_name_fragment_error(
+            role,
+            "NUL bytes are not allowed",
+        ));
+    }
+    if fragment.contains('/') || fragment.contains('\\') {
+        return Err(invalid_file_name_fragment_error(
+            role,
+            "path separators are not allowed",
+        ));
+    }
+    if Path::new(fragment).components().any(|component| {
+        matches!(
+            component,
+            Component::Prefix(_) | Component::RootDir | Component::ParentDir
+        )
+    }) {
+        return Err(invalid_file_name_fragment_error(
+            role,
+            "path components are not allowed",
+        ));
+    }
+    Ok(())
+}
+
+/// Builds an invalid file-name fragment error.
+///
+/// # Parameters
+/// - `role`: Fragment role used in error messages.
+/// - `reason`: Validation failure reason.
+///
+/// # Returns
+/// An [`ErrorKind::InvalidInput`] error.
+fn invalid_file_name_fragment_error(role: &str, reason: &str) -> Error {
+    Error::new(
+        ErrorKind::InvalidInput,
+        format!("temporary file name {role} is invalid: {reason}"),
+    )
 }
 
 /// Adds path context to an I/O error while preserving its kind.
@@ -619,17 +743,18 @@ fn unix_timestamp_nanos() -> u128 {
         .unwrap_or_default()
 }
 
-/// Returns random bytes encoded as lowercase hexadecimal.
+/// Tries to return random bytes encoded as lowercase hexadecimal.
 ///
 /// # Returns
 /// A hexadecimal string derived from operating-system randomness.
 ///
-/// # Panics
-/// Panics if the operating system random source cannot provide bytes.
-fn random_hex() -> String {
+/// # Errors
+/// Returns [`ErrorKind::Other`] if the operating system random source cannot
+/// provide bytes.
+fn try_random_hex() -> Result<String> {
     let mut bytes = [0_u8; RANDOM_NAME_BYTES];
-    fill_random_bytes(&mut bytes);
-    hex_encode(&bytes)
+    fill_random_bytes(&mut bytes)?;
+    Ok(hex_encode(&bytes))
 }
 
 /// Fills a byte slice with random bytes.
@@ -637,10 +762,11 @@ fn random_hex() -> String {
 /// # Parameters
 /// - `bytes`: Destination buffer.
 ///
-/// # Panics
-/// Panics if the operating system random source cannot provide bytes.
-fn fill_random_bytes(bytes: &mut [u8]) {
-    getrandom::fill(bytes).expect("failed to read OS randomness for temporary file name");
+/// # Errors
+/// Returns [`ErrorKind::Other`] if the operating system random source cannot
+/// provide bytes.
+fn fill_random_bytes(bytes: &mut [u8]) -> Result<()> {
+    getrandom::fill(bytes).map_err(Error::other)
 }
 
 /// Encodes bytes as lowercase hexadecimal.

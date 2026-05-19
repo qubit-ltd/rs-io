@@ -15,8 +15,8 @@ Qubit IO 在 `std::io` 之上提供一组紧凑的底层能力：
 
 - 为常用 `std::io` 能力组合提供 object-safe 的组合 trait；
 - 为标准库留给调用方反复手写的底层 I/O 模式提供 extension trait；
-- 提供 `Files` 命名空间，用于父目录创建、随机临时条目、buffered file helper
-  和持久化 atomic write；
+- 提供 `Files` 命名空间，用于父目录创建、带安全文件名片段校验的随机临时条目、
+  buffered file helper 和持久化 atomic write；
 - 提供 `Streams` 和 `Filenames` 命名空间，用于 stream 层复制/比较操作和
   lexical 文件名 helper；
 - 为 stream 统计、限制、tee、checksum 和位置恢复提供 wrapper 类型。
@@ -84,8 +84,9 @@ extension trait 覆盖的是保守、标准库优先的行为，例如：精确�
 ### 工具函数与 Wrapper
 
 - `Files` associated method 可创建缺失目录、打开 buffered file、构造随机临时
-  名称和路径、使用 `getrandom` 支持的 OS 随机源创建随机临时文件和目录，并提供
-  持久化同目录 atomic write，包括临时文件 sync 和支持平台上的父目录 sync；
+  名称和路径、拒绝路径型名称片段、使用 `getrandom` 支持的 OS 随机源创建随机临时
+  文件和目录，并提供保留既有普通文件权限的持久化同目录 atomic write，包括临时文件
+  sync 和支持平台上的父目录 sync；
 - `Streams` associated method 包装 `std::io::copy`，提供有界复制、必须在限制内
   到达 EOF 的复制，以及 reader 内容比较；
 - `Filenames` associated method 提供常用 lexical 文件名操作，包括 UTF-8 路径
@@ -342,7 +343,7 @@ where
 
 | 工具命名空间 | 方法 | 典型用途 |
 |-------------|------|----------|
-| `Files` | `open_buffered_reader`、`ensure_dir`、`ensure_parent`、`create_file_with_parent`、`create_buffered_writer_with_parent`、`random_file_name`、`temp_dir`、`temp_path`、`create_temp_file`、`create_temp_file_with`、`create_temp_file_in`、`create_temp_dir_with`、`create_temp_dir_in`、`atomic_write`、`atomic_write_with` | 文件系统 helper 和持久化写入 |
+| `Files` | `open_buffered_reader`、`ensure_dir`、`ensure_parent`、`create_file_with_parent`、`create_buffered_writer_with_parent`、`random_file_name`、`try_random_file_name`、`temp_dir`、`temp_path`、`create_temp_file`、`create_temp_file_with`、`create_temp_file_in`、`create_temp_dir_with`、`create_temp_dir_in`、`atomic_write`、`atomic_write_with` | 文件系统 helper 和持久化写入 |
 | `Streams` | `copy`、`copy_at_most`、`copy_to_end_limited`、`content_eq`、`compare_content` | stream 复制和内容比较 |
 | `Filenames` | `file_name`、`file_stem`、`file_prefix`、`extension`、`dot_extension`、`has_extension`、`has_extension_ignore_ascii_case`、`file_name_from_path`、`file_name_from_url` | lexical UTF-8 文件名检查 |
 

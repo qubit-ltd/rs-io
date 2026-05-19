@@ -111,12 +111,15 @@ ZigZag 映射后的有符号整数。严格读取方法要求底层 unsigned LEB
 - `ensure_dir` 和 `ensure_parent` 创建缺失目录。
 - `open_buffered_reader`、`create_file_with_parent` 和
   `create_buffered_writer_with_parent` 处理常见文件打开模式。
-- `random_file_name`、`temp_dir` 和 `temp_path` 构造随机临时名称和路径。
+- `random_file_name`、`try_random_file_name`、`temp_dir` 和 `temp_path` 构造
+  随机临时名称和路径。`try_random_file_name` 通过 `Result` 返回无效路径型
+  prefix 或 suffix 片段。
 - `create_temp_file`、`create_temp_file_with`、`create_temp_file_in`、
   `create_temp_dir_with` 和 `create_temp_dir_in` 使用 `getrandom` 支持的
-  OS 随机源创建抗碰撞随机临时条目。
-- `atomic_write` 和 `atomic_write_with` 通过随机同目录临时文件写入，flush
-  并 sync 临时文件，替换目标文件，并在平台支持时 sync 父目录。
+  OS 随机源创建抗碰撞随机临时条目，并在拼接目标目录前拒绝路径型名称片段。
+- `atomic_write` 和 `atomic_write_with` 通过随机同目录临时文件写入，保留既有
+  普通目标文件权限，flush 并 sync 临时文件，替换目标文件，并在平台支持时 sync
+  父目录。
 
 ```rust
 use qubit_io::Files;
@@ -286,6 +289,7 @@ ZigZag 参考 Protocol Buffers signed integer mapping：
 | `Files::create_file_with_parent` | 创建缺失父目录后创建文件。 |
 | `Files::create_buffered_writer_with_parent` | 创建缺失父目录后创建 `BufWriter<File>`。 |
 | `Files::random_file_name` | 基于可选前缀和后缀生成随机名称。 |
+| `Files::try_random_file_name` | 使用 `Result` 返回错误生成随机名称，并拒绝路径型名称片段。 |
 | `Files::temp_dir` | 返回进程临时目录。 |
 | `Files::temp_path` | 在进程临时目录下构造随机路径。 |
 | `Files::create_temp_file` | 在进程临时目录下创建随机临时文件。 |
@@ -293,7 +297,7 @@ ZigZag 参考 Protocol Buffers signed integer mapping：
 | `Files::create_temp_file_in` | 在调用方提供的目录下创建随机临时文件。 |
 | `Files::create_temp_dir_with` | 在进程临时目录下创建随机临时目录。 |
 | `Files::create_temp_dir_in` | 在调用方提供的目录下创建随机临时目录。 |
-| `Files::atomic_write` | 使用同目录临时文件写入，sync 临时文件，替换目标文件，并在支持的平台上 sync 父目录。 |
+| `Files::atomic_write` | 使用同目录临时文件写入，保留既有普通目标文件权限，sync 临时文件，替换目标文件，并在支持的平台上 sync 父目录。 |
 | `Files::atomic_write_with` | 与 `atomic_write` 相同，但由调用方提供临时文件写入逻辑。 |
 
 ### Stream 工具

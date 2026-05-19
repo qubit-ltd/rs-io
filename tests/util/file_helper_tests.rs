@@ -15,6 +15,8 @@ use std::io::{
     Read,
     Write,
 };
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::sync::atomic::{
@@ -81,6 +83,22 @@ fn test_atomic_write_creates_parent_directories_and_replaces_file() {
     fs::remove_dir_all(dir).unwrap();
 }
 
+#[cfg(unix)]
+#[test]
+fn test_atomic_write_preserves_existing_file_permissions() {
+    let dir = temp_dir("atomic-permissions");
+    let path = dir.join("out.txt");
+    fs::write(&path, b"old").unwrap();
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o754)).unwrap();
+
+    Files::atomic_write(&path, b"new").expect("atomic write should preserve permissions");
+
+    let mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+    assert_eq!(0o754, mode);
+    assert_eq!(b"new", fs::read(&path).unwrap().as_slice());
+    fs::remove_dir_all(dir).unwrap();
+}
+
 #[test]
 fn test_atomic_write_supports_parentless_relative_path() {
     let _lock = CURRENT_DIR_LOCK
@@ -129,6 +147,30 @@ fn test_random_file_name_uses_prefix_suffix_pid_and_hex_payload() {
     assert_eq!(format!("{:x}", std::process::id()), parts[1]);
     assert_eq!(32, parts[2].len());
     assert!(parts[2].chars().all(|ch| ch.is_ascii_hexdigit()));
+}
+
+#[test]
+fn test_try_random_file_name_rejects_path_fragments() {
+    let error = Files::try_random_file_name(Some("../escape-"), None)
+        .expect_err("prefix with path separators should be rejected");
+    assert_eq!(ErrorKind::InvalidInput, error.kind());
+
+    let error = Files::try_random_file_name(None, Some("/suffix"))
+        .expect_err("suffix with path separators should be rejected");
+    assert_eq!(ErrorKind::InvalidInput, error.kind());
+
+    let error = Files::try_random_file_name(Some("bad\0prefix"), None)
+        .expect_err("prefix with NUL bytes should be rejected");
+    assert_eq!(ErrorKind::InvalidInput, error.kind());
+
+    let error = Files::try_random_file_name(Some(".."), None)
+        .expect_err("parent directory component should be rejected");
+    assert_eq!(ErrorKind::InvalidInput, error.kind());
+
+    let name = Files::try_random_file_name(Some("safe-"), Some(".tmp"))
+        .expect("safe fragments should be accepted");
+    assert!(name.starts_with("safe-"));
+    assert!(name.ends_with(".tmp"));
 }
 
 #[test]
@@ -211,34 +253,24 @@ fn test_create_temp_file_with_rejects_zero_retry_count() {
 }
 
 #[test]
-fn test_create_temp_file_in_adds_path_context_to_create_error() {
+fn test_create_temp_file_in_rejects_path_prefix_fragment() {
     let dir = temp_dir("temp-file-create-error");
 
     let error = Files::create_temp_file_in(&dir, Some("missing-parent/"), None, 1)
-        .expect_err("missing nested parent should return file create error");
+        .expect_err("path-like prefix should be rejected");
 
-    assert_eq!(ErrorKind::NotFound, error.kind());
-    assert!(
-        error
-            .to_string()
-            .contains("failed to create temporary file")
-    );
+    assert_eq!(ErrorKind::InvalidInput, error.kind());
     fs::remove_dir_all(dir).unwrap();
 }
 
 #[test]
-fn test_create_temp_dir_in_adds_path_context_to_create_error() {
+fn test_create_temp_dir_in_rejects_path_prefix_fragment() {
     let dir = temp_dir("temp-dir-create-error");
 
     let error = Files::create_temp_dir_in(&dir, Some("missing-parent/"), 1)
-        .expect_err("missing nested parent should return directory create error");
+        .expect_err("path-like prefix should be rejected");
 
-    assert_eq!(ErrorKind::NotFound, error.kind());
-    assert!(
-        error
-            .to_string()
-            .contains("failed to create temporary directory")
-    );
+    assert_eq!(ErrorKind::InvalidInput, error.kind());
     fs::remove_dir_all(dir).unwrap();
 }
 
@@ -250,6 +282,20 @@ fn test_create_temp_dir_in_rejects_zero_retry_count() {
         Files::create_temp_dir_in(&dir, None, 0).expect_err("zero retries should be invalid");
 
     assert_eq!(ErrorKind::InvalidInput, error.kind());
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn test_create_temp_dir_in_returns_create_error() {
+    let dir = temp_dir("temp-dir-permission-error");
+    fs::set_permissions(&dir, fs::Permissions::from_mode(0o500)).unwrap();
+
+    let error = Files::create_temp_dir_in(&dir, Some("local-"), 1)
+        .expect_err("unwritable directory should return create-dir error");
+
+    fs::set_permissions(&dir, fs::Permissions::from_mode(0o700)).unwrap();
+    assert_eq!(ErrorKind::PermissionDenied, error.kind());
     fs::remove_dir_all(dir).unwrap();
 }
 
@@ -332,6 +378,42 @@ fn test_atomic_write_with_returns_parent_error() {
         error.kind(),
         ErrorKind::AlreadyExists | ErrorKind::NotADirectory
     ));
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn test_atomic_write_returns_temp_create_error() {
+    let dir = temp_dir("atomic-temp-create-error");
+    let path = dir.join("out.txt");
+    fs::set_permissions(&dir, fs::Permissions::from_mode(0o500)).unwrap();
+
+    let error =
+        Files::atomic_write(&path, b"data").expect_err("unwritable dir should fail temp creation");
+
+    fs::set_permissions(&dir, fs::Permissions::from_mode(0o700)).unwrap();
+    assert_eq!(ErrorKind::PermissionDenied, error.kind());
+    assert!(!path.exists());
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn test_atomic_write_returns_metadata_error() {
+    use std::os::unix::fs::symlink;
+
+    let dir = temp_dir("atomic-metadata-error");
+    let path = dir.join("loop");
+    symlink(&path, &path).unwrap();
+
+    let error = Files::atomic_write(&path, b"data").expect_err("symlink loop metadata should fail");
+
+    assert!(
+        error
+            .to_string()
+            .contains("failed to read destination metadata")
+    );
+    fs::remove_file(&path).unwrap();
     fs::remove_dir_all(dir).unwrap();
 }
 
