@@ -46,15 +46,11 @@ pub use traits::{
     WriteSeek,
 };
 pub use util::{
-    atomic_write,
-    atomic_write_with,
+    Files,
     compare_content,
     content_eq,
     copy_at_most,
     copy_to_end_limited,
-    create_buffered_writer_with_parent,
-    create_file_with_parent,
-    open_buffered_reader,
 };
 pub use wrappers::{
     ChecksumReader,
