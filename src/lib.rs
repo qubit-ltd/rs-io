@@ -16,12 +16,21 @@
 //! standard-library I/O patterns. The concrete trait definitions live in
 //! dedicated modules and are re-exported from the crate root for ergonomic use.
 
+mod codecs;
 mod ext;
 pub mod prelude;
 mod traits;
 mod util;
 mod wrappers;
 
+pub use codecs::{
+    BinaryReader,
+    BinaryWriter,
+    Leb128Reader,
+    Leb128Writer,
+    ZigZagReader,
+    ZigZagWriter,
+};
 pub use ext::{
     BinaryReadExt,
     BinaryWriteExt,
