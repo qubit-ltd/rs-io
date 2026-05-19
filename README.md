@@ -102,23 +102,51 @@ position-preserving seek operations.
 ### Utilities and Wrappers
 
 - `Files` associated methods create missing directories, open buffered files,
-  build random temporary names and paths, create random temporary files and
-  directories using `getrandom`-backed OS randomness while rejecting path-like
-  name fragments, clean and remove local paths, measure directory size, copy
-  directory trees, and provide durable same-directory atomic writes with
-  temporary-file sync, existing regular-file permission preservation, and
-  parent-directory sync when supported;
+  clean and remove local paths, measure directory size, copy directory trees, and provide
+  durable same-directory atomic writes with temporary-file sync, existing
+  regular-file permission preservation, and parent-directory sync when
+  supported;
+- `TempFile` and `TempDir` create random temporary files and directories using
+  `getrandom`-backed OS randomness and remove them automatically when dropped
+  unless callers explicitly keep or persist them. Drop-time cleanup is
+  best-effort; cleanup failures are reported through the default `log` facade
+  with `warn!`;
 - `Streams` associated methods wrap `std::io::copy`, copy bounded byte ranges,
   copy only if the remaining input reaches EOF within a limit, and compare
   readable stream contents;
 - `Filenames` associated methods expose common lexical file-name operations,
-  including UTF-8 string path components, extension checks, and URL file-name
-  extraction. Public filename-data methods return `&str` or `String`, not
-  `OsStr`;
+  including UTF-8 string path components, extension checks, random file-name
+  component generation, and URL file-name extraction. Public filename-data
+  methods return `&str` or `String`, not `OsStr`;
 - wrapper types provide counting, limiting, teeing, checksum updating, and
   position-guard behavior.
 - `qubit_io::prelude` re-exports the extension traits and composition traits
   for method-oriented call sites.
+
+#### Temporary files and directories
+
+`TempFile` and `TempDir` are RAII lifecycle guards. They create a real
+temporary file or directory immediately, expose its path for use by normal
+`std::fs` APIs, and remove it automatically when the guard leaves scope. Use
+`keep` when the generated temporary path should survive, or `persist` when the
+temporary entry should be moved to a final path.
+
+```rust
+use std::io::Write;
+
+use qubit_io::{
+    TempDir,
+    TempFile,
+};
+
+let dir = TempDir::with_prefix(Some("qubit-io-work-"))?;
+std::fs::write(dir.path().join("scratch.txt"), b"scratch")?;
+
+let mut file = TempFile::with_name(Some("qubit-io-"), Some(".txt"))?;
+writeln!(file.file_mut()?, "temporary payload")?;
+
+# Ok::<(), std::io::Error>(())
+```
 
 ### Codec Wrappers
 
@@ -374,9 +402,11 @@ For a complete method-level overview and usage guidance, see the
 
 | Utility namespace | Methods | Typical use |
 |-------------------|---------|-------------|
-| `Files` | `open_buffered_reader`, `ensure_dir`, `ensure_parent`, `create_file_with_parent`, `create_buffered_writer_with_parent`, `dir_size`, `clean_dir`, `remove_any`, `copy_dir_all_with`, `random_file_name`, `try_random_file_name`, `temp_dir`, `temp_path`, `create_temp_file`, `create_temp_file_with`, `create_temp_file_in`, `create_temp_dir_with`, `create_temp_dir_in`, `atomic_write`, `atomic_write_with` | filesystem helpers and durable writes |
+| `Files` | `open_buffered_reader`, `ensure_dir`, `ensure_parent`, `create_file_with_parent`, `create_buffered_writer_with_parent`, `dir_size`, `clean_dir`, `remove_any`, `copy_dir_all_with`, `atomic_write`, `atomic_write_with` | filesystem helpers and durable writes |
+| `TempFile` | `new`, `with_name`, `in_dir`, `path`, `file`, `file_mut`, `close`, `keep`, `persist` | temporary file lifecycle guard |
+| `TempDir` | `new`, `with_prefix`, `in_dir`, `path`, `keep`, `persist` | temporary directory lifecycle guard |
 | `Streams` | `copy`, `copy_at_most`, `copy_to_end_limited`, `content_eq`, `compare_content` | stream copy and content comparison |
-| `Filenames` | `file_name`, `file_stem`, `file_prefix`, `extension`, `dot_extension`, `has_extension`, `has_extension_ignore_ascii_case`, `file_name_from_path`, `file_name_from_url` | lexical UTF-8 file-name inspection |
+| `Filenames` | `random`, `random_with`, `try_random`, `try_random_with`, `file_name`, `file_stem`, `file_prefix`, `extension`, `dot_extension`, `has_extension`, `has_extension_ignore_ascii_case`, `file_name_from_path`, `file_name_from_url` | random and lexical UTF-8 file-name operations |
 
 Each trait is implemented with a blanket implementation:
 
