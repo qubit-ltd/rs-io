@@ -67,6 +67,7 @@ where
     /// # Errors
     /// Returns the error reported by [`Seek::stream_position`] when the current
     /// position cannot be read.
+    #[inline]
     pub fn new(stream: &'a mut S) -> Result<Self> {
         let position = stream.stream_position()?;
         Ok(Self {
@@ -80,6 +81,7 @@ where
     ///
     /// # Returns
     /// The position captured when this guard was created.
+    #[inline]
     pub fn position(&self) -> u64 {
         self.position
     }
@@ -88,6 +90,7 @@ where
     ///
     /// # Returns
     /// The guarded stream reference.
+    #[inline]
     pub fn get_mut(&mut self) -> &mut S {
         self.stream
     }
@@ -110,6 +113,7 @@ where
     ///
     /// This is useful when the caller intentionally wants to keep the stream at
     /// its current position.
+    #[inline]
     pub fn dismiss(mut self) {
         self.done = true;
     }

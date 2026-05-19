@@ -112,26 +112,32 @@ impl<T> StringReadExt for T
 where
     T: Read + ?Sized,
 {
+    #[inline]
     fn read_utf8_string_uleb(&mut self, max_len: usize) -> Result<String> {
         read_utf8_string_uleb_impl(self, max_len)
     }
 
+    #[inline]
     fn read_utf8_string_uleb_strict(&mut self, max_len: usize) -> Result<String> {
         read_utf8_string_uleb_strict_impl(self, max_len)
     }
 
+    #[inline]
     fn read_utf8_string_u16_be(&mut self, max_len: usize) -> Result<String> {
         read_utf8_string_u16_be_impl(self, max_len)
     }
 
+    #[inline]
     fn read_utf8_string_u16_le(&mut self, max_len: usize) -> Result<String> {
         read_utf8_string_u16_le_impl(self, max_len)
     }
 
+    #[inline]
     fn read_utf8_string_u32_be(&mut self, max_len: usize) -> Result<String> {
         read_utf8_string_u32_be_impl(self, max_len)
     }
 
+    #[inline]
     fn read_utf8_string_u32_le(&mut self, max_len: usize) -> Result<String> {
         read_utf8_string_u32_le_impl(self, max_len)
     }

@@ -47,6 +47,7 @@ impl<R> CountingReader<R> {
     ///
     /// # Returns
     /// A new counting reader with a zero byte count.
+    #[inline]
     pub fn new(inner: R) -> Self {
         Self {
             inner,
@@ -58,6 +59,7 @@ impl<R> CountingReader<R> {
     ///
     /// # Returns
     /// Total byte count. The value saturates at [`u64::MAX`].
+    #[inline]
     pub fn bytes_read(&self) -> u64 {
         self.bytes_read
     }
@@ -66,6 +68,7 @@ impl<R> CountingReader<R> {
     ///
     /// # Returns
     /// The wrapped reader reference.
+    #[inline]
     pub fn get_ref(&self) -> &R {
         &self.inner
     }
@@ -74,6 +77,7 @@ impl<R> CountingReader<R> {
     ///
     /// # Returns
     /// The wrapped reader reference.
+    #[inline]
     pub fn get_mut(&mut self) -> &mut R {
         &mut self.inner
     }
@@ -82,6 +86,7 @@ impl<R> CountingReader<R> {
     ///
     /// # Returns
     /// The wrapped reader.
+    #[inline]
     pub fn into_inner(self) -> R {
         self.inner
     }

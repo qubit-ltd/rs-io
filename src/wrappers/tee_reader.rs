@@ -55,6 +55,7 @@ impl<R, W> TeeReader<R, W> {
     ///
     /// # Returns
     /// A new tee reader.
+    #[inline]
     pub fn new(reader: R, branch: W) -> Self {
         Self { reader, branch }
     }
@@ -63,6 +64,7 @@ impl<R, W> TeeReader<R, W> {
     ///
     /// # Returns
     /// The source reader reference.
+    #[inline]
     pub fn reader_ref(&self) -> &R {
         &self.reader
     }
@@ -71,6 +73,7 @@ impl<R, W> TeeReader<R, W> {
     ///
     /// # Returns
     /// The source reader reference.
+    #[inline]
     pub fn reader_mut(&mut self) -> &mut R {
         &mut self.reader
     }
@@ -79,6 +82,7 @@ impl<R, W> TeeReader<R, W> {
     ///
     /// # Returns
     /// The branch writer reference.
+    #[inline]
     pub fn branch_ref(&self) -> &W {
         &self.branch
     }
@@ -87,6 +91,7 @@ impl<R, W> TeeReader<R, W> {
     ///
     /// # Returns
     /// The branch writer reference.
+    #[inline]
     pub fn branch_mut(&mut self) -> &mut W {
         &mut self.branch
     }
@@ -95,6 +100,7 @@ impl<R, W> TeeReader<R, W> {
     ///
     /// # Returns
     /// A tuple containing the source reader and branch writer.
+    #[inline]
     pub fn into_inner(self) -> (R, W) {
         (self.reader, self.branch)
     }
