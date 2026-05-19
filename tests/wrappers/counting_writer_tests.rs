@@ -81,3 +81,25 @@ fn test_counting_writer_flush_delegates_to_inner_writer() {
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("flush failed", error.to_string());
 }
+
+#[test]
+fn test_counting_writer_forwards_seek_without_counting() {
+    use std::io::{
+        Cursor,
+        Seek,
+        SeekFrom,
+    };
+
+    let mut writer = CountingWriter::new(Cursor::new(Vec::new()));
+
+    writer
+        .write_all(b"abc")
+        .expect("initial write should succeed");
+    writer
+        .seek(SeekFrom::Start(1))
+        .expect("seek should be forwarded");
+    writer.write_all(b"z").expect("patch write should succeed");
+
+    assert_eq!(4, writer.bytes_written());
+    assert_eq!(b"azc", writer.into_inner().into_inner().as_slice());
+}

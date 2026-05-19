@@ -8,6 +8,7 @@
  *
  ******************************************************************************/
 use std::io::{
+    BufRead,
     Read,
     Result,
 };
@@ -107,5 +108,25 @@ where
         let count = self.inner.read(&mut buffer[..requested])?;
         self.remaining -= count as u64;
         Ok(count)
+    }
+}
+
+impl<R> BufRead for LimitReader<R>
+where
+    R: BufRead,
+{
+    fn fill_buf(&mut self) -> Result<&[u8]> {
+        if self.remaining == 0 {
+            return Ok(&[]);
+        }
+        let buffer = self.inner.fill_buf()?;
+        let limit = self.remaining.min(buffer.len() as u64) as usize;
+        Ok(&buffer[..limit])
+    }
+
+    fn consume(&mut self, amount: usize) {
+        let count = self.remaining.min(amount as u64);
+        self.remaining -= count;
+        self.inner.consume(count as usize);
     }
 }

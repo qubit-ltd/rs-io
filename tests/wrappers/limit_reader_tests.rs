@@ -25,6 +25,34 @@ impl Read for PanicOnRead {
     }
 }
 
+#[test]
+fn test_limit_reader_forwards_buf_read_with_limit() {
+    use std::io::{
+        BufRead,
+        BufReader,
+        Cursor,
+    };
+
+    let inner = BufReader::new(Cursor::new(b"abcdef".to_vec()));
+    let mut reader = qubit_io::LimitReader::new(inner, 3);
+
+    assert_eq!(b"abc", reader.fill_buf().expect("buffer should be capped"));
+    reader.consume(2);
+    assert_eq!(1, reader.remaining());
+    assert_eq!(
+        b"c",
+        reader.fill_buf().expect("remaining buffer should shrink")
+    );
+    reader.consume(8);
+    assert_eq!(0, reader.remaining());
+    assert!(
+        reader
+            .fill_buf()
+            .expect("limit should be exhausted")
+            .is_empty()
+    );
+}
+
 struct FailingReader;
 
 impl Read for FailingReader {

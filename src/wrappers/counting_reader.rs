@@ -8,8 +8,11 @@
  *
  ******************************************************************************/
 use std::io::{
+    BufRead,
     Read,
     Result,
+    Seek,
+    SeekFrom,
 };
 
 /// Reader wrapper that counts successfully read bytes.
@@ -100,5 +103,31 @@ where
         let count = self.inner.read(buffer)?;
         self.bytes_read = self.bytes_read.saturating_add(count as u64);
         Ok(count)
+    }
+}
+
+impl<R> BufRead for CountingReader<R>
+where
+    R: BufRead,
+{
+    #[inline]
+    fn fill_buf(&mut self) -> Result<&[u8]> {
+        self.inner.fill_buf()
+    }
+
+    #[inline]
+    fn consume(&mut self, amount: usize) {
+        self.bytes_read = self.bytes_read.saturating_add(amount as u64);
+        self.inner.consume(amount);
+    }
+}
+
+impl<R> Seek for CountingReader<R>
+where
+    R: Seek,
+{
+    #[inline]
+    fn seek(&mut self, position: SeekFrom) -> Result<u64> {
+        self.inner.seek(position)
     }
 }

@@ -10,6 +10,8 @@
 use std::hash::Hasher;
 use std::io::{
     Result,
+    Seek,
+    SeekFrom,
     Write,
 };
 
@@ -132,5 +134,16 @@ where
     #[inline]
     fn flush(&mut self) -> Result<()> {
         self.inner.flush()
+    }
+}
+
+impl<W, H> Seek for ChecksumWriter<W, H>
+where
+    W: Seek,
+    H: Hasher,
+{
+    #[inline]
+    fn seek(&mut self, position: SeekFrom) -> Result<u64> {
+        self.inner.seek(position)
     }
 }

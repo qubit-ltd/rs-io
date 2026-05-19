@@ -79,3 +79,49 @@ fn test_counting_reader_does_not_count_failed_reads() {
     assert_eq!("read failed", error.to_string());
     assert_eq!(0, reader.bytes_read());
 }
+
+#[test]
+fn test_counting_reader_forwards_seek_without_counting() {
+    use std::io::{
+        Seek,
+        SeekFrom,
+    };
+
+    let cursor = Cursor::new(b"abcdef".to_vec());
+    let mut reader = CountingReader::new(cursor);
+
+    assert_eq!(
+        2,
+        reader
+            .seek(SeekFrom::Start(2))
+            .expect("seek should be forwarded")
+    );
+
+    let mut buffer = [0; 1];
+    reader
+        .read_exact(&mut buffer)
+        .expect("read after seek should succeed");
+
+    assert_eq!(b'c', buffer[0]);
+    assert_eq!(1, reader.bytes_read());
+}
+
+#[test]
+fn test_counting_reader_forwards_buf_read_and_counts_consumed_bytes() {
+    use std::io::{
+        BufRead,
+        BufReader,
+    };
+
+    let cursor = Cursor::new(b"abcdef".to_vec());
+    let mut reader = CountingReader::new(BufReader::new(cursor));
+
+    assert_eq!(
+        b"abcdef",
+        reader.fill_buf().expect("buffer should be available")
+    );
+    reader.consume(2);
+
+    assert_eq!(2, reader.bytes_read());
+    assert_eq!(b"cdef", reader.fill_buf().expect("buffer should advance"));
+}

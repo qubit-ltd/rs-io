@@ -178,3 +178,44 @@ fn test_checksum_writer_returns_flush_error() {
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("flush failed", error.to_string());
 }
+
+#[test]
+fn test_checksum_reader_forwards_seek() {
+    use std::io::{
+        Seek,
+        SeekFrom,
+    };
+
+    let source = Cursor::new(b"abcdef".to_vec());
+    let mut reader = ChecksumReader::new(source, DefaultHasher::new());
+
+    reader
+        .seek(SeekFrom::Start(2))
+        .expect("seek should be forwarded");
+    let mut buffer = [0; 2];
+    reader.read_exact(&mut buffer).unwrap();
+
+    assert_eq!(b"cd", &buffer);
+    assert_eq!(expected_checksum(b"cd"), reader.checksum());
+}
+
+#[test]
+fn test_checksum_writer_forwards_seek() {
+    use std::io::{
+        Seek,
+        SeekFrom,
+    };
+
+    let primary = Cursor::new(Vec::new());
+    let mut writer = ChecksumWriter::new(primary, DefaultHasher::new());
+
+    writer.write_all(b"abc").unwrap();
+    writer
+        .seek(SeekFrom::Start(1))
+        .expect("seek should be forwarded");
+    writer.write_all(b"z").unwrap();
+
+    let (primary, hasher) = writer.into_inner();
+    assert_eq!(b"azc", primary.into_inner().as_slice());
+    assert_eq!(expected_checksum(b"abcz"), hasher.finish());
+}

@@ -74,3 +74,23 @@ fn test_zig_zag_writer_delegates_raw_write_and_flush() {
 
     assert_eq!(vec![0x01, 0x02], writer.into_inner());
 }
+
+#[test]
+fn test_zig_zag_writer_forwards_seek() {
+    use std::io::{
+        Seek,
+        SeekFrom,
+    };
+
+    let mut writer = ZigZagWriter::new(Cursor::new(Vec::new()));
+
+    writer
+        .write_all(b"abc")
+        .expect("initial write should succeed");
+    writer
+        .seek(SeekFrom::Start(1))
+        .expect("seek should be forwarded");
+    writer.write_all(b"z").expect("patch write should succeed");
+
+    assert_eq!(b"azc", writer.into_inner().into_inner().as_slice());
+}

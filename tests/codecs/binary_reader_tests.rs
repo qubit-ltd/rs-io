@@ -144,3 +144,36 @@ fn test_binary_reader_delegates_raw_read() {
 
     assert_eq!([0x01, 0x02], bytes);
 }
+
+#[test]
+fn test_binary_reader_forwards_seek() {
+    let mut reader = BinaryReader::new(Cursor::new(b"abcdef".to_vec()), ByteOrder::BigEndian);
+
+    reader
+        .seek(SeekFrom::Start(3))
+        .expect("seek should be forwarded");
+
+    assert_eq!(
+        b'd',
+        reader.read_u8().expect("byte after seek should be read")
+    );
+}
+
+#[test]
+fn test_binary_reader_forwards_buf_read() {
+    use std::io::{
+        BufRead,
+        BufReader,
+    };
+
+    let inner = BufReader::new(Cursor::new(b"abcdef".to_vec()));
+    let mut reader = BinaryReader::new(inner, ByteOrder::BigEndian);
+
+    assert_eq!(
+        b"abcdef",
+        reader.fill_buf().expect("buffer should be exposed")
+    );
+    reader.consume(3);
+
+    assert_eq!(b"def", reader.fill_buf().expect("buffer should advance"));
+}

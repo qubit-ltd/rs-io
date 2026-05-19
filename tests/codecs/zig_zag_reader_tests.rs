@@ -96,3 +96,33 @@ fn test_zig_zag_reader_rejects_non_canonical_underlying_uleb() {
 
     assert_eq!(ErrorKind::InvalidData, error.kind());
 }
+
+#[test]
+fn test_zig_zag_reader_forwards_buf_read_and_seek() {
+    use std::io::{
+        BufRead,
+        BufReader,
+        Seek,
+        SeekFrom,
+    };
+
+    let inner = BufReader::new(Cursor::new(vec![0x00, 0x02, 0x04]));
+    let mut reader = ZigZagReader::new(inner);
+
+    assert_eq!(
+        &[0x00, 0x02, 0x04],
+        reader.fill_buf().expect("buffer should be exposed")
+    );
+    reader.consume(1);
+    assert_eq!(
+        &[0x02, 0x04],
+        reader.fill_buf().expect("buffer should advance")
+    );
+    reader
+        .seek(SeekFrom::Start(1))
+        .expect("seek should be forwarded");
+    assert_eq!(
+        1,
+        reader.read_i8().expect("value after seek should be read")
+    );
+}

@@ -10,6 +10,8 @@
 use std::io::{
     Read,
     Result,
+    Seek,
+    SeekFrom,
     Write,
 };
 
@@ -115,5 +117,15 @@ where
         let count = self.reader.read(buffer)?;
         self.branch.write_all(&buffer[..count])?;
         Ok(count)
+    }
+}
+
+impl<R, W> Seek for TeeReader<R, W>
+where
+    R: Seek,
+{
+    #[inline]
+    fn seek(&mut self, position: SeekFrom) -> Result<u64> {
+        self.reader.seek(position)
     }
 }
