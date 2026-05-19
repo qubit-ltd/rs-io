@@ -13,14 +13,14 @@ use std::io::{
 };
 
 use qubit_io::{
-    Leb128IntReadExt,
-    Leb128IntWriteExt,
-    ZigZagIntReadExt,
-    ZigZagIntWriteExt,
+    Leb128ReadExt,
+    Leb128WriteExt,
+    ZigZagReadExt,
+    ZigZagWriteExt,
 };
 
 #[test]
-fn test_leb128_int_ext_round_trips_u8_values() {
+fn test_leb128_ext_round_trips_u8_values() {
     let mut output = Vec::new();
 
     output
@@ -49,7 +49,7 @@ fn test_leb128_int_ext_round_trips_u8_values() {
 }
 
 #[test]
-fn test_leb128_int_ext_round_trips_u16_values() {
+fn test_leb128_ext_round_trips_u16_values() {
     let mut output = Vec::new();
 
     output
@@ -78,7 +78,7 @@ fn test_leb128_int_ext_round_trips_u16_values() {
 }
 
 #[test]
-fn test_leb128_int_ext_round_trips_unsigned_values() {
+fn test_leb128_ext_round_trips_unsigned_values() {
     let mut output = Vec::new();
 
     output
@@ -120,7 +120,7 @@ fn test_leb128_int_ext_round_trips_unsigned_values() {
 }
 
 #[test]
-fn test_leb128_int_ext_reads_single_byte_u64_from_array_cursor() {
+fn test_leb128_ext_reads_single_byte_u64_from_array_cursor() {
     let mut input = Cursor::new([0x7f]);
 
     assert_eq!(
@@ -132,7 +132,7 @@ fn test_leb128_int_ext_reads_single_byte_u64_from_array_cursor() {
 }
 
 #[test]
-fn test_leb128_int_ext_round_trips_u128_values() {
+fn test_leb128_ext_round_trips_u128_values() {
     let mut output = Vec::new();
 
     output
@@ -151,7 +151,7 @@ fn test_leb128_int_ext_round_trips_u128_values() {
 }
 
 #[test]
-fn test_leb128_int_read_ext_rejects_u8_overflow() {
+fn test_leb128_read_ext_rejects_u8_overflow() {
     let mut input = Cursor::new([0x80, 0x02]);
 
     let error = input
@@ -162,7 +162,7 @@ fn test_leb128_int_read_ext_rejects_u8_overflow() {
 }
 
 #[test]
-fn test_leb128_int_read_ext_rejects_u16_overflow() {
+fn test_leb128_read_ext_rejects_u16_overflow() {
     let mut input = Cursor::new([0xff, 0xff, 0x04]);
 
     let error = input
@@ -173,7 +173,7 @@ fn test_leb128_int_read_ext_rejects_u16_overflow() {
 }
 
 #[test]
-fn test_leb128_int_read_ext_rejects_u128_overflow() {
+fn test_leb128_read_ext_rejects_u128_overflow() {
     let mut bytes = vec![0xff; 18];
     bytes.push(0x04);
     let mut input = Cursor::new(bytes);
@@ -186,7 +186,7 @@ fn test_leb128_int_read_ext_rejects_u128_overflow() {
 }
 
 #[test]
-fn test_leb128_int_read_ext_rejects_unterminated_u128() {
+fn test_leb128_read_ext_rejects_unterminated_u128() {
     let mut input = Cursor::new([0x80; 19]);
 
     let error = input
@@ -197,7 +197,7 @@ fn test_leb128_int_read_ext_rejects_unterminated_u128() {
 }
 
 #[test]
-fn test_leb128_int_read_ext_rejects_unterminated_u16() {
+fn test_leb128_read_ext_rejects_unterminated_u16() {
     let mut input = Cursor::new([0x80, 0x80, 0x80]);
 
     let error = input
@@ -208,7 +208,7 @@ fn test_leb128_int_read_ext_rejects_unterminated_u16() {
 }
 
 #[test]
-fn test_leb128_int_read_ext_rejects_u32_overflow() {
+fn test_leb128_read_ext_rejects_u32_overflow() {
     let mut input = Cursor::new([0xff, 0xff, 0xff, 0xff, 0x10]);
 
     let error = input
@@ -219,7 +219,7 @@ fn test_leb128_int_read_ext_rejects_u32_overflow() {
 }
 
 #[test]
-fn test_leb128_int_read_ext_rejects_unterminated_u32() {
+fn test_leb128_read_ext_rejects_unterminated_u32() {
     let mut input = Cursor::new([0x80, 0x80, 0x80, 0x80, 0x80]);
 
     let error = input
@@ -230,7 +230,7 @@ fn test_leb128_int_read_ext_rejects_unterminated_u32() {
 }
 
 #[test]
-fn test_leb128_int_read_ext_rejects_u64_overflow() {
+fn test_leb128_read_ext_rejects_u64_overflow() {
     let mut input = Cursor::new([0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x02]);
 
     let error = input
@@ -241,7 +241,7 @@ fn test_leb128_int_read_ext_rejects_u64_overflow() {
 }
 
 #[test]
-fn test_leb128_int_read_ext_rejects_unterminated_u64() {
+fn test_leb128_read_ext_rejects_unterminated_u64() {
     let mut input = Cursor::new([0x80; 10]);
 
     let error = input
@@ -252,7 +252,7 @@ fn test_leb128_int_read_ext_rejects_unterminated_u64() {
 }
 
 #[test]
-fn test_leb128_int_read_ext_rejects_usize_overflow() {
+fn test_leb128_read_ext_rejects_usize_overflow() {
     let bytes = if usize::BITS == 64 {
         vec![0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x02]
     } else {
@@ -268,7 +268,7 @@ fn test_leb128_int_read_ext_rejects_usize_overflow() {
 }
 
 #[test]
-fn test_leb128_int_read_ext_reports_unexpected_eof() {
+fn test_leb128_read_ext_reports_unexpected_eof() {
     let mut input = Cursor::new([0x80]);
 
     let error = input
@@ -279,7 +279,7 @@ fn test_leb128_int_read_ext_reports_unexpected_eof() {
 }
 
 #[test]
-fn test_leb128_int_ext_round_trips_usize_values() {
+fn test_leb128_ext_round_trips_usize_values() {
     let mut output = Vec::new();
 
     output
@@ -296,7 +296,7 @@ fn test_leb128_int_ext_round_trips_usize_values() {
 }
 
 #[test]
-fn test_leb128_int_ext_round_trips_i8_values() {
+fn test_leb128_ext_round_trips_i8_values() {
     let mut output = Vec::new();
 
     output
@@ -328,7 +328,7 @@ fn test_leb128_int_ext_round_trips_i8_values() {
 }
 
 #[test]
-fn test_leb128_int_ext_round_trips_i16_values() {
+fn test_leb128_ext_round_trips_i16_values() {
     let mut output = Vec::new();
 
     output
@@ -360,7 +360,7 @@ fn test_leb128_int_ext_round_trips_i16_values() {
 }
 
 #[test]
-fn test_leb128_int_ext_round_trips_signed_values() {
+fn test_leb128_ext_round_trips_signed_values() {
     let mut output = Vec::new();
 
     output
@@ -405,7 +405,7 @@ fn test_leb128_int_ext_round_trips_signed_values() {
 }
 
 #[test]
-fn test_leb128_int_ext_round_trips_i128_values() {
+fn test_leb128_ext_round_trips_i128_values() {
     let mut output = Vec::new();
 
     output
@@ -427,7 +427,7 @@ fn test_leb128_int_ext_round_trips_i128_values() {
 }
 
 #[test]
-fn test_leb128_int_read_ext_rejects_i8_overflow() {
+fn test_leb128_read_ext_rejects_i8_overflow() {
     let mut input = Cursor::new([0x80, 0x02]);
 
     let error = input
@@ -438,7 +438,7 @@ fn test_leb128_int_read_ext_rejects_i8_overflow() {
 }
 
 #[test]
-fn test_leb128_int_read_ext_rejects_i16_overflow() {
+fn test_leb128_read_ext_rejects_i16_overflow() {
     let mut input = Cursor::new([0x80, 0x80, 0x02]);
 
     let error = input
@@ -449,7 +449,7 @@ fn test_leb128_int_read_ext_rejects_i16_overflow() {
 }
 
 #[test]
-fn test_leb128_int_read_ext_rejects_unterminated_i8() {
+fn test_leb128_read_ext_rejects_unterminated_i8() {
     let mut input = Cursor::new([0x80, 0x80]);
 
     let error = input
@@ -460,7 +460,7 @@ fn test_leb128_int_read_ext_rejects_unterminated_i8() {
 }
 
 #[test]
-fn test_leb128_int_read_ext_rejects_i32_overflow() {
+fn test_leb128_read_ext_rejects_i32_overflow() {
     let mut input = Cursor::new([0xff, 0xff, 0xff, 0xff, 0x0f]);
 
     let error = input
@@ -471,7 +471,7 @@ fn test_leb128_int_read_ext_rejects_i32_overflow() {
 }
 
 #[test]
-fn test_leb128_int_read_ext_rejects_i128_overflow() {
+fn test_leb128_read_ext_rejects_i128_overflow() {
     let mut bytes = vec![0xff; 18];
     bytes.push(0x03);
     let mut input = Cursor::new(bytes);
@@ -484,7 +484,7 @@ fn test_leb128_int_read_ext_rejects_i128_overflow() {
 }
 
 #[test]
-fn test_leb128_int_ext_round_trips_isize_values() {
+fn test_leb128_ext_round_trips_isize_values() {
     let mut output = Vec::new();
 
     output
@@ -501,7 +501,7 @@ fn test_leb128_int_ext_round_trips_isize_values() {
 }
 
 #[test]
-fn test_leb128_int_read_ext_strict_accepts_canonical_unsigned_values() {
+fn test_leb128_read_ext_strict_accepts_canonical_unsigned_values() {
     let mut input = Cursor::new([0x00, 0x80, 0x01]);
 
     assert_eq!(
@@ -519,7 +519,7 @@ fn test_leb128_int_read_ext_strict_accepts_canonical_unsigned_values() {
 }
 
 #[test]
-fn test_leb128_int_read_ext_strict_accepts_canonical_wide_unsigned_values() {
+fn test_leb128_read_ext_strict_accepts_canonical_wide_unsigned_values() {
     let mut output = Vec::new();
     output
         .write_uleb_u64(u64::MAX)
@@ -544,7 +544,7 @@ fn test_leb128_int_read_ext_strict_accepts_canonical_wide_unsigned_values() {
 }
 
 #[test]
-fn test_leb128_int_read_ext_strict_rejects_noncanonical_unsigned_values() {
+fn test_leb128_read_ext_strict_rejects_noncanonical_unsigned_values() {
     let mut input = Cursor::new([0x80, 0x00]);
 
     let error = input
@@ -555,7 +555,7 @@ fn test_leb128_int_read_ext_strict_rejects_noncanonical_unsigned_values() {
 }
 
 #[test]
-fn test_leb128_int_read_ext_strict_accepts_canonical_signed_values() {
+fn test_leb128_read_ext_strict_accepts_canonical_signed_values() {
     let mut input = Cursor::new([0x7f, 0xff, 0x00]);
 
     assert_eq!(
@@ -573,7 +573,7 @@ fn test_leb128_int_read_ext_strict_accepts_canonical_signed_values() {
 }
 
 #[test]
-fn test_leb128_int_read_ext_strict_accepts_canonical_wide_signed_values() {
+fn test_leb128_read_ext_strict_accepts_canonical_wide_signed_values() {
     let mut output = Vec::new();
     output
         .write_sleb_i64(i64::MIN)
@@ -598,7 +598,7 @@ fn test_leb128_int_read_ext_strict_accepts_canonical_wide_signed_values() {
 }
 
 #[test]
-fn test_leb128_int_read_ext_strict_rejects_noncanonical_signed_values() {
+fn test_leb128_read_ext_strict_rejects_noncanonical_signed_values() {
     let mut input = Cursor::new([0xff, 0x7f]);
 
     let error = input
@@ -609,7 +609,7 @@ fn test_leb128_int_read_ext_strict_rejects_noncanonical_signed_values() {
 }
 
 #[test]
-fn test_leb128_int_read_ext_strict_round_trips_128_bit_values() {
+fn test_leb128_read_ext_strict_round_trips_128_bit_values() {
     let mut output = Vec::new();
     output
         .write_uleb_u128(u128::MAX)
@@ -634,7 +634,7 @@ fn test_leb128_int_read_ext_strict_round_trips_128_bit_values() {
 }
 
 #[test]
-fn test_zigzag_int_ext_round_trips_i8_values() {
+fn test_zig_zag_ext_round_trips_i8_values() {
     let mut output = Vec::new();
 
     output
@@ -663,7 +663,7 @@ fn test_zigzag_int_ext_round_trips_i8_values() {
 }
 
 #[test]
-fn test_zigzag_int_ext_round_trips_i16_values() {
+fn test_zig_zag_ext_round_trips_i16_values() {
     let mut output = Vec::new();
 
     output
@@ -692,7 +692,7 @@ fn test_zigzag_int_ext_round_trips_i16_values() {
 }
 
 #[test]
-fn test_zigzag_int_ext_round_trips_i128_values() {
+fn test_zig_zag_ext_round_trips_i128_values() {
     let mut output = Vec::new();
 
     output
@@ -709,7 +709,7 @@ fn test_zigzag_int_ext_round_trips_i128_values() {
 }
 
 #[test]
-fn test_zigzag_int_read_ext_strict_rejects_noncanonical_payload() {
+fn test_zig_zag_read_ext_strict_rejects_noncanonical_payload() {
     let mut input = Cursor::new([0x80, 0x00]);
 
     let error = input
@@ -720,7 +720,7 @@ fn test_zigzag_int_read_ext_strict_rejects_noncanonical_payload() {
 }
 
 #[test]
-fn test_zigzag_int_read_ext_strict_accepts_canonical_values() {
+fn test_zig_zag_read_ext_strict_accepts_canonical_values() {
     let mut output = Vec::new();
     output
         .write_zigzag_i8(i8::MIN)
@@ -781,7 +781,7 @@ fn test_zigzag_int_read_ext_strict_accepts_canonical_values() {
 }
 
 #[test]
-fn test_zigzag_int_ext_round_trips_signed_values() {
+fn test_zig_zag_ext_round_trips_signed_values() {
     let mut output = Vec::new();
 
     output
@@ -823,7 +823,7 @@ fn test_zigzag_int_ext_round_trips_signed_values() {
 }
 
 #[test]
-fn test_zigzag_int_ext_round_trips_isize_values() {
+fn test_zig_zag_ext_round_trips_isize_values() {
     let mut output = Vec::new();
 
     output

@@ -15,9 +15,14 @@ use std::io::{
 };
 
 use qubit_io::prelude::{
+    ByteOrder,
+    Leb128ReadExt,
+    Leb128WriteExt,
     ReadExt,
     ReadSeek,
     SeekExt,
+    ZigZagReadExt,
+    ZigZagWriteExt,
 };
 
 fn takes_read_seek(_stream: &mut dyn ReadSeek) {}
@@ -43,4 +48,32 @@ fn test_prelude_imports_extension_and_composition_traits() {
     );
 
     takes_read_seek(&mut cursor);
+}
+
+#[test]
+fn test_prelude_imports_byte_order_and_encoding_extension_traits() {
+    let order = ByteOrder::BigEndian;
+    assert_eq!(ByteOrder::BigEndian, order);
+
+    let mut buffer = Vec::new();
+    buffer
+        .write_uleb_u16(300)
+        .expect("Leb128WriteExt should be in prelude");
+    buffer
+        .write_zigzag_i16(-42)
+        .expect("ZigZagWriteExt should be in prelude");
+
+    let mut input = Cursor::new(buffer);
+    assert_eq!(
+        300,
+        input
+            .read_uleb_u16()
+            .expect("Leb128ReadExt should be in prelude")
+    );
+    assert_eq!(
+        -42,
+        input
+            .read_zigzag_i16()
+            .expect("ZigZagReadExt should be in prelude")
+    );
 }

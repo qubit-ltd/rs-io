@@ -12,7 +12,7 @@ use std::io::{
     Result,
 };
 
-use crate::Leb128IntReadExt;
+use crate::Leb128ReadExt;
 
 /// Extension methods for reading ZigZag encoded signed integers.
 ///
@@ -24,7 +24,7 @@ use crate::Leb128IntReadExt;
 ///
 /// Methods with the `_strict` suffix also require the unsigned LEB128 payload
 /// to use canonical LEB128 encoding.
-pub trait ZigZagIntReadExt: Read {
+pub trait ZigZagReadExt: Read {
     /// Reads a ZigZag encoded `i8`.
     ///
     /// # Returns
@@ -152,7 +152,7 @@ pub trait ZigZagIntReadExt: Read {
     fn read_zigzag_isize_strict(&mut self) -> Result<isize>;
 }
 
-impl<T> ZigZagIntReadExt for T
+impl<T> ZigZagReadExt for T
 where
     T: Read + ?Sized,
 {

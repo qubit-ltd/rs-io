@@ -17,7 +17,7 @@ use std::io::{
 
 use crate::{
     BinaryWriteExt,
-    Leb128IntWriteExt,
+    Leb128WriteExt,
 };
 
 /// Extension methods for writing length-prefixed UTF-8 strings.

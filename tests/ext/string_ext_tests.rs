@@ -76,6 +76,45 @@ fn test_length_prefixed_utf8_strings_round_trip_uleb() {
 }
 
 #[test]
+fn test_read_utf8_string_uleb_strict_accepts_canonical_length() {
+    let mut input = Cursor::new(vec![5, b'h', b'e', b'l', b'l', b'o']);
+
+    let value = input
+        .read_utf8_string_uleb_strict(8)
+        .expect("canonical ULEB-prefixed string should be read");
+
+    assert_eq!("hello", value);
+}
+
+#[test]
+fn test_read_utf8_string_uleb_strict_rejects_noncanonical_length_before_payload() {
+    let mut input = Cursor::new(vec![0x80, 0x00, b'a']);
+
+    let error = input
+        .read_utf8_string_uleb_strict(8)
+        .expect_err("non-canonical ULEB length should be rejected");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!(2, input.position());
+}
+
+#[test]
+fn test_read_utf8_string_uleb_strict_rejects_length_beyond_limit_before_payload() {
+    let mut input = Cursor::new(vec![3, b'a', b'b', b'c']);
+
+    let error = input
+        .read_utf8_string_uleb_strict(2)
+        .expect_err("oversized strict ULEB string should be rejected");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!(
+        "string length 3 exceeds maximum length of 2 bytes",
+        error.to_string()
+    );
+    assert_eq!(1, input.position());
+}
+
+#[test]
 fn test_length_prefixed_utf8_strings_round_trip_u32_be_and_le() {
     let mut buffer = Vec::new();
     buffer

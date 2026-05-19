@@ -12,7 +12,7 @@ use std::io::{
     Write,
 };
 
-use crate::Leb128IntWriteExt;
+use crate::Leb128WriteExt;
 
 /// Extension methods for writing ZigZag encoded signed integers.
 ///
@@ -21,7 +21,7 @@ use crate::Leb128IntWriteExt;
 /// unsigned LEB128. The ZigZag mapping follows the Protocol Buffers encoding
 /// guide:
 /// <https://protobuf.dev/programming-guides/encoding/#signed-integers>.
-pub trait ZigZagIntWriteExt: Write {
+pub trait ZigZagWriteExt: Write {
     /// Writes a ZigZag encoded `i8`.
     ///
     /// # Parameters
@@ -77,7 +77,7 @@ pub trait ZigZagIntWriteExt: Write {
     fn write_zigzag_isize(&mut self, value: isize) -> Result<()>;
 }
 
-impl<T> ZigZagIntWriteExt for T
+impl<T> ZigZagWriteExt for T
 where
     T: Write + ?Sized,
 {
