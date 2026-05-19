@@ -172,10 +172,11 @@ assert_eq!(b"abcd", output.as_slice());
 ## Filename Utilities
 
 Use `Filenames` for lexical file-name operations that do not touch the
-filesystem:
+filesystem. Public methods that return filename data return UTF-8 string values
+(`&str` or `String`), not `OsStr`; invalid UTF-8 path components return `None`:
 
-- `file_name`, `file_name_str`, `file_stem_str`, `file_prefix_str`, and
-  `extension_str` expose common `Path` components.
+- `file_name`, `file_stem`, `file_prefix`, and `extension` expose common
+  `Path` components as `&str`.
 - `dot_extension`, `has_extension`, and `has_extension_ignore_ascii_case`
   cover frequent extension checks.
 - `file_name_from_path` extracts the final segment from a string containing
@@ -192,8 +193,8 @@ use std::path::Path;
 
 let path = Path::new("/tmp/archive.tar.gz");
 
-assert_eq!(Some("archive.tar"), Filenames::file_stem_str(path));
-assert_eq!(Some("gz"), Filenames::extension_str(path));
+assert_eq!(Some("archive.tar"), Filenames::file_stem(path));
+assert_eq!(Some("gz"), Filenames::extension(path));
 assert!(Filenames::has_extension(path, ".gz"));
 assert_eq!(
     "my file.txt",
@@ -328,12 +329,11 @@ ZigZag follows the Protocol Buffers signed integer mapping:
 
 | API | Purpose |
 |-----|---------|
-| `Filenames::file_name` | Returns the final file-name component as `OsStr`. |
-| `Filenames::file_name_str` | Returns the final file-name component as UTF-8. |
-| `Filenames::file_stem_str` | Returns the file stem as UTF-8 using `Path::file_stem` semantics. |
-| `Filenames::file_prefix_str` | Returns the file prefix as UTF-8 using `Path::file_prefix` semantics. |
-| `Filenames::extension_str` | Returns the final extension as UTF-8 using `Path::extension` semantics. |
-| `Filenames::dot_extension` | Returns the final extension with a leading dot. |
+| `Filenames::file_name` | Returns the final file-name component as `&str`. |
+| `Filenames::file_stem` | Returns the file stem as `&str` using `Path::file_stem` semantics. |
+| `Filenames::file_prefix` | Returns the file prefix as `&str` using `Path::file_prefix` semantics. |
+| `Filenames::extension` | Returns the final extension as `&str` using `Path::extension` semantics. |
+| `Filenames::dot_extension` | Returns the final extension with a leading dot as `String`. |
 | `Filenames::has_extension` | Performs a case-sensitive final-extension check. |
 | `Filenames::has_extension_ignore_ascii_case` | Performs an ASCII-case-insensitive final-extension check. |
 | `Filenames::file_name_from_path` | Extracts the final segment from a string with `/` or `\` separators. |

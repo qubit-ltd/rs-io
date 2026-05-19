@@ -109,8 +109,9 @@ position-preserving seek operations.
   copy only if the remaining input reaches EOF within a limit, and compare
   readable stream contents;
 - `Filenames` associated methods expose common lexical file-name operations,
-  including UTF-8 path components, extension checks, and URL file-name
-  extraction;
+  including UTF-8 string path components, extension checks, and URL file-name
+  extraction. Public filename-data methods return `&str` or `String`, not
+  `OsStr`;
 - wrapper types provide counting, limiting, teeing, checksum updating, and
   position-guard behavior.
 - `qubit_io::prelude` re-exports the extension traits and composition traits
@@ -372,7 +373,7 @@ For a complete method-level overview and usage guidance, see the
 |-------------------|---------|-------------|
 | `Files` | `open_buffered_reader`, `ensure_dir`, `ensure_parent`, `create_file_with_parent`, `create_buffered_writer_with_parent`, `random_file_name`, `temp_dir`, `temp_path`, `create_temp_file`, `create_temp_file_with`, `create_temp_file_in`, `create_temp_dir_with`, `create_temp_dir_in`, `atomic_write`, `atomic_write_with` | filesystem helpers and durable writes |
 | `Streams` | `copy`, `copy_at_most`, `copy_to_end_limited`, `content_eq`, `compare_content` | stream copy and content comparison |
-| `Filenames` | `file_name`, `file_name_str`, `file_stem_str`, `file_prefix_str`, `extension_str`, `dot_extension`, `has_extension`, `has_extension_ignore_ascii_case`, `file_name_from_path`, `file_name_from_url` | lexical file-name inspection |
+| `Filenames` | `file_name`, `file_stem`, `file_prefix`, `extension`, `dot_extension`, `has_extension`, `has_extension_ignore_ascii_case`, `file_name_from_path`, `file_name_from_url` | lexical UTF-8 file-name inspection |
 
 Each trait is implemented with a blanket implementation:
 

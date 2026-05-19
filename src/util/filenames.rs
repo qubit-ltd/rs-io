@@ -14,7 +14,9 @@ use std::path::Path;
 ///
 /// This type is an uninstantiable namespace for lexical file-name helpers. The
 /// path-based methods follow [`Path`] semantics, including Rust's handling of
-/// dotfiles and non-UTF-8 names.
+/// dotfiles. Public methods that return file-name data return UTF-8 strings
+/// (`&str` or `String`) instead of [`OsStr`]; invalid UTF-8 path components
+/// are reported as `None`.
 ///
 /// # Examples
 /// ```
@@ -23,26 +25,13 @@ use std::path::Path;
 ///
 /// let path = Path::new("/tmp/archive.tar.gz");
 ///
-/// assert_eq!(Some("archive.tar"), Filenames::file_stem_str(path));
-/// assert_eq!(Some("gz"), Filenames::extension_str(path));
+/// assert_eq!(Some("archive.tar"), Filenames::file_stem(path));
+/// assert_eq!(Some("gz"), Filenames::extension(path));
 /// assert!(Filenames::has_extension(path, ".gz"));
 /// ```
 pub enum Filenames {}
 
 impl Filenames {
-    /// Returns the final file-name component of `path`.
-    ///
-    /// # Parameters
-    /// - `path`: Path to inspect.
-    ///
-    /// # Returns
-    /// The final file-name component, or `None` when `path` has no file-name
-    /// component.
-    #[inline]
-    pub fn file_name(path: &Path) -> Option<&OsStr> {
-        path.file_name()
-    }
-
     /// Returns the final file-name component of `path` as UTF-8.
     ///
     /// # Parameters
@@ -52,7 +41,7 @@ impl Filenames {
     /// The final file-name component as `&str`, or `None` when `path` has no
     /// file-name component or when the component is not valid UTF-8.
     #[inline]
-    pub fn file_name_str(path: &Path) -> Option<&str> {
+    pub fn file_name(path: &Path) -> Option<&str> {
         path.file_name().and_then(OsStr::to_str)
     }
 
@@ -68,7 +57,7 @@ impl Filenames {
     /// The file stem as `&str`, or `None` when there is no stem or when the
     /// stem is not valid UTF-8.
     #[inline]
-    pub fn file_stem_str(path: &Path) -> Option<&str> {
+    pub fn file_stem(path: &Path) -> Option<&str> {
         path.file_stem().and_then(OsStr::to_str)
     }
 
@@ -84,7 +73,7 @@ impl Filenames {
     /// The file prefix as `&str`, or `None` when there is no prefix or when the
     /// prefix is not valid UTF-8.
     #[inline]
-    pub fn file_prefix_str(path: &Path) -> Option<&str> {
+    pub fn file_prefix(path: &Path) -> Option<&str> {
         path.file_prefix().and_then(OsStr::to_str)
     }
 
@@ -100,7 +89,7 @@ impl Filenames {
     /// The extension without the leading dot, or `None` when there is no
     /// extension or when the extension is not valid UTF-8.
     #[inline]
-    pub fn extension_str(path: &Path) -> Option<&str> {
+    pub fn extension(path: &Path) -> Option<&str> {
         path.extension().and_then(OsStr::to_str)
     }
 
@@ -116,7 +105,7 @@ impl Filenames {
     /// The extension with a leading dot, or `None` when there is no extension
     /// or when the extension is not valid UTF-8.
     pub fn dot_extension(path: &Path) -> Option<String> {
-        Self::extension_str(path).map(|extension| {
+        Self::extension(path).map(|extension| {
             if extension.is_empty() {
                 String::new()
             } else {
@@ -138,7 +127,7 @@ impl Filenames {
     /// `true` when `path` has `extension` as its final extension.
     #[inline]
     pub fn has_extension(path: &Path, extension: &str) -> bool {
-        Self::extension_str(path) == Some(normalize_extension(extension))
+        Self::extension(path) == Some(normalize_extension(extension))
     }
 
     /// Tests whether `path` has the specified final extension, ignoring ASCII
@@ -155,7 +144,7 @@ impl Filenames {
     /// `true` when `path` has `extension` as its final extension ignoring ASCII
     /// case.
     pub fn has_extension_ignore_ascii_case(path: &Path, extension: &str) -> bool {
-        Self::extension_str(path)
+        Self::extension(path)
             .map(|actual| actual.eq_ignore_ascii_case(normalize_extension(extension)))
             .unwrap_or(false)
     }

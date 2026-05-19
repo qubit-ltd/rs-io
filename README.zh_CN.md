@@ -89,7 +89,8 @@ extension trait 覆盖的是保守、标准库优先的行为，例如：精确�
 - `Streams` associated method 包装 `std::io::copy`，提供有界复制、必须在限制内
   到达 EOF 的复制，以及 reader 内容比较；
 - `Filenames` associated method 提供常用 lexical 文件名操作，包括 UTF-8 路径
-  component、扩展名判断和 URL 文件名提取；
+  component、扩展名判断和 URL 文件名提取。返回文件名数据的公开方法都返回
+  `&str` 或 `String`，不返回 `OsStr`；
 - wrapper 类型提供计数、限制、tee、checksum 更新和位置保护能力。
 - `qubit_io::prelude` 重导出 extension trait 和组合 trait，适合方法式调用场景。
 
@@ -343,7 +344,7 @@ where
 |-------------|------|----------|
 | `Files` | `open_buffered_reader`、`ensure_dir`、`ensure_parent`、`create_file_with_parent`、`create_buffered_writer_with_parent`、`random_file_name`、`temp_dir`、`temp_path`、`create_temp_file`、`create_temp_file_with`、`create_temp_file_in`、`create_temp_dir_with`、`create_temp_dir_in`、`atomic_write`、`atomic_write_with` | 文件系统 helper 和持久化写入 |
 | `Streams` | `copy`、`copy_at_most`、`copy_to_end_limited`、`content_eq`、`compare_content` | stream 复制和内容比较 |
-| `Filenames` | `file_name`、`file_name_str`、`file_stem_str`、`file_prefix_str`、`extension_str`、`dot_extension`、`has_extension`、`has_extension_ignore_ascii_case`、`file_name_from_path`、`file_name_from_url` | lexical 文件名检查 |
+| `Filenames` | `file_name`、`file_stem`、`file_prefix`、`extension`、`dot_extension`、`has_extension`、`has_extension_ignore_ascii_case`、`file_name_from_path`、`file_name_from_url` | lexical UTF-8 文件名检查 |
 
 每个 trait 都通过 blanket implementation 自动实现：
 
