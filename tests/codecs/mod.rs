@@ -1,0 +1,3 @@
+mod binary_reader_writer_tests;
+mod leb128_reader_writer_tests;
+mod zig_zag_reader_writer_tests;
