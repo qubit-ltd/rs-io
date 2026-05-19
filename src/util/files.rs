@@ -120,6 +120,7 @@ impl Files {
     ///
     /// # Errors
     /// Returns the error reported by [`File::open`].
+    #[inline]
     pub fn open_buffered_reader<P>(path: P) -> Result<BufReader<File>>
     where
         P: AsRef<Path>,
@@ -135,6 +136,7 @@ impl Files {
     /// # Errors
     /// Returns an I/O error when the directory or one of its ancestors cannot
     /// be created.
+    #[inline]
     pub fn ensure_dir<P>(path: P) -> Result<()>
     where
         P: AsRef<Path>,
@@ -153,6 +155,7 @@ impl Files {
     /// # Errors
     /// Returns an I/O error when the parent directory or one of its ancestors
     /// cannot be created.
+    #[inline]
     pub fn ensure_parent<P>(path: P) -> Result<()>
     where
         P: AsRef<Path>,
@@ -191,6 +194,7 @@ impl Files {
     /// # Errors
     /// Returns an I/O error when parent directories or the file cannot be
     /// created.
+    #[inline]
     pub fn create_buffered_writer_with_parent<P>(path: P) -> Result<BufWriter<File>>
     where
         P: AsRef<Path>,
@@ -229,6 +233,7 @@ impl Files {
     ///
     /// # Returns
     /// The path reported by [`std::env::temp_dir`].
+    #[inline]
     pub fn temp_dir() -> PathBuf {
         std::env::temp_dir()
     }
@@ -244,6 +249,7 @@ impl Files {
     ///
     /// # Returns
     /// A random path under [`Files::temp_dir`].
+    #[inline]
     pub fn temp_path(prefix: Option<&str>, suffix: Option<&str>) -> PathBuf {
         Self::temp_dir().join(Self::random_file_name(prefix, suffix))
     }
@@ -260,6 +266,7 @@ impl Files {
     /// # Errors
     /// Returns an I/O error when the temporary directory cannot be created, the
     /// retry limit is zero, all generated names collide, or file creation fails.
+    #[inline]
     pub fn create_temp_file() -> Result<(PathBuf, File)> {
         Self::create_temp_file_with(None, None, Self::DEFAULT_TEMP_FILE_RETRIES)
     }
@@ -277,6 +284,7 @@ impl Files {
     /// # Errors
     /// Returns an I/O error when the temporary directory cannot be created, the
     /// retry limit is zero, all generated names collide, or file creation fails.
+    #[inline]
     pub fn create_temp_file_with(
         prefix: Option<&str>,
         suffix: Option<&str>,
@@ -304,6 +312,7 @@ impl Files {
     /// # Errors
     /// Returns an I/O error when `dir` cannot be created, the retry limit is
     /// zero, all generated names collide, or file creation fails.
+    #[inline]
     pub fn create_temp_file_in<P>(
         dir: P,
         prefix: Option<&str>,
@@ -329,6 +338,7 @@ impl Files {
     /// Returns an I/O error when the temporary directory cannot be created, the
     /// retry limit is zero, all generated names collide, or directory creation
     /// fails.
+    #[inline]
     pub fn create_temp_dir_with(prefix: Option<&str>, max_tries: usize) -> Result<PathBuf> {
         Self::create_temp_dir_in(Self::temp_dir(), prefix, max_tries)
     }
@@ -350,6 +360,7 @@ impl Files {
     /// # Errors
     /// Returns an I/O error when `dir` cannot be created, the retry limit is
     /// zero, all generated names collide, or directory creation fails.
+    #[inline]
     pub fn create_temp_dir_in<P>(dir: P, prefix: Option<&str>, max_tries: usize) -> Result<PathBuf>
     where
         P: AsRef<Path>,
@@ -378,6 +389,7 @@ impl Files {
     /// # Errors
     /// Returns the first I/O error reported while creating, writing, syncing,
     /// removing, replacing, or syncing the temporary file or parent directory.
+    #[inline]
     pub fn atomic_write<P, B>(path: P, bytes: B) -> Result<()>
     where
         P: AsRef<Path>,
@@ -402,6 +414,7 @@ impl Files {
     /// # Errors
     /// Returns the first I/O error reported while creating, writing, syncing,
     /// removing, replacing, or syncing the temporary file or parent directory.
+    #[inline]
     pub fn atomic_write_with<P, F>(path: P, write: F) -> Result<()>
     where
         P: AsRef<Path>,

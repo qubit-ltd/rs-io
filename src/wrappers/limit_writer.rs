@@ -47,6 +47,7 @@ impl<W> LimitWriter<W> {
     ///
     /// # Returns
     /// A new limited writer.
+    #[inline]
     pub fn new(inner: W, limit: u64) -> Self {
         Self {
             inner,
@@ -58,6 +59,7 @@ impl<W> LimitWriter<W> {
     ///
     /// # Returns
     /// Remaining writable byte count before the wrapper reports zero writes.
+    #[inline]
     pub fn remaining(&self) -> u64 {
         self.remaining
     }
@@ -66,6 +68,7 @@ impl<W> LimitWriter<W> {
     ///
     /// # Returns
     /// The wrapped writer reference.
+    #[inline]
     pub fn get_ref(&self) -> &W {
         &self.inner
     }
@@ -74,6 +77,7 @@ impl<W> LimitWriter<W> {
     ///
     /// # Returns
     /// The wrapped writer reference.
+    #[inline]
     pub fn get_mut(&mut self) -> &mut W {
         &mut self.inner
     }
@@ -82,6 +86,7 @@ impl<W> LimitWriter<W> {
     ///
     /// # Returns
     /// The wrapped writer.
+    #[inline]
     pub fn into_inner(self) -> W {
         self.inner
     }
@@ -101,6 +106,7 @@ where
         Ok(count)
     }
 
+    #[inline]
     fn flush(&mut self) -> Result<()> {
         self.inner.flush()
     }

@@ -43,6 +43,7 @@ impl<W> CountingWriter<W> {
     ///
     /// # Returns
     /// A new counting writer with a zero byte count.
+    #[inline]
     pub fn new(inner: W) -> Self {
         Self {
             inner,
@@ -54,6 +55,7 @@ impl<W> CountingWriter<W> {
     ///
     /// # Returns
     /// Total byte count. The value saturates at [`u64::MAX`].
+    #[inline]
     pub fn bytes_written(&self) -> u64 {
         self.bytes_written
     }
@@ -62,6 +64,7 @@ impl<W> CountingWriter<W> {
     ///
     /// # Returns
     /// The wrapped writer reference.
+    #[inline]
     pub fn get_ref(&self) -> &W {
         &self.inner
     }
@@ -70,6 +73,7 @@ impl<W> CountingWriter<W> {
     ///
     /// # Returns
     /// The wrapped writer reference.
+    #[inline]
     pub fn get_mut(&mut self) -> &mut W {
         &mut self.inner
     }
@@ -78,6 +82,7 @@ impl<W> CountingWriter<W> {
     ///
     /// # Returns
     /// The wrapped writer.
+    #[inline]
     pub fn into_inner(self) -> W {
         self.inner
     }
@@ -93,6 +98,7 @@ where
         Ok(count)
     }
 
+    #[inline]
     fn flush(&mut self) -> Result<()> {
         self.inner.flush()
     }

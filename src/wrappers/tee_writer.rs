@@ -50,6 +50,7 @@ impl<P, B> TeeWriter<P, B> {
     ///
     /// # Returns
     /// A new tee writer.
+    #[inline]
     pub fn new(primary: P, branch: B) -> Self {
         Self { primary, branch }
     }
@@ -58,6 +59,7 @@ impl<P, B> TeeWriter<P, B> {
     ///
     /// # Returns
     /// The primary writer reference.
+    #[inline]
     pub fn primary_ref(&self) -> &P {
         &self.primary
     }
@@ -66,6 +68,7 @@ impl<P, B> TeeWriter<P, B> {
     ///
     /// # Returns
     /// The primary writer reference.
+    #[inline]
     pub fn primary_mut(&mut self) -> &mut P {
         &mut self.primary
     }
@@ -74,6 +77,7 @@ impl<P, B> TeeWriter<P, B> {
     ///
     /// # Returns
     /// The branch writer reference.
+    #[inline]
     pub fn branch_ref(&self) -> &B {
         &self.branch
     }
@@ -82,6 +86,7 @@ impl<P, B> TeeWriter<P, B> {
     ///
     /// # Returns
     /// The branch writer reference.
+    #[inline]
     pub fn branch_mut(&mut self) -> &mut B {
         &mut self.branch
     }
@@ -90,6 +95,7 @@ impl<P, B> TeeWriter<P, B> {
     ///
     /// # Returns
     /// A tuple containing the primary writer and branch writer.
+    #[inline]
     pub fn into_inner(self) -> (P, B) {
         (self.primary, self.branch)
     }

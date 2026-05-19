@@ -76,26 +76,31 @@ impl<T> StringWriteExt for T
 where
     T: Write + ?Sized,
 {
+    #[inline]
     fn write_utf8_string_uleb(&mut self, value: &str) -> Result<()> {
         let mut writer = self;
         write_utf8_string_uleb_to(&mut writer, value)
     }
 
+    #[inline]
     fn write_utf8_string_u16_be(&mut self, value: &str) -> Result<()> {
         let mut writer = self;
         write_utf8_string_u16_be_to(&mut writer, value)
     }
 
+    #[inline]
     fn write_utf8_string_u16_le(&mut self, value: &str) -> Result<()> {
         let mut writer = self;
         write_utf8_string_u16_le_to(&mut writer, value)
     }
 
+    #[inline]
     fn write_utf8_string_u32_be(&mut self, value: &str) -> Result<()> {
         let mut writer = self;
         write_utf8_string_u32_be_to(&mut writer, value)
     }
 
+    #[inline]
     fn write_utf8_string_u32_le(&mut self, value: &str) -> Result<()> {
         let mut writer = self;
         write_utf8_string_u32_le_to(&mut writer, value)

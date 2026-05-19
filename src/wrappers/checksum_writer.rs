@@ -58,6 +58,7 @@ where
     ///
     /// # Returns
     /// A new checksum writer.
+    #[inline]
     pub fn new(inner: W, hasher: H) -> Self {
         Self { inner, hasher }
     }
@@ -66,6 +67,7 @@ where
     ///
     /// # Returns
     /// The value reported by [`Hasher::finish`].
+    #[inline]
     pub fn checksum(&self) -> u64 {
         self.hasher.finish()
     }
@@ -74,6 +76,7 @@ where
     ///
     /// # Returns
     /// The wrapped writer reference.
+    #[inline]
     pub fn get_ref(&self) -> &W {
         &self.inner
     }
@@ -82,6 +85,7 @@ where
     ///
     /// # Returns
     /// The wrapped writer reference.
+    #[inline]
     pub fn get_mut(&mut self) -> &mut W {
         &mut self.inner
     }
@@ -90,6 +94,7 @@ where
     ///
     /// # Returns
     /// The wrapped hasher reference.
+    #[inline]
     pub fn hasher_ref(&self) -> &H {
         &self.hasher
     }
@@ -98,6 +103,7 @@ where
     ///
     /// # Returns
     /// The wrapped hasher reference.
+    #[inline]
     pub fn hasher_mut(&mut self) -> &mut H {
         &mut self.hasher
     }
@@ -106,6 +112,7 @@ where
     ///
     /// # Returns
     /// A tuple containing the wrapped writer and hasher.
+    #[inline]
     pub fn into_inner(self) -> (W, H) {
         (self.inner, self.hasher)
     }
@@ -122,6 +129,7 @@ where
         Ok(count)
     }
 
+    #[inline]
     fn flush(&mut self) -> Result<()> {
         self.inner.flush()
     }

@@ -50,6 +50,7 @@ impl<R> LimitReader<R> {
     ///
     /// # Returns
     /// A new limited reader.
+    #[inline]
     pub fn new(inner: R, limit: u64) -> Self {
         Self {
             inner,
@@ -61,6 +62,7 @@ impl<R> LimitReader<R> {
     ///
     /// # Returns
     /// Remaining readable byte count before the wrapper reports EOF.
+    #[inline]
     pub fn remaining(&self) -> u64 {
         self.remaining
     }
@@ -69,6 +71,7 @@ impl<R> LimitReader<R> {
     ///
     /// # Returns
     /// The wrapped reader reference.
+    #[inline]
     pub fn get_ref(&self) -> &R {
         &self.inner
     }
@@ -77,6 +80,7 @@ impl<R> LimitReader<R> {
     ///
     /// # Returns
     /// The wrapped reader reference.
+    #[inline]
     pub fn get_mut(&mut self) -> &mut R {
         &mut self.inner
     }
@@ -85,6 +89,7 @@ impl<R> LimitReader<R> {
     ///
     /// # Returns
     /// The wrapped reader.
+    #[inline]
     pub fn into_inner(self) -> R {
         self.inner
     }
