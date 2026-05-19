@@ -32,6 +32,11 @@ use std::time::{
     UNIX_EPOCH,
 };
 
+use crate::{
+    CopyDirOptions,
+    CopyDirStats,
+};
+
 #[cfg(windows)]
 use std::ffi::c_void;
 #[cfg(windows)]
@@ -69,59 +74,6 @@ const ATOMIC_WRITE_TEMP_PREFIX: &str = ".atomic-write-";
 
 /// Number of random bytes encoded into generated temporary file names.
 const RANDOM_NAME_BYTES: usize = 16;
-
-/// Options controlling recursive directory copy behavior.
-///
-/// The default is conservative: existing destination entries are not
-/// overwritten, symbolic links are not followed, and source permissions are not
-/// copied to destination entries.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct CopyDirOptions {
-    /// Whether existing destination files may be overwritten.
-    pub overwrite: bool,
-
-    /// Whether symbolic links in the source tree should be followed.
-    ///
-    /// When this is `false`, encountering a symbolic link returns
-    /// [`ErrorKind::Unsupported`]. This avoids accidentally copying data outside
-    /// the requested source tree.
-    pub follow_symlinks: bool,
-
-    /// Whether to copy source permissions to destination entries after copying.
-    ///
-    /// This uses [`fs::set_permissions`] and therefore only preserves the
-    /// portable permission bits exposed by the Rust standard library.
-    pub preserve_permissions: bool,
-}
-
-impl Default for CopyDirOptions {
-    /// Returns conservative directory copy options.
-    ///
-    /// # Returns
-    /// Options that do not overwrite existing destination entries, do not
-    /// follow symbolic links, and do not preserve source permissions.
-    #[inline]
-    fn default() -> Self {
-        Self {
-            overwrite: false,
-            follow_symlinks: false,
-            preserve_permissions: false,
-        }
-    }
-}
-
-/// Statistics reported by recursive directory copy operations.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct CopyDirStats {
-    /// Number of regular files copied.
-    pub files: u64,
-
-    /// Number of destination directories created.
-    pub directories: u64,
-
-    /// Number of bytes copied from regular files.
-    pub bytes: u64,
-}
 
 #[cfg(windows)]
 unsafe extern "system" {
@@ -345,11 +297,7 @@ impl Files {
     /// permission, a symbolic link is encountered while `follow_symlinks` is
     /// `false`, or an underlying filesystem operation fails.
     #[inline]
-    pub fn copy_dir_all_with<S, D>(
-        src: S,
-        dst: D,
-        options: CopyDirOptions,
-    ) -> Result<CopyDirStats>
+    pub fn copy_dir_all_with<S, D>(src: S, dst: D, options: CopyDirOptions) -> Result<CopyDirStats>
     where
         S: AsRef<Path>,
         D: AsRef<Path>,
@@ -374,6 +322,7 @@ impl Files {
     /// # Panics
     /// Panics if `prefix` or `suffix` is not a safe file-name fragment, or if
     /// the operating system random source cannot provide bytes.
+    #[inline]
     pub fn random_file_name(prefix: Option<&str>, suffix: Option<&str>) -> String {
         Self::try_random_file_name(prefix, suffix).expect("failed to build random file name")
     }
@@ -1104,4 +1053,381 @@ fn parent_dir_for(path: &Path) -> &Path {
 #[cfg(windows)]
 fn wide_path(path: &Path) -> Vec<u16> {
     path.as_os_str().encode_wide().chain(Some(0)).collect()
+}
+
+/// Computes the total size of regular files below a directory path.
+///
+/// # Parameters
+/// - `path`: Directory path to measure.
+///
+/// # Returns
+/// The total byte length of regular files under `path`.
+///
+/// # Errors
+/// Returns an I/O error when `path` is not a directory or cannot be read.
+fn dir_size_path(path: &Path) -> Result<u64> {
+    let metadata = fs::symlink_metadata(path)?;
+    if !metadata.is_dir() || metadata.file_type().is_symlink() {
+        return Err(Error::new(
+            ErrorKind::InvalidInput,
+            format!("path is not a directory: {}", path.display()),
+        ));
+    }
+    dir_size_recursive(path)
+}
+
+/// Recursively computes regular-file sizes below a directory.
+///
+/// # Parameters
+/// - `path`: Directory path to measure.
+///
+/// # Returns
+/// The total byte length of regular files under `path`.
+///
+/// # Errors
+/// Returns an I/O error when a directory entry cannot be read.
+fn dir_size_recursive(path: &Path) -> Result<u64> {
+    let mut total = 0u64;
+    for entry in fs::read_dir(path)? {
+        let entry = entry?;
+        let metadata = fs::symlink_metadata(entry.path())?;
+        let file_type = metadata.file_type();
+        if file_type.is_symlink() {
+            continue;
+        }
+        if metadata.is_dir() {
+            total = total.saturating_add(dir_size_recursive(&entry.path())?);
+        } else if metadata.is_file() {
+            total = total.saturating_add(metadata.len());
+        }
+    }
+    Ok(total)
+}
+
+/// Removes all children from a directory while keeping the directory itself.
+///
+/// # Parameters
+/// - `path`: Directory path to clean.
+///
+/// # Errors
+/// Returns an I/O error when `path` is not a directory, cannot be read, or a
+/// child cannot be removed.
+fn clean_dir_path(path: &Path) -> Result<()> {
+    let metadata = fs::symlink_metadata(path)?;
+    if !metadata.is_dir() || metadata.file_type().is_symlink() {
+        return Err(Error::new(
+            ErrorKind::InvalidInput,
+            format!("path is not a directory: {}", path.display()),
+        ));
+    }
+    for entry in fs::read_dir(path)? {
+        remove_any_path(&entry?.path())?;
+    }
+    Ok(())
+}
+
+/// Removes a path regardless of whether it is a file, directory, or symlink.
+///
+/// # Parameters
+/// - `path`: Path to remove.
+///
+/// # Errors
+/// Returns an I/O error when `path` cannot be inspected or removed.
+fn remove_any_path(path: &Path) -> Result<()> {
+    let metadata = fs::symlink_metadata(path)?;
+    let file_type = metadata.file_type();
+    if metadata.is_dir() && !file_type.is_symlink() {
+        fs::remove_dir_all(path)
+    } else {
+        fs::remove_file(path)
+    }
+}
+
+/// Recursively copies a directory tree with the supplied options.
+///
+/// # Parameters
+/// - `src`: Source directory.
+/// - `dst`: Destination directory.
+/// - `options`: Copy behavior options.
+///
+/// # Returns
+/// Copy statistics for regular files, created directories, and bytes.
+///
+/// # Errors
+/// Returns an I/O error when the source is invalid, the destination is inside
+/// the source tree, or an underlying filesystem operation fails.
+fn copy_dir_all_with_paths(
+    src: &Path,
+    dst: &Path,
+    options: CopyDirOptions,
+) -> Result<CopyDirStats> {
+    let source_metadata = metadata_for_copy_source(src, options.follow_symlinks)?;
+    if !source_metadata.is_dir() {
+        return Err(Error::new(
+            ErrorKind::InvalidInput,
+            format!("source is not a directory: {}", src.display()),
+        ));
+    }
+    reject_destination_inside_source(src, dst)?;
+    let mut stats = CopyDirStats::default();
+    copy_dir_recursive(src, dst, options, &mut stats)?;
+    Ok(stats)
+}
+
+/// Recursively copies one source directory into one destination directory.
+///
+/// # Parameters
+/// - `src`: Source directory.
+/// - `dst`: Destination directory.
+/// - `options`: Copy behavior options.
+/// - `stats`: Mutable copy statistics accumulator.
+///
+/// # Errors
+/// Returns an I/O error when a directory or file cannot be copied.
+fn copy_dir_recursive(
+    src: &Path,
+    dst: &Path,
+    options: CopyDirOptions,
+    stats: &mut CopyDirStats,
+) -> Result<()> {
+    let source_metadata = metadata_for_copy_source(src, options.follow_symlinks)?;
+    if !source_metadata.is_dir() {
+        return Err(Error::new(
+            ErrorKind::InvalidInput,
+            format!("source is not a directory: {}", src.display()),
+        ));
+    }
+    ensure_copy_destination_dir(dst, options.overwrite, stats)?;
+    if options.preserve_permissions {
+        fs::set_permissions(dst, source_metadata.permissions())?;
+    }
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let source_path = entry.path();
+        let destination_path = dst.join(entry.file_name());
+        let file_type = entry.file_type()?;
+        if file_type.is_symlink() {
+            copy_symlink_source(&source_path, &destination_path, options, stats)?;
+        } else if file_type.is_dir() {
+            copy_dir_recursive(&source_path, &destination_path, options, stats)?;
+        } else if file_type.is_file() {
+            copy_file_with_options(&source_path, &destination_path, options, stats)?;
+        } else {
+            return Err(Error::new(
+                ErrorKind::Unsupported,
+                format!("unsupported source file type: {}", source_path.display()),
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Copies a symbolic link source when link following is enabled.
+///
+/// # Parameters
+/// - `src`: Source symbolic link.
+/// - `dst`: Destination path.
+/// - `options`: Copy behavior options.
+/// - `stats`: Mutable copy statistics accumulator.
+///
+/// # Errors
+/// Returns an I/O error when symbolic links are disabled or the target cannot
+/// be copied.
+fn copy_symlink_source(
+    src: &Path,
+    dst: &Path,
+    options: CopyDirOptions,
+    stats: &mut CopyDirStats,
+) -> Result<()> {
+    if !options.follow_symlinks {
+        return Err(Error::new(
+            ErrorKind::Unsupported,
+            format!("symbolic links are not followed: {}", src.display()),
+        ));
+    }
+    let target_metadata = fs::metadata(src)?;
+    if target_metadata.is_dir() {
+        copy_dir_recursive(src, dst, options, stats)
+    } else if target_metadata.is_file() {
+        copy_file_with_options(src, dst, options, stats)
+    } else {
+        Err(Error::new(
+            ErrorKind::Unsupported,
+            format!("unsupported symbolic link target type: {}", src.display()),
+        ))
+    }
+}
+
+/// Ensures a directory copy destination exists as a directory.
+///
+/// # Parameters
+/// - `dst`: Destination directory path.
+/// - `overwrite`: Whether an existing non-directory destination may be removed.
+/// - `stats`: Mutable copy statistics accumulator.
+///
+/// # Errors
+/// Returns an I/O error when the destination cannot be created or cannot be
+/// replaced according to `overwrite`.
+fn ensure_copy_destination_dir(
+    dst: &Path,
+    overwrite: bool,
+    stats: &mut CopyDirStats,
+) -> Result<()> {
+    match fs::symlink_metadata(dst) {
+        Ok(metadata) => {
+            if metadata.is_dir() && !metadata.file_type().is_symlink() {
+                return Ok(());
+            }
+            if !overwrite {
+                return Err(Error::new(
+                    ErrorKind::AlreadyExists,
+                    format!("destination already exists: {}", dst.display()),
+                ));
+            }
+            remove_any_path(dst)?;
+        }
+        Err(error) if error.kind() == ErrorKind::NotFound => {}
+        Err(error) => return Err(error),
+    }
+    fs::create_dir(dst)?;
+    stats.directories = stats.directories.saturating_add(1);
+    Ok(())
+}
+
+/// Copies one regular source file into a destination path.
+///
+/// # Parameters
+/// - `src`: Source file path.
+/// - `dst`: Destination file path.
+/// - `options`: Copy behavior options.
+/// - `stats`: Mutable copy statistics accumulator.
+///
+/// # Errors
+/// Returns an I/O error when the destination exists without overwrite
+/// permission or the file cannot be copied.
+fn copy_file_with_options(
+    src: &Path,
+    dst: &Path,
+    options: CopyDirOptions,
+    stats: &mut CopyDirStats,
+) -> Result<()> {
+    prepare_copy_file_destination(dst, options.overwrite)?;
+    let source_metadata = metadata_for_copy_source(src, options.follow_symlinks)?;
+    let copied = fs::copy(src, dst)?;
+    if options.preserve_permissions {
+        fs::set_permissions(dst, source_metadata.permissions())?;
+    }
+    stats.files = stats.files.saturating_add(1);
+    stats.bytes = stats.bytes.saturating_add(copied);
+    Ok(())
+}
+
+/// Prepares a destination path for file copy.
+///
+/// # Parameters
+/// - `dst`: Destination file path.
+/// - `overwrite`: Whether an existing destination may be removed.
+///
+/// # Errors
+/// Returns an I/O error when the destination exists and cannot be overwritten.
+fn prepare_copy_file_destination(dst: &Path, overwrite: bool) -> Result<()> {
+    match fs::symlink_metadata(dst) {
+        Ok(_) if overwrite => remove_any_path(dst),
+        Ok(_) => Err(Error::new(
+            ErrorKind::AlreadyExists,
+            format!("destination already exists: {}", dst.display()),
+        )),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+    }
+}
+
+/// Loads metadata for a source path according to symlink policy.
+///
+/// # Parameters
+/// - `path`: Source path.
+/// - `follow_symlinks`: Whether symbolic links may be followed.
+///
+/// # Returns
+/// Metadata for `path`, following a symbolic link when allowed.
+///
+/// # Errors
+/// Returns an I/O error when metadata cannot be loaded or a symbolic link is
+/// encountered while `follow_symlinks` is `false`.
+fn metadata_for_copy_source(path: &Path, follow_symlinks: bool) -> Result<fs::Metadata> {
+    let metadata = fs::symlink_metadata(path)?;
+    if metadata.file_type().is_symlink() {
+        if follow_symlinks {
+            fs::metadata(path)
+        } else {
+            Err(Error::new(
+                ErrorKind::Unsupported,
+                format!("symbolic links are not followed: {}", path.display()),
+            ))
+        }
+    } else {
+        Ok(metadata)
+    }
+}
+
+/// Rejects copy destinations located inside the source tree.
+///
+/// # Parameters
+/// - `src`: Source directory.
+/// - `dst`: Destination directory.
+///
+/// # Errors
+/// Returns an I/O error when canonicalization fails or when `dst` is equal to
+/// or nested under `src`.
+fn reject_destination_inside_source(src: &Path, dst: &Path) -> Result<()> {
+    let source = fs::canonicalize(src)?;
+    let destination = canonicalize_existing_prefix(dst)?;
+    if destination == source || destination.starts_with(&source) {
+        return Err(Error::new(
+            ErrorKind::InvalidInput,
+            format!(
+                "destination must not be inside source: source={}, destination={}",
+                src.display(),
+                dst.display(),
+            ),
+        ));
+    }
+    Ok(())
+}
+
+/// Canonicalizes the existing prefix of a path while preserving missing tail components.
+///
+/// # Parameters
+/// - `path`: Path that may not exist yet.
+///
+/// # Returns
+/// A canonicalized path for the existing prefix with missing components appended.
+///
+/// # Errors
+/// Returns an I/O error when the existing prefix cannot be canonicalized.
+fn canonicalize_existing_prefix(path: &Path) -> Result<PathBuf> {
+    if path.exists() {
+        return fs::canonicalize(path);
+    }
+    let mut missing = Vec::<OsString>::new();
+    let mut current = path.to_path_buf();
+    while !current.exists() {
+        if let Some(name) = current.file_name() {
+            missing.push(name.to_os_string());
+        } else {
+            break;
+        }
+        match current.parent() {
+            Some(parent) if !parent.as_os_str().is_empty() => current = parent.to_path_buf(),
+            _ => {
+                current = env::current_dir()?;
+                break;
+            }
+        }
+    }
+    let mut canonical = fs::canonicalize(current)?;
+    for component in missing.into_iter().rev() {
+        canonical.push(component);
+    }
+    Ok(canonical)
 }

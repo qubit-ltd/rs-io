@@ -55,6 +55,8 @@ pub use traits::{
     WriteSeek,
 };
 pub use util::{
+    CopyDirOptions,
+    CopyDirStats,
     Filenames,
     Files,
     Streams,
