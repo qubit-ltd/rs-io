@@ -9,16 +9,21 @@
  ******************************************************************************/
 use std::cmp::Ordering;
 use std::io::{
+    Error,
+    ErrorKind,
     Read,
     Result,
     Write,
     copy,
 };
 
-use crate::util::{
-    compare,
-    copy as copy_util,
-};
+use crate::ReadExt;
+
+/// Default buffer size used by stream copy operations.
+const COPY_BUFFER_SIZE: usize = 16 * 1024;
+
+/// Buffer size used by stream comparison operations.
+const COMPARE_BUFFER_SIZE: usize = 16 * 1024;
 
 /// Stream utility namespace.
 ///
@@ -92,7 +97,9 @@ impl Streams {
         R: Read + ?Sized,
         W: Write + ?Sized,
     {
-        copy_util::copy_at_most(reader, writer, max_bytes)
+        let mut reader = reader;
+        let mut writer = writer;
+        copy_at_most_impl(&mut reader, &mut writer, max_bytes)
     }
 
     /// Copies the remaining input if its total length is at most `max_bytes`.
@@ -122,7 +129,9 @@ impl Streams {
         R: Read + ?Sized,
         W: Write + ?Sized,
     {
-        copy_util::copy_to_end_limited(reader, writer, max_bytes)
+        let mut reader = reader;
+        let mut writer = writer;
+        copy_to_end_limited_impl(&mut reader, &mut writer, max_bytes)
     }
 
     /// Tests whether two readable streams have equal remaining contents.
@@ -141,7 +150,7 @@ impl Streams {
     /// Returns the first read error reported by either stream.
     #[inline]
     pub fn content_eq(left: &mut dyn Read, right: &mut dyn Read) -> Result<bool> {
-        compare::content_eq(left, right)
+        Ok(Self::compare_content(left, right)? == Ordering::Equal)
     }
 
     /// Lexicographically compares the remaining contents of two readable
@@ -161,6 +170,119 @@ impl Streams {
     /// Returns the first read error reported by either stream.
     #[inline]
     pub fn compare_content(left: &mut dyn Read, right: &mut dyn Read) -> Result<Ordering> {
-        compare::compare_content(left, right)
+        let mut left_buffer = [0; COMPARE_BUFFER_SIZE];
+        let mut right_buffer = [0; COMPARE_BUFFER_SIZE];
+        loop {
+            let left_count = left.read_exact_or_eof(&mut left_buffer)?;
+            let right_count = right.read_exact_or_eof(&mut right_buffer)?;
+            let n = left_count.min(right_count);
+            for index in 0..n {
+                match left_buffer[index].cmp(&right_buffer[index]) {
+                    Ordering::Equal => {}
+                    ordering => return Ok(ordering),
+                }
+            }
+            match left_count.cmp(&right_count) {
+                Ordering::Equal if left_count == 0 => return Ok(Ordering::Equal),
+                Ordering::Equal => {}
+                ordering => return Ok(ordering),
+            }
+        }
+    }
+}
+
+/// Copies at most `max_bytes` bytes using trait-object I/O endpoints.
+///
+/// # Parameters
+/// - `reader`: Source reader.
+/// - `writer`: Destination writer.
+/// - `max_bytes`: Maximum number of bytes to copy.
+///
+/// # Returns
+/// The number of bytes copied.
+///
+/// # Errors
+/// Returns the first non-interrupted read error or write error reported by the
+/// underlying streams. Interrupted reads are retried.
+fn copy_at_most_impl(reader: &mut dyn Read, writer: &mut dyn Write, max_bytes: u64) -> Result<u64> {
+    let mut buffer = [0; COPY_BUFFER_SIZE];
+    let mut remaining = max_bytes;
+    let mut copied = 0;
+    while remaining > 0 {
+        let requested = remaining.min(COPY_BUFFER_SIZE as u64) as usize;
+        match reader.read(&mut buffer[..requested]) {
+            Ok(0) => break,
+            Ok(count) => {
+                writer.write_all(&buffer[..count])?;
+                let count = count as u64;
+                remaining -= count;
+                copied += count;
+            }
+            Err(error) => {
+                if error.kind() == ErrorKind::Interrupted {
+                    continue;
+                }
+                return Err(error);
+            }
+        }
+    }
+    Ok(copied)
+}
+
+/// Copies the remaining input through trait-object endpoints when it fits.
+///
+/// # Parameters
+/// - `reader`: Source reader.
+/// - `writer`: Destination writer.
+/// - `max_bytes`: Maximum accepted number of bytes in the remaining input.
+///
+/// # Returns
+/// The number of bytes copied when EOF is reached within the limit.
+///
+/// # Errors
+/// Returns [`ErrorKind::InvalidData`] when the remaining input is longer than
+/// `max_bytes`. Returns the first non-interrupted read error or write error
+/// reported by the underlying streams. Interrupted reads are retried.
+fn copy_to_end_limited_impl(
+    reader: &mut dyn Read,
+    writer: &mut dyn Write,
+    max_bytes: u64,
+) -> Result<u64> {
+    let copied = copy_at_most_impl(reader, writer, max_bytes)?;
+    if copied < max_bytes {
+        return Ok(copied);
+    }
+    if has_more_input(reader)? {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            format!("input exceeds maximum length of {max_bytes} bytes"),
+        ));
+    }
+    Ok(copied)
+}
+
+/// Returns whether `reader` has at least one more byte.
+///
+/// # Parameters
+/// - `reader`: Source reader to probe.
+///
+/// # Returns
+/// `true` when one extra byte was read, or `false` when EOF was reached.
+///
+/// # Errors
+/// Returns the first non-interrupted read error reported by `reader`.
+fn has_more_input(reader: &mut dyn Read) -> Result<bool> {
+    let mut byte = [0];
+    loop {
+        match reader.read(&mut byte) {
+            Ok(0) => return Ok(false),
+            Ok(_) => return Ok(true),
+            Err(error) => {
+                if error.kind() == ErrorKind::Interrupted {
+                    continue;
+                }
+                return Err(error);
+            }
+        }
     }
 }
