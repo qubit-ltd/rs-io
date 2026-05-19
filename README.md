@@ -11,19 +11,25 @@ Small stream I/O trait and extension utilities for Rust.
 
 ## Overview
 
-Qubit IO provides a compact set of low-level utilities on top of `std::io`:
+Qubit IO is focused on stream and byte I/O built on top of `std::io`. It does
+not try to become a filesystem abstraction layer. The crate provides reusable
+building blocks for code that reads, writes, seeks, buffers, encodes, decodes,
+limits, tees, counts, or compares byte streams.
 
-- object-safe composition traits for common `std::io` capability combinations;
-- extension traits for recurring low-level I/O patterns that the standard
-  library leaves to callers;
-- the `Streams` namespace for stream-level copy and compare operations;
-- wrapper types for stream instrumentation, limiting, teeing, checksumming, and
-  position restoration;
-- codec wrappers and extension traits for binary, LEB128, ZigZag, and
-  length-prefixed UTF-8 data.
+Use this crate when you need:
 
-Local filesystem helpers such as `Files`, `Filenames`, `TempFile`, and `TempDir`
-now live in `qubit-local-fs`.
+- object-safe trait aliases for common `std::io` capability combinations;
+- extension methods for exact reads, bounded reads, bounded delimiter reads, and
+  position-preserving seek operations;
+- small stream helper functions such as bounded copy and content comparison;
+- binary, LEB128, ZigZag, and length-prefixed UTF-8 encoding helpers;
+- wrapper types for counting, limiting, teeing, checksumming, and seek-position
+  restoration.
+
+For detailed usage, examples, and API selection guidance, see the [User Guide](doc/user_guide.md).
+API reference documentation is available on [docs.rs](https://docs.rs/qubit-io).
+
+For local filesystem capabilities, see [qubit-local-fs](https://github.com/qubit-ltd/rs-local-fs).
 
 ## Installation
 
@@ -52,33 +58,163 @@ assert_eq!(b"hello", output.as_slice());
 let mut cursor = Cursor::new(vec![0; 8]);
 cursor.write_all_at_preserving_position(2, b"rs")?;
 
+let data = Cursor::new(b"bounded".to_vec()).read_to_end_limited(16)?;
+assert_eq!(b"bounded", data.as_slice());
+
 # Ok::<(), std::io::Error>(())
 ```
 
-## Main APIs
+## Main Capabilities
 
-| API | Purpose |
+### Object-Safe I/O Trait Combinations
+
+`qubit-io` provides named composition traits that can be used as trait objects:
+
+| Trait | Combines | Typical use |
+| --- | --- | --- |
+| `ReadSeek` | `Read + Seek` | readable random-access input |
+| `BufReadSeek` | `BufRead + Seek` | buffered random-access input |
+| `ReadWrite` | `Read + Write` | duplex stream or mutable buffer |
+| `WriteSeek` | `Write + Seek` | writable random-access output |
+| `ReadWriteSeek` | `Read + Write + Seek` | fully mutable random-access I/O object |
+
+These traits are useful when an API should accept `&mut dyn ReadSeek` instead
+of being generic over `R: Read + Seek`.
+
+### Extension Traits
+
+The extension traits keep common low-level I/O patterns close to the standard
+library while avoiding repeated boilerplate:
+
+| Extension trait | Examples |
 | --- | --- |
-| `ReadSeek`, `BufReadSeek`, `ReadWrite`, `WriteSeek`, `ReadWriteSeek` | object-safe composition traits for common `std::io` capability sets |
-| `ReadExt`, `BufReadExt`, `SeekExt`, `ReadSeekExt`, `WriteSeekExt` | extension traits for exact, bounded, delimiter-oriented, and position-preserving I/O |
-| `BinaryReadExt`, `BinaryWriteExt` | primitive numeric scalar encoding and decoding |
-| `Leb128ReadExt`, `Leb128WriteExt` | unsigned and signed LEB128 encoding and decoding |
-| `ZigZagReadExt`, `ZigZagWriteExt` | ZigZag-mapped signed integer encoding and decoding |
-| `StringReadExt`, `StringWriteExt` | length-prefixed UTF-8 string encoding and decoding |
-| `Streams` | stream copy, bounded copy, EOF-limited copy, and content comparison |
-| `CountingReader`, `CountingWriter` | byte counting wrappers |
-| `LimitReader`, `LimitWriter` | byte limit wrappers |
-| `TeeReader`, `TeeWriter` | duplicate reads or writes to a branch writer |
-| `ChecksumReader`, `ChecksumWriter` | update a caller-provided checksum state while reading or writing |
-| `PositionGuard` | restore seek position unless dismissed |
+| `ReadExt` | `read_exact_or_eof`, `discard_exact_or_eof`, `copy_to`, `read_to_end_limited`, `read_to_string_limited` |
+| `BufReadExt` | `read_until_limited`, `read_line_limited`, `discard_until_limited` |
+| `SeekExt` | `stream_size` |
+| `ReadSeekExt` | `peek_exact_or_eof`, `read_exact_or_eof_at` |
+| `WriteSeekExt` | `write_all_at_preserving_position` |
+| `BinaryReadExt` / `BinaryWriteExt` | fixed-width integer and floating-point scalar encoding |
+| `Leb128ReadExt` / `Leb128WriteExt` | unsigned and signed LEB128 integer encoding |
+| `ZigZagReadExt` / `ZigZagWriteExt` | ZigZag-mapped signed integer encoding |
+| `StringReadExt` / `StringWriteExt` | length-prefixed UTF-8 strings |
+
+### Streams Namespace
+
+`Streams` contains stream-level associated functions:
+
+| Method | Purpose |
+| --- | --- |
+| `copy` | delegates to `std::io::copy` |
+| `copy_at_most` | copies no more than a specified number of bytes |
+| `copy_to_end_limited` | copies only if EOF is reached within a size limit |
+| `content_eq` | compares two readable streams for byte equality |
+| `compare_content` | lexicographically compares two readable streams |
+
+### Wrappers
+
+Wrapper types make stream behavior part of the type instead of a one-off call:
+
+| Wrapper | Purpose |
+| --- | --- |
+| `CountingReader`, `CountingWriter` | count successfully read or written bytes |
+| `LimitReader`, `LimitWriter` | enforce read or write byte budgets |
+| `TeeReader`, `TeeWriter` | duplicate data to a branch writer |
+| `ChecksumReader`, `ChecksumWriter` | update caller-provided checksum state while reading or writing |
+| `PositionGuard` | restore a seek position on drop unless dismissed |
+
+### Codec Wrappers
+
+Callers who prefer reader/writer objects over extension-method calls can use
+root-level codec wrappers:
+
+| Wrapper | Purpose |
+| --- | --- |
+| `BinaryReader`, `BinaryWriter` | fixed-width scalar encoding and decoding |
+| `Leb128Reader`, `Leb128Writer` | LEB128 encoding and decoding |
+| `ZigZagReader`, `ZigZagWriter` | ZigZag over unsigned LEB128 payloads |
+
+## Prelude
+
+`qubit_io::prelude` re-exports the method-providing extension traits and the
+object-safe composition traits. It intentionally does not re-export wrapper
+types or concrete namespaces.
+
+```rust
+use qubit_io::prelude::*;
+```
 
 ## Crate Boundary
 
 `qubit-io` is intentionally limited to stream and byte I/O. It does not expose
-local filesystem helpers. Use `qubit-local-fs` for local path utilities,
-temporary files and directories, directory copy, directory cleanup, and atomic
-file writes.
+local path helpers, temporary files, directory copy helpers, directory cleanup,
+or atomic file writes. For local filesystem capabilities, see
+[qubit-local-fs](https://github.com/qubit-ltd/rs-local-fs).
 
 ## Runtime Dependencies
 
 This crate depends only on the Rust standard library at runtime.
+
+## Testing & Code Coverage
+
+This project maintains test coverage for the stream traits, extension methods,
+codec helpers, and wrapper types.
+
+### Running Tests
+
+```bash
+# Run all tests
+cargo test
+
+# Run with coverage report
+./coverage.sh
+
+# Generate text format report
+./coverage.sh text
+
+# Run CI checks (format, clippy, test, coverage, audit)
+./ci-check.sh
+```
+
+## License
+
+Copyright (c) 2026. Haixing Hu.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+See [LICENSE](LICENSE) for the full license text.
+
+## Contributing
+
+Contributions are welcome. Please feel free to submit a Pull Request.
+
+### Development Guidelines
+
+- Follow the Rust API guidelines.
+- Keep stream and byte-I/O concerns in `qubit-io`.
+- Use [qubit-local-fs](https://github.com/qubit-ltd/rs-local-fs) for local filesystem utilities.
+- Maintain comprehensive test coverage.
+- Document public APIs with examples when they clarify behavior.
+- Ensure `./ci-check.sh` passes before submitting a PR.
+
+## Author
+
+**Haixing Hu**
+
+## Related Projects
+
+- [qubit-local-fs](https://github.com/qubit-ltd/rs-local-fs): local filesystem utilities for Rust.
+- More Rust libraries from Qubit are published under the [qubit-ltd](https://github.com/qubit-ltd) organization on GitHub.
+
+---
+
+Repository: [https://github.com/qubit-ltd/rs-io](https://github.com/qubit-ltd/rs-io)
