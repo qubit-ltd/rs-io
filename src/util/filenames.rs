@@ -13,17 +13,25 @@ use std::io::{
     ErrorKind,
     Result,
 };
-use std::path::Path;
+use std::path::{
+    Component,
+    Path,
+};
+use std::time::{
+    SystemTime,
+    UNIX_EPOCH,
+};
 
 const MAX_PORTABLE_FILE_NAME_BYTES: usize = 255;
+const RANDOM_NAME_BYTES: usize = 16;
 
 /// File-name utility namespace.
 ///
-/// This type is an uninstantiable namespace for lexical file-name helpers. The
-/// path-based methods follow [`Path`] semantics, including Rust's handling of
-/// dotfiles. Public methods that return file-name data return UTF-8 strings
-/// (`&str` or `String`) instead of [`OsStr`]; invalid UTF-8 path components
-/// are reported as `None`.
+/// This type is an uninstantiable namespace for random and lexical file-name
+/// helpers. The path-based methods follow [`Path`] semantics, including Rust's
+/// handling of dotfiles. Public methods that return file-name data return
+/// UTF-8 strings (`&str` or `String`) instead of [`OsStr`]; invalid UTF-8 path
+/// components are reported as `None`.
 ///
 /// # Examples
 /// ```
@@ -32,6 +40,7 @@ const MAX_PORTABLE_FILE_NAME_BYTES: usize = 255;
 ///
 /// let path = Path::new("/tmp/archive.tar.gz");
 ///
+/// assert!(Filenames::random().starts_with(Filenames::DEFAULT_RANDOM_PREFIX));
 /// assert_eq!(Some("archive.tar"), Filenames::file_stem(path));
 /// assert_eq!(Some("gz"), Filenames::extension(path));
 /// assert!(Filenames::has_extension(path, ".gz"));
@@ -39,6 +48,93 @@ const MAX_PORTABLE_FILE_NAME_BYTES: usize = 255;
 pub enum Filenames {}
 
 impl Filenames {
+    /// Default prefix used by random file-name generation.
+    pub const DEFAULT_RANDOM_PREFIX: &str = "qubit-io-";
+
+    /// Builds a random file-name component using the default prefix.
+    ///
+    /// The generated name contains a timestamp, process id, and random
+    /// hexadecimal payload. It is only a file-name component; it is not joined
+    /// to any directory and does not create anything on the filesystem.
+    ///
+    /// # Returns
+    /// A random file-name component.
+    ///
+    /// # Panics
+    /// Panics if the operating system random source cannot provide bytes.
+    #[inline]
+    pub fn random() -> String {
+        Self::try_random().expect("failed to build random file name")
+    }
+
+    /// Builds a random file-name component from an optional prefix and suffix.
+    ///
+    /// The caller-provided prefix and suffix must be file-name fragments, not
+    /// paths. Path separators, root components, parent directory components,
+    /// platform prefixes, and NUL bytes are rejected by
+    /// [`Filenames::try_random_with`].
+    ///
+    /// # Parameters
+    /// - `prefix`: Optional file-name prefix. The default is
+    ///   [`Filenames::DEFAULT_RANDOM_PREFIX`].
+    /// - `suffix`: Optional file-name suffix. The default is empty.
+    ///
+    /// # Returns
+    /// A random file-name component.
+    ///
+    /// # Panics
+    /// Panics if `prefix` or `suffix` is not a safe file-name fragment, or if
+    /// the operating system random source cannot provide bytes.
+    #[inline]
+    pub fn random_with(prefix: Option<&str>, suffix: Option<&str>) -> String {
+        Self::try_random_with(prefix, suffix).expect("failed to build random file name")
+    }
+
+    /// Tries to build a random file-name component using the default prefix.
+    ///
+    /// # Returns
+    /// A random file-name component.
+    ///
+    /// # Errors
+    /// Returns [`ErrorKind::Other`] when the operating system random source
+    /// cannot provide bytes.
+    #[inline]
+    pub fn try_random() -> Result<String> {
+        Self::try_random_with(None, None)
+    }
+
+    /// Tries to build a random file-name component from a prefix and suffix.
+    ///
+    /// The generated name contains a timestamp, process id, and random
+    /// hexadecimal payload. The caller-provided prefix and suffix must be file
+    /// name fragments, not paths. Path separators, root components, parent
+    /// directory components, platform prefixes, and NUL bytes are rejected.
+    ///
+    /// # Parameters
+    /// - `prefix`: Optional file-name prefix. The default is
+    ///   [`Filenames::DEFAULT_RANDOM_PREFIX`].
+    /// - `suffix`: Optional file-name suffix. The default is empty.
+    ///
+    /// # Returns
+    /// A random file-name component.
+    ///
+    /// # Errors
+    /// Returns [`ErrorKind::InvalidInput`] when `prefix` or `suffix` is not a
+    /// safe file-name fragment. Returns [`ErrorKind::Other`] when the operating
+    /// system random source cannot provide bytes.
+    pub fn try_random_with(prefix: Option<&str>, suffix: Option<&str>) -> Result<String> {
+        let prefix = prefix.unwrap_or(Self::DEFAULT_RANDOM_PREFIX);
+        let suffix = suffix.unwrap_or("");
+        validate_file_name_fragment("prefix", prefix)?;
+        validate_file_name_fragment("suffix", suffix)?;
+        let timestamp = unix_timestamp_nanos();
+        let process_id = std::process::id();
+        let random = try_random_hex()?;
+        Ok(format!(
+            "{prefix}{timestamp:x}-{process_id:x}-{random}{suffix}"
+        ))
+    }
+
     /// Validates that `name` is a portable single-component file name.
     ///
     /// This is a lexical, conservative validation helper for names that should
@@ -279,6 +375,112 @@ impl Filenames {
 /// The extension without one leading dot.
 fn normalize_extension(extension: &str) -> &str {
     extension.strip_prefix('.').unwrap_or(extension)
+}
+
+/// Validates a caller-provided file-name fragment.
+///
+/// # Parameters
+/// - `role`: Fragment role used in error messages.
+/// - `fragment`: File-name fragment to validate.
+///
+/// # Errors
+/// Returns [`ErrorKind::InvalidInput`] when `fragment` can behave like a path
+/// instead of a plain file-name fragment.
+fn validate_file_name_fragment(role: &str, fragment: &str) -> Result<()> {
+    if fragment.contains('\0') {
+        return Err(invalid_file_name_fragment_error(
+            role,
+            "NUL bytes are not allowed",
+        ));
+    }
+    if fragment.contains('/') || fragment.contains('\\') {
+        return Err(invalid_file_name_fragment_error(
+            role,
+            "path separators are not allowed",
+        ));
+    }
+    if Path::new(fragment).components().any(|component| {
+        matches!(
+            component,
+            Component::Prefix(_) | Component::RootDir | Component::ParentDir
+        )
+    }) {
+        return Err(invalid_file_name_fragment_error(
+            role,
+            "path components are not allowed",
+        ));
+    }
+    Ok(())
+}
+
+/// Builds an invalid file-name fragment error.
+///
+/// # Parameters
+/// - `role`: Fragment role used in error messages.
+/// - `reason`: Validation failure reason.
+///
+/// # Returns
+/// An [`ErrorKind::InvalidInput`] error.
+fn invalid_file_name_fragment_error(role: &str, reason: &str) -> Error {
+    Error::new(
+        ErrorKind::InvalidInput,
+        format!("random file name {role} is invalid: {reason}"),
+    )
+}
+
+/// Returns the current Unix timestamp in nanoseconds.
+///
+/// # Returns
+/// Nanoseconds since the Unix epoch, or zero if the system clock is earlier than
+/// the epoch.
+fn unix_timestamp_nanos() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default()
+}
+
+/// Tries to return random bytes encoded as lowercase hexadecimal.
+///
+/// # Returns
+/// A hexadecimal string derived from operating-system randomness.
+///
+/// # Errors
+/// Returns [`ErrorKind::Other`] if the operating system random source cannot
+/// provide bytes.
+fn try_random_hex() -> Result<String> {
+    let mut bytes = [0_u8; RANDOM_NAME_BYTES];
+    fill_random_bytes(&mut bytes)?;
+    Ok(hex_encode(&bytes))
+}
+
+/// Fills a byte slice with random bytes.
+///
+/// # Parameters
+/// - `bytes`: Destination buffer.
+///
+/// # Errors
+/// Returns [`ErrorKind::Other`] if the operating system random source cannot
+/// provide bytes.
+fn fill_random_bytes(bytes: &mut [u8]) -> Result<()> {
+    getrandom::fill(bytes).map_err(Error::other)
+}
+
+/// Encodes bytes as lowercase hexadecimal.
+///
+/// # Parameters
+/// - `bytes`: Bytes to encode.
+///
+/// # Returns
+/// Lowercase hexadecimal string.
+fn hex_encode(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut result = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        result.push(HEX[(byte >> 4) as usize] as char);
+        result.push(HEX[(byte & 0x0f) as usize] as char);
+    }
+    result
 }
 
 /// Tests whether a single-component file name is reserved by Windows.
