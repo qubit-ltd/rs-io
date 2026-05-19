@@ -15,14 +15,17 @@ Qubit IO 在 `std::io` 之上提供一组紧凑的底层能力：
 
 - 为常用 `std::io` 能力组合提供 object-safe 的组合 trait；
 - 为标准库留给调用方反复手写的底层 I/O 模式提供 extension trait；
-- 为 stream 统计、限制、tee、checksum 和位置恢复提供工具函数与 wrapper 类型。
+- 提供 `Files` 命名空间，用于父目录创建、随机临时条目、buffered file helper
+  和持久化 atomic write；
+- 为 stream 统计、限制、tee、checksum 和位置恢复提供 wrapper 类型。
 
 组合 trait 适合 API 需要使用 `&mut dyn ReadSeek` 或
 `Box<dyn ReadWriteSeek>` 这类 trait object，而不是 `R: Read + Seek`
 这类泛型约束的场景。
 
-extension trait 覆盖的是保守、标准库优先的行为，例如：有界读取、有界分隔符读取、
-二进制标量编码、LEB128 与 ZigZag 整数编码，以及保持位置不变的 seek 操作。
+extension trait 覆盖的是保守、标准库优先的行为，例如：精确读取、有界读取、
+有界分隔符读取、二进制标量编码、LEB128 与 ZigZag 整数编码、严格 ULEB
+字符串长度解码，以及保持位置不变的 seek 操作。
 
 ## 设计目标
 
@@ -66,21 +69,31 @@ extension trait 覆盖的是保守、标准库优先的行为，例如：有界�
 - **`BinaryReadExt` / `BinaryWriteExt`**：
   - 支持通过 `_be` / `_le` 后缀方法或运行时 `ByteOrder` 读写到
     `u128` / `i128` 的基础数字标量。
-- **`Leb128IntReadExt` / `Leb128IntWriteExt`**：
+- **`Leb128ReadExt` / `Leb128WriteExt`**：
   - 通过 `uleb` / `sleb` 方法读写到 128 位的 unsigned / signed LEB128 整数；
     读取方法还提供 `_strict` canonical 解码变体。
-- **`ZigZagIntReadExt` / `ZigZagIntWriteExt`**：
+- **`ZigZagReadExt` / `ZigZagWriteExt`**：
   - 使用 unsigned LEB128 payload 读写到 128 位的 ZigZag 映射有符号整数；
     读取方法还提供 `_strict` 变体。
 - **`StringReadExt` / `StringWriteExt`**：
-  - 使用 ULEB128、`u16` 或 `u32` 字节长度前缀读写 UTF-8 字符串。
+  - 使用 ULEB128、`u16` 或 `u32` 字节长度前缀读写 UTF-8 字符串；严格
+    ULEB 读取会在读取 payload 前拒绝 non-canonical 长度前缀。
 
 ### 工具函数与 Wrapper
 
-- 文件 helper 可创建缺失父目录，并提供同目录临时文件驱动的持久化 atomic write；
+- `Files` associated method 可创建缺失目录、打开 buffered file、构造随机临时
+  名称和路径、使用 `getrandom` 支持的 OS 随机源创建随机临时文件和目录，并提供
+  持久化同目录 atomic write，包括临时文件 sync 和支持平台上的父目录 sync；
 - 内容 helper 可比较 reader 内容并做有界复制；
 - wrapper 类型提供计数、限制、tee、checksum 更新和位置保护能力。
 - `qubit_io::prelude` 重导出 extension trait 和组合 trait，适合方法式调用场景。
+
+### Planned Codec Wrapper
+
+Phase 2 还为偏好 reader/writer object 调用风格的用户预留 root-level codec
+wrapper 名称：`BinaryReader`、`BinaryWriter`、`Leb128Reader`、`Leb128Writer`、
+`ZigZagReader` 和 `ZigZagWriter`。在这些 wrapper 的源码实现落地前，请使用上面列出的
+extension trait。
 
 ### Blanket Implementation
 
@@ -293,7 +306,7 @@ where
 
 ## API 参考
 
-完整的方法级清单见 [API 矩阵](doc/api-matrix.zh_CN.md)。
+完整的方法级清单和使用说明见 [用户指南](doc/user_guide.zh_CN.md)。
 
 | Trait | 标准库约束 | 典型用途 |
 |------|------------|----------|
@@ -305,18 +318,18 @@ where
 
 | Extension trait | 方法 | 典型用途 |
 |-----------------|------|----------|
-| `ReadExt` | `read_exact_or_eof`、`discard_exact_or_eof`、`copy_to`、`copy_to_at_most`、`copy_to_end_limited`、`read_to_end_limited`、`read_to_end_limited_into`、`read_to_string_limited`、`read_to_string_limited_into` | 短读安全读取、有界复制和有界读取 |
+| `ReadExt` | `read_exact_or_eof`、`read_exact_array`、`read_exact_vec_limited`、`read_exact_vec_limited_into`、`discard_exact_or_eof`、`copy_to`、`copy_to_at_most`、`copy_to_end_limited`、`read_to_end_limited`、`read_to_end_limited_into`、`read_to_string_limited`、`read_to_string_limited_into` | 短读安全读取、精确读取、有界复制和有界读取 |
 | `BufReadExt` | `read_until_limited`、`read_until_limited_into`、`read_line_limited`、`read_line_limited_into`、`discard_until_limited` | 有界分隔符和行操作 |
 | `SeekExt` | `stream_size` | 获取大小但保持原 cursor |
 | `ReadSeekExt` | `peek_exact_or_eof`、`read_exact_or_eof_at` | 不消费位置的探测和随机 offset 读取 |
 | `WriteSeekExt` | `write_all_at_preserving_position` | 随机访问 patch 写入 |
 | `BinaryReadExt` | `read_u16_be`、`read_u16_le`、`read_u16(order)`，以及到 `u128` / `i128` 的标量变体 | 二进制标量解码 |
 | `BinaryWriteExt` | `write_u16_be`、`write_u16_le`、`write_u16(value, order)`，以及到 `u128` / `i128` 的标量变体 | 二进制标量编码 |
-| `Leb128IntReadExt` | `read_uleb_u32`、`read_sleb_i32`、`_strict` 变体，以及到 128 位的整数变体 | LEB128 整数解码 |
-| `Leb128IntWriteExt` | `write_uleb_u32`、`write_sleb_i32`，以及到 128 位的整数变体 | LEB128 整数编码 |
-| `ZigZagIntReadExt` | `read_zigzag_i32`、`read_zigzag_i128`、`_strict` 变体和其他有符号整数变体 | ZigZag 有符号整数解码 |
-| `ZigZagIntWriteExt` | `write_zigzag_i32`、`write_zigzag_i128` 和其他有符号整数变体 | ZigZag 有符号整数编码 |
-| `StringReadExt` | `read_utf8_string_uleb`、`read_utf8_string_u16_be`、`read_utf8_string_u16_le`、`read_utf8_string_u32_be`、`read_utf8_string_u32_le` | 有界长度前缀 UTF-8 解码 |
+| `Leb128ReadExt` | `read_uleb_u32`、`read_sleb_i32`、`_strict` 变体，以及到 128 位的整数变体 | LEB128 整数解码 |
+| `Leb128WriteExt` | `write_uleb_u32`、`write_sleb_i32`，以及到 128 位的整数变体 | LEB128 整数编码 |
+| `ZigZagReadExt` | `read_zigzag_i32`、`read_zigzag_i128`、`_strict` 变体和其他有符号整数变体 | ZigZag 有符号整数解码 |
+| `ZigZagWriteExt` | `write_zigzag_i32`、`write_zigzag_i128` 和其他有符号整数变体 | ZigZag 有符号整数编码 |
+| `StringReadExt` | `read_utf8_string_uleb`、`read_utf8_string_uleb_strict`、`read_utf8_string_u16_be`、`read_utf8_string_u16_le`、`read_utf8_string_u32_be`、`read_utf8_string_u32_le` | 有界长度前缀 UTF-8 解码 |
 | `StringWriteExt` | `write_utf8_string_uleb`、`write_utf8_string_u16_be`、`write_utf8_string_u16_le`、`write_utf8_string_u32_be`、`write_utf8_string_u32_le` | 长度前缀 UTF-8 编码 |
 
 每个 trait 都通过 blanket implementation 自动实现：
@@ -377,7 +390,8 @@ cargo test
 
 ## 依赖项
 
-本 crate 除 Rust 标准库外没有运行时依赖。
+本 crate 运行时依赖 Rust 标准库和 `getrandom`。`getrandom` 用于 `Files`
+临时文件和目录 helper，以 OS 随机源生成随机名称。
 
 ## 许可证
 

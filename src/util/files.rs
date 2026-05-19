@@ -87,6 +87,20 @@ unsafe extern "system" {
 /// This type is an uninstantiable namespace. Use its associated methods for
 /// small recurring file operations, including parent creation, random temporary
 /// paths, and atomic replacement writes.
+///
+/// # Examples
+/// ```
+/// use qubit_io::Files;
+///
+/// let dir = Files::create_temp_dir_with(Some("qubit-io-doc-"), 16)?;
+/// let path = dir.join("nested").join("data.txt");
+///
+/// Files::atomic_write(&path, b"payload")?;
+/// assert_eq!(b"payload", std::fs::read(&path)?.as_slice());
+///
+/// std::fs::remove_dir_all(dir)?;
+/// # Ok::<(), std::io::Error>(())
+/// ```
 pub enum Files {}
 
 impl Files {

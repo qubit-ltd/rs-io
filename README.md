@@ -16,16 +16,19 @@ Qubit IO provides a compact set of low-level utilities on top of `std::io`:
 - object-safe composition traits for common `std::io` capability combinations;
 - extension traits for recurring low-level I/O patterns that the standard
   library leaves to callers;
-- utility functions and wrapper types for common stream instrumentation,
-  limiting, teeing, checksumming, and position restoration.
+- the `Files` namespace for parent directory creation, random temporary
+  entries, buffered file helpers, and durable atomic writes;
+- wrapper types for common stream instrumentation, limiting, teeing,
+  checksumming, and position restoration.
 
 The composition traits are useful when an API needs a trait object such as
 `&mut dyn ReadSeek` or `Box<dyn ReadWriteSeek>` instead of a generic bound like
 `R: Read + Seek`.
 
 The extension traits cover conservative, standard-library-first behavior such
-as bounded reads, limited delimiter reads, binary scalar encoding, LEB128 and
-ZigZag integer encodings, and position-preserving seek operations.
+as exact and bounded reads, limited delimiter reads, binary scalar encoding,
+LEB128 and ZigZag integer encodings, strict ULEB string length decoding, and
+position-preserving seek operations.
 
 ## Design Goals
 
@@ -82,25 +85,37 @@ ZigZag integer encodings, and position-preserving seek operations.
 - **`BinaryReadExt` / `BinaryWriteExt`**:
   - read and write primitive numeric scalars through `u128` / `i128` with
     `_be` / `_le` suffix methods or a runtime `ByteOrder`.
-- **`Leb128IntReadExt` / `Leb128IntWriteExt`**:
+- **`Leb128ReadExt` / `Leb128WriteExt`**:
   - read and write unsigned and signed LEB128 integers through 128-bit values;
     read methods also provide `_strict` canonical-decoding variants.
-- **`ZigZagIntReadExt` / `ZigZagIntWriteExt`**:
+- **`ZigZagReadExt` / `ZigZagWriteExt`**:
   - read and write ZigZag-mapped signed integers through 128-bit values using
     unsigned LEB128 payloads; read methods also provide `_strict` variants.
 - **`StringReadExt` / `StringWriteExt`**:
   - read and write length-prefixed UTF-8 strings with ULEB128, `u16`, or `u32`
-    byte-length prefixes.
+    byte-length prefixes; strict ULEB reads reject non-canonical length
+    prefixes before reading the payload.
 
 ### Utilities and Wrappers
 
-- file helpers create missing parent directories and provide durable
-  same-directory atomic writes;
+- `Files` associated methods create missing directories, open buffered files,
+  build random temporary names and paths, create random temporary files and
+  directories using `getrandom`-backed OS randomness, and provide durable
+  same-directory atomic writes with temporary-file sync and parent-directory
+  sync when supported;
 - content helpers compare readers and copy bounded byte ranges;
 - wrapper types provide counting, limiting, teeing, checksum updating, and
   position-guard behavior.
 - `qubit_io::prelude` re-exports the extension traits and composition traits
   for method-oriented call sites.
+
+### Planned Codec Wrappers
+
+Phase 2 also reserves root-level codec wrapper names for callers who prefer
+reader/writer objects over extension-method calls: `BinaryReader`,
+`BinaryWriter`, `Leb128Reader`, `Leb128Writer`, `ZigZagReader`, and
+`ZigZagWriter`. Until those wrappers land in source, use the extension traits
+listed above.
 
 ### Blanket Implementations
 
@@ -317,7 +332,8 @@ where
 
 ## API Reference
 
-For a complete method-level overview, see the [API matrix](doc/api-matrix.md).
+For a complete method-level overview and usage guidance, see the
+[user guide](doc/user_guide.md).
 
 | Trait | Standard-library bounds | Typical use |
 |-------|-------------------------|-------------|
@@ -329,18 +345,18 @@ For a complete method-level overview, see the [API matrix](doc/api-matrix.md).
 
 | Extension trait | Methods | Typical use |
 |-----------------|---------|-------------|
-| `ReadExt` | `read_exact_or_eof`, `discard_exact_or_eof`, `copy_to`, `copy_to_at_most`, `copy_to_end_limited`, `read_to_end_limited`, `read_to_end_limited_into`, `read_to_string_limited`, `read_to_string_limited_into` | short-read-safe reads, bounded copies, and bounded reads |
+| `ReadExt` | `read_exact_or_eof`, `read_exact_array`, `read_exact_vec_limited`, `read_exact_vec_limited_into`, `discard_exact_or_eof`, `copy_to`, `copy_to_at_most`, `copy_to_end_limited`, `read_to_end_limited`, `read_to_end_limited_into`, `read_to_string_limited`, `read_to_string_limited_into` | short-read-safe reads, exact reads, bounded copies, and bounded reads |
 | `BufReadExt` | `read_until_limited`, `read_until_limited_into`, `read_line_limited`, `read_line_limited_into`, `discard_until_limited` | bounded delimiter and line operations |
 | `SeekExt` | `stream_size` | size checks that keep the original cursor |
 | `ReadSeekExt` | `peek_exact_or_eof`, `read_exact_or_eof_at` | non-consuming inspection and random-offset reads |
 | `WriteSeekExt` | `write_all_at_preserving_position` | random-access patch writes |
 | `BinaryReadExt` | `read_u16_be`, `read_u16_le`, `read_u16(order)`, and scalar variants through `u128` / `i128` | binary scalar decoding |
 | `BinaryWriteExt` | `write_u16_be`, `write_u16_le`, `write_u16(value, order)`, and scalar variants through `u128` / `i128` | binary scalar encoding |
-| `Leb128IntReadExt` | `read_uleb_u32`, `read_sleb_i32`, `_strict` variants, and other integer variants through 128-bit values | LEB128 integer decoding |
-| `Leb128IntWriteExt` | `write_uleb_u32`, `write_sleb_i32`, and other integer variants through 128-bit values | LEB128 integer encoding |
-| `ZigZagIntReadExt` | `read_zigzag_i32`, `read_zigzag_i128`, `_strict` variants, and other signed variants | ZigZag signed integer decoding |
-| `ZigZagIntWriteExt` | `write_zigzag_i32`, `write_zigzag_i128`, and other signed variants | ZigZag signed integer encoding |
-| `StringReadExt` | `read_utf8_string_uleb`, `read_utf8_string_u16_be`, `read_utf8_string_u16_le`, `read_utf8_string_u32_be`, `read_utf8_string_u32_le` | bounded length-prefixed UTF-8 decoding |
+| `Leb128ReadExt` | `read_uleb_u32`, `read_sleb_i32`, `_strict` variants, and other integer variants through 128-bit values | LEB128 integer decoding |
+| `Leb128WriteExt` | `write_uleb_u32`, `write_sleb_i32`, and other integer variants through 128-bit values | LEB128 integer encoding |
+| `ZigZagReadExt` | `read_zigzag_i32`, `read_zigzag_i128`, `_strict` variants, and other signed variants | ZigZag signed integer decoding |
+| `ZigZagWriteExt` | `write_zigzag_i32`, `write_zigzag_i128`, and other signed variants | ZigZag signed integer encoding |
+| `StringReadExt` | `read_utf8_string_uleb`, `read_utf8_string_uleb_strict`, `read_utf8_string_u16_be`, `read_utf8_string_u16_le`, `read_utf8_string_u32_be`, `read_utf8_string_u32_le` | bounded length-prefixed UTF-8 decoding |
 | `StringWriteExt` | `write_utf8_string_uleb`, `write_utf8_string_u16_be`, `write_utf8_string_u16_le`, `write_utf8_string_u32_be`, `write_utf8_string_u32_le` | length-prefixed UTF-8 encoding |
 
 Each trait is implemented with a blanket implementation:
@@ -405,7 +421,9 @@ cargo test
 
 ## Dependencies
 
-This crate has no runtime dependencies outside the Rust standard library.
+This crate depends on the Rust standard library and `getrandom` at runtime.
+`getrandom` is used by `Files` temporary file and directory helpers to build
+random names from operating-system randomness.
 
 ## License
 

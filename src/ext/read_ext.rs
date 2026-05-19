@@ -33,6 +33,20 @@ const READ_TO_END_BUFFER_SIZE: usize = 8 * 1024;
 /// `ReadExt` fills small semantic gaps in the standard [`Read`] trait while
 /// keeping the same blocking and error model. The methods are implemented for
 /// every type that implements [`Read`], including `dyn Read` trait objects.
+///
+/// # Examples
+/// ```
+/// use qubit_io::ReadExt;
+/// use std::io::Cursor;
+///
+/// let mut input = Cursor::new(b"abcdef".to_vec());
+/// let header = input.read_exact_array::<2>()?;
+/// let payload = input.read_exact_vec_limited(4, 16)?;
+///
+/// assert_eq!(*b"ab", header);
+/// assert_eq!(b"cdef", payload.as_slice());
+/// # Ok::<(), std::io::Error>(())
+/// ```
 pub trait ReadExt: Read {
     /// Reads bytes until `buffer` is full or EOF is reached.
     ///
