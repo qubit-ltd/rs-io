@@ -16,8 +16,9 @@ Qubit IO provides a compact set of low-level utilities on top of `std::io`:
 - object-safe composition traits for common `std::io` capability combinations;
 - extension traits for recurring low-level I/O patterns that the standard
   library leaves to callers;
-- the `Files` namespace for parent directory creation, random temporary
-  entries, buffered file helpers, and durable atomic writes;
+- the `Files` namespace for parent directory creation, random temporary entries
+  with safe file-name fragment validation, buffered file helpers, and durable
+  atomic writes;
 - the `Streams` and `Filenames` namespaces for stream-level copy/compare
   operations and lexical file-name helpers;
 - wrapper types for common stream instrumentation, limiting, teeing,
@@ -102,9 +103,10 @@ position-preserving seek operations.
 
 - `Files` associated methods create missing directories, open buffered files,
   build random temporary names and paths, create random temporary files and
-  directories using `getrandom`-backed OS randomness, and provide durable
-  same-directory atomic writes with temporary-file sync and parent-directory
-  sync when supported;
+  directories using `getrandom`-backed OS randomness while rejecting path-like
+  name fragments, and provide durable same-directory atomic writes with
+  temporary-file sync, existing regular-file permission preservation, and
+  parent-directory sync when supported;
 - `Streams` associated methods wrap `std::io::copy`, copy bounded byte ranges,
   copy only if the remaining input reaches EOF within a limit, and compare
   readable stream contents;
@@ -371,7 +373,7 @@ For a complete method-level overview and usage guidance, see the
 
 | Utility namespace | Methods | Typical use |
 |-------------------|---------|-------------|
-| `Files` | `open_buffered_reader`, `ensure_dir`, `ensure_parent`, `create_file_with_parent`, `create_buffered_writer_with_parent`, `random_file_name`, `temp_dir`, `temp_path`, `create_temp_file`, `create_temp_file_with`, `create_temp_file_in`, `create_temp_dir_with`, `create_temp_dir_in`, `atomic_write`, `atomic_write_with` | filesystem helpers and durable writes |
+| `Files` | `open_buffered_reader`, `ensure_dir`, `ensure_parent`, `create_file_with_parent`, `create_buffered_writer_with_parent`, `random_file_name`, `try_random_file_name`, `temp_dir`, `temp_path`, `create_temp_file`, `create_temp_file_with`, `create_temp_file_in`, `create_temp_dir_with`, `create_temp_dir_in`, `atomic_write`, `atomic_write_with` | filesystem helpers and durable writes |
 | `Streams` | `copy`, `copy_at_most`, `copy_to_end_limited`, `content_eq`, `compare_content` | stream copy and content comparison |
 | `Filenames` | `file_name`, `file_stem`, `file_prefix`, `extension`, `dot_extension`, `has_extension`, `has_extension_ignore_ascii_case`, `file_name_from_path`, `file_name_from_url` | lexical UTF-8 file-name inspection |
 

@@ -10,8 +10,9 @@ instrumentation and bounded I/O.
 - Object-safe composition traits such as `ReadSeek` and `ReadWriteSeek`.
 - Extension traits for exact reads, bounded reads, bounded delimiter reads,
   binary scalars, LEB128, ZigZag, and length-prefixed UTF-8 strings.
-- A `Files` namespace for parent directory creation, random temporary entries,
-  buffered file helpers, and durable same-directory atomic writes.
+- A `Files` namespace for parent directory creation, random temporary entries
+  with safe file-name fragment validation, buffered file helpers, and durable
+  same-directory atomic writes.
 - `Streams` and `Filenames` namespaces for stream copy/compare operations and
   lexical file-name helpers.
 - Wrapper types for counting, limiting, teeing, checksumming, and restoring a
@@ -120,14 +121,17 @@ Use `Files` associated methods instead of free functions:
 - `ensure_dir` and `ensure_parent` create missing directories.
 - `open_buffered_reader`, `create_file_with_parent`, and
   `create_buffered_writer_with_parent` handle common file-open patterns.
-- `random_file_name`, `temp_dir`, and `temp_path` construct random temporary
-  names and paths.
+- `random_file_name`, `try_random_file_name`, `temp_dir`, and `temp_path`
+  construct random temporary names and paths. `try_random_file_name` reports
+  invalid path-like prefix or suffix fragments through `Result`.
 - `create_temp_file`, `create_temp_file_with`, `create_temp_file_in`,
   `create_temp_dir_with`, and `create_temp_dir_in` create collision-resistant
-  random temporary entries with `getrandom`-backed OS randomness.
+  random temporary entries with `getrandom`-backed OS randomness and reject
+  path-like name fragments before joining with the target directory.
 - `atomic_write` and `atomic_write_with` write through a random same-directory
-  temporary file, flush and sync it, replace the destination, and sync the
-  parent directory when the platform supports directory syncing.
+  temporary file, preserve existing regular-file permissions, flush and sync it,
+  replace the destination, and sync the parent directory when the platform
+  supports directory syncing.
 
 ```rust
 use qubit_io::Files;
@@ -305,6 +309,7 @@ ZigZag follows the Protocol Buffers signed integer mapping:
 | `Files::create_file_with_parent` | Creates missing parent directories, then creates a file. |
 | `Files::create_buffered_writer_with_parent` | Creates missing parent directories, then creates `BufWriter<File>`. |
 | `Files::random_file_name` | Builds a random name from an optional prefix and suffix. |
+| `Files::try_random_file_name` | Builds a random name through a `Result`-returning API and rejects path-like fragments. |
 | `Files::temp_dir` | Returns the process temporary directory. |
 | `Files::temp_path` | Builds a random path under the process temporary directory. |
 | `Files::create_temp_file` | Creates a random temporary file under the process temporary directory. |
@@ -312,7 +317,7 @@ ZigZag follows the Protocol Buffers signed integer mapping:
 | `Files::create_temp_file_in` | Creates a random temporary file in a caller-provided directory. |
 | `Files::create_temp_dir_with` | Creates a random temporary directory under the process temporary directory. |
 | `Files::create_temp_dir_in` | Creates a random temporary directory in a caller-provided directory. |
-| `Files::atomic_write` | Writes bytes through a same-directory temporary file, syncs the temporary file, replaces the destination, and syncs the parent directory when supported. |
+| `Files::atomic_write` | Writes bytes through a same-directory temporary file, preserves existing regular-file permissions, syncs the temporary file, replaces the destination, and syncs the parent directory when supported. |
 | `Files::atomic_write_with` | Same as `atomic_write`, but accepts caller-provided write logic for the temporary file. |
 
 ### Stream Utilities
