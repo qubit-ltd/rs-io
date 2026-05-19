@@ -9,14 +9,10 @@
  ******************************************************************************/
 mod compare;
 mod copy;
+mod filenames;
 mod files;
+mod streams;
 
-pub use compare::{
-    compare_content,
-    content_eq,
-};
-pub use copy::{
-    copy_at_most,
-    copy_to_end_limited,
-};
+pub use filenames::Filenames;
 pub use files::Files;
+pub use streams::Streams;

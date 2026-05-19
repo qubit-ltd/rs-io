@@ -34,7 +34,7 @@ const COPY_BUFFER_SIZE: usize = 16 * 1024;
 /// # Errors
 /// Returns the first non-interrupted read error or write error reported by the
 /// underlying streams. Interrupted reads are retried.
-pub fn copy_at_most<R, W>(reader: &mut R, writer: &mut W, max_bytes: u64) -> Result<u64>
+pub(super) fn copy_at_most<R, W>(reader: &mut R, writer: &mut W, max_bytes: u64) -> Result<u64>
 where
     R: Read + ?Sized,
     W: Write + ?Sized,
@@ -101,7 +101,11 @@ fn copy_at_most_impl(reader: &mut dyn Read, writer: &mut dyn Write, max_bytes: u
 /// Returns [`ErrorKind::InvalidData`] when the remaining input is longer than
 /// `max_bytes`. Returns the first non-interrupted read error or write error
 /// reported by the underlying streams. Interrupted reads are retried.
-pub fn copy_to_end_limited<R, W>(reader: &mut R, writer: &mut W, max_bytes: u64) -> Result<u64>
+pub(super) fn copy_to_end_limited<R, W>(
+    reader: &mut R,
+    writer: &mut W,
+    max_bytes: u64,
+) -> Result<u64>
 where
     R: Read + ?Sized,
     W: Write + ?Sized,

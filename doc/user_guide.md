@@ -12,9 +12,11 @@ instrumentation and bounded I/O.
   binary scalars, LEB128, ZigZag, and length-prefixed UTF-8 strings.
 - A `Files` namespace for parent directory creation, random temporary entries,
   buffered file helpers, and durable same-directory atomic writes.
+- `Streams` and `Filenames` namespaces for stream copy/compare operations and
+  lexical file-name helpers.
 - Wrapper types for counting, limiting, teeing, checksumming, and restoring a
   seekable stream position.
-- Planned codec wrapper types for users who prefer reader/writer objects over
+- Codec wrapper types for users who prefer reader/writer objects over
   extension-method calls.
 
 ## Import Patterns
@@ -23,8 +25,10 @@ Use individual imports when a module only needs a few APIs:
 
 ```rust
 use qubit_io::{
+    Filenames,
     Files,
     ReadExt,
+    Streams,
     WriteSeekExt,
 };
 ```
@@ -36,7 +40,8 @@ use qubit_io::prelude::*;
 ```
 
 The prelude intentionally re-exports composition and extension traits, plus
-`ByteOrder`. Wrapper types and `Files` remain explicit root-level imports.
+`ByteOrder`. Wrapper types, `Files`, `Streams`, and `Filenames` remain explicit
+root-level imports.
 
 ## Composition Traits
 
@@ -137,6 +142,65 @@ std::fs::remove_dir_all(dir)?;
 # Ok::<(), std::io::Error>(())
 ```
 
+## Stream Utilities
+
+Use `Streams` when an operation involves more than one stream or is clearer as
+a namespace-level helper:
+
+- `copy` delegates to `std::io::copy`, preserving standard-library optimized
+  copy paths.
+- `copy_at_most` copies no more than the requested byte count.
+- `copy_to_end_limited` requires the remaining input to reach EOF within the
+  limit.
+- `content_eq` and `compare_content` consume two readers while comparing their
+  remaining bytes.
+
+```rust
+use qubit_io::Streams;
+use std::io::Cursor;
+
+let mut input = Cursor::new(b"abcdef".to_vec());
+let mut output = Vec::new();
+
+let copied = Streams::copy_at_most(&mut input, &mut output, 4)?;
+
+assert_eq!(4, copied);
+assert_eq!(b"abcd", output.as_slice());
+# Ok::<(), std::io::Error>(())
+```
+
+## Filename Utilities
+
+Use `Filenames` for lexical file-name operations that do not touch the
+filesystem:
+
+- `file_name`, `file_name_str`, `file_stem_str`, `file_prefix_str`, and
+  `extension_str` expose common `Path` components.
+- `dot_extension`, `has_extension`, and `has_extension_ignore_ascii_case`
+  cover frequent extension checks.
+- `file_name_from_path` extracts the final segment from a string containing
+  `/` or `\` separators.
+- `file_name_from_url` removes query/fragment suffixes and decodes
+  percent-encoded UTF-8 in the final URL path segment.
+
+Path-based helpers follow `std::path::Path` semantics. In particular, dotfiles
+such as `.env` do not have an extension unless they contain another dot.
+
+```rust
+use qubit_io::Filenames;
+use std::path::Path;
+
+let path = Path::new("/tmp/archive.tar.gz");
+
+assert_eq!(Some("archive.tar"), Filenames::file_stem_str(path));
+assert_eq!(Some("gz"), Filenames::extension_str(path));
+assert!(Filenames::has_extension(path, ".gz"));
+assert_eq!(
+    "my file.txt",
+    Filenames::file_name_from_url("https://example.com/my%20file.txt")
+);
+```
+
 ## Stream Wrappers
 
 Wrappers are transparent around the wrapped reader or writer and implement the
@@ -169,7 +233,7 @@ LEB128 validation is required.
 
 ## API Matrix
 
-This matrix summarizes the root-level public API expected after Phase 2.
+This matrix summarizes the root-level public API.
 
 ### Prelude
 
@@ -250,14 +314,30 @@ ZigZag follows the Protocol Buffers signed integer mapping:
 | `Files::atomic_write` | Writes bytes through a same-directory temporary file, syncs the temporary file, replaces the destination, and syncs the parent directory when supported. |
 | `Files::atomic_write_with` | Same as `atomic_write`, but accepts caller-provided write logic for the temporary file. |
 
-### Content Utilities
+### Stream Utilities
 
-| Function | Purpose |
-|----------|---------|
-| `copy_at_most` | Copies at most `max_bytes` bytes from a reader to a writer. |
-| `copy_to_end_limited` | Copies until EOF, returning `InvalidData` if input is longer than `max_bytes`. |
-| `content_eq` | Compares two readers for byte-for-byte equality. |
-| `compare_content` | Lexicographically compares two readers. |
+| API | Purpose |
+|-----|---------|
+| `Streams::copy` | Namespace-style wrapper around `std::io::copy`. |
+| `Streams::copy_at_most` | Copies at most `max_bytes` bytes from a reader to a writer. |
+| `Streams::copy_to_end_limited` | Copies until EOF, returning `InvalidData` if input is longer than `max_bytes`. |
+| `Streams::content_eq` | Compares two readers for byte-for-byte equality. |
+| `Streams::compare_content` | Lexicographically compares two readers. |
+
+### Filename Utilities
+
+| API | Purpose |
+|-----|---------|
+| `Filenames::file_name` | Returns the final file-name component as `OsStr`. |
+| `Filenames::file_name_str` | Returns the final file-name component as UTF-8. |
+| `Filenames::file_stem_str` | Returns the file stem as UTF-8 using `Path::file_stem` semantics. |
+| `Filenames::file_prefix_str` | Returns the file prefix as UTF-8 using `Path::file_prefix` semantics. |
+| `Filenames::extension_str` | Returns the final extension as UTF-8 using `Path::extension` semantics. |
+| `Filenames::dot_extension` | Returns the final extension with a leading dot. |
+| `Filenames::has_extension` | Performs a case-sensitive final-extension check. |
+| `Filenames::has_extension_ignore_ascii_case` | Performs an ASCII-case-insensitive final-extension check. |
+| `Filenames::file_name_from_path` | Extracts the final segment from a string with `/` or `\` separators. |
+| `Filenames::file_name_from_url` | Extracts and percent-decodes the final URL path segment. |
 
 ### Wrapper Types
 

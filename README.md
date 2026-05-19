@@ -18,6 +18,8 @@ Qubit IO provides a compact set of low-level utilities on top of `std::io`:
   library leaves to callers;
 - the `Files` namespace for parent directory creation, random temporary
   entries, buffered file helpers, and durable atomic writes;
+- the `Streams` and `Filenames` namespaces for stream-level copy/compare
+  operations and lexical file-name helpers;
 - wrapper types for common stream instrumentation, limiting, teeing,
   checksumming, and position restoration.
 
@@ -103,7 +105,12 @@ position-preserving seek operations.
   directories using `getrandom`-backed OS randomness, and provide durable
   same-directory atomic writes with temporary-file sync and parent-directory
   sync when supported;
-- content helpers compare readers and copy bounded byte ranges;
+- `Streams` associated methods wrap `std::io::copy`, copy bounded byte ranges,
+  copy only if the remaining input reaches EOF within a limit, and compare
+  readable stream contents;
+- `Filenames` associated methods expose common lexical file-name operations,
+  including UTF-8 path components, extension checks, and URL file-name
+  extraction;
 - wrapper types provide counting, limiting, teeing, checksum updating, and
   position-guard behavior.
 - `qubit_io::prelude` re-exports the extension traits and composition traits
@@ -360,6 +367,12 @@ For a complete method-level overview and usage guidance, see the
 | `ZigZagWriteExt` | `write_zigzag_i32`, `write_zigzag_i128`, and other signed variants | ZigZag signed integer encoding |
 | `StringReadExt` | `read_utf8_string_uleb`, `read_utf8_string_uleb_strict`, `read_utf8_string_u16_be`, `read_utf8_string_u16_le`, `read_utf8_string_u32_be`, `read_utf8_string_u32_le` | bounded length-prefixed UTF-8 decoding |
 | `StringWriteExt` | `write_utf8_string_uleb`, `write_utf8_string_u16_be`, `write_utf8_string_u16_le`, `write_utf8_string_u32_be`, `write_utf8_string_u32_le` | length-prefixed UTF-8 encoding |
+
+| Utility namespace | Methods | Typical use |
+|-------------------|---------|-------------|
+| `Files` | `open_buffered_reader`, `ensure_dir`, `ensure_parent`, `create_file_with_parent`, `create_buffered_writer_with_parent`, `random_file_name`, `temp_dir`, `temp_path`, `create_temp_file`, `create_temp_file_with`, `create_temp_file_in`, `create_temp_dir_with`, `create_temp_dir_in`, `atomic_write`, `atomic_write_with` | filesystem helpers and durable writes |
+| `Streams` | `copy`, `copy_at_most`, `copy_to_end_limited`, `content_eq`, `compare_content` | stream copy and content comparison |
+| `Filenames` | `file_name`, `file_name_str`, `file_stem_str`, `file_prefix_str`, `extension_str`, `dot_extension`, `has_extension`, `has_extension_ignore_ascii_case`, `file_name_from_path`, `file_name_from_url` | lexical file-name inspection |
 
 Each trait is implemented with a blanket implementation:
 

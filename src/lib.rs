@@ -55,11 +55,9 @@ pub use traits::{
     WriteSeek,
 };
 pub use util::{
+    Filenames,
     Files,
-    compare_content,
-    content_eq,
-    copy_at_most,
-    copy_to_end_limited,
+    Streams,
 };
 pub use wrappers::{
     ChecksumReader,

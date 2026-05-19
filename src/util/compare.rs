@@ -32,7 +32,7 @@ const COMPARE_BUFFER_SIZE: usize = 16 * 1024;
 ///
 /// # Errors
 /// Returns the first read error reported by either stream.
-pub fn content_eq(left: &mut dyn Read, right: &mut dyn Read) -> Result<bool> {
+pub(super) fn content_eq(left: &mut dyn Read, right: &mut dyn Read) -> Result<bool> {
     Ok(compare_content(left, right)? == Ordering::Equal)
 }
 
@@ -50,7 +50,7 @@ pub fn content_eq(left: &mut dyn Read, right: &mut dyn Read) -> Result<bool> {
 ///
 /// # Errors
 /// Returns the first read error reported by either stream.
-pub fn compare_content(left: &mut dyn Read, right: &mut dyn Read) -> Result<Ordering> {
+pub(super) fn compare_content(left: &mut dyn Read, right: &mut dyn Read) -> Result<Ordering> {
     let mut left_buffer = [0; COMPARE_BUFFER_SIZE];
     let mut right_buffer = [0; COMPARE_BUFFER_SIZE];
     loop {
