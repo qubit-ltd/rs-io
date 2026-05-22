@@ -26,63 +26,84 @@ use super::coder_progress::CoderProgress;
 /// - Use `Coder` directly for custom, policy-free unit transforms.
 /// - Use `Coder` when you want to own malformed/unmappable decisions at the call site.
 ///
-/// # Example: raw unit transform
-///
-/// # Example
+/// # Example: streaming byte-to-word decoder
 ///
 /// ```rust
 /// use qubit_io::{Coder, CoderProgress, CoderStatus};
 ///
 /// #[derive(Default)]
-/// struct ByteCopy;
+/// struct U16BeBytesDecoder;
 ///
-/// impl Coder<u8, u8> for ByteCopy {
+/// impl Coder<u8, u16> for U16BeBytesDecoder {
 ///     type Error = core::convert::Infallible;
 ///
 ///     fn max_output_len(&self, input_len: usize) -> Option<usize> {
-///         Some(input_len)
+///         Some(input_len / 2)
 ///     }
 ///
 ///     fn convert(
 ///         &mut self,
 ///         input: &[u8],
 ///         input_index: usize,
-///         output: &mut [u8],
+///         output: &mut [u16],
 ///         output_index: usize,
 ///     ) -> Result<CoderProgress, Self::Error> {
 ///         let mut read = 0;
 ///         let mut written = 0;
-///         while input_index + read < input.len() && output_index + written < output.len() {
-///             output[output_index + written] = input[input_index + read];
-///             read += 1;
+///         while input_index + read + 1 < input.len() {
+///             if output_index + written == output.len() {
+///                 let status = CoderStatus::NeedOutput {
+///                     output_index: output_index + written,
+///                     required: 1,
+///                     available: 0,
+///                 };
+///                 return Ok(CoderProgress::new(status, read, written));
+///             }
+///             let high = input[input_index + read] as u16;
+///             let low = input[input_index + read + 1] as u16;
+///             output[output_index + written] = (high << 8) | low;
+///             read += 2;
 ///             written += 1;
 ///         }
 ///         if input_index + read == input.len() {
 ///             Ok(CoderProgress::complete(read, written))
 ///         } else {
-///             let status = CoderStatus::NeedOutput {
-///                 output_index: output_index + written,
-///                 required: 1,
-///                 available: output.len().saturating_sub(output_index + written),
+///             let status = CoderStatus::NeedInput {
+///                 input_index: input_index + read,
+///                 required: 2,
+///                 available: input.len() - (input_index + read),
 ///             };
-///             Ok(CoderProgress::new(
-///                 status,
-///                 read,
-///                 written,
-///             ))
+///             Ok(CoderProgress::new(status, read, written))
 ///         }
 ///     }
 /// }
 ///
-/// let mut coder = ByteCopy;
-/// let mut output = [0_u8; 2];
+/// let mut coder = U16BeBytesDecoder;
+/// let mut output = [0_u16; 1];
 /// let progress = coder
-///     .convert(&[1, 2, 3], 0, &mut output, 0)
-///     .expect("convert works on partial output");
-/// assert!(matches!(progress.status(), CoderStatus::NeedOutput { .. }));
+///     .convert(&[0x12, 0x34, 0xab, 0xcd], 0, &mut output, 0)
+///     .expect("decoding cannot fail");
+/// assert_eq!(CoderStatus::NeedOutput {
+///     output_index: 1,
+///     required: 1,
+///     available: 0,
+/// }, progress.status());
 /// assert_eq!(2, progress.read());
-/// assert_eq!(2, progress.written());
-/// assert_eq!([1, 2], output);
+/// assert_eq!(1, progress.written());
+/// assert_eq!([0x1234], output);
+///
+/// let mut output = [0_u16; 2];
+/// let progress = coder
+///     .convert(&[0x12, 0x34, 0xab], 0, &mut output, 0)
+///     .expect("decoding cannot fail");
+/// assert_eq!(CoderStatus::NeedInput {
+///     input_index: 2,
+///     required: 2,
+///     available: 1,
+/// }, progress.status());
+/// assert_eq!(2, progress.read());
+/// assert_eq!(1, progress.written());
+/// assert_eq!([0x1234, 0], output);
 /// ```
 ///
 /// The trait is intentionally independent from charset concepts. Implementors
@@ -90,61 +111,6 @@ use super::coder_progress::CoderProgress;
 /// slices. Returned progress counters are relative counts from those positions.
 /// For raw codecs this gives a compact API; higher-level workflows can wrap this
 /// trait with their own semantic policies.
-///
-/// Use `Coder` directly when you need a byte/word-buffer converter without any
-/// charset policy coupling:
-///
-/// ```rust
-/// use qubit_io::{Coder, CoderProgress, CoderStatus};
-///
-/// #[derive(Default)]
-/// struct ByteCopy;
-///
-/// impl Coder<u8, u8> for ByteCopy {
-///     type Error = core::convert::Infallible;
-///
-///     fn max_output_len(&self, input_len: usize) -> Option<usize> {
-///         Some(input_len)
-///     }
-///
-///     fn convert(
-///         &mut self,
-///         input: &[u8],
-///         input_index: usize,
-///         output: &mut [u8],
-///         output_index: usize,
-///     ) -> Result<CoderProgress, Self::Error> {
-///         let mut read = 0;
-///         let mut written = 0;
-///         while input_index + read < input.len() && output_index + written < output.len() {
-///             output[output_index + written] = input[input_index + read];
-///             read += 1;
-///             written += 1;
-///         }
-///         if input_index + read == input.len() {
-///             Ok(CoderProgress::complete(read, written))
-///         } else {
-///             let status = CoderStatus::NeedOutput {
-///                 output_index: output_index + written,
-///                 required: 1,
-///                 available: output.len().saturating_sub(output_index + written),
-///             };
-///             Ok(CoderProgress::new(
-///                 status,
-///                 read,
-///                 written,
-///             ))
-///         }
-///     }
-/// }
-///
-/// let mut coder = ByteCopy;
-/// let mut output = [0_u8; 1];
-/// let progress = coder
-///     .convert(&[1], 0, &mut output, 0)
-///     .expect("convert works on partial output");
-/// assert!(matches!(progress.status(), CoderStatus::Complete));
-/// ```
 ///
 /// # Type Parameters
 ///
