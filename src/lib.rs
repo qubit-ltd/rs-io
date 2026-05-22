@@ -26,6 +26,7 @@ mod wrappers;
 
 pub use codec::{
     BinaryCodec,
+    ByteOrder,
     Coder,
     CoderProgress,
     CoderStatus,
@@ -38,7 +39,6 @@ pub use ext::{
     BinaryReadExt,
     BinaryWriteExt,
     BufReadExt,
-    ByteOrder,
     Leb128ReadExt,
     Leb128WriteExt,
     ReadExt,
