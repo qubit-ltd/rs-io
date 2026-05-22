@@ -17,6 +17,7 @@
 //! dedicated modules and are re-exported from the crate root for ergonomic use.
 
 mod codec;
+mod coder;
 mod ext;
 pub mod prelude;
 mod stream;
@@ -27,13 +28,15 @@ mod wrappers;
 pub use codec::{
     BinaryCodec,
     ByteOrder,
-    Coder,
-    CoderProgress,
-    CoderStatus,
     Leb128Codec,
     Leb128DecodeError,
     Leb128DecodeErrorKind,
     ZigZagCodec,
+};
+pub use coder::{
+    Coder,
+    CoderProgress,
+    CoderStatus,
 };
 pub use ext::{
     BinaryReadExt,

@@ -7,7 +7,7 @@
  *    Licensed under the Apache License, Version 2.0.
  *
  ******************************************************************************/
-use super::coder_status::CoderStatus;
+use super::CoderStatus;
 
 /// Counts how much work a [`crate::Coder`] completed before returning.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
