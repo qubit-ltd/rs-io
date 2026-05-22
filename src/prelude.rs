@@ -14,11 +14,18 @@
 //! utility functions.
 
 pub use crate::{
+    BinaryCodec,
     BinaryReadExt,
     BinaryWriteExt,
     BufReadExt,
     BufReadSeek,
     ByteOrder,
+    Coder,
+    CoderProgress,
+    CoderStatus,
+    Leb128Codec,
+    Leb128DecodeError,
+    Leb128DecodeErrorKind,
     Leb128ReadExt,
     Leb128WriteExt,
     ReadExt,
@@ -31,6 +38,7 @@ pub use crate::{
     StringWriteExt,
     WriteSeek,
     WriteSeekExt,
+    ZigZagCodec,
     ZigZagReadExt,
     ZigZagWriteExt,
 };

@@ -35,6 +35,23 @@ binary codec、协议适配器、archive reader、内存 buffer、网络 stream�
 这些本地文件系统能力请参考
 [qubit-local-files](https://github.com/qubit-ltd/rs-local-files)。
 
+## 缓冲区 Codec
+
+当数据已经位于调用方管理的 slice 中，不需要 `std::io::Read` 或 `std::io::Write` 适配器时，
+使用 root-level 缓冲区 codec 类型。
+
+| 类型 | 使用场景 |
+| --- | --- |
+| `Coder` | 实现面向输入/输出 buffer 的 progress-oriented 转换 |
+| `CoderProgress`、`CoderStatus` | 报告转换推进了多少，以及为什么停止 |
+| `BinaryCodec` | 在显式 byte index 上读写 fixed-width 标量 |
+| `Leb128Codec` | 在 byte slice 中编码 unsigned / signed LEB128 值 |
+| `ZigZagCodec` | 通过 ZigZag 加 unsigned LEB128 编码有符号整数 |
+
+面向 stream 的 reader/writer wrapper 使用单独的 stream wrapper API：
+`BinaryReader`、`BinaryWriter`、`Leb128Reader`、`Leb128Writer`、`ZigZagReader`
+和 `ZigZagWriter`。
+
 ## 安装
 
 ```toml
@@ -64,13 +81,13 @@ use qubit_io::{
 };
 ```
 
-如果一个模块主要使用 extension trait 和组合 trait，可以导入 prelude：
+如果一个模块主要使用 extension trait、组合 trait 或缓冲区 codec 类型，可以导入 prelude：
 
 ```rust
 use qubit_io::prelude::*;
 ```
 
-prelude 有意不导入 wrapper 类型。这样可以让具体运行时行为在调用点保持明确。
+prelude 有意不导入 stream wrapper 类型。这样可以让具体运行时行为在调用点保持明确。
 
 ## Object-Safe 组合 Trait
 

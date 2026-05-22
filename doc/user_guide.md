@@ -36,6 +36,23 @@ Not a fit:
 For those local filesystem concerns, use
 [qubit-local-files](https://github.com/qubit-ltd/rs-local-files).
 
+## Buffer Codecs
+
+Use the root-level buffer codec types when data already lives in caller-managed
+slices and no `std::io::Read` or `std::io::Write` adapter is needed.
+
+| Type | Use when |
+| --- | --- |
+| `Coder` | implementing a progress-oriented conversion over input and output buffers |
+| `CoderProgress`, `CoderStatus` | reporting how far conversion advanced and why it stopped |
+| `BinaryCodec` | reading or writing fixed-width scalars at explicit byte indexes |
+| `Leb128Codec` | encoding unsigned and signed LEB128 values in byte slices |
+| `ZigZagCodec` | encoding signed integers through ZigZag plus unsigned LEB128 |
+
+Stream-oriented reader/writer wrappers live under the separate stream wrapper
+surface: `BinaryReader`, `BinaryWriter`, `Leb128Reader`, `Leb128Writer`,
+`ZigZagReader`, and `ZigZagWriter`.
+
 ## Installation
 
 ```toml
@@ -66,15 +83,15 @@ use qubit_io::{
 };
 ```
 
-Use the prelude when a module mostly needs extension traits and composition
-traits:
+Use the prelude when a module mostly needs extension traits, composition traits,
+or buffer codec types:
 
 ```rust
 use qubit_io::prelude::*;
 ```
 
-The prelude intentionally does not import wrapper types. This keeps concrete
-runtime behavior explicit at call sites.
+The prelude intentionally does not import stream wrapper types. This keeps
+concrete runtime behavior explicit at call sites.
 
 ## Object-Safe Composition Traits
 

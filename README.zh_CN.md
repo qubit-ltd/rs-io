@@ -74,6 +74,18 @@ assert_eq!(b"bounded", data.as_slice());
 
 当 API 希望接收 `&mut dyn ReadSeek`，而不是写成 `R: Read + Seek` 泛型约束时，这些 trait 会更方便。
 
+### 缓冲区 Codec
+
+`codec` 模块提供不依赖 `std::io::Read` 或 `std::io::Write` 的缓冲区级 helper：
+
+| 类型 | 用途 |
+| --- | --- |
+| `Coder` | 面向调用方管理 buffer 的 progress-oriented 转换 trait |
+| `CoderProgress`、`CoderStatus` | 报告转换进度和停止原因 |
+| `BinaryCodec` | 在 byte slice 上做 fixed-width 标量编解码 |
+| `Leb128Codec`、`ZigZagCodec` | 在 byte slice 上做紧凑整数编解码 |
+| `Leb128DecodeError` | 结构化 LEB128 解码错误 |
+
 ### Extension Trait
 
 extension trait 让常见底层 I/O 模式保持接近标准库，同时减少重复样板代码：
@@ -126,7 +138,7 @@ wrapper 类型把 stream 行为放进类型语义，而不是一次性函数调�
 
 ## Prelude
 
-`qubit_io::prelude` 重导出 method-providing extension trait 和 object-safe 组合 trait。它有意不重导出 wrapper 类型或具体命名空间。
+`qubit_io::prelude` 重导出 method-providing extension trait、object-safe 组合 trait、字节序和缓冲区 codec 类型。它有意不重导出 stream wrapper 类型。
 
 ```rust
 use qubit_io::prelude::*;
@@ -138,7 +150,7 @@ use qubit_io::prelude::*;
 
 ## 运行时依赖
 
-本 crate 运行时只依赖 Rust 标准库。
+本 crate 运行时依赖 Rust 标准库和 `thiserror`。
 
 ## 测试与代码覆盖率
 

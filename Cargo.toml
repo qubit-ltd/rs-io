@@ -30,5 +30,8 @@ include = [
 name = "qubit_io"
 doctest = true
 
+[dependencies]
+thiserror = "2.0"
+
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage)'] }
