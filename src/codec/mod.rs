@@ -10,6 +10,7 @@
 //! Generic, charset-independent coding traits and status types.
 
 mod binary_codec;
+mod byte_order;
 mod coder;
 mod coder_progress;
 mod coder_status;
@@ -19,6 +20,7 @@ mod leb128_decode_error_kind;
 mod zig_zag_codec;
 
 pub use binary_codec::BinaryCodec;
+pub use byte_order::ByteOrder;
 pub use coder::Coder;
 pub use coder_progress::CoderProgress;
 pub use coder_status::CoderStatus;

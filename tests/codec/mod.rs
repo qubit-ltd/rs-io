@@ -1,4 +1,5 @@
 mod binary_codec_tests;
+mod byte_order_tests;
 mod coder_progress_tests;
 mod coder_status_tests;
 mod coder_tests;
