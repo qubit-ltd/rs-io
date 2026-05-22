@@ -1,4 +1,5 @@
-mod checksum_wrapper_tests;
+mod checksum_reader_tests;
+mod checksum_writer_tests;
 mod counting_reader_tests;
 mod counting_writer_tests;
 mod limit_reader_tests;

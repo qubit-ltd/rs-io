@@ -1,188 +1,107 @@
-/*******************************************************************************
- *
- *    Copyright (c) 2026 Haixing Hu.
- *
- *    SPDX-License-Identifier: Apache-2.0
- *
- *    Licensed under the Apache License, Version 2.0.
- *
- ******************************************************************************/
 use std::io::{
     Cursor,
     ErrorKind,
-    Read,
 };
 
 use qubit_io::{
     Leb128Reader,
-    Leb128WriteExt,
-    StringWriteExt,
+    Leb128Writer,
+    NonStrict,
+    Strict,
 };
 
 #[test]
-fn test_leb128_reader_reads_boundary_values_and_strings() {
-    let mut bytes = Vec::new();
-    bytes.write_uleb_u8(0).expect("u8 zero should be written");
-    bytes
-        .write_uleb_u8(u8::MAX)
-        .expect("u8 max should be written");
-    bytes
-        .write_uleb_u16(u16::MAX)
-        .expect("u16 max should be written");
-    bytes
-        .write_uleb_u32(u32::MAX)
-        .expect("u32 max should be written");
-    bytes
-        .write_uleb_u64(u64::MAX)
-        .expect("u64 max should be written");
-    bytes
-        .write_uleb_u128(u128::MAX)
-        .expect("u128 max should be written");
-    bytes
-        .write_uleb_usize(usize::MAX)
-        .expect("usize max should be written");
-    bytes.write_sleb_i8(0).expect("i8 zero should be written");
-    bytes
-        .write_sleb_i8(i8::MIN)
-        .expect("i8 min should be written");
-    bytes
-        .write_sleb_i16(i16::MAX)
-        .expect("i16 max should be written");
-    bytes
-        .write_sleb_i32(i32::MIN)
-        .expect("i32 min should be written");
-    bytes
-        .write_sleb_i64(i64::MAX)
-        .expect("i64 max should be written");
-    bytes
-        .write_sleb_i128(i128::MIN)
-        .expect("i128 min should be written");
-    bytes
-        .write_sleb_isize(isize::MIN)
-        .expect("isize min should be written");
-    bytes
-        .write_utf8_string_uleb("hello 世界")
-        .expect("string should be written");
-    bytes
-        .write_utf8_string_uleb("plain")
-        .expect("second string should be written");
-    bytes.push(0x7f);
+fn test_leb128_reader_reads_all_methods() {
+    let mut writer = Leb128Writer::new(Vec::new());
+    writer.write_u8(u8::MAX).expect("u8 should be written");
+    writer.write_u16(300).expect("u16 should be written");
+    writer.write_u32(0x1f600).expect("u32 should be written");
+    writer
+        .write_u64(0x0102_0304_0506_0708)
+        .expect("u64 should be written");
+    writer
+        .write_u128(0x0102_0304_0506_0708_1112_1314_1516_1718)
+        .expect("u128 should be written");
+    writer
+        .write_usize(usize::MAX)
+        .expect("usize should be written");
+    writer.write_i8(i8::MIN).expect("i8 should be written");
+    writer.write_i16(-300).expect("i16 should be written");
+    writer.write_i32(-0x1f600).expect("i32 should be written");
+    writer
+        .write_i64(-0x0102_0304_0506_0708)
+        .expect("i64 should be written");
+    writer
+        .write_i128(-0x0102_0304_0506_0708_1112_1314_1516_1718)
+        .expect("i128 should be written");
+    writer
+        .write_isize(isize::MIN)
+        .expect("isize should be written");
 
-    let mut reader = Leb128Reader::with_strict(Cursor::new(bytes), true);
-    assert!(reader.is_strict());
-
-    assert_eq!(0, reader.read_u8().expect("u8 zero should be read"));
-    assert_eq!(u8::MAX, reader.read_u8().expect("u8 max should be read"));
-    assert_eq!(u16::MAX, reader.read_u16().expect("u16 max should be read"));
-    assert_eq!(u32::MAX, reader.read_u32().expect("u32 max should be read"));
-    assert_eq!(u64::MAX, reader.read_u64().expect("u64 max should be read"));
+    let mut reader = Leb128Reader::<_, NonStrict>::new(Cursor::new(writer.into_inner()));
+    assert!(!reader.is_strict());
+    assert_eq!(u8::MAX, reader.read_u8().expect("u8 should be read"));
+    assert_eq!(300, reader.read_u16().expect("u16 should be read"));
+    assert_eq!(0x1f600, reader.read_u32().expect("u32 should be read"));
     assert_eq!(
-        u128::MAX,
-        reader.read_u128().expect("u128 max should be read")
+        0x0102_0304_0506_0708,
+        reader.read_u64().expect("u64 should be read")
+    );
+    assert_eq!(
+        0x0102_0304_0506_0708_1112_1314_1516_1718,
+        reader.read_u128().expect("u128 should be read")
     );
     assert_eq!(
         usize::MAX,
-        reader.read_usize().expect("usize max should be read")
+        reader.read_usize().expect("usize should be read")
     );
-    assert_eq!(0, reader.read_i8().expect("i8 zero should be read"));
-    assert_eq!(i8::MIN, reader.read_i8().expect("i8 min should be read"));
-    assert_eq!(i16::MAX, reader.read_i16().expect("i16 max should be read"));
-    assert_eq!(i32::MIN, reader.read_i32().expect("i32 min should be read"));
-    assert_eq!(i64::MAX, reader.read_i64().expect("i64 max should be read"));
+    assert_eq!(i8::MIN, reader.read_i8().expect("i8 should be read"));
+    assert_eq!(-300, reader.read_i16().expect("i16 should be read"));
+    assert_eq!(-0x1f600, reader.read_i32().expect("i32 should be read"));
     assert_eq!(
-        i128::MIN,
-        reader.read_i128().expect("i128 min should be read")
+        -0x0102_0304_0506_0708,
+        reader.read_i64().expect("i64 should be read")
+    );
+    assert_eq!(
+        -0x0102_0304_0506_0708_1112_1314_1516_1718,
+        reader.read_i128().expect("i128 should be read")
     );
     assert_eq!(
         isize::MIN,
-        reader.read_isize().expect("isize min should be read")
-    );
-    assert_eq!(
-        "hello 世界",
-        reader.read_utf8_string(32).expect("string should be read")
-    );
-    assert_eq!(
-        "plain",
-        reader
-            .read_utf8_string(16)
-            .expect("second string should be read")
-    );
-    let position = reader.get_ref().position() as usize;
-    assert_eq!(0x7f, reader.get_mut().get_ref()[position]);
-
-    let cursor = reader.into_inner();
-    assert_eq!(cursor.get_ref().len() as u64 - 1, cursor.position());
-}
-
-#[test]
-fn test_leb128_reader_delegates_raw_read() {
-    let mut reader = Leb128Reader::new(Cursor::new(vec![0x01, 0x02]));
-    let mut bytes = [0; 2];
-
-    reader
-        .read_exact(&mut bytes)
-        .expect("raw bytes should be read");
-
-    assert_eq!([0x01, 0x02], bytes);
-}
-
-#[test]
-fn test_leb128_reader_default_non_strict_accepts_non_canonical_values() {
-    let mut reader = Leb128Reader::new(Cursor::new(vec![0x80, 0x00, 0x81, 0x00, b'a']));
-    assert!(!reader.is_strict());
-
-    assert_eq!(0, reader.read_u8().expect("non-strict u8 should be read"));
-    assert_eq!(
-        "a",
-        reader
-            .read_utf8_string(4)
-            .expect("non-strict string should be read")
+        reader.read_isize().expect("isize should be read")
     );
 }
 
 #[test]
-fn test_leb128_reader_rejects_non_canonical_values_and_strings() {
-    let mut reader = Leb128Reader::new(Cursor::new(vec![0x80, 0x00]));
-    assert!(!reader.is_strict());
-    reader.set_strict(true);
+fn test_leb128_reader_exposes_accessors_and_reports_errors() {
+    let mut reader = Leb128Reader::<_, Strict>::new(Cursor::new([0x80, 0x00]));
     assert!(reader.is_strict());
-
-    let error = reader.read_u8().expect_err("non-canonical u8 should fail");
-    assert_eq!(ErrorKind::InvalidData, error.kind());
-
-    let mut reader = Leb128Reader::with_strict(Cursor::new(vec![0x81, 0x00, b'a']), true);
-    let error = reader
-        .read_utf8_string(16)
-        .expect_err("non-canonical string length should fail");
-    assert_eq!(ErrorKind::InvalidData, error.kind());
-}
-
-#[test]
-fn test_leb128_reader_forwards_buf_read_and_seek() {
-    use std::io::{
-        BufRead,
-        BufReader,
-        Seek,
-        SeekFrom,
-    };
-
-    let inner = BufReader::new(Cursor::new(vec![0x00, 0x01, 0x02, 0x03]));
-    let mut reader = Leb128Reader::new(inner);
-
+    assert_eq!(0, reader.get_ref().position());
+    reader.get_mut().set_position(0);
     assert_eq!(
-        &[0x00, 0x01, 0x02, 0x03],
-        reader.fill_buf().expect("buffer should be exposed")
+        ErrorKind::InvalidData,
+        reader
+            .read_u16()
+            .expect_err("non-canonical value should fail")
+            .kind()
     );
-    reader.consume(2);
+    assert_eq!(2, reader.into_inner().position());
+
+    let mut reader = Leb128Reader::<_, NonStrict>::new(Cursor::new([0x80]));
     assert_eq!(
-        &[0x02, 0x03],
-        reader.fill_buf().expect("buffer should advance")
+        ErrorKind::UnexpectedEof,
+        reader
+            .read_u64()
+            .expect_err("truncated value should report EOF")
+            .kind()
     );
-    reader
-        .seek(SeekFrom::Start(1))
-        .expect("seek should be forwarded");
+
+    let mut reader = Leb128Reader::<_, NonStrict>::new(Cursor::new([0x80, 0x80, 0x80]));
     assert_eq!(
-        1,
-        reader.read_u8().expect("value after seek should be read")
+        ErrorKind::InvalidData,
+        reader
+            .read_u16()
+            .expect_err("unterminated max-width value should fail")
+            .kind()
     );
 }

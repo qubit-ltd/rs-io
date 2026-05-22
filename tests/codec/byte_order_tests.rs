@@ -8,5 +8,4 @@ fn test_byte_order_variants_are_distinct_and_copyable() {
     assert_eq!(ByteOrder::BigEndian, big);
     assert_eq!(ByteOrder::LittleEndian, little);
     assert_ne!(big, little);
-    assert_eq!(big, big);
 }
