@@ -23,7 +23,7 @@ Qubit IO 专注于基于 `std::io` 的 stream 和字节 I/O。它不尝试成为
 
 详细用法、示例和 API 选择建议请参见[中文用户手册](doc/user_guide.zh_CN.md)。API 参考文档可在 [docs.rs](https://docs.rs/qubit-io) 查看。
 
-如果需要本地文件系统相关能力，请参考[qubit-local-fs](https://github.com/qubit-ltd/rs-local-fs)。
+如果需要本地文件系统相关能力，请参考[qubit-local-files](https://github.com/qubit-ltd/rs-local-files)。
 
 ## 安装
 
@@ -134,7 +134,7 @@ use qubit_io::prelude::*;
 
 ## Crate 边界
 
-`qubit-io` 只保留 stream 和字节 I/O 能力，不暴露本地路径 helper、临时文件、目录复制、目录清理或 atomic file write。如果需要本地文件系统相关能力，请参考[qubit-local-fs](https://github.com/qubit-ltd/rs-local-fs)。
+`qubit-io` 只保留 stream 和字节 I/O 能力，不暴露本地路径 helper、临时文件、目录复制、目录清理或 atomic file write。如果需要本地文件系统相关能力，请参考[qubit-local-files](https://github.com/qubit-ltd/rs-local-files)。
 
 ## 运行时依赖
 
@@ -184,7 +184,7 @@ Copyright (c) 2026. Haixing Hu.
 
 - 遵循 Rust API 指南。
 - 将 stream 和字节 I/O 相关能力保留在 `qubit-io` 中。
-- 本地文件系统工具请使用 [qubit-local-fs](https://github.com/qubit-ltd/rs-local-fs)。
+- 本地文件系统工具请使用 [qubit-local-files](https://github.com/qubit-ltd/rs-local-files)。
 - 保持全面的测试覆盖。
 - 公共 API 在有助于说明行为时应提供文档和示例。
 - 提交 PR 前确保 `./ci-check.sh` 通过。
@@ -195,7 +195,7 @@ Copyright (c) 2026. Haixing Hu.
 
 ## 相关项目
 
-- [qubit-local-fs](https://github.com/qubit-ltd/rs-local-fs)：面向 Rust 的本地文件系统工具库。
+- [qubit-local-files](https://github.com/qubit-ltd/rs-local-files)：面向 Rust 的本地文件系统工具库。
 - Qubit 旗下的更多 Rust 库发布在 GitHub 组织 [qubit-ltd](https://github.com/qubit-ltd)。
 
 ---
