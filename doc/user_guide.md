@@ -49,6 +49,24 @@ slices and no `std::io::Read` or `std::io::Write` adapter is needed.
 | `Leb128Codec` | encoding unsigned and signed LEB128 values in byte slices |
 | `ZigZagCodec` | encoding signed integers through ZigZag plus unsigned LEB128 |
 
+These codecs are low-level static namespaces. They intentionally expose only
+`unsafe` unchecked buffer operations, so the caller must validate the accessible
+range before calling them. Use `REQUIRED_MIN_BUFFER_LEN` from the concrete
+specialization to size a temporary buffer that can hold one value.
+
+```rust
+use qubit_io::{BinaryCodec, BigEndian, Leb128Codec, NonStrict};
+
+let mut fixed = [0_u8; BinaryCodec::<u32, BigEndian>::REQUIRED_MIN_BUFFER_LEN];
+unsafe {
+    BinaryCodec::<u32, BigEndian>::write_unchecked(&mut fixed, 0, 0x0102_0304);
+}
+
+let mut compact = [0_u8; Leb128Codec::<u64, NonStrict>::REQUIRED_MIN_BUFFER_LEN];
+let written = unsafe { Leb128Codec::<u64, NonStrict>::write_unchecked(&mut compact, 0, 300) };
+assert_eq!(&[0xac, 0x02], &compact[..written]);
+```
+
 Stream-oriented reader/writer wrappers live under the separate stream wrapper
 surface: `BinaryReader`, `BinaryWriter`, `Leb128Reader`, `Leb128Writer`,
 `ZigZagReader`, and `ZigZagWriter`.

@@ -86,6 +86,11 @@ assert_eq!(b"bounded", data.as_slice());
 | `Leb128Codec`、`ZigZagCodec` | 在调用方已验证的 byte buffer 上做 unchecked 紧凑整数编解码 |
 | `Leb128DecodeError` | 结构化 LEB128 解码错误 |
 
+`BinaryCodec`、`Leb128Codec` 和 `ZigZagCodec` 只提供静态 `unsafe`
+`read_unchecked` / `write_unchecked` 函数，适用于调用方已经验证 buffer 容量的热路径。
+每个具体 codec 实例化类型都提供 `REQUIRED_MIN_BUFFER_LEN`，表示该类型单个值编码或解码时
+调用方需要准备的最小 buffer 容量。
+
 ### Extension Trait
 
 extension trait 让常见底层 I/O 模式保持接近标准库，同时减少重复样板代码：

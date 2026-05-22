@@ -48,6 +48,23 @@ binary codec、协议适配器、archive reader、内存 buffer、网络 stream�
 | `Leb128Codec` | 在 byte slice 中编码 unsigned / signed LEB128 值 |
 | `ZigZagCodec` | 通过 ZigZag 加 unsigned LEB128 编码有符号整数 |
 
+这些 codec 是低层静态命名空间，只提供 `unsafe` unchecked buffer 操作；调用方必须在调用前
+自行验证可访问范围。具体实例化类型上的 `REQUIRED_MIN_BUFFER_LEN` 表示一个值所需的最小临时
+buffer 容量。
+
+```rust
+use qubit_io::{BinaryCodec, BigEndian, Leb128Codec, NonStrict};
+
+let mut fixed = [0_u8; BinaryCodec::<u32, BigEndian>::REQUIRED_MIN_BUFFER_LEN];
+unsafe {
+    BinaryCodec::<u32, BigEndian>::write_unchecked(&mut fixed, 0, 0x0102_0304);
+}
+
+let mut compact = [0_u8; Leb128Codec::<u64, NonStrict>::REQUIRED_MIN_BUFFER_LEN];
+let written = unsafe { Leb128Codec::<u64, NonStrict>::write_unchecked(&mut compact, 0, 300) };
+assert_eq!(&[0xac, 0x02], &compact[..written]);
+```
+
 面向 stream 的 reader/writer wrapper 使用单独的 stream wrapper API：
 `BinaryReader`、`BinaryWriter`、`Leb128Reader`、`Leb128Writer`、`ZigZagReader`
 和 `ZigZagWriter`。
