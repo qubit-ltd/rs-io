@@ -25,7 +25,7 @@ use crate::codec::{
 
 macro_rules! read_zig_zag_value {
     ($reader:expr, $ty:ty, $policy:ty) => {{
-        let mut bytes = [0u8; ZigZagCodec::<$ty, NonStrict>::MIN_BUFFER_LEN];
+        let mut bytes = [0u8; ZigZagCodec::<$ty, NonStrict>::REQUIRED_MIN_BUFFER_LEN];
         for index in 0..bytes.len() {
             // SAFETY: The loop index is always inside the fixed-size local buffer.
             let target =

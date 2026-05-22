@@ -20,7 +20,7 @@ use crate::codec::{
 
 macro_rules! write_zig_zag_value {
     ($writer:expr, $value:expr, $ty:ty) => {
-        write_zig_zag::<{ ZigZagCodec::<$ty, NonStrict>::MIN_BUFFER_LEN }, _, _, _>(
+        write_zig_zag::<{ ZigZagCodec::<$ty, NonStrict>::REQUIRED_MIN_BUFFER_LEN }, _, _, _>(
             $writer,
             $value,
             |bytes, value| {

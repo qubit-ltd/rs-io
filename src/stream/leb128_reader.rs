@@ -25,7 +25,7 @@ use crate::codec::{
 
 macro_rules! read_leb128_value {
     ($reader:expr, $ty:ty, $policy:ty) => {
-        read_leb128::<{ Leb128Codec::<$ty, NonStrict>::MIN_BUFFER_LEN }, _, _, _>(
+        read_leb128::<{ Leb128Codec::<$ty, NonStrict>::REQUIRED_MIN_BUFFER_LEN }, _, _, _>(
             $reader,
             |bytes| {
                 // SAFETY: The local buffer is exactly the codec's minimum buffer length,
