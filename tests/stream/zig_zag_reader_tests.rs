@@ -1,128 +1,239 @@
-/*******************************************************************************
- *
- *    Copyright (c) 2026 Haixing Hu.
- *
- *    SPDX-License-Identifier: Apache-2.0
- *
- *    Licensed under the Apache License, Version 2.0.
- *
- ******************************************************************************/
 use std::io::{
     Cursor,
     ErrorKind,
-    Read,
 };
 
 use qubit_io::{
+    NonStrict,
+    Strict,
+    ZigZagCodec,
     ZigZagReader,
-    ZigZagWriteExt,
+    ZigZagWriter,
 };
 
 #[test]
-fn test_zig_zag_reader_reads_signed_values() {
-    let mut bytes = Vec::new();
-    bytes.write_zigzag_i8(-1).expect("i8 should be written");
-    bytes
-        .write_zigzag_i16(i16::MIN)
-        .expect("i16 should be written");
-    bytes
-        .write_zigzag_i32(-123_456)
-        .expect("i32 should be written");
-    bytes
-        .write_zigzag_i64(i64::MAX)
-        .expect("i64 should be written");
-    bytes
-        .write_zigzag_i128(i128::MIN)
+fn test_zig_zag_reader_reads_all_methods() {
+    let mut writer = ZigZagWriter::new(Vec::new());
+    writer
+        .write_i8(0)
+        .expect("single-byte i8 should be written");
+    writer.write_i8(i8::MIN).expect("i8 should be written");
+    writer.write_i16(-300).expect("i16 should be written");
+    writer.write_i32(-0x1f600).expect("i32 should be written");
+    writer.write_i64(i64::MIN).expect("i64 should be written");
+    writer
+        .write_i128(i128::MIN)
         .expect("i128 should be written");
-    bytes
-        .write_zigzag_isize(isize::MIN)
+    writer
+        .write_isize(isize::MIN)
         .expect("isize should be written");
-    bytes.push(0);
 
-    let mut reader = ZigZagReader::with_strict(Cursor::new(bytes), true);
-    assert!(reader.is_strict());
-
-    assert_eq!(-1, reader.read_i8().expect("i8 should be read"));
-    assert_eq!(i16::MIN, reader.read_i16().expect("i16 should be read"));
-    assert_eq!(-123_456, reader.read_i32().expect("i32 should be read"));
-    assert_eq!(i64::MAX, reader.read_i64().expect("i64 should be read"));
+    let mut reader = ZigZagReader::<_, NonStrict>::new(Cursor::new(writer.into_inner()));
+    assert!(!reader.is_strict());
+    assert_eq!(0, reader.read_i8().expect("single-byte i8 should be read"));
+    assert_eq!(i8::MIN, reader.read_i8().expect("i8 should be read"));
+    assert_eq!(-300, reader.read_i16().expect("i16 should be read"));
+    assert_eq!(-0x1f600, reader.read_i32().expect("i32 should be read"));
+    assert_eq!(i64::MIN, reader.read_i64().expect("i64 should be read"));
     assert_eq!(i128::MIN, reader.read_i128().expect("i128 should be read"));
     assert_eq!(
         isize::MIN,
         reader.read_isize().expect("isize should be read")
     );
-    let position = reader.get_ref().position() as usize;
-    assert_eq!(0, reader.get_mut().get_ref()[position]);
 
-    let cursor = reader.into_inner();
-    assert_eq!(cursor.get_ref().len() as u64 - 1, cursor.position());
-}
+    let mut writer = ZigZagWriter::new(Vec::new());
+    writer.write_i8(0).expect("strict i8 should be written");
+    writer
+        .write_i16(-300)
+        .expect("strict i16 should be written");
+    writer
+        .write_i32(-0x1f600)
+        .expect("strict i32 should be written");
+    writer
+        .write_i64(i64::MIN)
+        .expect("strict i64 should be written");
+    writer
+        .write_i128(i128::MIN)
+        .expect("strict i128 should be written");
+    writer
+        .write_isize(isize::MIN)
+        .expect("strict isize should be written");
 
-#[test]
-fn test_zig_zag_reader_delegates_raw_read() {
-    let mut reader = ZigZagReader::new(Cursor::new(vec![0x01, 0x02]));
-    let mut bytes = [0; 2];
-
-    reader
-        .read_exact(&mut bytes)
-        .expect("raw bytes should be read");
-
-    assert_eq!([0x01, 0x02], bytes);
-}
-
-#[test]
-fn test_zig_zag_reader_default_non_strict_accepts_non_canonical_underlying_uleb() {
-    let mut reader = ZigZagReader::new(Cursor::new([0x80, 0x00]));
-    assert!(!reader.is_strict());
-
-    assert_eq!(
-        0,
-        reader
-            .read_i8()
-            .expect("non-strict ZigZag value should be read")
-    );
-}
-
-#[test]
-fn test_zig_zag_reader_rejects_non_canonical_underlying_uleb() {
-    let mut reader = ZigZagReader::new(Cursor::new([0x80, 0x00]));
-    assert!(!reader.is_strict());
-    reader.set_strict(true);
+    let mut reader = ZigZagReader::<_, Strict>::new(Cursor::new(writer.into_inner()));
     assert!(reader.is_strict());
-
-    let error = reader
-        .read_i8()
-        .expect_err("non-canonical underlying ULEB should fail");
-
-    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!(0, reader.read_i8().expect("strict i8 should be read"));
+    assert_eq!(-300, reader.read_i16().expect("strict i16 should be read"));
+    assert_eq!(
+        -0x1f600,
+        reader.read_i32().expect("strict i32 should be read")
+    );
+    assert_eq!(
+        i64::MIN,
+        reader.read_i64().expect("strict i64 should be read")
+    );
+    assert_eq!(
+        i128::MIN,
+        reader.read_i128().expect("strict i128 should be read")
+    );
+    assert_eq!(
+        isize::MIN,
+        reader.read_isize().expect("strict isize should be read")
+    );
 }
 
 #[test]
-fn test_zig_zag_reader_forwards_buf_read_and_seek() {
-    use std::io::{
-        BufRead,
-        BufReader,
-        Seek,
-        SeekFrom,
-    };
-
-    let inner = BufReader::new(Cursor::new(vec![0x00, 0x02, 0x04]));
-    let mut reader = ZigZagReader::new(inner);
-
+fn test_zig_zag_reader_exposes_accessors_and_reports_errors() {
+    let mut reader = ZigZagReader::<_, Strict>::new(Cursor::new([0x80, 0x00]));
+    assert!(reader.is_strict());
+    assert_eq!(0, reader.get_ref().position());
+    reader.get_mut().set_position(0);
     assert_eq!(
-        &[0x00, 0x02, 0x04],
-        reader.fill_buf().expect("buffer should be exposed")
+        ErrorKind::InvalidData,
+        reader
+            .read_i16()
+            .expect_err("non-canonical value should fail")
+            .kind()
     );
-    reader.consume(1);
+    assert_eq!(2, reader.into_inner().position());
+
+    let mut reader = ZigZagReader::<_, NonStrict>::new(Cursor::new([0x80]));
     assert_eq!(
-        &[0x02, 0x04],
-        reader.fill_buf().expect("buffer should advance")
+        ErrorKind::UnexpectedEof,
+        reader
+            .read_i64()
+            .expect_err("truncated value should report EOF")
+            .kind()
     );
-    reader
-        .seek(SeekFrom::Start(1))
-        .expect("seek should be forwarded");
+
+    let mut reader = ZigZagReader::<_, NonStrict>::new(Cursor::new([0x80, 0x80, 0x80]));
     assert_eq!(
-        1,
-        reader.read_i8().expect("value after seek should be read")
+        ErrorKind::InvalidData,
+        reader
+            .read_i16()
+            .expect_err("unterminated max-width value should fail")
+            .kind()
+    );
+}
+
+#[test]
+fn test_zig_zag_reader_reports_all_instantiated_error_paths() {
+    let mut reader = ZigZagReader::<_, NonStrict>::new(Cursor::new([0x80]));
+    assert_eq!(
+        ErrorKind::UnexpectedEof,
+        reader.read_i8().expect_err("truncated i8").kind()
+    );
+
+    let mut reader = ZigZagReader::<_, NonStrict>::new(Cursor::new([0x80]));
+    assert_eq!(
+        ErrorKind::UnexpectedEof,
+        reader.read_i16().expect_err("truncated i16").kind()
+    );
+
+    let mut reader = ZigZagReader::<_, NonStrict>::new(Cursor::new([0x80]));
+    assert_eq!(
+        ErrorKind::UnexpectedEof,
+        reader.read_i32().expect_err("truncated i32").kind()
+    );
+
+    let mut reader = ZigZagReader::<_, NonStrict>::new(Cursor::new([0x80]));
+    assert_eq!(
+        ErrorKind::UnexpectedEof,
+        reader.read_i64().expect_err("truncated i64").kind()
+    );
+
+    let mut reader = ZigZagReader::<_, NonStrict>::new(Cursor::new([0x80]));
+    assert_eq!(
+        ErrorKind::UnexpectedEof,
+        reader.read_i128().expect_err("truncated i128").kind()
+    );
+
+    let mut reader = ZigZagReader::<_, NonStrict>::new(Cursor::new([0x80]));
+    assert_eq!(
+        ErrorKind::UnexpectedEof,
+        reader.read_isize().expect_err("truncated isize").kind()
+    );
+
+    let mut reader = ZigZagReader::<_, Strict>::new(Cursor::new([0x80, 0x00]));
+    assert_eq!(
+        ErrorKind::InvalidData,
+        reader.read_i8().expect_err("non-canonical i8").kind()
+    );
+
+    let mut reader = ZigZagReader::<_, Strict>::new(Cursor::new([0x80, 0x00]));
+    assert_eq!(
+        ErrorKind::InvalidData,
+        reader.read_i16().expect_err("non-canonical i16").kind()
+    );
+
+    let mut reader = ZigZagReader::<_, Strict>::new(Cursor::new([0x80, 0x00]));
+    assert_eq!(
+        ErrorKind::InvalidData,
+        reader.read_i32().expect_err("non-canonical i32").kind()
+    );
+
+    let mut reader = ZigZagReader::<_, Strict>::new(Cursor::new([0x80, 0x00]));
+    assert_eq!(
+        ErrorKind::InvalidData,
+        reader.read_i64().expect_err("non-canonical i64").kind()
+    );
+
+    let mut reader = ZigZagReader::<_, Strict>::new(Cursor::new([0x80, 0x00]));
+    assert_eq!(
+        ErrorKind::InvalidData,
+        reader.read_i128().expect_err("non-canonical i128").kind()
+    );
+
+    let mut reader = ZigZagReader::<_, Strict>::new(Cursor::new([0x80, 0x00]));
+    assert_eq!(
+        ErrorKind::InvalidData,
+        reader.read_isize().expect_err("non-canonical isize").kind()
+    );
+
+    let mut reader = ZigZagReader::<_, NonStrict>::new(Cursor::new(
+        [0x80u8; ZigZagCodec::<i8, NonStrict>::MIN_BUFFER_LEN],
+    ));
+    assert_eq!(
+        ErrorKind::InvalidData,
+        reader.read_i8().expect_err("unterminated i8").kind()
+    );
+
+    let mut reader = ZigZagReader::<_, NonStrict>::new(Cursor::new(
+        [0x80u8; ZigZagCodec::<i16, NonStrict>::MIN_BUFFER_LEN],
+    ));
+    assert_eq!(
+        ErrorKind::InvalidData,
+        reader.read_i16().expect_err("unterminated i16").kind()
+    );
+
+    let mut reader = ZigZagReader::<_, NonStrict>::new(Cursor::new(
+        [0x80u8; ZigZagCodec::<i32, NonStrict>::MIN_BUFFER_LEN],
+    ));
+    assert_eq!(
+        ErrorKind::InvalidData,
+        reader.read_i32().expect_err("unterminated i32").kind()
+    );
+
+    let mut reader = ZigZagReader::<_, NonStrict>::new(Cursor::new(
+        [0x80u8; ZigZagCodec::<i64, NonStrict>::MIN_BUFFER_LEN],
+    ));
+    assert_eq!(
+        ErrorKind::InvalidData,
+        reader.read_i64().expect_err("unterminated i64").kind()
+    );
+
+    let mut reader = ZigZagReader::<_, NonStrict>::new(Cursor::new(
+        [0x80u8; ZigZagCodec::<i128, NonStrict>::MIN_BUFFER_LEN],
+    ));
+    assert_eq!(
+        ErrorKind::InvalidData,
+        reader.read_i128().expect_err("unterminated i128").kind()
+    );
+
+    let mut reader = ZigZagReader::<_, NonStrict>::new(Cursor::new(
+        [0x80u8; ZigZagCodec::<isize, NonStrict>::MIN_BUFFER_LEN],
+    ));
+    assert_eq!(
+        ErrorKind::InvalidData,
+        reader.read_isize().expect_err("unterminated isize").kind()
     );
 }

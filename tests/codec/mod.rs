@@ -1,4 +1,12 @@
+mod big_endian_tests;
 mod binary_codec_tests;
+mod byte_order_spec_tests;
 mod byte_order_tests;
+mod decode_policy_tests;
 mod leb128_codec_tests;
+mod leb128_decode_error_kind_tests;
+mod leb128_decode_error_tests;
+mod little_endian_tests;
+mod non_strict_tests;
+mod strict_tests;
 mod zig_zag_codec_tests;
