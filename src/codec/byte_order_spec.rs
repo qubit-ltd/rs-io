@@ -8,12 +8,10 @@
  *
  ******************************************************************************/
 
-/// Runtime byte order selector.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ByteOrder {
-    /// Big-endian byte order.
-    BigEndian,
+use crate::ByteOrder;
 
-    /// Little-endian byte order.
-    LittleEndian,
+/// Describes a type-level byte order.
+pub trait ByteOrderSpec: Copy + Default {
+    /// Runtime value represented by this type-level byte order.
+    const ORDER: ByteOrder;
 }

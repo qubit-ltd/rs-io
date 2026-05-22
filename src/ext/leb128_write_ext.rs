@@ -7,236 +7,114 @@
  *    Licensed under the Apache License, Version 2.0.
  *
  ******************************************************************************/
+
 use std::io::{
     Result,
     Write,
 };
 
-/// Extension methods for writing LEB128 encoded integers.
-///
-/// Unsigned methods write unsigned LEB128 values, and signed methods write
-/// signed LEB128 values. Both forms encode seven payload bits per byte in
-/// least-significant group first order, with the high bit marking
-/// continuation. The integer encoding is described by the WebAssembly Core
-/// binary format:
-/// <https://webassembly.github.io/spec/core/binary/values.html#integers>.
+use crate::codec::{
+    Leb128Codec,
+    NonStrict,
+};
+
+macro_rules! write_leb128_value {
+    ($writer:expr, $value:expr, $ty:ty) => {
+        write_leb128::<{ Leb128Codec::<$ty, NonStrict>::MIN_BUFFER_LEN }, _, _, _>(
+            $writer,
+            $value,
+            |bytes, value| {
+                // SAFETY: The local buffer is exactly the codec's minimum buffer length.
+                unsafe { Leb128Codec::<$ty, NonStrict>::write_unchecked(bytes, 0, value) }
+            },
+        )
+    };
+}
+
+/// Extension methods for writing canonical LEB128 integers to byte streams.
 pub trait Leb128WriteExt: Write {
     /// Writes an unsigned LEB128 `u8`.
-    ///
-    /// # Parameters
-    /// - `value`: Value to encode.
-    ///
-    /// # Errors
-    /// Returns an I/O error from the underlying writer.
-    fn write_uleb_u8(&mut self, value: u8) -> Result<()>;
-
-    /// Writes an unsigned LEB128 `u16`.
-    ///
-    /// # Parameters
-    /// - `value`: Value to encode.
-    ///
-    /// # Errors
-    /// Returns an I/O error from the underlying writer.
-    fn write_uleb_u16(&mut self, value: u16) -> Result<()>;
-
-    /// Writes an unsigned LEB128 `u32`.
-    ///
-    /// # Parameters
-    /// - `value`: Value to encode.
-    ///
-    /// # Errors
-    /// Returns an I/O error from the underlying writer.
-    fn write_uleb_u32(&mut self, value: u32) -> Result<()>;
-
-    /// Writes an unsigned LEB128 `u64`.
-    ///
-    /// # Parameters
-    /// - `value`: Value to encode.
-    ///
-    /// # Errors
-    /// Returns an I/O error from the underlying writer.
-    fn write_uleb_u64(&mut self, value: u64) -> Result<()>;
-
-    /// Writes an unsigned LEB128 `u128`.
-    ///
-    /// # Parameters
-    /// - `value`: Value to encode.
-    ///
-    /// # Errors
-    /// Returns an I/O error from the underlying writer.
-    fn write_uleb_u128(&mut self, value: u128) -> Result<()>;
-
-    /// Writes an unsigned LEB128 `usize`.
-    ///
-    /// # Parameters
-    /// - `value`: Value to encode.
-    ///
-    /// # Errors
-    /// Returns an I/O error from the underlying writer.
-    fn write_uleb_usize(&mut self, value: usize) -> Result<()>;
-
-    /// Writes a signed LEB128 `i8`.
-    ///
-    /// # Parameters
-    /// - `value`: Value to encode.
-    ///
-    /// # Errors
-    /// Returns an I/O error from the underlying writer.
-    fn write_sleb_i8(&mut self, value: i8) -> Result<()>;
-
-    /// Writes a signed LEB128 `i16`.
-    ///
-    /// # Parameters
-    /// - `value`: Value to encode.
-    ///
-    /// # Errors
-    /// Returns an I/O error from the underlying writer.
-    fn write_sleb_i16(&mut self, value: i16) -> Result<()>;
-
-    /// Writes a signed LEB128 `i32`.
-    ///
-    /// # Parameters
-    /// - `value`: Value to encode.
-    ///
-    /// # Errors
-    /// Returns an I/O error from the underlying writer.
-    fn write_sleb_i32(&mut self, value: i32) -> Result<()>;
-
-    /// Writes a signed LEB128 `i64`.
-    ///
-    /// # Parameters
-    /// - `value`: Value to encode.
-    ///
-    /// # Errors
-    /// Returns an I/O error from the underlying writer.
-    fn write_sleb_i64(&mut self, value: i64) -> Result<()>;
-
-    /// Writes a signed LEB128 `i128`.
-    ///
-    /// # Parameters
-    /// - `value`: Value to encode.
-    ///
-    /// # Errors
-    /// Returns an I/O error from the underlying writer.
-    fn write_sleb_i128(&mut self, value: i128) -> Result<()>;
-
-    /// Writes a signed LEB128 `isize`.
-    ///
-    /// # Parameters
-    /// - `value`: Value to encode.
-    ///
-    /// # Errors
-    /// Returns an I/O error from the underlying writer.
-    fn write_sleb_isize(&mut self, value: isize) -> Result<()>;
-}
-
-impl<T> Leb128WriteExt for T
-where
-    T: Write + ?Sized,
-{
     #[inline]
     fn write_uleb_u8(&mut self, value: u8) -> Result<()> {
-        write_uleb(self, value as u128)
+        write_leb128_value!(self, value, u8)
     }
 
+    /// Writes an unsigned LEB128 `u16`.
     #[inline]
     fn write_uleb_u16(&mut self, value: u16) -> Result<()> {
-        write_uleb(self, value as u128)
+        write_leb128_value!(self, value, u16)
     }
 
+    /// Writes an unsigned LEB128 `u32`.
     #[inline]
     fn write_uleb_u32(&mut self, value: u32) -> Result<()> {
-        write_uleb(self, value as u128)
+        write_leb128_value!(self, value, u32)
     }
 
+    /// Writes an unsigned LEB128 `u64`.
     #[inline]
     fn write_uleb_u64(&mut self, value: u64) -> Result<()> {
-        write_uleb(self, value as u128)
+        write_leb128_value!(self, value, u64)
     }
 
+    /// Writes an unsigned LEB128 `u128`.
     #[inline]
     fn write_uleb_u128(&mut self, value: u128) -> Result<()> {
-        write_uleb(self, value)
+        write_leb128_value!(self, value, u128)
     }
 
+    /// Writes an unsigned LEB128 `usize`.
     #[inline]
     fn write_uleb_usize(&mut self, value: usize) -> Result<()> {
-        write_uleb(self, value as u128)
+        write_leb128_value!(self, value, usize)
     }
 
+    /// Writes a signed LEB128 `i8`.
     #[inline]
     fn write_sleb_i8(&mut self, value: i8) -> Result<()> {
-        write_sleb(self, value as i128)
+        write_leb128_value!(self, value, i8)
     }
 
+    /// Writes a signed LEB128 `i16`.
     #[inline]
     fn write_sleb_i16(&mut self, value: i16) -> Result<()> {
-        write_sleb(self, value as i128)
+        write_leb128_value!(self, value, i16)
     }
 
+    /// Writes a signed LEB128 `i32`.
     #[inline]
     fn write_sleb_i32(&mut self, value: i32) -> Result<()> {
-        write_sleb(self, value as i128)
+        write_leb128_value!(self, value, i32)
     }
 
+    /// Writes a signed LEB128 `i64`.
     #[inline]
     fn write_sleb_i64(&mut self, value: i64) -> Result<()> {
-        write_sleb(self, value as i128)
+        write_leb128_value!(self, value, i64)
     }
 
+    /// Writes a signed LEB128 `i128`.
     #[inline]
     fn write_sleb_i128(&mut self, value: i128) -> Result<()> {
-        write_sleb(self, value)
+        write_leb128_value!(self, value, i128)
     }
 
+    /// Writes a signed LEB128 `isize`.
     #[inline]
     fn write_sleb_isize(&mut self, value: isize) -> Result<()> {
-        write_sleb(self, value as i128)
+        write_leb128_value!(self, value, isize)
     }
 }
 
-/// Writes an unsigned LEB128 integer.
-///
-/// # Parameters
-/// - `writer`: Destination writer. It may be a sized writer or a writer trait
-///   object.
-/// - `value`: Value to encode.
-///
-/// # Errors
-/// Returns an I/O error from `writer`.
-fn write_uleb<T>(writer: &mut T, value: u128) -> Result<()>
-where
-    T: Write + ?Sized,
-{
-    let mut remaining = value;
-    while remaining > 0x7f {
-        writer.write_all(&[((remaining as u8) & 0x7f) | 0x80])?;
-        remaining >>= 7;
-    }
-    writer.write_all(&[remaining as u8])
-}
+impl<W> Leb128WriteExt for W where W: Write + ?Sized {}
 
-/// Writes a signed LEB128 integer.
-///
-/// # Parameters
-/// - `writer`: Destination writer. It may be a sized writer or a writer trait
-///   object.
-/// - `value`: Value to encode.
-///
-/// # Errors
-/// Returns an I/O error from `writer`.
-fn write_sleb<T>(writer: &mut T, value: i128) -> Result<()>
+#[inline]
+fn write_leb128<const N: usize, T, W, F>(writer: &mut W, value: T, encode: F) -> Result<()>
 where
-    T: Write + ?Sized,
+    W: Write + ?Sized,
+    F: FnOnce(&mut [u8], T) -> usize,
 {
-    let mut remaining = value;
-    loop {
-        let byte = (remaining as u8) & 0x7f;
-        remaining >>= 7;
-        let is_done = (remaining == 0 && byte & 0x40 == 0) || (remaining == -1 && byte & 0x40 != 0);
-        if is_done {
-            return writer.write_all(&[byte]);
-        }
-        writer.write_all(&[byte | 0x80])?;
-    }
+    let mut bytes = [0u8; N];
+    let len = encode(&mut bytes, value);
+    writer.write_all(&bytes[..len])
 }

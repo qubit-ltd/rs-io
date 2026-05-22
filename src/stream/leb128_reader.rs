@@ -7,204 +7,189 @@
  *    Licensed under the Apache License, Version 2.0.
  *
  ******************************************************************************/
+
+use core::marker::PhantomData;
 use std::io::{
-    BufRead,
+    Error,
+    ErrorKind,
     Read,
     Result,
-    Seek,
-    SeekFrom,
 };
 
-use crate::{
-    Leb128ReadExt,
-    StringReadExt,
+use crate::codec::{
+    DecodePolicy,
+    Leb128Codec,
+    Leb128DecodeError,
+    NonStrict,
 };
 
-/// Reader wrapper for LEB128 integers and LEB128 length-prefixed strings.
-///
-/// This wrapper defaults to non-strict decoding. Use [`Leb128Reader::with_strict`]
-/// or [`Leb128Reader::set_strict`] to reject non-canonical LEB128 encodings.
-///
-/// # Examples
-/// ```
-/// use std::io::Cursor;
-///
-/// use qubit_io::{
-///     Leb128Reader,
-///     Leb128Writer,
-/// };
-///
-/// let mut output = Leb128Writer::new(Vec::new());
-/// output.write_u16(300)?;
-///
-/// let mut input = Leb128Reader::with_strict(Cursor::new(output.into_inner()), true);
-/// assert_eq!(300, input.read_u16()?);
-/// # Ok::<(), std::io::Error>(())
-/// ```
-pub struct Leb128Reader<R> {
-    inner: R,
-    strict: bool,
+macro_rules! read_leb128_value {
+    ($reader:expr, $ty:ty, $policy:ty) => {
+        read_leb128::<{ Leb128Codec::<$ty, NonStrict>::MIN_BUFFER_LEN }, _, _, _>(
+            $reader,
+            |bytes| {
+                // SAFETY: The local buffer is exactly the codec's minimum buffer length,
+                // or it contains an earlier terminating byte before decoding.
+                unsafe { Leb128Codec::<$ty, $policy>::read_unchecked(bytes, 0) }
+            },
+        )
+    };
 }
 
-impl<R> Leb128Reader<R> {
+/// Reader wrapper for LEB128 integers.
+///
+/// The decoding policy is selected by the `P` type parameter. Use
+/// `Leb128Reader<R, NonStrict>` for permissive decoding and
+/// `Leb128Reader<R, Strict>` for canonical-only decoding.
+pub struct Leb128Reader<R, P = NonStrict> {
+    inner: R,
+    marker: PhantomData<fn() -> P>,
+}
+
+impl<R, P> Leb128Reader<R, P>
+where
+    P: DecodePolicy,
+{
     /// Creates a LEB128 reader.
-    ///
-    /// # Parameters
-    /// - `inner`: Reader to wrap.
-    ///
-    /// # Returns
-    /// A new non-strict LEB128 reader.
+    #[must_use]
     #[inline]
-    pub fn new(inner: R) -> Self {
-        Self::with_strict(inner, false)
+    pub const fn new(inner: R) -> Self {
+        Self {
+            inner,
+            marker: PhantomData,
+        }
     }
 
-    /// Creates a LEB128 reader with explicit canonical-decoding policy.
-    ///
-    /// # Parameters
-    /// - `inner`: Reader to wrap.
-    /// - `strict`: Whether to reject non-canonical LEB128 encodings.
-    ///
-    /// # Returns
-    /// A new LEB128 reader.
+    /// Returns whether this reader rejects non-canonical encodings.
+    #[must_use]
     #[inline]
-    pub fn with_strict(inner: R, strict: bool) -> Self {
-        Self { inner, strict }
+    pub const fn is_strict(&self) -> bool {
+        P::STRICT
     }
 
-    /// Reports whether strict canonical LEB128 decoding is enabled.
-    ///
-    /// # Returns
-    /// `true` when non-canonical encodings are rejected.
+    /// Returns a shared reference to the underlying reader.
+    #[must_use]
     #[inline]
-    pub fn is_strict(&self) -> bool {
-        self.strict
-    }
-
-    /// Changes the canonical-decoding policy used by subsequent reads.
-    ///
-    /// # Parameters
-    /// - `strict`: Whether to reject non-canonical LEB128 encodings.
-    #[inline]
-    pub fn set_strict(&mut self, strict: bool) {
-        self.strict = strict;
-    }
-
-    /// Returns an immutable reference to the wrapped reader.
-    ///
-    /// # Returns
-    /// The wrapped reader reference.
-    #[inline]
-    pub fn get_ref(&self) -> &R {
+    pub const fn get_ref(&self) -> &R {
         &self.inner
     }
 
-    /// Returns a mutable reference to the wrapped reader.
-    ///
-    /// # Returns
-    /// The wrapped reader reference.
+    /// Returns an exclusive reference to the underlying reader.
+    #[must_use]
     #[inline]
     pub fn get_mut(&mut self) -> &mut R {
         &mut self.inner
     }
 
-    /// Consumes this wrapper and returns the wrapped reader.
-    ///
-    /// # Returns
-    /// The wrapped reader.
+    /// Consumes this wrapper and returns the underlying reader.
+    #[must_use]
     #[inline]
     pub fn into_inner(self) -> R {
         self.inner
     }
 }
 
-macro_rules! delegate_read {
-    ($name:ident, $read:ident, $read_strict:ident, $value:ty) => {
-        #[doc = concat!("Reads a LEB128 `", stringify!($value), "`.")]
-        ///
-        /// # Errors
-        /// Returns an I/O error from the wrapped reader, or `InvalidData` for
-        /// malformed or overflowing LEB128 input. In strict mode, also returns
-        /// `InvalidData` for non-canonical LEB128 input.
-        #[inline]
-        pub fn $name(&mut self) -> Result<$value> {
-            if self.strict {
-                self.inner.$read_strict()
-            } else {
-                self.inner.$read()
-            }
-        }
-    };
-}
-
-impl<R> Leb128Reader<R>
+impl<R, P> Leb128Reader<R, P>
 where
     R: Read,
+    P: DecodePolicy,
 {
-    delegate_read!(read_u8, read_uleb_u8, read_uleb_u8_strict, u8);
-    delegate_read!(read_u16, read_uleb_u16, read_uleb_u16_strict, u16);
-    delegate_read!(read_u32, read_uleb_u32, read_uleb_u32_strict, u32);
-    delegate_read!(read_u64, read_uleb_u64, read_uleb_u64_strict, u64);
-    delegate_read!(read_u128, read_uleb_u128, read_uleb_u128_strict, u128);
-    delegate_read!(read_usize, read_uleb_usize, read_uleb_usize_strict, usize);
-    delegate_read!(read_i8, read_sleb_i8, read_sleb_i8_strict, i8);
-    delegate_read!(read_i16, read_sleb_i16, read_sleb_i16_strict, i16);
-    delegate_read!(read_i32, read_sleb_i32, read_sleb_i32_strict, i32);
-    delegate_read!(read_i64, read_sleb_i64, read_sleb_i64_strict, i64);
-    delegate_read!(read_i128, read_sleb_i128, read_sleb_i128_strict, i128);
-    delegate_read!(read_isize, read_sleb_isize, read_sleb_isize_strict, isize);
-
-    /// Reads a UTF-8 string with an unsigned LEB128 byte-length prefix.
-    ///
-    /// # Parameters
-    /// - `max_len`: Maximum accepted UTF-8 payload length in bytes.
-    ///
-    /// # Errors
-    /// Returns an I/O error from the wrapped reader, or `InvalidData` when the
-    /// encoded length exceeds `max_len` or the payload is not valid UTF-8. In
-    /// strict mode, also returns `InvalidData` when the length prefix is
-    /// non-canonical.
+    /// Reads an unsigned LEB128 `u8`.
     #[inline]
-    pub fn read_utf8_string(&mut self, max_len: usize) -> Result<String> {
-        if self.strict {
-            self.inner.read_utf8_string_uleb_strict(max_len)
-        } else {
-            self.inner.read_utf8_string_uleb(max_len)
-        }
+    pub fn read_u8(&mut self) -> Result<u8> {
+        read_leb128_value!(&mut self.inner, u8, P)
+    }
+
+    /// Reads an unsigned LEB128 `u16`.
+    #[inline]
+    pub fn read_u16(&mut self) -> Result<u16> {
+        read_leb128_value!(&mut self.inner, u16, P)
+    }
+
+    /// Reads an unsigned LEB128 `u32`.
+    #[inline]
+    pub fn read_u32(&mut self) -> Result<u32> {
+        read_leb128_value!(&mut self.inner, u32, P)
+    }
+
+    /// Reads an unsigned LEB128 `u64`.
+    #[inline]
+    pub fn read_u64(&mut self) -> Result<u64> {
+        read_leb128_value!(&mut self.inner, u64, P)
+    }
+
+    /// Reads an unsigned LEB128 `u128`.
+    #[inline]
+    pub fn read_u128(&mut self) -> Result<u128> {
+        read_leb128_value!(&mut self.inner, u128, P)
+    }
+
+    /// Reads an unsigned LEB128 `usize`.
+    #[inline]
+    pub fn read_usize(&mut self) -> Result<usize> {
+        read_leb128_value!(&mut self.inner, usize, P)
+    }
+
+    /// Reads a signed LEB128 `i8`.
+    #[inline]
+    pub fn read_i8(&mut self) -> Result<i8> {
+        read_leb128_value!(&mut self.inner, i8, P)
+    }
+
+    /// Reads a signed LEB128 `i16`.
+    #[inline]
+    pub fn read_i16(&mut self) -> Result<i16> {
+        read_leb128_value!(&mut self.inner, i16, P)
+    }
+
+    /// Reads a signed LEB128 `i32`.
+    #[inline]
+    pub fn read_i32(&mut self) -> Result<i32> {
+        read_leb128_value!(&mut self.inner, i32, P)
+    }
+
+    /// Reads a signed LEB128 `i64`.
+    #[inline]
+    pub fn read_i64(&mut self) -> Result<i64> {
+        read_leb128_value!(&mut self.inner, i64, P)
+    }
+
+    /// Reads a signed LEB128 `i128`.
+    #[inline]
+    pub fn read_i128(&mut self) -> Result<i128> {
+        read_leb128_value!(&mut self.inner, i128, P)
+    }
+
+    /// Reads a signed LEB128 `isize`.
+    #[inline]
+    pub fn read_isize(&mut self) -> Result<isize> {
+        read_leb128_value!(&mut self.inner, isize, P)
     }
 }
 
-impl<R> Read for Leb128Reader<R>
+#[inline]
+fn read_leb128<const N: usize, T, R, F>(reader: &mut R, decode: F) -> Result<T>
 where
     R: Read,
+    F: FnOnce(&[u8]) -> std::result::Result<(T, usize), Leb128DecodeError>,
 {
-    #[inline]
-    fn read(&mut self, buffer: &mut [u8]) -> Result<usize> {
-        self.inner.read(buffer)
+    let mut bytes = [0u8; N];
+    for index in 0..N {
+        let target = one_byte_slice(&mut bytes, index);
+        reader.read_exact(target)?;
+        if bytes[index] & 0x80 == 0 {
+            return decode(&bytes)
+                .map(|(value, _)| value)
+                .map_err(|error| Error::new(ErrorKind::InvalidData, error));
+        }
     }
+    decode(&bytes)
+        .map(|(value, _)| value)
+        .map_err(|error| Error::new(ErrorKind::InvalidData, error))
 }
 
-impl<R> BufRead for Leb128Reader<R>
-where
-    R: BufRead,
-{
-    #[inline]
-    fn fill_buf(&mut self) -> Result<&[u8]> {
-        self.inner.fill_buf()
-    }
-
-    #[inline]
-    fn consume(&mut self, amount: usize) {
-        self.inner.consume(amount);
-    }
-}
-
-impl<R> Seek for Leb128Reader<R>
-where
-    R: Seek,
-{
-    #[inline]
-    fn seek(&mut self, position: SeekFrom) -> Result<u64> {
-        self.inner.seek(position)
-    }
+#[inline]
+fn one_byte_slice(bytes: &mut [u8], index: usize) -> &mut [u8] {
+    // SAFETY: Callers pass an index inside the fixed-size local buffer.
+    unsafe { core::slice::from_raw_parts_mut(bytes.as_mut_ptr().add(index), 1) }
 }
