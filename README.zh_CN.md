@@ -82,8 +82,8 @@ assert_eq!(b"bounded", data.as_slice());
 | --- | --- |
 | `Coder` | 面向调用方管理 buffer 的 progress-oriented 转换 trait |
 | `CoderProgress`、`CoderStatus` | 报告转换进度和停止原因 |
-| `BinaryCodec` | 在 byte slice 上做 fixed-width 标量编解码 |
-| `Leb128Codec`、`ZigZagCodec` | 在 byte slice 上做紧凑整数编解码 |
+| `BinaryCodec` | 在调用方已验证的 byte buffer 上做 unchecked fixed-width 标量编解码 |
+| `Leb128Codec`、`ZigZagCodec` | 在调用方已验证的 byte buffer 上做 unchecked 紧凑整数编解码 |
 | `Leb128DecodeError` | 结构化 LEB128 解码错误 |
 
 ### Extension Trait

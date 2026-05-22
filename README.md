@@ -90,8 +90,8 @@ The `codec` module contains buffer-level helpers that do not depend on
 | --- | --- |
 | `Coder` | progress-oriented conversion trait for caller-managed buffers |
 | `CoderProgress`, `CoderStatus` | conversion progress and stop reason reporting |
-| `BinaryCodec` | fixed-width scalar encoding and decoding on byte slices |
-| `Leb128Codec`, `ZigZagCodec` | compact integer encoding on byte slices |
+| `BinaryCodec` | unchecked fixed-width scalar encoding and decoding on caller-validated byte buffers |
+| `Leb128Codec`, `ZigZagCodec` | unchecked compact integer encoding on caller-validated byte buffers |
 | `Leb128DecodeError` | structured LEB128 decode error reporting |
 
 ### Extension Traits
