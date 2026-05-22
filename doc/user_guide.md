@@ -5,7 +5,7 @@ on `std::io` traits, extension methods, stream wrappers, and codec helpers. It
 is intentionally not a local filesystem utility crate.
 
 For local filesystem capabilities, see
-[qubit-local-fs](https://github.com/qubit-ltd/rs-local-fs).
+[qubit-local-files](https://github.com/qubit-ltd/rs-local-files).
 
 ## When to Use This Crate
 
@@ -34,7 +34,7 @@ Not a fit:
 - Abstracting local, FTP, object storage, or remote filesystems.
 
 For those local filesystem concerns, use
-[qubit-local-fs](https://github.com/qubit-ltd/rs-local-fs).
+[qubit-local-files](https://github.com/qubit-ltd/rs-local-files).
 
 ## Installation
 
@@ -578,6 +578,6 @@ can fail.
 ## Crate Boundary
 
 `qubit-io` deliberately does not contain local filesystem utilities. Use
-[qubit-local-fs](https://github.com/qubit-ltd/rs-local-fs) when you need local
+[qubit-local-files](https://github.com/qubit-ltd/rs-local-files) when you need local
 path utilities, temporary files and directories, recursive directory operations,
 directory cleanup, or atomic file writes.

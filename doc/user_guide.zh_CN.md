@@ -5,7 +5,7 @@ Qubit IO 是 Qubit Rust crate 家族中的 stream 和字节 I/O crate。它专�
 文件系统工具库。
 
 如果需要本地文件系统相关能力，请参考
-[qubit-local-fs](https://github.com/qubit-ltd/rs-local-fs)。
+[qubit-local-files](https://github.com/qubit-ltd/rs-local-files)。
 
 ## 何时使用本 crate
 
@@ -33,7 +33,7 @@ binary codec、协议适配器、archive reader、内存 buffer、网络 stream�
 - 抽象本地、FTP、对象存储或远程文件系统。
 
 这些本地文件系统能力请参考
-[qubit-local-fs](https://github.com/qubit-ltd/rs-local-fs)。
+[qubit-local-files](https://github.com/qubit-ltd/rs-local-files)。
 
 ## 安装
 
@@ -551,4 +551,4 @@ assert_eq!(42, reader.read_i64()?);
 
 `qubit-io` 不包含本地文件系统工具。如果需要本地路径工具、临时文件和目录、递归目录操作、
 目录清理或 atomic file write，请使用
-[qubit-local-fs](https://github.com/qubit-ltd/rs-local-fs)。
+[qubit-local-files](https://github.com/qubit-ltd/rs-local-files)。

@@ -29,7 +29,7 @@ Use this crate when you need:
 For detailed usage, examples, and API selection guidance, see the [User Guide](doc/user_guide.md).
 API reference documentation is available on [docs.rs](https://docs.rs/qubit-io).
 
-For local filesystem capabilities, see [qubit-local-fs](https://github.com/qubit-ltd/rs-local-fs).
+For local filesystem capabilities, see [qubit-local-files](https://github.com/qubit-ltd/rs-local-files).
 
 ## Installation
 
@@ -148,7 +148,7 @@ use qubit_io::prelude::*;
 `qubit-io` is intentionally limited to stream and byte I/O. It does not expose
 local path helpers, temporary files, directory copy helpers, directory cleanup,
 or atomic file writes. For local filesystem capabilities, see
-[qubit-local-fs](https://github.com/qubit-ltd/rs-local-fs).
+[qubit-local-files](https://github.com/qubit-ltd/rs-local-files).
 
 ## Runtime Dependencies
 
@@ -201,7 +201,7 @@ Contributions are welcome. Please feel free to submit a Pull Request.
 
 - Follow the Rust API guidelines.
 - Keep stream and byte-I/O concerns in `qubit-io`.
-- Use [qubit-local-fs](https://github.com/qubit-ltd/rs-local-fs) for local filesystem utilities.
+- Use [qubit-local-files](https://github.com/qubit-ltd/rs-local-files) for local filesystem utilities.
 - Maintain comprehensive test coverage.
 - Document public APIs with examples when they clarify behavior.
 - Ensure `./ci-check.sh` passes before submitting a PR.
@@ -212,7 +212,7 @@ Contributions are welcome. Please feel free to submit a Pull Request.
 
 ## Related Projects
 
-- [qubit-local-fs](https://github.com/qubit-ltd/rs-local-fs): local filesystem utilities for Rust.
+- [qubit-local-files](https://github.com/qubit-ltd/rs-local-files): local filesystem utilities for Rust.
 - More Rust libraries from Qubit are published under the [qubit-ltd](https://github.com/qubit-ltd) organization on GitHub.
 
 ---
