@@ -7,534 +7,304 @@
  *    Licensed under the Apache License, Version 2.0.
  *
  ******************************************************************************/
+
 use std::io::{
+    Error,
+    ErrorKind,
     Read,
     Result,
 };
 
-use crate::ByteOrder;
+use crate::codec::{
+    BigEndian,
+    BinaryCodec,
+    ByteOrder,
+    LittleEndian,
+};
 
-/// Extension methods for reading binary scalar values from [`Read`] streams.
-///
-/// Multi-byte values can be read either with explicit byte-order suffixes or
-/// with a runtime [`ByteOrder`] argument. All methods read exactly the required
-/// number of bytes and therefore return [`std::io::ErrorKind::UnexpectedEof`]
-/// when the stream ends early.
+macro_rules! read_binary_value {
+    ($reader:expr, $ty:ty, $order:ty) => {
+        read_binary::<{ BinaryCodec::<$ty, $order>::MIN_BUFFER_LEN }, _, _, _>($reader, |bytes| {
+            // SAFETY: The local buffer is exactly the codec's minimum buffer length.
+            unsafe { BinaryCodec::<$ty, $order>::read_unchecked(bytes, 0) }
+        })
+    };
+}
+
+/// Extension methods for reading fixed-width binary values from byte streams.
 pub trait BinaryReadExt: Read {
-    /// Reads one unsigned byte.
+    /// Reads exactly `N` bytes.
     ///
     /// # Returns
-    /// The byte value.
+    ///
+    /// Returns the filled byte array.
     ///
     /// # Errors
-    /// Returns an I/O error from the underlying reader, including
-    /// `UnexpectedEof` when no byte is available.
-    fn read_u8(&mut self) -> Result<u8>;
-
-    /// Reads one signed byte.
     ///
-    /// # Returns
-    /// The byte interpreted as `i8`.
-    ///
-    /// # Errors
-    /// Returns an I/O error from the underlying reader, including
-    /// `UnexpectedEof` when no byte is available.
-    fn read_i8(&mut self) -> Result<i8>;
-
-    /// Reads a `u16` using `order`.
-    ///
-    /// # Parameters
-    /// - `order`: Byte order used to decode the value.
-    ///
-    /// # Returns
-    /// The decoded value.
-    ///
-    /// # Errors
-    /// Returns an I/O error when two bytes cannot be read.
+    /// Returns any I/O error reported by the underlying reader.
     #[inline]
-    fn read_u16(&mut self, order: ByteOrder) -> Result<u16> {
-        match order {
+    fn read_bytes<const N: usize>(&mut self) -> Result<[u8; N]> {
+        let mut bytes = [0u8; N];
+        self.read_exact(&mut bytes)?;
+        Ok(bytes)
+    }
+
+    /// Reads an unsigned 8-bit integer.
+    #[inline]
+    fn read_u8(&mut self) -> Result<u8> {
+        read_binary_value!(self, u8, BigEndian)
+    }
+
+    /// Reads a signed 8-bit integer.
+    #[inline]
+    fn read_i8(&mut self) -> Result<i8> {
+        read_binary_value!(self, i8, BigEndian)
+    }
+
+    /// Reads an unsigned 16-bit integer using a runtime byte order.
+    #[inline]
+    fn read_u16(&mut self, byte_order: ByteOrder) -> Result<u16> {
+        match byte_order {
             ByteOrder::BigEndian => self.read_u16_be(),
             ByteOrder::LittleEndian => self.read_u16_le(),
         }
     }
 
-    /// Reads a big-endian `u16`.
-    ///
-    /// # Returns
-    /// The decoded value.
-    ///
-    /// # Errors
-    /// Returns an I/O error when two bytes cannot be read.
-    fn read_u16_be(&mut self) -> Result<u16>;
-
-    /// Reads a little-endian `u16`.
-    ///
-    /// # Returns
-    /// The decoded value.
-    ///
-    /// # Errors
-    /// Returns an I/O error when two bytes cannot be read.
-    fn read_u16_le(&mut self) -> Result<u16>;
-
-    /// Reads an `i16` using `order`.
-    ///
-    /// # Parameters
-    /// - `order`: Byte order used to decode the value.
-    ///
-    /// # Returns
-    /// The decoded value.
-    ///
-    /// # Errors
-    /// Returns an I/O error when two bytes cannot be read.
+    /// Reads a big-endian unsigned 16-bit integer.
     #[inline]
-    fn read_i16(&mut self, order: ByteOrder) -> Result<i16> {
-        match order {
-            ByteOrder::BigEndian => self.read_i16_be(),
-            ByteOrder::LittleEndian => self.read_i16_le(),
-        }
+    fn read_u16_be(&mut self) -> Result<u16> {
+        read_binary_value!(self, u16, BigEndian)
     }
 
-    /// Reads a big-endian `i16`.
-    ///
-    /// # Returns
-    /// The decoded value.
-    ///
-    /// # Errors
-    /// Returns an I/O error when two bytes cannot be read.
-    fn read_i16_be(&mut self) -> Result<i16>;
-
-    /// Reads a little-endian `i16`.
-    ///
-    /// # Returns
-    /// The decoded value.
-    ///
-    /// # Errors
-    /// Returns an I/O error when two bytes cannot be read.
-    fn read_i16_le(&mut self) -> Result<i16>;
-
-    /// Reads a `u32` using `order`.
-    ///
-    /// # Parameters
-    /// - `order`: Byte order used to decode the value.
-    ///
-    /// # Returns
-    /// The decoded value.
-    ///
-    /// # Errors
-    /// Returns an I/O error when four bytes cannot be read.
+    /// Reads a little-endian unsigned 16-bit integer.
     #[inline]
-    fn read_u32(&mut self, order: ByteOrder) -> Result<u32> {
-        match order {
+    fn read_u16_le(&mut self) -> Result<u16> {
+        read_binary_value!(self, u16, LittleEndian)
+    }
+
+    /// Reads an unsigned 32-bit integer using a runtime byte order.
+    #[inline]
+    fn read_u32(&mut self, byte_order: ByteOrder) -> Result<u32> {
+        match byte_order {
             ByteOrder::BigEndian => self.read_u32_be(),
             ByteOrder::LittleEndian => self.read_u32_le(),
         }
     }
 
-    /// Reads a big-endian `u32`.
-    ///
-    /// # Returns
-    /// The decoded value.
-    ///
-    /// # Errors
-    /// Returns an I/O error when four bytes cannot be read.
-    fn read_u32_be(&mut self) -> Result<u32>;
-
-    /// Reads a little-endian `u32`.
-    ///
-    /// # Returns
-    /// The decoded value.
-    ///
-    /// # Errors
-    /// Returns an I/O error when four bytes cannot be read.
-    fn read_u32_le(&mut self) -> Result<u32>;
-
-    /// Reads an `i32` using `order`.
-    ///
-    /// # Parameters
-    /// - `order`: Byte order used to decode the value.
-    ///
-    /// # Returns
-    /// The decoded value.
-    ///
-    /// # Errors
-    /// Returns an I/O error when four bytes cannot be read.
+    /// Reads a big-endian unsigned 32-bit integer.
     #[inline]
-    fn read_i32(&mut self, order: ByteOrder) -> Result<i32> {
-        match order {
-            ByteOrder::BigEndian => self.read_i32_be(),
-            ByteOrder::LittleEndian => self.read_i32_le(),
-        }
+    fn read_u32_be(&mut self) -> Result<u32> {
+        read_binary_value!(self, u32, BigEndian)
     }
 
-    /// Reads a big-endian `i32`.
-    ///
-    /// # Returns
-    /// The decoded value.
-    ///
-    /// # Errors
-    /// Returns an I/O error when four bytes cannot be read.
-    fn read_i32_be(&mut self) -> Result<i32>;
-
-    /// Reads a little-endian `i32`.
-    ///
-    /// # Returns
-    /// The decoded value.
-    ///
-    /// # Errors
-    /// Returns an I/O error when four bytes cannot be read.
-    fn read_i32_le(&mut self) -> Result<i32>;
-
-    /// Reads a `u64` using `order`.
-    ///
-    /// # Parameters
-    /// - `order`: Byte order used to decode the value.
-    ///
-    /// # Returns
-    /// The decoded value.
-    ///
-    /// # Errors
-    /// Returns an I/O error when eight bytes cannot be read.
+    /// Reads a little-endian unsigned 32-bit integer.
     #[inline]
-    fn read_u64(&mut self, order: ByteOrder) -> Result<u64> {
-        match order {
+    fn read_u32_le(&mut self) -> Result<u32> {
+        read_binary_value!(self, u32, LittleEndian)
+    }
+
+    /// Reads an unsigned 64-bit integer using a runtime byte order.
+    #[inline]
+    fn read_u64(&mut self, byte_order: ByteOrder) -> Result<u64> {
+        match byte_order {
             ByteOrder::BigEndian => self.read_u64_be(),
             ByteOrder::LittleEndian => self.read_u64_le(),
         }
     }
 
-    /// Reads a big-endian `u64`.
-    ///
-    /// # Returns
-    /// The decoded value.
-    ///
-    /// # Errors
-    /// Returns an I/O error when eight bytes cannot be read.
-    fn read_u64_be(&mut self) -> Result<u64>;
-
-    /// Reads a little-endian `u64`.
-    ///
-    /// # Returns
-    /// The decoded value.
-    ///
-    /// # Errors
-    /// Returns an I/O error when eight bytes cannot be read.
-    fn read_u64_le(&mut self) -> Result<u64>;
-
-    /// Reads an `i64` using `order`.
-    ///
-    /// # Parameters
-    /// - `order`: Byte order used to decode the value.
-    ///
-    /// # Returns
-    /// The decoded value.
-    ///
-    /// # Errors
-    /// Returns an I/O error when eight bytes cannot be read.
+    /// Reads a big-endian unsigned 64-bit integer.
     #[inline]
-    fn read_i64(&mut self, order: ByteOrder) -> Result<i64> {
-        match order {
-            ByteOrder::BigEndian => self.read_i64_be(),
-            ByteOrder::LittleEndian => self.read_i64_le(),
-        }
+    fn read_u64_be(&mut self) -> Result<u64> {
+        read_binary_value!(self, u64, BigEndian)
     }
 
-    /// Reads a big-endian `i64`.
-    ///
-    /// # Returns
-    /// The decoded value.
-    ///
-    /// # Errors
-    /// Returns an I/O error when eight bytes cannot be read.
-    fn read_i64_be(&mut self) -> Result<i64>;
-
-    /// Reads a little-endian `i64`.
-    ///
-    /// # Returns
-    /// The decoded value.
-    ///
-    /// # Errors
-    /// Returns an I/O error when eight bytes cannot be read.
-    fn read_i64_le(&mut self) -> Result<i64>;
-
-    /// Reads a `u128` using `order`.
-    ///
-    /// # Parameters
-    /// - `order`: Byte order used to decode the value.
-    ///
-    /// # Returns
-    /// The decoded value.
-    ///
-    /// # Errors
-    /// Returns an I/O error when sixteen bytes cannot be read.
+    /// Reads a little-endian unsigned 64-bit integer.
     #[inline]
-    fn read_u128(&mut self, order: ByteOrder) -> Result<u128> {
-        match order {
+    fn read_u64_le(&mut self) -> Result<u64> {
+        read_binary_value!(self, u64, LittleEndian)
+    }
+
+    /// Reads an unsigned 128-bit integer using a runtime byte order.
+    #[inline]
+    fn read_u128(&mut self, byte_order: ByteOrder) -> Result<u128> {
+        match byte_order {
             ByteOrder::BigEndian => self.read_u128_be(),
             ByteOrder::LittleEndian => self.read_u128_le(),
         }
     }
 
-    /// Reads a big-endian `u128`.
-    ///
-    /// # Returns
-    /// The decoded value.
-    ///
-    /// # Errors
-    /// Returns an I/O error when sixteen bytes cannot be read.
-    fn read_u128_be(&mut self) -> Result<u128>;
-
-    /// Reads a little-endian `u128`.
-    ///
-    /// # Returns
-    /// The decoded value.
-    ///
-    /// # Errors
-    /// Returns an I/O error when sixteen bytes cannot be read.
-    fn read_u128_le(&mut self) -> Result<u128>;
-
-    /// Reads an `i128` using `order`.
-    ///
-    /// # Parameters
-    /// - `order`: Byte order used to decode the value.
-    ///
-    /// # Returns
-    /// The decoded value.
-    ///
-    /// # Errors
-    /// Returns an I/O error when sixteen bytes cannot be read.
+    /// Reads a big-endian unsigned 128-bit integer.
     #[inline]
-    fn read_i128(&mut self, order: ByteOrder) -> Result<i128> {
-        match order {
+    fn read_u128_be(&mut self) -> Result<u128> {
+        read_binary_value!(self, u128, BigEndian)
+    }
+
+    /// Reads a little-endian unsigned 128-bit integer.
+    #[inline]
+    fn read_u128_le(&mut self) -> Result<u128> {
+        read_binary_value!(self, u128, LittleEndian)
+    }
+
+    /// Reads a signed 16-bit integer using a runtime byte order.
+    #[inline]
+    fn read_i16(&mut self, byte_order: ByteOrder) -> Result<i16> {
+        match byte_order {
+            ByteOrder::BigEndian => self.read_i16_be(),
+            ByteOrder::LittleEndian => self.read_i16_le(),
+        }
+    }
+
+    /// Reads a big-endian signed 16-bit integer.
+    #[inline]
+    fn read_i16_be(&mut self) -> Result<i16> {
+        read_binary_value!(self, i16, BigEndian)
+    }
+
+    /// Reads a little-endian signed 16-bit integer.
+    #[inline]
+    fn read_i16_le(&mut self) -> Result<i16> {
+        read_binary_value!(self, i16, LittleEndian)
+    }
+
+    /// Reads a signed 32-bit integer using a runtime byte order.
+    #[inline]
+    fn read_i32(&mut self, byte_order: ByteOrder) -> Result<i32> {
+        match byte_order {
+            ByteOrder::BigEndian => self.read_i32_be(),
+            ByteOrder::LittleEndian => self.read_i32_le(),
+        }
+    }
+
+    /// Reads a big-endian signed 32-bit integer.
+    #[inline]
+    fn read_i32_be(&mut self) -> Result<i32> {
+        read_binary_value!(self, i32, BigEndian)
+    }
+
+    /// Reads a little-endian signed 32-bit integer.
+    #[inline]
+    fn read_i32_le(&mut self) -> Result<i32> {
+        read_binary_value!(self, i32, LittleEndian)
+    }
+
+    /// Reads a signed 64-bit integer using a runtime byte order.
+    #[inline]
+    fn read_i64(&mut self, byte_order: ByteOrder) -> Result<i64> {
+        match byte_order {
+            ByteOrder::BigEndian => self.read_i64_be(),
+            ByteOrder::LittleEndian => self.read_i64_le(),
+        }
+    }
+
+    /// Reads a big-endian signed 64-bit integer.
+    #[inline]
+    fn read_i64_be(&mut self) -> Result<i64> {
+        read_binary_value!(self, i64, BigEndian)
+    }
+
+    /// Reads a little-endian signed 64-bit integer.
+    #[inline]
+    fn read_i64_le(&mut self) -> Result<i64> {
+        read_binary_value!(self, i64, LittleEndian)
+    }
+
+    /// Reads a signed 128-bit integer using a runtime byte order.
+    #[inline]
+    fn read_i128(&mut self, byte_order: ByteOrder) -> Result<i128> {
+        match byte_order {
             ByteOrder::BigEndian => self.read_i128_be(),
             ByteOrder::LittleEndian => self.read_i128_le(),
         }
     }
 
-    /// Reads a big-endian `i128`.
-    ///
-    /// # Returns
-    /// The decoded value.
-    ///
-    /// # Errors
-    /// Returns an I/O error when sixteen bytes cannot be read.
-    fn read_i128_be(&mut self) -> Result<i128>;
-
-    /// Reads a little-endian `i128`.
-    ///
-    /// # Returns
-    /// The decoded value.
-    ///
-    /// # Errors
-    /// Returns an I/O error when sixteen bytes cannot be read.
-    fn read_i128_le(&mut self) -> Result<i128>;
-
-    /// Reads an IEEE-754 `f32` using `order`.
-    ///
-    /// # Parameters
-    /// - `order`: Byte order used to decode the value.
-    ///
-    /// # Returns
-    /// The decoded value.
-    ///
-    /// # Errors
-    /// Returns an I/O error when four bytes cannot be read.
+    /// Reads a big-endian signed 128-bit integer.
     #[inline]
-    fn read_f32(&mut self, order: ByteOrder) -> Result<f32> {
-        match order {
+    fn read_i128_be(&mut self) -> Result<i128> {
+        read_binary_value!(self, i128, BigEndian)
+    }
+
+    /// Reads a little-endian signed 128-bit integer.
+    #[inline]
+    fn read_i128_le(&mut self) -> Result<i128> {
+        read_binary_value!(self, i128, LittleEndian)
+    }
+
+    /// Reads a 32-bit float using a runtime byte order.
+    #[inline]
+    fn read_f32(&mut self, byte_order: ByteOrder) -> Result<f32> {
+        match byte_order {
             ByteOrder::BigEndian => self.read_f32_be(),
             ByteOrder::LittleEndian => self.read_f32_le(),
         }
     }
 
-    /// Reads a big-endian IEEE-754 `f32`.
-    ///
-    /// # Returns
-    /// The decoded value.
-    ///
-    /// # Errors
-    /// Returns an I/O error when four bytes cannot be read.
-    fn read_f32_be(&mut self) -> Result<f32>;
-
-    /// Reads a little-endian IEEE-754 `f32`.
-    ///
-    /// # Returns
-    /// The decoded value.
-    ///
-    /// # Errors
-    /// Returns an I/O error when four bytes cannot be read.
-    fn read_f32_le(&mut self) -> Result<f32>;
-
-    /// Reads an IEEE-754 `f64` using `order`.
-    ///
-    /// # Parameters
-    /// - `order`: Byte order used to decode the value.
-    ///
-    /// # Returns
-    /// The decoded value.
-    ///
-    /// # Errors
-    /// Returns an I/O error when eight bytes cannot be read.
+    /// Reads a big-endian 32-bit float.
     #[inline]
-    fn read_f64(&mut self, order: ByteOrder) -> Result<f64> {
-        match order {
+    fn read_f32_be(&mut self) -> Result<f32> {
+        read_binary_value!(self, f32, BigEndian)
+    }
+
+    /// Reads a little-endian 32-bit float.
+    #[inline]
+    fn read_f32_le(&mut self) -> Result<f32> {
+        read_binary_value!(self, f32, LittleEndian)
+    }
+
+    /// Reads a 64-bit float using a runtime byte order.
+    #[inline]
+    fn read_f64(&mut self, byte_order: ByteOrder) -> Result<f64> {
+        match byte_order {
             ByteOrder::BigEndian => self.read_f64_be(),
             ByteOrder::LittleEndian => self.read_f64_le(),
         }
     }
 
-    /// Reads a big-endian IEEE-754 `f64`.
-    ///
-    /// # Returns
-    /// The decoded value.
-    ///
-    /// # Errors
-    /// Returns an I/O error when eight bytes cannot be read.
-    fn read_f64_be(&mut self) -> Result<f64>;
-
-    /// Reads a little-endian IEEE-754 `f64`.
-    ///
-    /// # Returns
-    /// The decoded value.
-    ///
-    /// # Errors
-    /// Returns an I/O error when eight bytes cannot be read.
-    fn read_f64_le(&mut self) -> Result<f64>;
-}
-
-impl<T> BinaryReadExt for T
-where
-    T: Read + ?Sized,
-{
-    #[inline]
-    fn read_u8(&mut self) -> Result<u8> {
-        read_bytes::<_, 1>(self).map(|buffer| buffer[0])
-    }
-
-    #[inline]
-    fn read_i8(&mut self) -> Result<i8> {
-        read_bytes::<_, 1>(self).map(|buffer| buffer[0] as i8)
-    }
-
-    #[inline]
-    fn read_u16_be(&mut self) -> Result<u16> {
-        read_bytes::<_, 2>(self).map(u16::from_be_bytes)
-    }
-
-    #[inline]
-    fn read_u16_le(&mut self) -> Result<u16> {
-        read_bytes::<_, 2>(self).map(u16::from_le_bytes)
-    }
-
-    #[inline]
-    fn read_i16_be(&mut self) -> Result<i16> {
-        read_bytes::<_, 2>(self).map(i16::from_be_bytes)
-    }
-
-    #[inline]
-    fn read_i16_le(&mut self) -> Result<i16> {
-        read_bytes::<_, 2>(self).map(i16::from_le_bytes)
-    }
-
-    #[inline]
-    fn read_u32_be(&mut self) -> Result<u32> {
-        read_bytes::<_, 4>(self).map(u32::from_be_bytes)
-    }
-
-    #[inline]
-    fn read_u32_le(&mut self) -> Result<u32> {
-        read_bytes::<_, 4>(self).map(u32::from_le_bytes)
-    }
-
-    #[inline]
-    fn read_i32_be(&mut self) -> Result<i32> {
-        read_bytes::<_, 4>(self).map(i32::from_be_bytes)
-    }
-
-    #[inline]
-    fn read_i32_le(&mut self) -> Result<i32> {
-        read_bytes::<_, 4>(self).map(i32::from_le_bytes)
-    }
-
-    #[inline]
-    fn read_u64_be(&mut self) -> Result<u64> {
-        read_bytes::<_, 8>(self).map(u64::from_be_bytes)
-    }
-
-    #[inline]
-    fn read_u64_le(&mut self) -> Result<u64> {
-        read_bytes::<_, 8>(self).map(u64::from_le_bytes)
-    }
-
-    #[inline]
-    fn read_i64_be(&mut self) -> Result<i64> {
-        read_bytes::<_, 8>(self).map(i64::from_be_bytes)
-    }
-
-    #[inline]
-    fn read_i64_le(&mut self) -> Result<i64> {
-        read_bytes::<_, 8>(self).map(i64::from_le_bytes)
-    }
-
-    #[inline]
-    fn read_u128_be(&mut self) -> Result<u128> {
-        read_bytes::<_, 16>(self).map(u128::from_be_bytes)
-    }
-
-    #[inline]
-    fn read_u128_le(&mut self) -> Result<u128> {
-        read_bytes::<_, 16>(self).map(u128::from_le_bytes)
-    }
-
-    #[inline]
-    fn read_i128_be(&mut self) -> Result<i128> {
-        read_bytes::<_, 16>(self).map(i128::from_be_bytes)
-    }
-
-    #[inline]
-    fn read_i128_le(&mut self) -> Result<i128> {
-        read_bytes::<_, 16>(self).map(i128::from_le_bytes)
-    }
-
-    #[inline]
-    fn read_f32_be(&mut self) -> Result<f32> {
-        read_bytes::<_, 4>(self).map(|buffer| f32::from_bits(u32::from_be_bytes(buffer)))
-    }
-
-    #[inline]
-    fn read_f32_le(&mut self) -> Result<f32> {
-        read_bytes::<_, 4>(self).map(|buffer| f32::from_bits(u32::from_le_bytes(buffer)))
-    }
-
+    /// Reads a big-endian 64-bit float.
     #[inline]
     fn read_f64_be(&mut self) -> Result<f64> {
-        read_bytes::<_, 8>(self).map(|buffer| f64::from_bits(u64::from_be_bytes(buffer)))
+        read_binary_value!(self, f64, BigEndian)
     }
 
+    /// Reads a little-endian 64-bit float.
     #[inline]
     fn read_f64_le(&mut self) -> Result<f64> {
-        read_bytes::<_, 8>(self).map(|buffer| f64::from_bits(u64::from_le_bytes(buffer)))
+        read_binary_value!(self, f64, LittleEndian)
+    }
+
+    /// Reads a UTF-8 string prefixed by a 16-bit byte length.
+    #[inline]
+    fn read_utf8_string_u16(&mut self, byte_order: ByteOrder) -> Result<String> {
+        let len = usize::from(self.read_u16(byte_order)?);
+        read_utf8_string(self, len)
+    }
+
+    /// Reads a UTF-8 string prefixed by a 32-bit byte length.
+    #[inline]
+    fn read_utf8_string_u32(&mut self, byte_order: ByteOrder) -> Result<String> {
+        let len = self.read_u32(byte_order)? as usize;
+        read_utf8_string(self, len)
     }
 }
 
-/// Reads exactly `N` bytes from `reader`.
-///
-/// # Parameters
-/// - `reader`: Source reader. It may be a sized reader or a reader trait
-///   object.
-///
-/// # Returns
-/// An array containing the bytes read from the stream.
-///
-/// # Errors
-/// Returns an I/O error from [`Read::read_exact`], including
-/// [`std::io::ErrorKind::UnexpectedEof`] when fewer than `N` bytes are
-/// available.
-fn read_bytes<R, const N: usize>(reader: &mut R) -> Result<[u8; N]>
+impl<R> BinaryReadExt for R where R: Read + ?Sized {}
+
+#[inline]
+fn read_binary<const N: usize, T, R, F>(reader: &mut R, decode: F) -> Result<T>
+where
+    R: Read + ?Sized,
+    F: FnOnce(&[u8]) -> T,
+{
+    let mut bytes = [0u8; N];
+    reader.read_exact(&mut bytes)?;
+    Ok(decode(&bytes))
+}
+
+#[inline]
+fn read_utf8_string<R>(reader: &mut R, len: usize) -> Result<String>
 where
     R: Read + ?Sized,
 {
-    let mut buffer = [0; N];
-    reader.read_exact(&mut buffer)?;
-    Ok(buffer)
+    let mut bytes = vec![0u8; len];
+    reader.read_exact(&mut bytes)?;
+    String::from_utf8(bytes).map_err(|error| Error::new(ErrorKind::InvalidData, error))
 }

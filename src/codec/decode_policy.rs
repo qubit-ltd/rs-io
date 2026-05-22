@@ -8,12 +8,8 @@
  *
  ******************************************************************************/
 
-/// Runtime byte order selector.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ByteOrder {
-    /// Big-endian byte order.
-    BigEndian,
-
-    /// Little-endian byte order.
-    LittleEndian,
+/// Describes a type-level decoding policy.
+pub trait DecodePolicy: Copy + Default {
+    /// Whether this policy rejects non-canonical encodings.
+    const STRICT: bool;
 }

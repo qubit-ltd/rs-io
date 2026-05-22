@@ -7,173 +7,78 @@
  *    Licensed under the Apache License, Version 2.0.
  *
  ******************************************************************************/
+
 use std::io::{
     Result,
     Write,
 };
 
-use crate::Leb128WriteExt;
+use crate::codec::{
+    NonStrict,
+    ZigZagCodec,
+};
 
-/// Extension methods for writing ZigZag encoded signed integers.
-///
-/// ZigZag maps signed integers to unsigned integers so small negative values
-/// still have short varint encodings. The mapped unsigned value is written with
-/// unsigned LEB128. The ZigZag mapping follows the Protocol Buffers encoding
-/// guide:
-/// <https://protobuf.dev/programming-guides/encoding/#signed-integers>.
+macro_rules! write_zig_zag_value {
+    ($writer:expr, $value:expr, $ty:ty) => {
+        write_zig_zag::<{ ZigZagCodec::<$ty, NonStrict>::MIN_BUFFER_LEN }, _, _, _>(
+            $writer,
+            $value,
+            |bytes, value| {
+                // SAFETY: The local buffer is exactly the codec's minimum buffer length.
+                unsafe { ZigZagCodec::<$ty, NonStrict>::write_unchecked(bytes, 0, value) }
+            },
+        )
+    };
+}
+
+/// Extension methods for writing ZigZag + unsigned LEB128 integers.
 pub trait ZigZagWriteExt: Write {
-    /// Writes a ZigZag encoded `i8`.
-    ///
-    /// # Parameters
-    /// - `value`: Value to encode.
-    ///
-    /// # Errors
-    /// Returns an I/O error from the underlying writer.
-    fn write_zigzag_i8(&mut self, value: i8) -> Result<()>;
+    /// Writes a ZigZag `i8`.
+    #[inline]
+    fn write_zig_zag_i8(&mut self, value: i8) -> Result<()> {
+        write_zig_zag_value!(self, value, i8)
+    }
 
-    /// Writes a ZigZag encoded `i16`.
-    ///
-    /// # Parameters
-    /// - `value`: Value to encode.
-    ///
-    /// # Errors
-    /// Returns an I/O error from the underlying writer.
-    fn write_zigzag_i16(&mut self, value: i16) -> Result<()>;
+    /// Writes a ZigZag `i16`.
+    #[inline]
+    fn write_zig_zag_i16(&mut self, value: i16) -> Result<()> {
+        write_zig_zag_value!(self, value, i16)
+    }
 
-    /// Writes a ZigZag encoded `i32`.
-    ///
-    /// # Parameters
-    /// - `value`: Value to encode.
-    ///
-    /// # Errors
-    /// Returns an I/O error from the underlying writer.
-    fn write_zigzag_i32(&mut self, value: i32) -> Result<()>;
+    /// Writes a ZigZag `i32`.
+    #[inline]
+    fn write_zig_zag_i32(&mut self, value: i32) -> Result<()> {
+        write_zig_zag_value!(self, value, i32)
+    }
 
-    /// Writes a ZigZag encoded `i64`.
-    ///
-    /// # Parameters
-    /// - `value`: Value to encode.
-    ///
-    /// # Errors
-    /// Returns an I/O error from the underlying writer.
-    fn write_zigzag_i64(&mut self, value: i64) -> Result<()>;
+    /// Writes a ZigZag `i64`.
+    #[inline]
+    fn write_zig_zag_i64(&mut self, value: i64) -> Result<()> {
+        write_zig_zag_value!(self, value, i64)
+    }
 
-    /// Writes a ZigZag encoded `i128`.
-    ///
-    /// # Parameters
-    /// - `value`: Value to encode.
-    ///
-    /// # Errors
-    /// Returns an I/O error from the underlying writer.
-    fn write_zigzag_i128(&mut self, value: i128) -> Result<()>;
+    /// Writes a ZigZag `i128`.
+    #[inline]
+    fn write_zig_zag_i128(&mut self, value: i128) -> Result<()> {
+        write_zig_zag_value!(self, value, i128)
+    }
 
-    /// Writes a ZigZag encoded `isize`.
-    ///
-    /// # Parameters
-    /// - `value`: Value to encode.
-    ///
-    /// # Errors
-    /// Returns an I/O error from the underlying writer.
-    fn write_zigzag_isize(&mut self, value: isize) -> Result<()>;
+    /// Writes a ZigZag `isize`.
+    #[inline]
+    fn write_zig_zag_isize(&mut self, value: isize) -> Result<()> {
+        write_zig_zag_value!(self, value, isize)
+    }
 }
 
-impl<T> ZigZagWriteExt for T
+impl<W> ZigZagWriteExt for W where W: Write + ?Sized {}
+
+#[inline]
+fn write_zig_zag<const N: usize, T, W, F>(writer: &mut W, value: T, encode: F) -> Result<()>
 where
-    T: Write + ?Sized,
+    W: Write + ?Sized,
+    F: FnOnce(&mut [u8], T) -> usize,
 {
-    #[inline]
-    fn write_zigzag_i8(&mut self, value: i8) -> Result<()> {
-        self.write_uleb_u8(encode_zigzag_i8(value))
-    }
-
-    #[inline]
-    fn write_zigzag_i16(&mut self, value: i16) -> Result<()> {
-        self.write_uleb_u16(encode_zigzag_i16(value))
-    }
-
-    #[inline]
-    fn write_zigzag_i32(&mut self, value: i32) -> Result<()> {
-        self.write_uleb_u32(encode_zigzag_i32(value))
-    }
-
-    #[inline]
-    fn write_zigzag_i64(&mut self, value: i64) -> Result<()> {
-        self.write_uleb_u64(encode_zigzag_i64(value))
-    }
-
-    #[inline]
-    fn write_zigzag_i128(&mut self, value: i128) -> Result<()> {
-        self.write_uleb_u128(encode_zigzag_i128(value))
-    }
-
-    #[inline]
-    fn write_zigzag_isize(&mut self, value: isize) -> Result<()> {
-        self.write_uleb_usize(encode_zigzag_isize(value))
-    }
-}
-
-/// Encodes an `i8` with ZigZag mapping.
-///
-/// # Parameters
-/// - `value`: Signed value to map.
-///
-/// # Returns
-/// ZigZag mapped unsigned value.
-fn encode_zigzag_i8(value: i8) -> u8 {
-    ((value as u8) << 1) ^ ((value >> 7) as u8)
-}
-
-/// Encodes an `i16` with ZigZag mapping.
-///
-/// # Parameters
-/// - `value`: Signed value to map.
-///
-/// # Returns
-/// ZigZag mapped unsigned value.
-fn encode_zigzag_i16(value: i16) -> u16 {
-    ((value as u16) << 1) ^ ((value >> 15) as u16)
-}
-
-/// Encodes an `i32` with ZigZag mapping.
-///
-/// # Parameters
-/// - `value`: Signed value to map.
-///
-/// # Returns
-/// ZigZag mapped unsigned value.
-fn encode_zigzag_i32(value: i32) -> u32 {
-    ((value as u32) << 1) ^ ((value >> 31) as u32)
-}
-
-/// Encodes an `i64` with ZigZag mapping.
-///
-/// # Parameters
-/// - `value`: Signed value to map.
-///
-/// # Returns
-/// ZigZag mapped unsigned value.
-fn encode_zigzag_i64(value: i64) -> u64 {
-    ((value as u64) << 1) ^ ((value >> 63) as u64)
-}
-
-/// Encodes an `i128` with ZigZag mapping.
-///
-/// # Parameters
-/// - `value`: Signed value to map.
-///
-/// # Returns
-/// ZigZag mapped unsigned value.
-fn encode_zigzag_i128(value: i128) -> u128 {
-    ((value as u128) << 1) ^ ((value >> 127) as u128)
-}
-
-/// Encodes an `isize` with ZigZag mapping.
-///
-/// # Parameters
-/// - `value`: Signed value to map.
-///
-/// # Returns
-/// ZigZag mapped unsigned value.
-fn encode_zigzag_isize(value: isize) -> usize {
-    ((value as usize) << 1) ^ ((value >> (isize::BITS - 1)) as usize)
+    let mut bytes = [0u8; N];
+    let len = encode(&mut bytes, value);
+    writer.write_all(&bytes[..len])
 }

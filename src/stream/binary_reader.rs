@@ -7,282 +7,222 @@
  *    Licensed under the Apache License, Version 2.0.
  *
  ******************************************************************************/
+
+use core::marker::PhantomData;
 use std::io::{
-    BufRead,
+    Error,
+    ErrorKind,
     Read,
     Result,
-    Seek,
-    SeekFrom,
 };
 
-use crate::{
-    BinaryReadExt,
+use crate::codec::{
+    BigEndian,
+    BinaryCodec,
     ByteOrder,
-    StringReadExt,
+    ByteOrderSpec,
+    LittleEndian,
 };
 
-/// Reader wrapper for binary scalar and length-prefixed string decoding.
-///
-/// Multi-byte methods use the configured [`ByteOrder`].
-///
-/// # Examples
-/// ```
-/// use std::io::Cursor;
-///
-/// use qubit_io::{
-///     BinaryReader,
-///     BinaryWriter,
-///     ByteOrder,
-/// };
-///
-/// let mut output = BinaryWriter::new(Vec::new(), ByteOrder::BigEndian);
-/// output.write_u16(0x1234)?;
-///
-/// let mut input = BinaryReader::new(Cursor::new(output.into_inner()), ByteOrder::BigEndian);
-/// assert_eq!(0x1234, input.read_u16()?);
-/// # Ok::<(), std::io::Error>(())
-/// ```
-pub struct BinaryReader<R> {
-    inner: R,
-    byte_order: ByteOrder,
+macro_rules! read_binary_value {
+    ($reader:expr, $ty:ty, $order:ty) => {
+        read_binary::<{ BinaryCodec::<$ty, $order>::MIN_BUFFER_LEN }, _, _, _>($reader, |bytes| {
+            // SAFETY: The local buffer is exactly the codec's minimum buffer length.
+            unsafe { BinaryCodec::<$ty, $order>::read_unchecked(bytes, 0) }
+        })
+    };
 }
 
-impl<R> BinaryReader<R> {
+macro_rules! impl_binary_reader_for_order {
+    ($order:ty) => {
+        impl<R> BinaryReader<R, $order>
+        where
+            R: Read,
+        {
+            /// Reads an unsigned 8-bit integer.
+            #[inline]
+            pub fn read_u8(&mut self) -> Result<u8> {
+                read_binary_value!(&mut self.inner, u8, $order)
+            }
+
+            /// Reads a signed 8-bit integer.
+            #[inline]
+            pub fn read_i8(&mut self) -> Result<i8> {
+                read_binary_value!(&mut self.inner, i8, $order)
+            }
+
+            /// Reads an unsigned 16-bit integer.
+            #[inline]
+            pub fn read_u16(&mut self) -> Result<u16> {
+                read_binary_value!(&mut self.inner, u16, $order)
+            }
+
+            /// Reads an unsigned 32-bit integer.
+            #[inline]
+            pub fn read_u32(&mut self) -> Result<u32> {
+                read_binary_value!(&mut self.inner, u32, $order)
+            }
+
+            /// Reads an unsigned 64-bit integer.
+            #[inline]
+            pub fn read_u64(&mut self) -> Result<u64> {
+                read_binary_value!(&mut self.inner, u64, $order)
+            }
+
+            /// Reads an unsigned 128-bit integer.
+            #[inline]
+            pub fn read_u128(&mut self) -> Result<u128> {
+                read_binary_value!(&mut self.inner, u128, $order)
+            }
+
+            /// Reads a signed 16-bit integer.
+            #[inline]
+            pub fn read_i16(&mut self) -> Result<i16> {
+                read_binary_value!(&mut self.inner, i16, $order)
+            }
+
+            /// Reads a signed 32-bit integer.
+            #[inline]
+            pub fn read_i32(&mut self) -> Result<i32> {
+                read_binary_value!(&mut self.inner, i32, $order)
+            }
+
+            /// Reads a signed 64-bit integer.
+            #[inline]
+            pub fn read_i64(&mut self) -> Result<i64> {
+                read_binary_value!(&mut self.inner, i64, $order)
+            }
+
+            /// Reads a signed 128-bit integer.
+            #[inline]
+            pub fn read_i128(&mut self) -> Result<i128> {
+                read_binary_value!(&mut self.inner, i128, $order)
+            }
+
+            /// Reads a 32-bit float.
+            #[inline]
+            pub fn read_f32(&mut self) -> Result<f32> {
+                read_binary_value!(&mut self.inner, f32, $order)
+            }
+
+            /// Reads a 64-bit float.
+            #[inline]
+            pub fn read_f64(&mut self) -> Result<f64> {
+                read_binary_value!(&mut self.inner, f64, $order)
+            }
+
+            /// Reads a UTF-8 string prefixed by a 16-bit byte length.
+            #[inline]
+            pub fn read_utf8_string_u16(&mut self) -> Result<String> {
+                let len = usize::from(self.read_u16()?);
+                read_utf8_string(&mut self.inner, len)
+            }
+
+            /// Reads a UTF-8 string prefixed by a 32-bit byte length.
+            #[inline]
+            pub fn read_utf8_string_u32(&mut self) -> Result<String> {
+                let len = self.read_u32()? as usize;
+                read_utf8_string(&mut self.inner, len)
+            }
+        }
+    };
+}
+
+/// Reader wrapper for fixed-width binary values.
+///
+/// The byte order is selected by the `O` type parameter. Use
+/// `BinaryReader<R, BigEndian>` for big-endian data and
+/// `BinaryReader<R, LittleEndian>` for little-endian data.
+pub struct BinaryReader<R, O = BigEndian> {
+    inner: R,
+    marker: PhantomData<fn() -> O>,
+}
+
+impl<R, O> BinaryReader<R, O>
+where
+    O: ByteOrderSpec,
+{
     /// Creates a binary reader.
     ///
     /// # Parameters
-    /// - `inner`: Reader to wrap.
-    /// - `byte_order`: Byte order used by multi-byte reads.
+    ///
+    /// - `inner`: Underlying byte reader.
     ///
     /// # Returns
-    /// A new binary reader.
+    ///
+    /// Returns a reader using the byte order selected by `O`.
+    #[must_use]
     #[inline]
-    pub fn new(inner: R, byte_order: ByteOrder) -> Self {
-        Self { inner, byte_order }
+    pub const fn new(inner: R) -> Self {
+        Self {
+            inner,
+            marker: PhantomData,
+        }
     }
 
-    /// Returns an immutable reference to the wrapped reader.
-    ///
-    /// # Returns
-    /// The wrapped reader reference.
+    /// Returns the byte order selected by this reader.
+    #[must_use]
     #[inline]
-    pub fn get_ref(&self) -> &R {
+    pub const fn byte_order(&self) -> ByteOrder {
+        O::ORDER
+    }
+
+    /// Returns a shared reference to the underlying reader.
+    #[must_use]
+    #[inline]
+    pub const fn get_ref(&self) -> &R {
         &self.inner
     }
 
-    /// Returns a mutable reference to the wrapped reader.
-    ///
-    /// # Returns
-    /// The wrapped reader reference.
+    /// Returns an exclusive reference to the underlying reader.
+    #[must_use]
     #[inline]
     pub fn get_mut(&mut self) -> &mut R {
         &mut self.inner
     }
 
-    /// Consumes this wrapper and returns the wrapped reader.
-    ///
-    /// # Returns
-    /// The wrapped reader.
+    /// Consumes this wrapper and returns the underlying reader.
+    #[must_use]
     #[inline]
     pub fn into_inner(self) -> R {
         self.inner
     }
+}
 
-    /// Returns the byte order used by multi-byte reads.
-    ///
-    /// # Returns
-    /// The configured byte order.
+impl<R, O> BinaryReader<R, O>
+where
+    R: Read,
+    O: ByteOrderSpec,
+{
+    /// Reads exactly `N` bytes.
     #[inline]
-    pub fn byte_order(&self) -> ByteOrder {
-        self.byte_order
-    }
-
-    /// Changes the byte order used by multi-byte reads.
-    ///
-    /// # Parameters
-    /// - `byte_order`: New byte order.
-    #[inline]
-    pub fn set_byte_order(&mut self, byte_order: ByteOrder) {
-        self.byte_order = byte_order;
+    pub fn read_bytes<const N: usize>(&mut self) -> Result<[u8; N]> {
+        let mut bytes = [0u8; N];
+        self.inner.read_exact(&mut bytes)?;
+        Ok(bytes)
     }
 }
 
-impl<R> BinaryReader<R>
+impl_binary_reader_for_order!(BigEndian);
+impl_binary_reader_for_order!(LittleEndian);
+
+#[inline]
+fn read_binary<const N: usize, T, R, F>(reader: &mut R, decode: F) -> Result<T>
+where
+    R: Read,
+    F: FnOnce(&[u8]) -> T,
+{
+    let mut bytes = [0u8; N];
+    reader.read_exact(&mut bytes)?;
+    Ok(decode(&bytes))
+}
+
+#[inline]
+fn read_utf8_string<R>(reader: &mut R, len: usize) -> Result<String>
 where
     R: Read,
 {
-    /// Reads one unsigned byte.
-    ///
-    /// # Errors
-    /// Returns an I/O error from the wrapped reader.
-    #[inline]
-    pub fn read_u8(&mut self) -> Result<u8> {
-        self.inner.read_u8()
-    }
-
-    /// Reads one signed byte.
-    ///
-    /// # Errors
-    /// Returns an I/O error from the wrapped reader.
-    #[inline]
-    pub fn read_i8(&mut self) -> Result<i8> {
-        self.inner.read_i8()
-    }
-
-    /// Reads a `u16` using the configured byte order.
-    ///
-    /// # Errors
-    /// Returns an I/O error from the wrapped reader.
-    #[inline]
-    pub fn read_u16(&mut self) -> Result<u16> {
-        self.inner.read_u16(self.byte_order)
-    }
-
-    /// Reads an `i16` using the configured byte order.
-    ///
-    /// # Errors
-    /// Returns an I/O error from the wrapped reader.
-    #[inline]
-    pub fn read_i16(&mut self) -> Result<i16> {
-        self.inner.read_i16(self.byte_order)
-    }
-
-    /// Reads a `u32` using the configured byte order.
-    ///
-    /// # Errors
-    /// Returns an I/O error from the wrapped reader.
-    #[inline]
-    pub fn read_u32(&mut self) -> Result<u32> {
-        self.inner.read_u32(self.byte_order)
-    }
-
-    /// Reads an `i32` using the configured byte order.
-    ///
-    /// # Errors
-    /// Returns an I/O error from the wrapped reader.
-    #[inline]
-    pub fn read_i32(&mut self) -> Result<i32> {
-        self.inner.read_i32(self.byte_order)
-    }
-
-    /// Reads a `u64` using the configured byte order.
-    ///
-    /// # Errors
-    /// Returns an I/O error from the wrapped reader.
-    #[inline]
-    pub fn read_u64(&mut self) -> Result<u64> {
-        self.inner.read_u64(self.byte_order)
-    }
-
-    /// Reads an `i64` using the configured byte order.
-    ///
-    /// # Errors
-    /// Returns an I/O error from the wrapped reader.
-    #[inline]
-    pub fn read_i64(&mut self) -> Result<i64> {
-        self.inner.read_i64(self.byte_order)
-    }
-
-    /// Reads a `u128` using the configured byte order.
-    ///
-    /// # Errors
-    /// Returns an I/O error from the wrapped reader.
-    #[inline]
-    pub fn read_u128(&mut self) -> Result<u128> {
-        self.inner.read_u128(self.byte_order)
-    }
-
-    /// Reads an `i128` using the configured byte order.
-    ///
-    /// # Errors
-    /// Returns an I/O error from the wrapped reader.
-    #[inline]
-    pub fn read_i128(&mut self) -> Result<i128> {
-        self.inner.read_i128(self.byte_order)
-    }
-
-    /// Reads an `f32` using the configured byte order.
-    ///
-    /// # Errors
-    /// Returns an I/O error from the wrapped reader.
-    #[inline]
-    pub fn read_f32(&mut self) -> Result<f32> {
-        self.inner.read_f32(self.byte_order)
-    }
-
-    /// Reads an `f64` using the configured byte order.
-    ///
-    /// # Errors
-    /// Returns an I/O error from the wrapped reader.
-    #[inline]
-    pub fn read_f64(&mut self) -> Result<f64> {
-        self.inner.read_f64(self.byte_order)
-    }
-
-    /// Reads a UTF-8 string with a `u16` byte-length prefix.
-    ///
-    /// # Parameters
-    /// - `max_len`: Maximum accepted UTF-8 payload length in bytes.
-    ///
-    /// # Errors
-    /// Returns an I/O error from the wrapped reader, or `InvalidData` when the
-    /// payload length exceeds `max_len` or the payload is not valid UTF-8.
-    #[inline]
-    pub fn read_utf8_string_u16(&mut self, max_len: usize) -> Result<String> {
-        match self.byte_order {
-            ByteOrder::BigEndian => self.inner.read_utf8_string_u16_be(max_len),
-            ByteOrder::LittleEndian => self.inner.read_utf8_string_u16_le(max_len),
-        }
-    }
-
-    /// Reads a UTF-8 string with a `u32` byte-length prefix.
-    ///
-    /// # Parameters
-    /// - `max_len`: Maximum accepted UTF-8 payload length in bytes.
-    ///
-    /// # Errors
-    /// Returns an I/O error from the wrapped reader, or `InvalidData` when the
-    /// payload length exceeds `max_len` or the payload is not valid UTF-8.
-    #[inline]
-    pub fn read_utf8_string_u32(&mut self, max_len: usize) -> Result<String> {
-        match self.byte_order {
-            ByteOrder::BigEndian => self.inner.read_utf8_string_u32_be(max_len),
-            ByteOrder::LittleEndian => self.inner.read_utf8_string_u32_le(max_len),
-        }
-    }
-}
-
-impl<R> Read for BinaryReader<R>
-where
-    R: Read,
-{
-    #[inline]
-    fn read(&mut self, buffer: &mut [u8]) -> Result<usize> {
-        self.inner.read(buffer)
-    }
-}
-
-impl<R> BufRead for BinaryReader<R>
-where
-    R: BufRead,
-{
-    #[inline]
-    fn fill_buf(&mut self) -> Result<&[u8]> {
-        self.inner.fill_buf()
-    }
-
-    #[inline]
-    fn consume(&mut self, amount: usize) {
-        self.inner.consume(amount);
-    }
-}
-
-impl<R> Seek for BinaryReader<R>
-where
-    R: Seek,
-{
-    #[inline]
-    fn seek(&mut self, position: SeekFrom) -> Result<u64> {
-        self.inner.seek(position)
-    }
+    let mut bytes = vec![0u8; len];
+    reader.read_exact(&mut bytes)?;
+    String::from_utf8(bytes).map_err(|error| Error::new(ErrorKind::InvalidData, error))
 }

@@ -7,183 +7,133 @@
  *    Licensed under the Apache License, Version 2.0.
  *
  ******************************************************************************/
+
+use core::marker::PhantomData;
 use std::io::{
-    BufRead,
+    Error,
+    ErrorKind,
     Read,
     Result,
-    Seek,
-    SeekFrom,
 };
 
-use crate::ZigZagReadExt;
+use crate::codec::{
+    DecodePolicy,
+    Leb128DecodeErrorKind,
+    NonStrict,
+    ZigZagCodec,
+};
 
-/// Reader wrapper for ZigZag encoded signed integers.
-///
-/// This wrapper defaults to non-strict decoding of the underlying unsigned
-/// LEB128 value. Use [`ZigZagReader::with_strict`] or
-/// [`ZigZagReader::set_strict`] to reject non-canonical underlying encodings.
-///
-/// # Examples
-/// ```
-/// use std::io::Cursor;
-///
-/// use qubit_io::{
-///     ZigZagReader,
-///     ZigZagWriter,
-/// };
-///
-/// let mut output = ZigZagWriter::new(Vec::new());
-/// output.write_i32(-123)?;
-///
-/// let mut input = ZigZagReader::with_strict(Cursor::new(output.into_inner()), true);
-/// assert_eq!(-123, input.read_i32()?);
-/// # Ok::<(), std::io::Error>(())
-/// ```
-pub struct ZigZagReader<R> {
-    inner: R,
-    strict: bool,
+macro_rules! read_zig_zag_value {
+    ($reader:expr, $ty:ty, $policy:ty) => {{
+        let mut bytes = [0u8; ZigZagCodec::<$ty, NonStrict>::MIN_BUFFER_LEN];
+        for index in 0..bytes.len() {
+            // SAFETY: The loop index is always inside the fixed-size local buffer.
+            let target =
+                unsafe { core::slice::from_raw_parts_mut(bytes.as_mut_ptr().add(index), 1) };
+            $reader.read_exact(target)?;
+            if bytes[index] & 0x80 == 0 {
+                // SAFETY: The local buffer is exactly the codec's minimum buffer length,
+                // or it contains an earlier terminating byte before decoding.
+                let result = unsafe { ZigZagCodec::<$ty, $policy>::read_unchecked(&bytes, 0) };
+                return match result {
+                    Ok((value, _)) => Ok(value),
+                    Err(error) => Err(Error::new(ErrorKind::InvalidData, error)),
+                };
+            }
+        }
+        let kind = Leb128DecodeErrorKind::Malformed;
+        let error = crate::Leb128DecodeError::new(kind, bytes.len() - 1);
+        Err(Error::new(ErrorKind::InvalidData, error))
+    }};
 }
 
-impl<R> ZigZagReader<R> {
+/// Reader wrapper for ZigZag + unsigned LEB128 integers.
+pub struct ZigZagReader<R, P = NonStrict> {
+    inner: R,
+    marker: PhantomData<fn() -> P>,
+}
+
+impl<R, P> ZigZagReader<R, P>
+where
+    P: DecodePolicy,
+{
     /// Creates a ZigZag reader.
-    ///
-    /// # Parameters
-    /// - `inner`: Reader to wrap.
-    ///
-    /// # Returns
-    /// A new non-strict ZigZag reader.
+    #[must_use]
     #[inline]
-    pub fn new(inner: R) -> Self {
-        Self::with_strict(inner, false)
+    pub const fn new(inner: R) -> Self {
+        Self {
+            inner,
+            marker: PhantomData,
+        }
     }
 
-    /// Creates a ZigZag reader with explicit underlying LEB128 policy.
-    ///
-    /// # Parameters
-    /// - `inner`: Reader to wrap.
-    /// - `strict`: Whether to reject non-canonical underlying LEB128 encodings.
-    ///
-    /// # Returns
-    /// A new ZigZag reader.
+    /// Returns whether this reader rejects non-canonical LEB128 encodings.
+    #[must_use]
     #[inline]
-    pub fn with_strict(inner: R, strict: bool) -> Self {
-        Self { inner, strict }
+    pub const fn is_strict(&self) -> bool {
+        P::STRICT
     }
 
-    /// Reports whether strict underlying LEB128 decoding is enabled.
-    ///
-    /// # Returns
-    /// `true` when non-canonical underlying LEB128 encodings are rejected.
+    /// Returns a shared reference to the underlying reader.
+    #[must_use]
     #[inline]
-    pub fn is_strict(&self) -> bool {
-        self.strict
-    }
-
-    /// Changes the underlying LEB128 policy used by subsequent reads.
-    ///
-    /// # Parameters
-    /// - `strict`: Whether to reject non-canonical underlying LEB128 encodings.
-    #[inline]
-    pub fn set_strict(&mut self, strict: bool) {
-        self.strict = strict;
-    }
-
-    /// Returns an immutable reference to the wrapped reader.
-    ///
-    /// # Returns
-    /// The wrapped reader reference.
-    #[inline]
-    pub fn get_ref(&self) -> &R {
+    pub const fn get_ref(&self) -> &R {
         &self.inner
     }
 
-    /// Returns a mutable reference to the wrapped reader.
-    ///
-    /// # Returns
-    /// The wrapped reader reference.
+    /// Returns an exclusive reference to the underlying reader.
+    #[must_use]
     #[inline]
     pub fn get_mut(&mut self) -> &mut R {
         &mut self.inner
     }
 
-    /// Consumes this wrapper and returns the wrapped reader.
-    ///
-    /// # Returns
-    /// The wrapped reader.
+    /// Consumes this wrapper and returns the underlying reader.
+    #[must_use]
     #[inline]
     pub fn into_inner(self) -> R {
         self.inner
     }
 }
 
-macro_rules! delegate_read {
-    ($name:ident, $read:ident, $read_strict:ident, $value:ty) => {
-        #[doc = concat!("Reads a ZigZag encoded `", stringify!($value), "`.")]
-        ///
-        /// # Errors
-        /// Returns an I/O error from the wrapped reader, or `InvalidData` for
-        /// malformed or overflowing underlying unsigned LEB128 input. In strict
-        /// mode, also returns `InvalidData` for non-canonical underlying LEB128
-        /// input.
-        #[inline]
-        pub fn $name(&mut self) -> Result<$value> {
-            if self.strict {
-                self.inner.$read_strict()
-            } else {
-                self.inner.$read()
-            }
-        }
-    };
-}
-
-impl<R> ZigZagReader<R>
+impl<R, P> ZigZagReader<R, P>
 where
     R: Read,
+    P: DecodePolicy,
 {
-    delegate_read!(read_i8, read_zigzag_i8, read_zigzag_i8_strict, i8);
-    delegate_read!(read_i16, read_zigzag_i16, read_zigzag_i16_strict, i16);
-    delegate_read!(read_i32, read_zigzag_i32, read_zigzag_i32_strict, i32);
-    delegate_read!(read_i64, read_zigzag_i64, read_zigzag_i64_strict, i64);
-    delegate_read!(read_i128, read_zigzag_i128, read_zigzag_i128_strict, i128);
-    delegate_read!(
-        read_isize,
-        read_zigzag_isize,
-        read_zigzag_isize_strict,
-        isize
-    );
-}
-
-impl<R> Read for ZigZagReader<R>
-where
-    R: Read,
-{
+    /// Reads a ZigZag `i8`.
     #[inline]
-    fn read(&mut self, buffer: &mut [u8]) -> Result<usize> {
-        self.inner.read(buffer)
-    }
-}
-
-impl<R> BufRead for ZigZagReader<R>
-where
-    R: BufRead,
-{
-    #[inline]
-    fn fill_buf(&mut self) -> Result<&[u8]> {
-        self.inner.fill_buf()
+    pub fn read_i8(&mut self) -> Result<i8> {
+        read_zig_zag_value!(&mut self.inner, i8, P)
     }
 
+    /// Reads a ZigZag `i16`.
     #[inline]
-    fn consume(&mut self, amount: usize) {
-        self.inner.consume(amount);
+    pub fn read_i16(&mut self) -> Result<i16> {
+        read_zig_zag_value!(&mut self.inner, i16, P)
     }
-}
 
-impl<R> Seek for ZigZagReader<R>
-where
-    R: Seek,
-{
+    /// Reads a ZigZag `i32`.
     #[inline]
-    fn seek(&mut self, position: SeekFrom) -> Result<u64> {
-        self.inner.seek(position)
+    pub fn read_i32(&mut self) -> Result<i32> {
+        read_zig_zag_value!(&mut self.inner, i32, P)
+    }
+
+    /// Reads a ZigZag `i64`.
+    #[inline]
+    pub fn read_i64(&mut self) -> Result<i64> {
+        read_zig_zag_value!(&mut self.inner, i64, P)
+    }
+
+    /// Reads a ZigZag `i128`.
+    #[inline]
+    pub fn read_i128(&mut self) -> Result<i128> {
+        read_zig_zag_value!(&mut self.inner, i128, P)
+    }
+
+    /// Reads a ZigZag `isize`.
+    #[inline]
+    pub fn read_isize(&mut self) -> Result<isize> {
+        read_zig_zag_value!(&mut self.inner, isize, P)
     }
 }

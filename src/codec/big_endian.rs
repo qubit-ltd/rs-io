@@ -8,12 +8,16 @@
  *
  ******************************************************************************/
 
-/// Runtime byte order selector.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ByteOrder {
-    /// Big-endian byte order.
-    BigEndian,
+use super::{
+    ByteOrder,
+    ByteOrderSpec,
+};
 
-    /// Little-endian byte order.
-    LittleEndian,
+/// Type-level marker for big-endian byte order.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct BigEndian;
+
+impl ByteOrderSpec for BigEndian {
+    /// The big-endian byte order.
+    const ORDER: ByteOrder = ByteOrder::BigEndian;
 }

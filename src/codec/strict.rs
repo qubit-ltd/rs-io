@@ -8,12 +8,13 @@
  *
  ******************************************************************************/
 
-/// Runtime byte order selector.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ByteOrder {
-    /// Big-endian byte order.
-    BigEndian,
+use super::DecodePolicy;
 
-    /// Little-endian byte order.
-    LittleEndian,
+/// Marker type selecting strict decoding.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Strict;
+
+impl DecodePolicy for Strict {
+    /// Whether this policy rejects non-canonical encodings.
+    const STRICT: bool = true;
 }

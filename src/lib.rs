@@ -7,6 +7,7 @@
  *    Licensed under the Apache License, Version 2.0.
  *
  ******************************************************************************/
+
 //! # Qubit IO
 //!
 //! Small I/O trait utilities for Rust.
@@ -26,11 +27,17 @@ mod util;
 mod wrappers;
 
 pub use codec::{
+    BigEndian,
     BinaryCodec,
     ByteOrder,
+    ByteOrderSpec,
+    DecodePolicy,
     Leb128Codec,
     Leb128DecodeError,
     Leb128DecodeErrorKind,
+    LittleEndian,
+    NonStrict,
+    Strict,
     ZigZagCodec,
 };
 pub use coder::{

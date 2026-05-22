@@ -7,6 +7,7 @@
  *    Licensed under the Apache License, Version 2.0.
  *
  ******************************************************************************/
+
 //! Common extension and composition traits for Qubit IO users.
 //!
 //! Importing this module brings the method-providing extension traits and the
@@ -14,26 +15,32 @@
 //! utility functions.
 
 pub use crate::{
+    BigEndian,
     BinaryCodec,
     BinaryReadExt,
     BinaryWriteExt,
     BufReadExt,
     BufReadSeek,
     ByteOrder,
+    ByteOrderSpec,
     Coder,
     CoderProgress,
     CoderStatus,
+    DecodePolicy,
     Leb128Codec,
     Leb128DecodeError,
     Leb128DecodeErrorKind,
     Leb128ReadExt,
     Leb128WriteExt,
+    LittleEndian,
+    NonStrict,
     ReadExt,
     ReadSeek,
     ReadSeekExt,
     ReadWrite,
     ReadWriteSeek,
     SeekExt,
+    Strict,
     StringReadExt,
     StringWriteExt,
     WriteSeek,
