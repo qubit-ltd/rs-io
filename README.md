@@ -94,6 +94,12 @@ The `codec` module contains buffer-level helpers that do not depend on
 | `Leb128Codec`, `ZigZagCodec` | unchecked compact integer encoding on caller-validated byte buffers |
 | `Leb128DecodeError` | structured LEB128 decode error reporting |
 
+`BinaryCodec`, `Leb128Codec`, and `ZigZagCodec` expose static `unsafe`
+`read_unchecked` and `write_unchecked` functions for hot paths where the caller
+has already validated buffer capacity. Each concrete codec specialization
+provides `REQUIRED_MIN_BUFFER_LEN`, the minimum caller-provided buffer capacity
+that can hold one value for that specialization.
+
 ### Extension Traits
 
 The extension traits keep common low-level I/O patterns close to the standard
