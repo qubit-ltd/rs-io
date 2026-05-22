@@ -7,20 +7,20 @@ use qubit_io::{
 
 #[test]
 fn test_zig_zag_codec_exposes_min_buffer_len() {
-    assert_eq!(2, ZigZagCodec::<i8, NonStrict>::MIN_BUFFER_LEN);
-    assert_eq!(3, ZigZagCodec::<i16, NonStrict>::MIN_BUFFER_LEN);
-    assert_eq!(5, ZigZagCodec::<i32, NonStrict>::MIN_BUFFER_LEN);
-    assert_eq!(10, ZigZagCodec::<i64, NonStrict>::MIN_BUFFER_LEN);
-    assert_eq!(19, ZigZagCodec::<i128, NonStrict>::MIN_BUFFER_LEN);
+    assert_eq!(2, ZigZagCodec::<i8, NonStrict>::REQUIRED_MIN_BUFFER_LEN);
+    assert_eq!(3, ZigZagCodec::<i16, NonStrict>::REQUIRED_MIN_BUFFER_LEN);
+    assert_eq!(5, ZigZagCodec::<i32, NonStrict>::REQUIRED_MIN_BUFFER_LEN);
+    assert_eq!(10, ZigZagCodec::<i64, NonStrict>::REQUIRED_MIN_BUFFER_LEN);
+    assert_eq!(19, ZigZagCodec::<i128, NonStrict>::REQUIRED_MIN_BUFFER_LEN);
     assert_eq!(
         (isize::BITS as usize).div_ceil(7),
-        ZigZagCodec::<isize, Strict>::MIN_BUFFER_LEN
+        ZigZagCodec::<isize, Strict>::REQUIRED_MIN_BUFFER_LEN
     );
 }
 
 #[test]
 fn test_zig_zag_codec_reads_and_writes_values_unchecked() {
-    let mut output = [0u8; ZigZagCodec::<i16, NonStrict>::MIN_BUFFER_LEN + 2];
+    let mut output = [0u8; ZigZagCodec::<i16, NonStrict>::REQUIRED_MIN_BUFFER_LEN + 2];
     let len = unsafe { ZigZagCodec::<i16, NonStrict>::write_unchecked(&mut output, 1, -300) };
 
     assert_eq!(2, len);
@@ -33,7 +33,7 @@ fn test_zig_zag_codec_reads_and_writes_values_unchecked() {
 
 #[test]
 fn test_zig_zag_codec_handles_signed_extremes() {
-    let mut output = [0u8; ZigZagCodec::<i128, NonStrict>::MIN_BUFFER_LEN];
+    let mut output = [0u8; ZigZagCodec::<i128, NonStrict>::REQUIRED_MIN_BUFFER_LEN];
     let len = unsafe { ZigZagCodec::<i128, NonStrict>::write_unchecked(&mut output, 0, i128::MIN) };
 
     let decoded = unsafe { ZigZagCodec::<i128, NonStrict>::read_unchecked(&output, 0) }

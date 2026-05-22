@@ -26,7 +26,7 @@ use crate::codec::{
 
 macro_rules! write_binary_value {
     ($writer:expr, $value:expr, $ty:ty, $order:ty) => {
-        write_binary::<{ BinaryCodec::<$ty, $order>::MIN_BUFFER_LEN }, _, _, _>(
+        write_binary::<{ BinaryCodec::<$ty, $order>::REQUIRED_MIN_BUFFER_LEN }, _, _, _>(
             $writer,
             $value,
             |bytes, value| {

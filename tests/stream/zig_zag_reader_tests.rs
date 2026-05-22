@@ -190,7 +190,7 @@ fn test_zig_zag_reader_reports_all_instantiated_error_paths() {
     );
 
     let mut reader = ZigZagReader::<_, NonStrict>::new(Cursor::new(
-        [0x80u8; ZigZagCodec::<i8, NonStrict>::MIN_BUFFER_LEN],
+        [0x80u8; ZigZagCodec::<i8, NonStrict>::REQUIRED_MIN_BUFFER_LEN],
     ));
     assert_eq!(
         ErrorKind::InvalidData,
@@ -198,7 +198,7 @@ fn test_zig_zag_reader_reports_all_instantiated_error_paths() {
     );
 
     let mut reader = ZigZagReader::<_, NonStrict>::new(Cursor::new(
-        [0x80u8; ZigZagCodec::<i16, NonStrict>::MIN_BUFFER_LEN],
+        [0x80u8; ZigZagCodec::<i16, NonStrict>::REQUIRED_MIN_BUFFER_LEN],
     ));
     assert_eq!(
         ErrorKind::InvalidData,
@@ -206,7 +206,7 @@ fn test_zig_zag_reader_reports_all_instantiated_error_paths() {
     );
 
     let mut reader = ZigZagReader::<_, NonStrict>::new(Cursor::new(
-        [0x80u8; ZigZagCodec::<i32, NonStrict>::MIN_BUFFER_LEN],
+        [0x80u8; ZigZagCodec::<i32, NonStrict>::REQUIRED_MIN_BUFFER_LEN],
     ));
     assert_eq!(
         ErrorKind::InvalidData,
@@ -214,7 +214,7 @@ fn test_zig_zag_reader_reports_all_instantiated_error_paths() {
     );
 
     let mut reader = ZigZagReader::<_, NonStrict>::new(Cursor::new(
-        [0x80u8; ZigZagCodec::<i64, NonStrict>::MIN_BUFFER_LEN],
+        [0x80u8; ZigZagCodec::<i64, NonStrict>::REQUIRED_MIN_BUFFER_LEN],
     ));
     assert_eq!(
         ErrorKind::InvalidData,
@@ -222,7 +222,7 @@ fn test_zig_zag_reader_reports_all_instantiated_error_paths() {
     );
 
     let mut reader = ZigZagReader::<_, NonStrict>::new(Cursor::new(
-        [0x80u8; ZigZagCodec::<i128, NonStrict>::MIN_BUFFER_LEN],
+        [0x80u8; ZigZagCodec::<i128, NonStrict>::REQUIRED_MIN_BUFFER_LEN],
     ));
     assert_eq!(
         ErrorKind::InvalidData,
@@ -230,7 +230,7 @@ fn test_zig_zag_reader_reports_all_instantiated_error_paths() {
     );
 
     let mut reader = ZigZagReader::<_, NonStrict>::new(Cursor::new(
-        [0x80u8; ZigZagCodec::<isize, NonStrict>::MIN_BUFFER_LEN],
+        [0x80u8; ZigZagCodec::<isize, NonStrict>::REQUIRED_MIN_BUFFER_LEN],
     ));
     assert_eq!(
         ErrorKind::InvalidData,

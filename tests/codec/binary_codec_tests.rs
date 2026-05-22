@@ -6,14 +6,17 @@ use qubit_io::{
 
 #[test]
 fn test_binary_codec_exposes_min_buffer_len() {
-    assert_eq!(1, BinaryCodec::<u8, BigEndian>::MIN_BUFFER_LEN);
-    assert_eq!(1, BinaryCodec::<i8, LittleEndian>::MIN_BUFFER_LEN);
-    assert_eq!(2, BinaryCodec::<u16, BigEndian>::MIN_BUFFER_LEN);
-    assert_eq!(4, BinaryCodec::<u32, LittleEndian>::MIN_BUFFER_LEN);
-    assert_eq!(8, BinaryCodec::<u64, BigEndian>::MIN_BUFFER_LEN);
-    assert_eq!(16, BinaryCodec::<u128, LittleEndian>::MIN_BUFFER_LEN);
-    assert_eq!(4, BinaryCodec::<f32, BigEndian>::MIN_BUFFER_LEN);
-    assert_eq!(8, BinaryCodec::<f64, LittleEndian>::MIN_BUFFER_LEN);
+    assert_eq!(1, BinaryCodec::<u8, BigEndian>::REQUIRED_MIN_BUFFER_LEN);
+    assert_eq!(1, BinaryCodec::<i8, LittleEndian>::REQUIRED_MIN_BUFFER_LEN);
+    assert_eq!(2, BinaryCodec::<u16, BigEndian>::REQUIRED_MIN_BUFFER_LEN);
+    assert_eq!(4, BinaryCodec::<u32, LittleEndian>::REQUIRED_MIN_BUFFER_LEN);
+    assert_eq!(8, BinaryCodec::<u64, BigEndian>::REQUIRED_MIN_BUFFER_LEN);
+    assert_eq!(
+        16,
+        BinaryCodec::<u128, LittleEndian>::REQUIRED_MIN_BUFFER_LEN
+    );
+    assert_eq!(4, BinaryCodec::<f32, BigEndian>::REQUIRED_MIN_BUFFER_LEN);
+    assert_eq!(8, BinaryCodec::<f64, LittleEndian>::REQUIRED_MIN_BUFFER_LEN);
 }
 
 #[test]

@@ -30,7 +30,7 @@ pub struct BinaryCodec<T, O> {
 
 impl<O> BinaryCodec<u8, O> {
     /// Minimum number of bytes required to encode or decode this type.
-    pub const MIN_BUFFER_LEN: usize = 1;
+    pub const REQUIRED_MIN_BUFFER_LEN: usize = 1;
 
     /// Decodes a value from `input` starting at `index` without bounds checks.
     ///
@@ -46,9 +46,9 @@ impl<O> BinaryCodec<u8, O> {
     /// # Safety
     ///
     /// The caller must guarantee that `input.as_ptr().add(index)` is valid to
-    /// read [`Self::MIN_BUFFER_LEN`] bytes.
+    /// read [`Self::REQUIRED_MIN_BUFFER_LEN`] bytes.
     #[must_use]
-    #[inline]
+    #[inline(always)]
     pub unsafe fn read_unchecked(input: &[u8], index: usize) -> u8 {
         // SAFETY: The caller guarantees that the indexed byte is readable.
         unsafe { *input.as_ptr().add(index) }
@@ -65,8 +65,8 @@ impl<O> BinaryCodec<u8, O> {
     /// # Safety
     ///
     /// The caller must guarantee that `output.as_mut_ptr().add(index)` is valid
-    /// to write [`Self::MIN_BUFFER_LEN`] bytes.
-    #[inline]
+    /// to write [`Self::REQUIRED_MIN_BUFFER_LEN`] bytes.
+    #[inline(always)]
     pub unsafe fn write_unchecked(output: &mut [u8], index: usize, value: u8) {
         // SAFETY: The caller guarantees that the indexed byte is writable.
         unsafe {
@@ -77,7 +77,7 @@ impl<O> BinaryCodec<u8, O> {
 
 impl<O> BinaryCodec<i8, O> {
     /// Minimum number of bytes required to encode or decode this type.
-    pub const MIN_BUFFER_LEN: usize = 1;
+    pub const REQUIRED_MIN_BUFFER_LEN: usize = 1;
 
     /// Decodes a value from `input` starting at `index` without bounds checks.
     ///
@@ -93,9 +93,9 @@ impl<O> BinaryCodec<i8, O> {
     /// # Safety
     ///
     /// The caller must guarantee that `input.as_ptr().add(index)` is valid to
-    /// read [`Self::MIN_BUFFER_LEN`] bytes.
+    /// read [`Self::REQUIRED_MIN_BUFFER_LEN`] bytes.
     #[must_use]
-    #[inline]
+    #[inline(always)]
     pub unsafe fn read_unchecked(input: &[u8], index: usize) -> i8 {
         // SAFETY: The caller guarantees that the indexed byte is readable.
         unsafe { *input.as_ptr().add(index) as i8 }
@@ -112,8 +112,8 @@ impl<O> BinaryCodec<i8, O> {
     /// # Safety
     ///
     /// The caller must guarantee that `output.as_mut_ptr().add(index)` is valid
-    /// to write [`Self::MIN_BUFFER_LEN`] bytes.
-    #[inline]
+    /// to write [`Self::REQUIRED_MIN_BUFFER_LEN`] bytes.
+    #[inline(always)]
     pub unsafe fn write_unchecked(output: &mut [u8], index: usize, value: i8) {
         // SAFETY: The caller guarantees that the indexed byte is writable.
         unsafe {
@@ -126,7 +126,7 @@ macro_rules! impl_integer_binary_codec {
     ($ty:ty, $len:expr) => {
         impl BinaryCodec<$ty, BigEndian> {
             /// Minimum number of bytes required to encode or decode this type.
-            pub const MIN_BUFFER_LEN: usize = $len;
+            pub const REQUIRED_MIN_BUFFER_LEN: usize = $len;
 
             /// Decodes a value from `input` starting at `index` without bounds checks.
             ///
@@ -146,13 +146,13 @@ macro_rules! impl_integer_binary_codec {
             ///
             /// The caller must guarantee that:
             ///
-            /// - `index + Self::MIN_BUFFER_LEN <= input.len()`
-            /// - `input[index..index + Self::MIN_BUFFER_LEN]`
+            /// - `index + Self::REQUIRED_MIN_BUFFER_LEN <= input.len()`
+            /// - `input[index..index + Self::REQUIRED_MIN_BUFFER_LEN]`
             ///   is valid for reading.
             #[must_use]
-            #[inline]
+            #[inline(always)]
             pub unsafe fn read_unchecked(input: &[u8], index: usize) -> $ty {
-                debug_assert!(index + Self::MIN_BUFFER_LEN <= input.len());
+                debug_assert!(index + Self::REQUIRED_MIN_BUFFER_LEN <= input.len());
 
                 // SAFETY:
                 // The caller guarantees that the readable range is fully in-bounds.
@@ -182,12 +182,12 @@ macro_rules! impl_integer_binary_codec {
             ///
             /// The caller must guarantee that:
             ///
-            /// - `index + Self::MIN_BUFFER_LEN <= output.len()`
-            /// - `output[index..index + Self::MIN_BUFFER_LEN]`
+            /// - `index + Self::REQUIRED_MIN_BUFFER_LEN <= output.len()`
+            /// - `output[index..index + Self::REQUIRED_MIN_BUFFER_LEN]`
             ///   is valid for writing.
-            #[inline]
+            #[inline(always)]
             pub unsafe fn write_unchecked(output: &mut [u8], index: usize, value: $ty) {
-                debug_assert!(index + Self::MIN_BUFFER_LEN <= output.len());
+                debug_assert!(index + Self::REQUIRED_MIN_BUFFER_LEN <= output.len());
 
                 let raw = value.to_be();
 
@@ -206,7 +206,7 @@ macro_rules! impl_integer_binary_codec {
 
         impl BinaryCodec<$ty, LittleEndian> {
             /// Minimum number of bytes required to encode or decode this type.
-            pub const MIN_BUFFER_LEN: usize = $len;
+            pub const REQUIRED_MIN_BUFFER_LEN: usize = $len;
 
             /// Decodes a value from `input` starting at `index` without bounds checks.
             ///
@@ -226,13 +226,13 @@ macro_rules! impl_integer_binary_codec {
             ///
             /// The caller must guarantee that:
             ///
-            /// - `index + Self::MIN_BUFFER_LEN <= input.len()`
-            /// - `input[index..index + Self::MIN_BUFFER_LEN]`
+            /// - `index + Self::REQUIRED_MIN_BUFFER_LEN <= input.len()`
+            /// - `input[index..index + Self::REQUIRED_MIN_BUFFER_LEN]`
             ///   is valid for reading.
             #[must_use]
-            #[inline]
+            #[inline(always)]
             pub unsafe fn read_unchecked(input: &[u8], index: usize) -> $ty {
-                debug_assert!(index + Self::MIN_BUFFER_LEN <= input.len());
+                debug_assert!(index + Self::REQUIRED_MIN_BUFFER_LEN <= input.len());
 
                 // SAFETY:
                 // The caller guarantees that the readable range is fully in-bounds.
@@ -262,12 +262,12 @@ macro_rules! impl_integer_binary_codec {
             ///
             /// The caller must guarantee that:
             ///
-            /// - `index + Self::MIN_BUFFER_LEN <= output.len()`
-            /// - `output[index..index + Self::MIN_BUFFER_LEN]`
+            /// - `index + Self::REQUIRED_MIN_BUFFER_LEN <= output.len()`
+            /// - `output[index..index + Self::REQUIRED_MIN_BUFFER_LEN]`
             ///   is valid for writing.
-            #[inline]
+            #[inline(always)]
             pub unsafe fn write_unchecked(output: &mut [u8], index: usize, value: $ty) {
-                debug_assert!(index + Self::MIN_BUFFER_LEN <= output.len());
+                debug_assert!(index + Self::REQUIRED_MIN_BUFFER_LEN <= output.len());
 
                 let raw = value.to_le();
 
@@ -290,7 +290,7 @@ macro_rules! impl_float_binary_codec {
     ($ty:ty, $bits:ty, $len:expr) => {
         impl BinaryCodec<$ty, BigEndian> {
             /// Minimum number of bytes required to encode or decode this type.
-            pub const MIN_BUFFER_LEN: usize = $len;
+            pub const REQUIRED_MIN_BUFFER_LEN: usize = $len;
 
             /// Decodes a value from `input` starting at `index` without bounds checks.
             ///
@@ -310,13 +310,13 @@ macro_rules! impl_float_binary_codec {
             ///
             /// The caller must guarantee that:
             ///
-            /// - `index + Self::MIN_BUFFER_LEN <= input.len()`
-            /// - `input[index..index + Self::MIN_BUFFER_LEN]`
+            /// - `index + Self::REQUIRED_MIN_BUFFER_LEN <= input.len()`
+            /// - `input[index..index + Self::REQUIRED_MIN_BUFFER_LEN]`
             ///   is valid for reading.
             #[must_use]
-            #[inline]
+            #[inline(always)]
             pub unsafe fn read_unchecked(input: &[u8], index: usize) -> $ty {
-                debug_assert!(index + Self::MIN_BUFFER_LEN <= input.len());
+                debug_assert!(index + Self::REQUIRED_MIN_BUFFER_LEN <= input.len());
 
                 // SAFETY:
                 // The caller guarantees that the readable range is fully in-bounds.
@@ -346,12 +346,12 @@ macro_rules! impl_float_binary_codec {
             ///
             /// The caller must guarantee that:
             ///
-            /// - `index + Self::MIN_BUFFER_LEN <= output.len()`
-            /// - `output[index..index + Self::MIN_BUFFER_LEN]`
+            /// - `index + Self::REQUIRED_MIN_BUFFER_LEN <= output.len()`
+            /// - `output[index..index + Self::REQUIRED_MIN_BUFFER_LEN]`
             ///   is valid for writing.
-            #[inline]
+            #[inline(always)]
             pub unsafe fn write_unchecked(output: &mut [u8], index: usize, value: $ty) {
-                debug_assert!(index + Self::MIN_BUFFER_LEN <= output.len());
+                debug_assert!(index + Self::REQUIRED_MIN_BUFFER_LEN <= output.len());
 
                 let raw = value.to_bits().to_be();
 
@@ -370,7 +370,7 @@ macro_rules! impl_float_binary_codec {
 
         impl BinaryCodec<$ty, LittleEndian> {
             /// Minimum number of bytes required to encode or decode this type.
-            pub const MIN_BUFFER_LEN: usize = $len;
+            pub const REQUIRED_MIN_BUFFER_LEN: usize = $len;
 
             /// Decodes a value from `input` starting at `index` without bounds checks.
             ///
@@ -390,13 +390,13 @@ macro_rules! impl_float_binary_codec {
             ///
             /// The caller must guarantee that:
             ///
-            /// - `index + Self::MIN_BUFFER_LEN <= input.len()`
-            /// - `input[index..index + Self::MIN_BUFFER_LEN]`
+            /// - `index + Self::REQUIRED_MIN_BUFFER_LEN <= input.len()`
+            /// - `input[index..index + Self::REQUIRED_MIN_BUFFER_LEN]`
             ///   is valid for reading.
             #[must_use]
-            #[inline]
+            #[inline(always)]
             pub unsafe fn read_unchecked(input: &[u8], index: usize) -> $ty {
-                debug_assert!(index + Self::MIN_BUFFER_LEN <= input.len());
+                debug_assert!(index + Self::REQUIRED_MIN_BUFFER_LEN <= input.len());
 
                 // SAFETY:
                 // The caller guarantees that the readable range is fully in-bounds.
@@ -426,12 +426,12 @@ macro_rules! impl_float_binary_codec {
             ///
             /// The caller must guarantee that:
             ///
-            /// - `index + Self::MIN_BUFFER_LEN <= output.len()`
-            /// - `output[index..index + Self::MIN_BUFFER_LEN]`
+            /// - `index + Self::REQUIRED_MIN_BUFFER_LEN <= output.len()`
+            /// - `output[index..index + Self::REQUIRED_MIN_BUFFER_LEN]`
             ///   is valid for writing.
-            #[inline]
+            #[inline(always)]
             pub unsafe fn write_unchecked(output: &mut [u8], index: usize, value: $ty) {
-                debug_assert!(index + Self::MIN_BUFFER_LEN <= output.len());
+                debug_assert!(index + Self::REQUIRED_MIN_BUFFER_LEN <= output.len());
 
                 let raw = value.to_bits().to_le();
 
