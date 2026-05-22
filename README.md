@@ -81,6 +81,19 @@ assert_eq!(b"bounded", data.as_slice());
 These traits are useful when an API should accept `&mut dyn ReadSeek` instead
 of being generic over `R: Read + Seek`.
 
+### Buffer Codecs
+
+The `codec` module contains buffer-level helpers that do not depend on
+`std::io::Read` or `std::io::Write`:
+
+| Type | Purpose |
+| --- | --- |
+| `Coder` | progress-oriented conversion trait for caller-managed buffers |
+| `CoderProgress`, `CoderStatus` | conversion progress and stop reason reporting |
+| `BinaryCodec` | fixed-width scalar encoding and decoding on byte slices |
+| `Leb128Codec`, `ZigZagCodec` | compact integer encoding on byte slices |
+| `Leb128DecodeError` | structured LEB128 decode error reporting |
+
 ### Extension Traits
 
 The extension traits keep common low-level I/O patterns close to the standard
@@ -135,9 +148,9 @@ root-level codec wrappers:
 
 ## Prelude
 
-`qubit_io::prelude` re-exports the method-providing extension traits and the
-object-safe composition traits. It intentionally does not re-export wrapper
-types or concrete namespaces.
+`qubit_io::prelude` re-exports the method-providing extension traits,
+object-safe composition traits, byte order, and buffer codec types. It
+intentionally does not re-export stream wrapper types.
 
 ```rust
 use qubit_io::prelude::*;
@@ -152,7 +165,7 @@ or atomic file writes. For local filesystem capabilities, see
 
 ## Runtime Dependencies
 
-This crate depends only on the Rust standard library at runtime.
+This crate depends on the Rust standard library and `thiserror`.
 
 ## Testing & Code Coverage
 
