@@ -144,12 +144,15 @@ Wrapper types make stream behavior part of the type instead of a one-off call:
 ### Codec Wrappers
 
 Callers who prefer reader/writer objects over extension-method calls can use
-root-level codec wrappers:
+root-level codec wrappers. These wrappers keep codec configuration in the
+wrapper object while still behaving like normal streams: readers implement
+`Read`, writers implement `Write`, and both pass through `Seek` when the inner
+stream supports seeking.
 
 | Wrapper | Purpose |
 | --- | --- |
-| `BinaryReader`, `BinaryWriter` | fixed-width scalar encoding and decoding |
-| `Leb128Reader`, `Leb128Writer` | LEB128 encoding and decoding |
+| `BinaryReader`, `BinaryWriter` | fixed-width scalar encoding and decoding with type-level byte order |
+| `Leb128Reader`, `Leb128Writer` | LEB128 integers and ULEB length-prefixed UTF-8 strings |
 | `ZigZagReader`, `ZigZagWriter` | ZigZag over unsigned LEB128 payloads |
 
 ## Prelude

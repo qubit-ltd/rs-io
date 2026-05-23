@@ -133,12 +133,14 @@ wrapper 类型把 stream 行为放进类型语义，而不是一次性函数调�
 
 ### Codec Wrapper
 
-偏好 reader/writer object 调用风格的用户可以使用 root-level codec wrapper：
+偏好 reader/writer object 调用风格的用户可以使用 root-level codec wrapper。这些
+wrapper 把 codec 配置保存在对象中，同时仍然表现为普通 stream：reader 实现 `Read`，
+writer 实现 `Write`，底层 stream 支持 seek 时还会透传 `Seek`。
 
 | Wrapper | 用途 |
 | --- | --- |
-| `BinaryReader`、`BinaryWriter` | fixed-width 标量编解码 |
-| `Leb128Reader`、`Leb128Writer` | LEB128 编解码 |
+| `BinaryReader`、`BinaryWriter` | 使用类型级字节序的 fixed-width 标量编解码 |
+| `Leb128Reader`、`Leb128Writer` | LEB128 整数和 ULEB 长度前缀 UTF-8 字符串 |
 | `ZigZagReader`、`ZigZagWriter` | 基于 unsigned LEB128 payload 的 ZigZag 编解码 |
 
 ## Prelude
