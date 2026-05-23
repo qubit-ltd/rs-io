@@ -8,14 +8,11 @@
  *
  ******************************************************************************/
 use std::io::{
-    Error,
-    ErrorKind,
     Read,
     Result,
 };
-use std::string::FromUtf8Error;
 
-use crate::util::try_reserve_vec;
+use crate::util::read_utf8_payload as read_utf8_payload_impl;
 use crate::{
     BinaryReadExt,
     ByteOrder,
@@ -34,8 +31,8 @@ pub trait StringReadExt: Read {
     /// The decoded string.
     ///
     /// # Errors
-    /// Returns an I/O error for payload reads, [`ErrorKind::InvalidData`] when
-    /// `len` exceeds `max_len`, or [`ErrorKind::InvalidData`] when the payload
+    /// Returns an I/O error for payload reads, [`std::io::ErrorKind::InvalidData`] when
+    /// `len` exceeds `max_len`, or [`std::io::ErrorKind::InvalidData`] when the payload
     /// is not valid UTF-8.
     fn read_utf8_payload(&mut self, len: usize, max_len: usize) -> Result<String>;
 
@@ -48,8 +45,8 @@ pub trait StringReadExt: Read {
     /// The decoded string.
     ///
     /// # Errors
-    /// Returns an I/O error for length or payload reads, [`ErrorKind::InvalidData`]
-    /// when the encoded length exceeds `max_len`, or [`ErrorKind::InvalidData`]
+    /// Returns an I/O error for length or payload reads, [`std::io::ErrorKind::InvalidData`]
+    /// when the encoded length exceeds `max_len`, or [`std::io::ErrorKind::InvalidData`]
     /// when the payload is not valid UTF-8.
     fn read_utf8_string_uleb(&mut self, max_len: usize) -> Result<String>;
 
@@ -62,9 +59,9 @@ pub trait StringReadExt: Read {
     /// The decoded string.
     ///
     /// # Errors
-    /// Returns an I/O error for length or payload reads, [`ErrorKind::InvalidData`]
-    /// when the length prefix is malformed or non-canonical, [`ErrorKind::InvalidData`]
-    /// when the encoded length exceeds `max_len`, or [`ErrorKind::InvalidData`]
+    /// Returns an I/O error for length or payload reads, [`std::io::ErrorKind::InvalidData`]
+    /// when the length prefix is malformed or non-canonical, [`std::io::ErrorKind::InvalidData`]
+    /// when the encoded length exceeds `max_len`, or [`std::io::ErrorKind::InvalidData`]
     /// when the payload is not valid UTF-8.
     fn read_utf8_string_uleb_strict(&mut self, max_len: usize) -> Result<String>;
 
@@ -78,8 +75,8 @@ pub trait StringReadExt: Read {
     /// The decoded string.
     ///
     /// # Errors
-    /// Returns an I/O error for length or payload reads, [`ErrorKind::InvalidData`]
-    /// when the encoded length exceeds `max_len`, or [`ErrorKind::InvalidData`]
+    /// Returns an I/O error for length or payload reads, [`std::io::ErrorKind::InvalidData`]
+    /// when the encoded length exceeds `max_len`, or [`std::io::ErrorKind::InvalidData`]
     /// when the payload is not valid UTF-8.
     fn read_utf8_string_u16(&mut self, byte_order: ByteOrder, max_len: usize) -> Result<String>;
 
@@ -92,8 +89,8 @@ pub trait StringReadExt: Read {
     /// The decoded string.
     ///
     /// # Errors
-    /// Returns an I/O error for length or payload reads, [`ErrorKind::InvalidData`]
-    /// when the encoded length exceeds `max_len`, or [`ErrorKind::InvalidData`]
+    /// Returns an I/O error for length or payload reads, [`std::io::ErrorKind::InvalidData`]
+    /// when the encoded length exceeds `max_len`, or [`std::io::ErrorKind::InvalidData`]
     /// when the payload is not valid UTF-8.
     fn read_utf8_string_u16_be(&mut self, max_len: usize) -> Result<String>;
 
@@ -106,8 +103,8 @@ pub trait StringReadExt: Read {
     /// The decoded string.
     ///
     /// # Errors
-    /// Returns an I/O error for length or payload reads, [`ErrorKind::InvalidData`]
-    /// when the encoded length exceeds `max_len`, or [`ErrorKind::InvalidData`]
+    /// Returns an I/O error for length or payload reads, [`std::io::ErrorKind::InvalidData`]
+    /// when the encoded length exceeds `max_len`, or [`std::io::ErrorKind::InvalidData`]
     /// when the payload is not valid UTF-8.
     fn read_utf8_string_u16_le(&mut self, max_len: usize) -> Result<String>;
 
@@ -121,8 +118,8 @@ pub trait StringReadExt: Read {
     /// The decoded string.
     ///
     /// # Errors
-    /// Returns an I/O error for length or payload reads, [`ErrorKind::InvalidData`]
-    /// when the encoded length exceeds `max_len`, or [`ErrorKind::InvalidData`]
+    /// Returns an I/O error for length or payload reads, [`std::io::ErrorKind::InvalidData`]
+    /// when the encoded length exceeds `max_len`, or [`std::io::ErrorKind::InvalidData`]
     /// when the payload is not valid UTF-8.
     fn read_utf8_string_u32(&mut self, byte_order: ByteOrder, max_len: usize) -> Result<String>;
 
@@ -135,8 +132,8 @@ pub trait StringReadExt: Read {
     /// The decoded string.
     ///
     /// # Errors
-    /// Returns an I/O error for length or payload reads, [`ErrorKind::InvalidData`]
-    /// when the encoded length exceeds `max_len`, or [`ErrorKind::InvalidData`]
+    /// Returns an I/O error for length or payload reads, [`std::io::ErrorKind::InvalidData`]
+    /// when the encoded length exceeds `max_len`, or [`std::io::ErrorKind::InvalidData`]
     /// when the payload is not valid UTF-8.
     fn read_utf8_string_u32_be(&mut self, max_len: usize) -> Result<String>;
 
@@ -149,8 +146,8 @@ pub trait StringReadExt: Read {
     /// The decoded string.
     ///
     /// # Errors
-    /// Returns an I/O error for length or payload reads, [`ErrorKind::InvalidData`]
-    /// when the encoded length exceeds `max_len`, or [`ErrorKind::InvalidData`]
+    /// Returns an I/O error for length or payload reads, [`std::io::ErrorKind::InvalidData`]
+    /// when the encoded length exceeds `max_len`, or [`std::io::ErrorKind::InvalidData`]
     /// when the payload is not valid UTF-8.
     fn read_utf8_string_u32_le(&mut self, max_len: usize) -> Result<String>;
 }
@@ -161,95 +158,54 @@ where
 {
     #[inline]
     fn read_utf8_payload(&mut self, len: usize, max_len: usize) -> Result<String> {
-        read_utf8_payload(self, len, max_len)
+        read_utf8_payload_impl(self, len, max_len)
     }
 
     #[inline]
     fn read_utf8_string_uleb(&mut self, max_len: usize) -> Result<String> {
         let len = self.read_uleb_usize()?;
-        read_utf8_payload(self, len, max_len)
+        read_utf8_payload_impl(self, len, max_len)
     }
 
     #[inline]
     fn read_utf8_string_uleb_strict(&mut self, max_len: usize) -> Result<String> {
         let len = self.read_uleb_usize_strict()?;
-        read_utf8_payload(self, len, max_len)
+        read_utf8_payload_impl(self, len, max_len)
     }
 
     #[inline]
     fn read_utf8_string_u16(&mut self, byte_order: ByteOrder, max_len: usize) -> Result<String> {
         let len = usize::from(self.read_u16(byte_order)?);
-        read_utf8_payload(self, len, max_len)
+        read_utf8_payload_impl(self, len, max_len)
     }
 
     #[inline]
     fn read_utf8_string_u16_be(&mut self, max_len: usize) -> Result<String> {
         let len = self.read_u16_be()? as usize;
-        read_utf8_payload(self, len, max_len)
+        read_utf8_payload_impl(self, len, max_len)
     }
 
     #[inline]
     fn read_utf8_string_u16_le(&mut self, max_len: usize) -> Result<String> {
         let len = self.read_u16_le()? as usize;
-        read_utf8_payload(self, len, max_len)
+        read_utf8_payload_impl(self, len, max_len)
     }
 
     #[inline]
     fn read_utf8_string_u32(&mut self, byte_order: ByteOrder, max_len: usize) -> Result<String> {
         let len = self.read_u32(byte_order)? as usize;
-        read_utf8_payload(self, len, max_len)
+        read_utf8_payload_impl(self, len, max_len)
     }
 
     #[inline]
     fn read_utf8_string_u32_be(&mut self, max_len: usize) -> Result<String> {
         let len = self.read_u32_be()? as usize;
-        read_utf8_payload(self, len, max_len)
+        read_utf8_payload_impl(self, len, max_len)
     }
 
     #[inline]
     fn read_utf8_string_u32_le(&mut self, max_len: usize) -> Result<String> {
         let len = self.read_u32_le()? as usize;
-        read_utf8_payload(self, len, max_len)
+        read_utf8_payload_impl(self, len, max_len)
     }
-}
-
-/// Reads a UTF-8 payload after its length has already been decoded.
-///
-/// # Parameters
-/// - `reader`: Reader that provides the UTF-8 payload bytes.
-/// - `len`: Payload length in bytes.
-/// - `max_len`: Maximum accepted payload length in bytes.
-///
-/// # Returns
-/// Returns the decoded UTF-8 string.
-///
-/// # Errors
-/// Returns an error when `len` exceeds `max_len`, allocation fails, the reader
-/// cannot provide enough bytes, or the payload is not valid UTF-8.
-fn read_utf8_payload<T>(reader: &mut T, len: usize, max_len: usize) -> Result<String>
-where
-    T: Read + ?Sized,
-{
-    if len > max_len {
-        return Err(length_exceeded_error(len, max_len));
-    }
-    let mut bytes = Vec::new();
-    try_reserve_vec(&mut bytes, len)?;
-    bytes.resize(len, 0);
-    reader.read_exact(&mut bytes)?;
-    String::from_utf8(bytes).map_err(invalid_utf8_error)
-}
-
-fn length_exceeded_error(len: usize, max_len: usize) -> Error {
-    Error::new(
-        ErrorKind::InvalidData,
-        format!("string length {len} exceeds maximum length of {max_len} bytes"),
-    )
-}
-
-fn invalid_utf8_error(error: FromUtf8Error) -> Error {
-    Error::new(
-        ErrorKind::InvalidData,
-        format!("length-prefixed string is not valid UTF-8: {error}"),
-    )
 }

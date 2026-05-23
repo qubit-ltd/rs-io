@@ -15,4 +15,10 @@ pub(crate) use allocation::{
     try_reserve_vec,
 };
 pub use streams::Streams;
-pub(crate) use streams::read_leb128_payload;
+pub(crate) use streams::{
+    read_leb128_payload,
+    read_utf8_payload,
+    write_utf8_payload,
+    write_utf8_string_with_u16_len,
+    write_utf8_string_with_u32_len,
+};
