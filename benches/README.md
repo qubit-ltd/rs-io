@@ -27,6 +27,10 @@
   - `wrapper_*` 使用 `BinaryReader/Writer`、`Leb128Reader/Writer`、`ZigZagReader/Writer` 包装 `BufReader<File>` / `BufWriter<File>`。
   - `buffered_*` 使用 `BufferedBinaryReader/Writer`、`BufferedLeb128Reader/Writer`、`BufferedZigZagReader/Writer` 直接包装 `File`，由 wrapper 内部维护 8 KiB 缓冲区。
 - 每组基准设置 `warm_up_time = 2s`、`measurement_time = 8s`、`sample_size = 12`。
+- 每个大组必须在独立的 `cargo bench` 进程中执行，避免前一个大组的长时间
+  文件 IO、分支预测和 CPU 调度状态污染后续大组结果。`benches/stream.rs`
+  会读取 `QUBIT_IO_STREAM_BENCH_GROUP`，每次只注册并执行一个大组。
+  直接运行 `cargo bench --bench stream` 不再作为完整套件入口。
 
 ## 基线约定
 
@@ -46,5 +50,11 @@
 示例流程（在本仓库根目录执行）：
 
 ```bash
-cargo bench --bench stream
+benches/run_stream_bench_groups.sh
+```
+
+如只运行单个大组：
+
+```bash
+QUBIT_IO_STREAM_BENCH_GROUP=prod_varints cargo bench --bench stream
 ```

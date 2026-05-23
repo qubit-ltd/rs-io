@@ -1,9 +1,10 @@
+use std::env;
 use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use qubit_io::{
     BinaryReadExt, BinaryReader, BinaryWriteExt, BinaryWriter, BufferedBinaryReader,
     BufferedBinaryWriter, BufferedLeb128Reader, BufferedLeb128Writer, BufferedZigZagReader,
@@ -16,6 +17,40 @@ const BINARY_REPEAT: usize = 32;
 const BINARY_RECORD_BYTES: usize = 41;
 const VARINT_COUNT: usize = 262_144;
 const VARINT_REPEAT: usize = 64;
+const STREAM_BENCH_GROUP_ENV: &str = "QUBIT_IO_STREAM_BENCH_GROUP";
+const STREAM_BENCH_GROUP_NAMES: [&str; 3] = [
+    "prod_binary_pipeline",
+    "prod_varints",
+    "prod_signed_varints",
+];
+
+#[derive(Clone, Copy)]
+enum StreamBenchGroup {
+    BinaryPipeline,
+    Varints,
+    SignedVarints,
+}
+
+fn selected_stream_bench_group() -> StreamBenchGroup {
+    let value = env::var(STREAM_BENCH_GROUP_ENV).unwrap_or_else(|_| {
+        panic!(
+            "{STREAM_BENCH_GROUP_ENV} must be set to one of: {}. \
+             Use benches/run_stream_bench_groups.sh to run all groups in \
+             isolated cargo bench processes.",
+            STREAM_BENCH_GROUP_NAMES.join(", ")
+        );
+    });
+
+    match value.as_str() {
+        "prod_binary_pipeline" => StreamBenchGroup::BinaryPipeline,
+        "prod_varints" => StreamBenchGroup::Varints,
+        "prod_signed_varints" => StreamBenchGroup::SignedVarints,
+        _ => panic!(
+            "{STREAM_BENCH_GROUP_ENV}={value:?} is unsupported; expected one of: {}",
+            STREAM_BENCH_GROUP_NAMES.join(", ")
+        ),
+    }
+}
 
 struct BenchmarkFiles {
     dir: PathBuf,
@@ -973,10 +1008,13 @@ fn bench_prod_signed_varints(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(
-    benches,
-    bench_prod_binary_pipeline,
-    bench_prod_varints,
-    bench_prod_signed_varints,
-);
+fn bench_selected_stream_group(c: &mut Criterion) {
+    match selected_stream_bench_group() {
+        StreamBenchGroup::BinaryPipeline => bench_prod_binary_pipeline(c),
+        StreamBenchGroup::Varints => bench_prod_varints(c),
+        StreamBenchGroup::SignedVarints => bench_prod_signed_varints(c),
+    }
+}
+
+criterion_group!(benches, bench_selected_stream_group);
 criterion_main!(benches);
