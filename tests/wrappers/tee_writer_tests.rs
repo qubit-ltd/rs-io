@@ -126,9 +126,7 @@ fn test_tee_writer_allows_primary_zero_length_write() {
     let branch = ScriptedWriter::accepting();
     let mut writer = TeeWriter::new(primary, branch);
 
-    let count = writer
-        .write(b"ab")
-        .expect("zero-length primary write should succeed");
+    let count = writer.write(b"ab").expect("zero-length primary write should succeed");
 
     assert_eq!(0, count);
     assert!(writer.primary_ref().as_slice().is_empty());
@@ -141,9 +139,7 @@ fn test_tee_writer_returns_primary_write_error() {
     let branch = ScriptedWriter::accepting();
     let mut writer = TeeWriter::new(primary, branch);
 
-    let error = writer
-        .write(b"ab")
-        .expect_err("primary write error should be returned");
+    let error = writer.write(b"ab").expect_err("primary write error should be returned");
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("primary write failed", error.to_string());
@@ -166,9 +162,7 @@ fn test_tee_writer_returns_branch_write_error() {
     let branch = ScriptedWriter::failing_write("branch write failed");
     let mut writer = TeeWriter::new(primary, branch);
 
-    let error = writer
-        .write(b"ab")
-        .expect_err("branch write error should be returned");
+    let error = writer.write(b"ab").expect_err("branch write error should be returned");
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("branch write failed", error.to_string());
@@ -181,9 +175,7 @@ fn test_tee_writer_flushes_both_writers() {
     let branch = ScriptedWriter::failing_flush("branch flush failed");
     let mut writer = TeeWriter::new(primary, branch);
 
-    let error = writer
-        .flush()
-        .expect_err("branch flush error should be returned");
+    let error = writer.flush().expect_err("branch flush error should be returned");
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("branch flush failed", error.to_string());
@@ -204,9 +196,7 @@ fn test_tee_writer_returns_primary_flush_error() {
     let branch = ScriptedWriter::accepting();
     let mut writer = TeeWriter::new(primary, branch);
 
-    let error = writer
-        .flush()
-        .expect_err("primary flush error should be returned");
+    let error = writer.flush().expect_err("primary flush error should be returned");
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("primary flush failed", error.to_string());
@@ -226,9 +216,7 @@ fn test_tee_writer_forwards_seek_to_both_writers() {
     let mut writer = TeeWriter::new(primary, branch);
 
     writer.write_all(b"abc").unwrap();
-    writer
-        .seek(SeekFrom::Start(1))
-        .expect("seek should be forwarded");
+    writer.seek(SeekFrom::Start(1)).expect("seek should be forwarded");
     writer.write_all(b"z").unwrap();
 
     let (primary, branch) = writer.into_inner();

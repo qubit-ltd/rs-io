@@ -9,11 +9,23 @@
  ******************************************************************************/
 
 use core::marker::PhantomData;
-use std::io::{Error, ErrorKind, Read, Result, Seek, SeekFrom};
+use std::io::{
+    Error,
+    ErrorKind,
+    Read,
+    Result,
+    Seek,
+    SeekFrom,
+};
 
 use crate::ReadExt;
-use crate::codec::{DecodePolicy, Leb128DecodeError, NonStrict};
-use crate::stream::macros::read_zig_zag_value;
+use crate::codec::{
+    DecodePolicy,
+    Leb128DecodeError,
+    NonStrict,
+    Strict,
+    ZigZagCodec,
+};
 
 /// Reader wrapper for ZigZag + unsigned LEB128 integers.
 pub struct ZigZagReader<R, P = NonStrict> {
@@ -66,6 +78,36 @@ where
     }
 }
 
+macro_rules! impl_read_value {
+    ($policy:ty, $method:ident, $ty:ty, $doc:literal) => {
+        #[doc = $doc]
+        #[inline]
+        pub fn $method(&mut self) -> Result<$ty> {
+            type Codec = ZigZagCodec<$ty, $policy>;
+
+            self.read_leb128::<$ty, { Codec::REQUIRED_MIN_BUFFER_LEN }, _>(|bytes| unsafe {
+                Codec::read_unchecked(bytes, 0)
+            })
+        }
+    };
+}
+
+macro_rules! impl_for_policy {
+    ($policy:ty) => {
+        impl<R> ZigZagReader<R, $policy>
+        where
+            R: Read,
+        {
+            impl_read_value!($policy, read_i8, i8, "Reads a ZigZag `i8`.");
+            impl_read_value!($policy, read_i16, i16, "Reads a ZigZag `i16`.");
+            impl_read_value!($policy, read_i32, i32, "Reads a ZigZag `i32`.");
+            impl_read_value!($policy, read_i64, i64, "Reads a ZigZag `i64`.");
+            impl_read_value!($policy, read_i128, i128, "Reads a ZigZag `i128`.");
+            impl_read_value!($policy, read_isize, isize, "Reads a ZigZag `isize`.");
+        }
+    };
+}
+
 impl<R, P> ZigZagReader<R, P>
 where
     R: Read,
@@ -76,16 +118,12 @@ where
     where
         F: FnOnce(&[u8; 19]) -> std::result::Result<(T, usize), Leb128DecodeError>,
     {
-        debug_assert!(
-            N <= self.buffer.len(),
-            "ZigZag read length exceeds internal buffer"
-        );
+        debug_assert!(N <= self.buffer.len(), "ZigZag read length exceeds internal buffer");
         for index in 0..N {
             // SAFETY: `index` is produced by `0..N`, where `N` is a
             // codec-declared length that fits the fixed internal buffer.
             unsafe {
-                self.inner
-                    .read_exact_unchecked(&mut self.buffer, index, 1)?;
+                self.inner.read_exact_unchecked(&mut self.buffer, index, 1)?;
             }
             if read_byte(&self.buffer, index) & 0x80 == 0 {
                 return decode(&self.buffer)
@@ -97,43 +135,10 @@ where
             .map(|(value, _)| value)
             .map_err(map_leb128_decode_error)
     }
-
-    /// Reads a ZigZag `i8`.
-    #[inline]
-    pub fn read_i8(&mut self) -> Result<i8> {
-        read_zig_zag_value!(self, i8, P)
-    }
-
-    /// Reads a ZigZag `i16`.
-    #[inline]
-    pub fn read_i16(&mut self) -> Result<i16> {
-        read_zig_zag_value!(self, i16, P)
-    }
-
-    /// Reads a ZigZag `i32`.
-    #[inline]
-    pub fn read_i32(&mut self) -> Result<i32> {
-        read_zig_zag_value!(self, i32, P)
-    }
-
-    /// Reads a ZigZag `i64`.
-    #[inline]
-    pub fn read_i64(&mut self) -> Result<i64> {
-        read_zig_zag_value!(self, i64, P)
-    }
-
-    /// Reads a ZigZag `i128`.
-    #[inline]
-    pub fn read_i128(&mut self) -> Result<i128> {
-        read_zig_zag_value!(self, i128, P)
-    }
-
-    /// Reads a ZigZag `isize`.
-    #[inline]
-    pub fn read_isize(&mut self) -> Result<isize> {
-        read_zig_zag_value!(self, isize, P)
-    }
 }
+
+impl_for_policy!(NonStrict);
+impl_for_policy!(Strict);
 
 impl<R, P> Read for ZigZagReader<R, P>
 where
@@ -189,10 +194,7 @@ fn map_leb128_decode_error(error: Leb128DecodeError) -> Error {
 /// Reads one byte from the internal ZigZag buffer without an extra bounds check.
 #[inline(always)]
 fn read_byte(buffer: &[u8; 19], index: usize) -> u8 {
-    debug_assert!(
-        index < buffer.len(),
-        "ZigZag read index exceeds internal buffer"
-    );
+    debug_assert!(index < buffer.len(), "ZigZag read index exceeds internal buffer");
     // SAFETY: `read_leb128` only calls this with an index produced by
     // `0..N`, where N is a codec-declared length that fits `buffer`.
     unsafe { *buffer.as_ptr().add(index) }

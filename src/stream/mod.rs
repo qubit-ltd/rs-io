@@ -13,7 +13,6 @@ mod binary_reader;
 mod binary_writer;
 mod leb128_reader;
 mod leb128_writer;
-mod macros;
 mod zig_zag_reader;
 mod zig_zag_writer;
 

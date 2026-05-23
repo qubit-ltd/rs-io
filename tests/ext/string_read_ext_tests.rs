@@ -21,9 +21,7 @@ fn test_string_read_ext_reads_all_length_prefix_kinds() {
     let mut input = Cursor::new(vec![5, b'h', b'e', b'l', b'l', b'o']);
     assert_eq!(
         "hello",
-        input
-            .read_utf8_string_uleb(8)
-            .expect("ULEB string should be read")
+        input.read_utf8_string_uleb(8).expect("ULEB string should be read")
     );
 
     let mut input = Cursor::new(vec![5, b'h', b'e', b'l', b'l', b'o']);
@@ -37,9 +35,7 @@ fn test_string_read_ext_reads_all_length_prefix_kinds() {
     let mut input = Cursor::new(vec![0, 2, b'h', b'i']);
     assert_eq!(
         "hi",
-        input
-            .read_utf8_string_u16_be(8)
-            .expect("u16 BE string should be read")
+        input.read_utf8_string_u16_be(8).expect("u16 BE string should be read")
     );
 
     let mut input = Cursor::new(vec![0, 2, b'h', b'i']);
@@ -53,9 +49,7 @@ fn test_string_read_ext_reads_all_length_prefix_kinds() {
     let mut input = Cursor::new(vec![2, 0, b'h', b'i']);
     assert_eq!(
         "hi",
-        input
-            .read_utf8_string_u16_le(8)
-            .expect("u16 LE string should be read")
+        input.read_utf8_string_u16_le(8).expect("u16 LE string should be read")
     );
 
     let mut input = Cursor::new(vec![2, 0, b'h', b'i']);
@@ -69,9 +63,7 @@ fn test_string_read_ext_reads_all_length_prefix_kinds() {
     let mut input = Cursor::new(vec![0, 0, 0, 2, b'o', b'k']);
     assert_eq!(
         "ok",
-        input
-            .read_utf8_string_u32_be(8)
-            .expect("u32 BE string should be read")
+        input.read_utf8_string_u32_be(8).expect("u32 BE string should be read")
     );
 
     let mut input = Cursor::new(vec![0, 0, 0, 2, b'o', b'k']);
@@ -85,9 +77,7 @@ fn test_string_read_ext_reads_all_length_prefix_kinds() {
     let mut input = Cursor::new(vec![2, 0, 0, 0, b'o', b'k']);
     assert_eq!(
         "ok",
-        input
-            .read_utf8_string_u32_le(8)
-            .expect("u32 LE string should be read")
+        input.read_utf8_string_u32_le(8).expect("u32 LE string should be read")
     );
 
     let mut input = Cursor::new(vec![2, 0, 0, 0, b'o', b'k']);

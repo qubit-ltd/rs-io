@@ -11,10 +11,7 @@ fn test_binary_codec_exposes_required_min_buffer_len() {
     assert_eq!(2, BinaryCodec::<u16, BigEndian>::REQUIRED_MIN_BUFFER_LEN);
     assert_eq!(4, BinaryCodec::<u32, LittleEndian>::REQUIRED_MIN_BUFFER_LEN);
     assert_eq!(8, BinaryCodec::<u64, BigEndian>::REQUIRED_MIN_BUFFER_LEN);
-    assert_eq!(
-        16,
-        BinaryCodec::<u128, LittleEndian>::REQUIRED_MIN_BUFFER_LEN
-    );
+    assert_eq!(16, BinaryCodec::<u128, LittleEndian>::REQUIRED_MIN_BUFFER_LEN);
     assert_eq!(4, BinaryCodec::<f32, BigEndian>::REQUIRED_MIN_BUFFER_LEN);
     assert_eq!(8, BinaryCodec::<f64, LittleEndian>::REQUIRED_MIN_BUFFER_LEN);
 }
@@ -59,9 +56,7 @@ fn test_binary_codec_handles_byte_signed_and_float_values() {
     assert_eq!(0x7f, unsafe {
         BinaryCodec::<u8, LittleEndian>::read_unchecked(&output, 0)
     });
-    assert_eq!(-1, unsafe {
-        BinaryCodec::<i8, BigEndian>::read_unchecked(&output, 1)
-    });
+    assert_eq!(-1, unsafe { BinaryCodec::<i8, BigEndian>::read_unchecked(&output, 1) });
     assert_eq!(12.5, unsafe {
         BinaryCodec::<f32, BigEndian>::read_unchecked(&output, 2)
     });

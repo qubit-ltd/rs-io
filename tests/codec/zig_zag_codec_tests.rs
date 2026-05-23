@@ -26,8 +26,8 @@ fn test_zig_zag_codec_reads_and_writes_values_unchecked() {
     assert_eq!(2, len);
     assert_eq!([0x00, 0xd7, 0x04, 0x00, 0x00], output);
 
-    let decoded = unsafe { ZigZagCodec::<i16, NonStrict>::read_unchecked(&output, 1) }
-        .expect("valid i16 should decode");
+    let decoded =
+        unsafe { ZigZagCodec::<i16, NonStrict>::read_unchecked(&output, 1) }.expect("valid i16 should decode");
     assert_eq!((-300, 2), decoded);
 }
 
@@ -36,8 +36,8 @@ fn test_zig_zag_codec_handles_signed_extremes() {
     let mut output = [0u8; ZigZagCodec::<i128, NonStrict>::REQUIRED_MIN_BUFFER_LEN];
     let len = unsafe { ZigZagCodec::<i128, NonStrict>::write_unchecked(&mut output, 0, i128::MIN) };
 
-    let decoded = unsafe { ZigZagCodec::<i128, NonStrict>::read_unchecked(&output, 0) }
-        .expect("valid i128 should decode");
+    let decoded =
+        unsafe { ZigZagCodec::<i128, NonStrict>::read_unchecked(&output, 0) }.expect("valid i128 should decode");
     assert_eq!((i128::MIN, len), decoded);
 }
 

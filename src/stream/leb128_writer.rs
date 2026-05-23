@@ -8,11 +8,18 @@
  *
  ******************************************************************************/
 
-use std::io::{Result, Seek, SeekFrom, Write};
+use std::io::{
+    Result,
+    Seek,
+    SeekFrom,
+    Write,
+};
 
 use crate::WriteExt;
-use crate::stream::macros::write_leb128_value;
-use crate::util::write_utf8_payload;
+use crate::codec::{
+    Leb128Codec,
+    NonStrict,
+};
 
 /// Writer wrapper for canonical LEB128 integers.
 pub struct Leb128Writer<W> {
@@ -25,10 +32,7 @@ impl<W> Leb128Writer<W> {
     #[must_use]
     #[inline]
     pub const fn new(inner: W) -> Self {
-        Self {
-            inner,
-            buffer: [0; 19],
-        }
+        Self { inner, buffer: [0; 19] }
     }
 
     /// Returns a shared reference to the underlying writer.
@@ -53,6 +57,20 @@ impl<W> Leb128Writer<W> {
     }
 }
 
+macro_rules! impl_write_value {
+    ($method:ident, $ty:ty, $doc:literal) => {
+        #[doc = $doc]
+        #[inline]
+        pub fn $method(&mut self, value: $ty) -> Result<()> {
+            type Codec = Leb128Codec<$ty, NonStrict>;
+
+            self.write_leb128::<$ty, { Codec::REQUIRED_MIN_BUFFER_LEN }, _>(value, |bytes, value| unsafe {
+                Codec::write_unchecked(bytes, 0, value)
+            })
+        }
+    };
+}
+
 impl<W> Leb128Writer<W>
 where
     W: Write,
@@ -67,77 +85,18 @@ where
         unsafe { self.inner.write_all_unchecked(&self.buffer, 0, len) }
     }
 
-    /// Writes an unsigned LEB128 `u8`.
-    #[inline]
-    pub fn write_u8(&mut self, value: u8) -> Result<()> {
-        write_leb128_value!(self, value, u8)
-    }
-
-    /// Writes an unsigned LEB128 `u16`.
-    #[inline]
-    pub fn write_u16(&mut self, value: u16) -> Result<()> {
-        write_leb128_value!(self, value, u16)
-    }
-
-    /// Writes an unsigned LEB128 `u32`.
-    #[inline]
-    pub fn write_u32(&mut self, value: u32) -> Result<()> {
-        write_leb128_value!(self, value, u32)
-    }
-
-    /// Writes an unsigned LEB128 `u64`.
-    #[inline]
-    pub fn write_u64(&mut self, value: u64) -> Result<()> {
-        write_leb128_value!(self, value, u64)
-    }
-
-    /// Writes an unsigned LEB128 `u128`.
-    #[inline]
-    pub fn write_u128(&mut self, value: u128) -> Result<()> {
-        write_leb128_value!(self, value, u128)
-    }
-
-    /// Writes an unsigned LEB128 `usize`.
-    #[inline]
-    pub fn write_usize(&mut self, value: usize) -> Result<()> {
-        write_leb128_value!(self, value, usize)
-    }
-
-    /// Writes a signed LEB128 `i8`.
-    #[inline]
-    pub fn write_i8(&mut self, value: i8) -> Result<()> {
-        write_leb128_value!(self, value, i8)
-    }
-
-    /// Writes a signed LEB128 `i16`.
-    #[inline]
-    pub fn write_i16(&mut self, value: i16) -> Result<()> {
-        write_leb128_value!(self, value, i16)
-    }
-
-    /// Writes a signed LEB128 `i32`.
-    #[inline]
-    pub fn write_i32(&mut self, value: i32) -> Result<()> {
-        write_leb128_value!(self, value, i32)
-    }
-
-    /// Writes a signed LEB128 `i64`.
-    #[inline]
-    pub fn write_i64(&mut self, value: i64) -> Result<()> {
-        write_leb128_value!(self, value, i64)
-    }
-
-    /// Writes a signed LEB128 `i128`.
-    #[inline]
-    pub fn write_i128(&mut self, value: i128) -> Result<()> {
-        write_leb128_value!(self, value, i128)
-    }
-
-    /// Writes a signed LEB128 `isize`.
-    #[inline]
-    pub fn write_isize(&mut self, value: isize) -> Result<()> {
-        write_leb128_value!(self, value, isize)
-    }
+    impl_write_value!(write_u8, u8, "Writes an unsigned LEB128 `u8`.");
+    impl_write_value!(write_u16, u16, "Writes an unsigned LEB128 `u16`.");
+    impl_write_value!(write_u32, u32, "Writes an unsigned LEB128 `u32`.");
+    impl_write_value!(write_u64, u64, "Writes an unsigned LEB128 `u64`.");
+    impl_write_value!(write_u128, u128, "Writes an unsigned LEB128 `u128`.");
+    impl_write_value!(write_usize, usize, "Writes an unsigned LEB128 `usize`.");
+    impl_write_value!(write_i8, i8, "Writes a signed LEB128 `i8`.");
+    impl_write_value!(write_i16, i16, "Writes a signed LEB128 `i16`.");
+    impl_write_value!(write_i32, i32, "Writes a signed LEB128 `i32`.");
+    impl_write_value!(write_i64, i64, "Writes a signed LEB128 `i64`.");
+    impl_write_value!(write_i128, i128, "Writes a signed LEB128 `i128`.");
+    impl_write_value!(write_isize, isize, "Writes a signed LEB128 `isize`.");
 
     /// Writes a UTF-8 string prefixed by an unsigned LEB128 byte length.
     ///
@@ -151,7 +110,9 @@ where
     #[inline]
     pub fn write_utf8_string(&mut self, value: &str) -> Result<()> {
         self.write_usize(value.len())?;
-        write_utf8_payload(&mut self.inner, value)
+        let bytes = value.as_bytes();
+        // SAFETY: The range covers the full byte slice produced by `str::as_bytes`.
+        unsafe { self.inner.write_all_unchecked(bytes, 0, bytes.len()) }
     }
 }
 

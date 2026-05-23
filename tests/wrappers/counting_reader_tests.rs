@@ -34,12 +34,8 @@ fn test_counting_reader_counts_successful_reads() {
 
     let mut buffer = [0; 4];
     let first = reader.read(&mut buffer).expect("first read should succeed");
-    let second = reader
-        .read(&mut buffer)
-        .expect("second read should succeed");
-    let eof = reader
-        .read(&mut buffer)
-        .expect("EOF should not be an error");
+    let second = reader.read(&mut buffer).expect("second read should succeed");
+    let eof = reader.read(&mut buffer).expect("EOF should not be an error");
 
     assert_eq!(4, first);
     assert_eq!(2, second);
@@ -57,9 +53,7 @@ fn test_counting_reader_get_mut_allows_inner_access() {
 
     reader.get_mut().set_position(1);
     let mut buffer = [0; 4];
-    let count = reader
-        .read(&mut buffer)
-        .expect("read should use mutated inner reader");
+    let count = reader.read(&mut buffer).expect("read should use mutated inner reader");
 
     assert_eq!(2, count);
     assert_eq!(2, reader.bytes_read());
@@ -90,17 +84,10 @@ fn test_counting_reader_forwards_seek_without_counting() {
     let cursor = Cursor::new(b"abcdef".to_vec());
     let mut reader = CountingReader::new(cursor);
 
-    assert_eq!(
-        2,
-        reader
-            .seek(SeekFrom::Start(2))
-            .expect("seek should be forwarded")
-    );
+    assert_eq!(2, reader.seek(SeekFrom::Start(2)).expect("seek should be forwarded"));
 
     let mut buffer = [0; 1];
-    reader
-        .read_exact(&mut buffer)
-        .expect("read after seek should succeed");
+    reader.read_exact(&mut buffer).expect("read after seek should succeed");
 
     assert_eq!(b'c', buffer[0]);
     assert_eq!(1, reader.bytes_read());
@@ -116,10 +103,7 @@ fn test_counting_reader_forwards_buf_read_and_counts_consumed_bytes() {
     let cursor = Cursor::new(b"abcdef".to_vec());
     let mut reader = CountingReader::new(BufReader::new(cursor));
 
-    assert_eq!(
-        b"abcdef",
-        reader.fill_buf().expect("buffer should be available")
-    );
+    assert_eq!(b"abcdef", reader.fill_buf().expect("buffer should be available"));
     reader.consume(2);
 
     assert_eq!(2, reader.bytes_read());

@@ -7,11 +7,21 @@
  *    Licensed under the Apache License, Version 2.0.
  *
  ******************************************************************************/
-use std::io::{Error, ErrorKind, Read, Result, Write, copy as copy_all};
+use std::io::{
+    Error,
+    ErrorKind,
+    Read,
+    Result,
+    Write,
+    copy as copy_all,
+};
 use std::string::FromUtf8Error;
 
 use crate::Streams;
-use crate::util::{try_reserve_string, try_reserve_vec};
+use crate::util::{
+    try_reserve_string,
+    try_reserve_vec,
+};
 
 /// Default stack buffer size used by discard operations.
 const DISCARD_BUFFER_SIZE: usize = 8 * 1024;
@@ -63,12 +73,7 @@ pub trait ReadExt: Read {
     /// The caller must guarantee that `start_index..start_index + count` is a
     /// valid range within `buffer` and that `start_index + count` does not
     /// overflow `usize`.
-    unsafe fn read_unchecked(
-        &mut self,
-        buffer: &mut [u8],
-        start_index: usize,
-        count: usize,
-    ) -> Result<usize>;
+    unsafe fn read_unchecked(&mut self, buffer: &mut [u8], start_index: usize, count: usize) -> Result<usize>;
 
     /// Reads exactly `count` bytes into a range of `buffer` without checking
     /// the range bounds in release builds.
@@ -91,12 +96,7 @@ pub trait ReadExt: Read {
     /// The caller must guarantee that `start_index..start_index + count` is a
     /// valid range within `buffer` and that `start_index + count` does not
     /// overflow `usize`.
-    unsafe fn read_exact_unchecked(
-        &mut self,
-        buffer: &mut [u8],
-        start_index: usize,
-        count: usize,
-    ) -> Result<()>;
+    unsafe fn read_exact_unchecked(&mut self, buffer: &mut [u8], start_index: usize, count: usize) -> Result<()>;
 
     /// Reads bytes into a range of `buffer` until that range is full or EOF is
     /// reached, without checking the range bounds in release builds.
@@ -200,12 +200,7 @@ pub trait ReadExt: Read {
     /// error reported by [`Read::read_exact`], including
     /// [`ErrorKind::UnexpectedEof`] when EOF is reached before `len` bytes are
     /// read.
-    fn read_exact_vec_limited_into(
-        &mut self,
-        output: &mut Vec<u8>,
-        len: usize,
-        max_len: usize,
-    ) -> Result<()>;
+    fn read_exact_vec_limited_into(&mut self, output: &mut Vec<u8>, len: usize, max_len: usize) -> Result<()>;
 
     /// Discards up to `bytes` bytes from this reader.
     ///
@@ -361,8 +356,7 @@ pub trait ReadExt: Read {
     /// `max_len` bytes or when the collected bytes are not valid UTF-8. Returns
     /// the first non-[`ErrorKind::Interrupted`] error reported by the
     /// underlying reader; interrupted reads are retried.
-    fn read_to_string_limited_into(&mut self, output: &mut String, max_len: usize)
-    -> Result<usize>;
+    fn read_to_string_limited_into(&mut self, output: &mut String, max_len: usize) -> Result<usize>;
 }
 
 impl<T> ReadExt for T
@@ -370,12 +364,7 @@ where
     T: Read + ?Sized,
 {
     #[inline(always)]
-    unsafe fn read_unchecked(
-        &mut self,
-        buffer: &mut [u8],
-        start_index: usize,
-        count: usize,
-    ) -> Result<usize> {
+    unsafe fn read_unchecked(&mut self, buffer: &mut [u8], start_index: usize, count: usize) -> Result<usize> {
         debug_assert!(
             start_index
                 .checked_add(count)
@@ -385,9 +374,7 @@ where
         // SAFETY: The caller guarantees that the requested range is valid for
         // `buffer`, and that the computed pointer and length form a valid
         // mutable subslice of `buffer`.
-        let target = unsafe {
-            core::slice::from_raw_parts_mut(buffer.as_mut_ptr().add(start_index), count)
-        };
+        let target = unsafe { core::slice::from_raw_parts_mut(buffer.as_mut_ptr().add(start_index), count) };
         self.read(target)
     }
 
@@ -409,9 +396,7 @@ where
             // SAFETY: The caller guarantees that `start_index..start_index +
             // count` is valid for `buffer`; `total < count`, so this remaining
             // suffix is also a valid mutable subslice.
-            let target = unsafe {
-                core::slice::from_raw_parts_mut(base.add(total), count - total)
-            };
+            let target = unsafe { core::slice::from_raw_parts_mut(base.add(total), count - total) };
             match self.read(target) {
                 Ok(0) => break,
                 Ok(read) => total += read,
@@ -426,37 +411,18 @@ where
         Ok(total)
     }
 
-    unsafe fn read_exact_unchecked(
-        &mut self,
-        buffer: &mut [u8],
-        start_index: usize,
-        count: usize,
-    ) -> Result<()> {
+    unsafe fn read_exact_unchecked(&mut self, buffer: &mut [u8], start_index: usize, count: usize) -> Result<()> {
         debug_assert!(
             start_index
                 .checked_add(count)
                 .is_some_and(|end_index| end_index <= buffer.len()),
             "unchecked read range exceeds buffer"
         );
-        let base = unsafe { buffer.as_mut_ptr().add(start_index) };
-        let mut total = 0;
-        while total < count {
-            // SAFETY: The caller guarantees that `start_index..start_index +
-            // count` is valid for `buffer`; `total < count`, so this remaining
-            // suffix is also a valid mutable subslice.
-            let target = unsafe { core::slice::from_raw_parts_mut(base.add(total), count - total) };
-            match self.read(target) {
-                Ok(0) => return Err(ErrorKind::UnexpectedEof.into()),
-                Ok(read) => total += read,
-                Err(error) => {
-                    if error.kind() == ErrorKind::Interrupted {
-                        continue;
-                    }
-                    return Err(error);
-                }
-            }
-        }
-        Ok(())
+        // SAFETY: The caller guarantees that the requested range is valid for
+        // `buffer`, and that the computed pointer and length form a valid
+        // mutable subslice of `buffer`.
+        let target = unsafe { core::slice::from_raw_parts_mut(buffer.as_mut_ptr().add(start_index), count) };
+        self.read_exact(target)
     }
 
     fn read_exact_or_eof(&mut self, buffer: &mut [u8]) -> Result<usize> {
@@ -483,7 +449,6 @@ where
         Ok(buffer)
     }
 
-
     fn read_exact_vec_limited(&mut self, len: usize, max_len: usize) -> Result<Vec<u8>> {
         validate_exact_read_len(len, max_len)?;
         let mut output = Vec::new();
@@ -493,12 +458,7 @@ where
     }
 
     #[inline(always)]
-    fn read_exact_vec_limited_into(
-        &mut self,
-        output: &mut Vec<u8>,
-        len: usize,
-        max_len: usize,
-    ) -> Result<()> {
+    fn read_exact_vec_limited_into(&mut self, output: &mut Vec<u8>, len: usize, max_len: usize) -> Result<()> {
         let mut reader = self;
         read_exact_vec_limited_into_impl(&mut reader, output, len, max_len)
     }
@@ -562,11 +522,7 @@ where
         String::from_utf8(bytes).map_err(invalid_utf8_error)
     }
 
-    fn read_to_string_limited_into(
-        &mut self,
-        output: &mut String,
-        max_len: usize,
-    ) -> Result<usize> {
+    fn read_to_string_limited_into(&mut self, output: &mut String, max_len: usize) -> Result<usize> {
         let mut reader = self;
         let bytes = read_to_end_limited_impl(&mut reader, max_len)?;
         let text = String::from_utf8(bytes).map_err(invalid_utf8_error)?;
@@ -671,11 +627,7 @@ fn read_to_end_limited_impl(reader: &mut dyn Read, max_len: usize) -> Result<Vec
 /// Returns [`ErrorKind::InvalidData`] after detecting that the input contains
 /// more than `max_len` bytes. Returns the first non-interrupted read error
 /// reported by `reader`.
-fn read_to_end_limited_into_impl(
-    reader: &mut dyn Read,
-    output: &mut Vec<u8>,
-    max_len: usize,
-) -> Result<usize> {
+fn read_to_end_limited_into_impl(reader: &mut dyn Read, output: &mut Vec<u8>, max_len: usize) -> Result<usize> {
     let mut buffer = [0; READ_TO_END_BUFFER_SIZE];
     let mut appended = 0;
     loop {

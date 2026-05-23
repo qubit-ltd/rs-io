@@ -8,7 +8,10 @@
  *
  ******************************************************************************/
 
-use std::io::{Error, ErrorKind, Result, Write};
+use std::io::{
+    Result,
+    Write,
+};
 
 /// Extension methods for [`Write`] values.
 ///
@@ -40,20 +43,26 @@ pub trait WriteExt: Write {
     /// The caller must guarantee that `start_index..start_index + count` is a
     /// valid range within `buffer` and that `start_index + count` does not
     /// overflow `usize`.
-    unsafe fn write_unchecked(
-        &mut self,
-        buffer: &[u8],
-        start_index: usize,
-        count: usize,
-    ) -> Result<usize>;
+    unsafe fn write_unchecked(&mut self, buffer: &[u8], start_index: usize, count: usize) -> Result<usize> {
+        debug_assert!(
+            start_index
+                .checked_add(count)
+                .is_some_and(|end_index| end_index <= buffer.len()),
+            "unchecked write range exceeds buffer"
+        );
+        // SAFETY: The caller guarantees that the computed pointer and length
+        // form a valid subslice of `buffer`.
+        let source = unsafe { core::slice::from_raw_parts(buffer.as_ptr().add(start_index), count) };
+        self.write(source)
+    }
 
     /// Writes exactly `count` bytes from a range of `buffer` without checking
     /// the range bounds in release builds.
     ///
-    /// This method repeatedly calls [`Write::write`] with unchecked source
-    /// subslices until the requested range has been written or an error occurs.
-    /// It keeps the same short-write, [`ErrorKind::Interrupted`], and
-    /// [`ErrorKind::WriteZero`] behavior as [`Write::write_all`].
+    /// This method delegates to [`Write::write_all`] after creating the source
+    /// slice with raw pointer arithmetic. It keeps the same short-write,
+    /// [`std::io::ErrorKind::Interrupted`], and [`std::io::ErrorKind::WriteZero`]
+    /// behavior as [`Write::write_all`].
     ///
     /// # Parameters
     /// - `buffer`: Source buffer.
@@ -67,90 +76,18 @@ pub trait WriteExt: Write {
     /// The caller must guarantee that `start_index..start_index + count` is a
     /// valid range within `buffer` and that `start_index + count` does not
     /// overflow `usize`.
-    unsafe fn write_all_unchecked(
-        &mut self,
-        buffer: &[u8],
-        start_index: usize,
-        count: usize,
-    ) -> Result<()>;
-}
-
-impl<T> WriteExt for T
-where
-    T: Write + ?Sized,
-{
-    #[inline(always)]
-    unsafe fn write_unchecked(
-        &mut self,
-        buffer: &[u8],
-        start_index: usize,
-        count: usize,
-    ) -> Result<usize> {
-        // SAFETY: The caller guarantees that the requested range is valid for
-        // `buffer`.
-        let source = unsafe { slice_unchecked(buffer, start_index, count) };
-        self.write(source)
-    }
-
-    unsafe fn write_all_unchecked(
-        &mut self,
-        buffer: &[u8],
-        start_index: usize,
-        count: usize,
-    ) -> Result<()> {
+    unsafe fn write_all_unchecked(&mut self, buffer: &[u8], start_index: usize, count: usize) -> Result<()> {
         debug_assert!(
             start_index
                 .checked_add(count)
                 .is_some_and(|end_index| end_index <= buffer.len()),
             "unchecked write range exceeds buffer"
         );
-        let base = unsafe { buffer.as_ptr().add(start_index) };
-        let mut total = 0;
-        while total < count {
-            // SAFETY: The caller guarantees that `start_index..start_index +
-            // count` is valid for `buffer`; `total < count`, so this remaining
-            // suffix is also a valid subslice.
-            let source = unsafe { core::slice::from_raw_parts(base.add(total), count - total) };
-            match self.write(source) {
-                Ok(0) => {
-                    return Err(Error::new(
-                        ErrorKind::WriteZero,
-                        "failed to write whole buffer",
-                    ));
-                }
-                Ok(written) => total += written,
-                Err(error) => {
-                    if error.kind() == ErrorKind::Interrupted {
-                        continue;
-                    }
-                    return Err(error);
-                }
-            }
-        }
-        Ok(())
+        // SAFETY: The caller guarantees that the computed pointer and length
+        // form a valid subslice of `buffer`.
+        let source = unsafe { core::slice::from_raw_parts(buffer.as_ptr().add(start_index), count) };
+        self.write_all(source)
     }
 }
 
-/// Returns an unchecked immutable range of `buffer`.
-///
-/// # Parameters
-/// - `buffer`: Source byte slice.
-/// - `start_index`: Start offset inside `buffer`.
-/// - `count`: Number of bytes in the returned range.
-///
-/// # Safety
-/// The caller must guarantee that `start_index..start_index + count` is a
-/// valid range within `buffer` and that `start_index + count` does not overflow
-/// `usize`.
-#[inline(always)]
-unsafe fn slice_unchecked(buffer: &[u8], start_index: usize, count: usize) -> &[u8] {
-    debug_assert!(
-        start_index
-            .checked_add(count)
-            .is_some_and(|end_index| end_index <= buffer.len()),
-        "unchecked write range exceeds buffer"
-    );
-    // SAFETY: The caller guarantees that the computed pointer and length form
-    // a valid subslice of `buffer`.
-    unsafe { core::slice::from_raw_parts(buffer.as_ptr().add(start_index), count) }
-}
+impl<T> WriteExt for T where T: Write + ?Sized {}

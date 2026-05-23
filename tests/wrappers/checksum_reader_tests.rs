@@ -35,9 +35,7 @@ fn test_checksum_reader_hashes_successfully_read_bytes_and_exposes_accessors() {
     reader.get_mut().set_position(1);
     reader.hasher_mut().write(b"x");
     let mut buffer = [0; 2];
-    let count = reader
-        .read(&mut buffer)
-        .expect("checksum read should succeed");
+    let count = reader.read(&mut buffer).expect("checksum read should succeed");
 
     assert_eq!(2, count);
     assert_eq!(b"bc", &buffer);
@@ -54,9 +52,7 @@ fn test_checksum_reader_does_not_hash_failed_reads() {
     let mut reader = ChecksumReader::new(FailingReader, DefaultHasher::new());
     let mut buffer = [0; 2];
 
-    let error = reader
-        .read(&mut buffer)
-        .expect_err("read error should be returned");
+    let error = reader.read(&mut buffer).expect_err("read error should be returned");
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!(expected_checksum(b""), reader.checksum());
@@ -67,9 +63,7 @@ fn test_checksum_reader_forwards_seek() {
     let source = Cursor::new(b"abcdef".to_vec());
     let mut reader = ChecksumReader::new(source, DefaultHasher::new());
 
-    reader
-        .seek(SeekFrom::Start(2))
-        .expect("seek should be forwarded");
+    reader.seek(SeekFrom::Start(2)).expect("seek should be forwarded");
     let mut buffer = [0; 2];
     reader.read_exact(&mut buffer).expect("read should succeed");
 

@@ -97,15 +97,11 @@ impl Seek for FailingWriteSeek {
             SeekFrom::Start(position) if Some(position) == self.rejected_offset => {
                 Err(Error::other("offset seek failed"))
             }
-            SeekFrom::Start(position)
-                if position == self.original_position && self.fail_restore =>
-            {
+            SeekFrom::Start(position) if position == self.original_position && self.fail_restore => {
                 Err(Error::other("restore failed"))
             }
             SeekFrom::Start(position) => Ok(position),
-            SeekFrom::Current(_) | SeekFrom::End(_) => {
-                Err(Error::new(ErrorKind::Unsupported, "unsupported seek"))
-            }
+            SeekFrom::Current(_) | SeekFrom::End(_) => Err(Error::new(ErrorKind::Unsupported, "unsupported seek")),
         }
     }
 }
@@ -127,9 +123,7 @@ impl Seek for PositionFailingWriteSeek {
         match position {
             SeekFrom::Current(0) => Err(Error::other("position failed")),
             SeekFrom::Start(position) => Ok(position),
-            SeekFrom::Current(_) | SeekFrom::End(_) => {
-                Err(Error::new(ErrorKind::Unsupported, "unsupported seek"))
-            }
+            SeekFrom::Current(_) | SeekFrom::End(_) => Err(Error::new(ErrorKind::Unsupported, "unsupported seek")),
         }
     }
 }
@@ -146,12 +140,7 @@ fn test_write_all_at_preserving_position_writes_without_moving_cursor() {
         .expect("position-preserving write should succeed");
 
     assert_eq!(b"aZZdef", cursor.get_ref().as_slice());
-    assert_eq!(
-        2,
-        cursor
-            .stream_position()
-            .expect("cursor position should be restored"),
-    );
+    assert_eq!(2, cursor.stream_position().expect("cursor position should be restored"),);
 }
 
 #[test]
@@ -166,12 +155,7 @@ fn test_write_all_at_preserving_position_works_on_dyn_write_seek() {
         .write_all_at_preserving_position(2, b"YY")
         .expect("write-seek extension should work on dyn WriteSeek");
 
-    assert_eq!(
-        4,
-        stream
-            .stream_position()
-            .expect("stream position should be restored"),
-    );
+    assert_eq!(4, stream.stream_position().expect("stream position should be restored"),);
     assert_eq!(b"abYYef", cursor.get_ref().as_slice());
 }
 
@@ -185,12 +169,7 @@ fn test_write_all_at_preserving_position_ufcs_works_on_dyn_write_seek() {
         let stream: &mut dyn WriteSeek = &mut cursor;
         <dyn WriteSeek as WriteSeekExt>::write_all_at_preserving_position(stream, 2, b"YY")
             .expect("UFCS write-seek extension should work on dyn WriteSeek");
-        assert_eq!(
-            4,
-            stream
-                .stream_position()
-                .expect("stream position should be restored"),
-        );
+        assert_eq!(4, stream.stream_position().expect("stream position should be restored"),);
     }
 
     assert_eq!(b"abYYef", cursor.get_ref().as_slice());

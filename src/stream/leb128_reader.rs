@@ -9,11 +9,23 @@
  ******************************************************************************/
 
 use core::marker::PhantomData;
-use std::io::{Error, ErrorKind, Read, Result, Seek, SeekFrom};
+use std::io::{
+    Error,
+    ErrorKind,
+    Read,
+    Result,
+    Seek,
+    SeekFrom,
+};
 
 use crate::ReadExt;
-use crate::codec::{DecodePolicy, Leb128Codec, Leb128DecodeError, NonStrict};
-use crate::stream::macros::read_leb128_value;
+use crate::codec::{
+    DecodePolicy,
+    Leb128Codec,
+    Leb128DecodeError,
+    NonStrict,
+    Strict,
+};
 use crate::util::read_utf8_payload;
 
 /// Reader wrapper for LEB128 integers.
@@ -71,6 +83,63 @@ where
     }
 }
 
+macro_rules! impl_read_value {
+    ($policy:ty, $method:ident, $ty:ty, $doc:literal) => {
+        #[doc = $doc]
+        #[inline]
+        pub fn $method(&mut self) -> Result<$ty> {
+            type Codec = Leb128Codec<$ty, $policy>;
+
+            self.read_leb128::<$ty, { Codec::REQUIRED_MIN_BUFFER_LEN }, _>(|bytes| unsafe {
+                Codec::read_unchecked(bytes, 0)
+            })
+        }
+    };
+}
+
+macro_rules! impl_for_policy {
+    ($policy:ty) => {
+        impl<R> Leb128Reader<R, $policy>
+        where
+            R: Read,
+        {
+            impl_read_value!($policy, read_u8, u8, "Reads an unsigned LEB128 `u8`.");
+            impl_read_value!($policy, read_u16, u16, "Reads an unsigned LEB128 `u16`.");
+            impl_read_value!($policy, read_u32, u32, "Reads an unsigned LEB128 `u32`.");
+            impl_read_value!($policy, read_u64, u64, "Reads an unsigned LEB128 `u64`.");
+            impl_read_value!($policy, read_u128, u128, "Reads an unsigned LEB128 `u128`.");
+            impl_read_value!($policy, read_usize, usize, "Reads an unsigned LEB128 `usize`.");
+            impl_read_value!($policy, read_i8, i8, "Reads a signed LEB128 `i8`.");
+            impl_read_value!($policy, read_i16, i16, "Reads a signed LEB128 `i16`.");
+            impl_read_value!($policy, read_i32, i32, "Reads a signed LEB128 `i32`.");
+            impl_read_value!($policy, read_i64, i64, "Reads a signed LEB128 `i64`.");
+            impl_read_value!($policy, read_i128, i128, "Reads a signed LEB128 `i128`.");
+            impl_read_value!($policy, read_isize, isize, "Reads a signed LEB128 `isize`.");
+
+            /// Reads a UTF-8 string prefixed by an unsigned LEB128 byte length.
+            ///
+            /// # Parameters
+            ///
+            /// - `max_len`: Maximum accepted UTF-8 payload length in bytes.
+            ///
+            /// # Returns
+            ///
+            /// Returns the decoded UTF-8 string.
+            ///
+            /// # Errors
+            ///
+            /// Returns an I/O error for length or payload reads, [`std::io::ErrorKind::InvalidData`]
+            /// when the encoded length exceeds `max_len`, or [`std::io::ErrorKind::InvalidData`]
+            /// when the payload is not valid UTF-8.
+            #[inline]
+            pub fn read_utf8_string(&mut self, max_len: usize) -> Result<String> {
+                let len = self.read_usize()?;
+                read_utf8_payload(&mut self.inner, len, max_len)
+            }
+        }
+    };
+}
+
 impl<R, P> Leb128Reader<R, P>
 where
     R: Read,
@@ -81,16 +150,12 @@ where
     where
         F: FnOnce(&[u8; 19]) -> std::result::Result<(T, usize), Leb128DecodeError>,
     {
-        debug_assert!(
-            N <= self.buffer.len(),
-            "LEB128 read length exceeds internal buffer"
-        );
+        debug_assert!(N <= self.buffer.len(), "LEB128 read length exceeds internal buffer");
         for index in 0..N {
             // SAFETY: `index` is produced by `0..N`, where `N` is a
             // codec-declared length that fits the fixed internal buffer.
             unsafe {
-                self.inner
-                    .read_exact_unchecked(&mut self.buffer, index, 1)?;
+                self.inner.read_exact_unchecked(&mut self.buffer, index, 1)?;
             }
             if read_byte(&self.buffer, index) & 0x80 == 0 {
                 return decode(&self.buffer)
@@ -102,160 +167,10 @@ where
             .map(|(value, _)| value)
             .map_err(map_leb128_decode_error)
     }
-
-    /// Reads an unsigned LEB128 `u8`.
-    #[inline]
-    pub fn read_u8(&mut self) -> Result<u8> {
-        read_leb128_value!(
-            self,
-            u8,
-            P,
-            Leb128Codec::<u8, NonStrict>::REQUIRED_MIN_BUFFER_LEN
-        )
-    }
-
-    /// Reads an unsigned LEB128 `u16`.
-    #[inline]
-    pub fn read_u16(&mut self) -> Result<u16> {
-        read_leb128_value!(
-            self,
-            u16,
-            P,
-            Leb128Codec::<u16, NonStrict>::REQUIRED_MIN_BUFFER_LEN
-        )
-    }
-
-    /// Reads an unsigned LEB128 `u32`.
-    #[inline]
-    pub fn read_u32(&mut self) -> Result<u32> {
-        read_leb128_value!(
-            self,
-            u32,
-            P,
-            Leb128Codec::<u32, NonStrict>::REQUIRED_MIN_BUFFER_LEN
-        )
-    }
-
-    /// Reads an unsigned LEB128 `u64`.
-    #[inline]
-    pub fn read_u64(&mut self) -> Result<u64> {
-        read_leb128_value!(
-            self,
-            u64,
-            P,
-            Leb128Codec::<u64, NonStrict>::REQUIRED_MIN_BUFFER_LEN
-        )
-    }
-
-    /// Reads an unsigned LEB128 `u128`.
-    #[inline]
-    pub fn read_u128(&mut self) -> Result<u128> {
-        read_leb128_value!(
-            self,
-            u128,
-            P,
-            Leb128Codec::<u128, NonStrict>::REQUIRED_MIN_BUFFER_LEN
-        )
-    }
-
-    /// Reads an unsigned LEB128 `usize`.
-    #[inline]
-    pub fn read_usize(&mut self) -> Result<usize> {
-        read_leb128_value!(
-            self,
-            usize,
-            P,
-            Leb128Codec::<usize, NonStrict>::REQUIRED_MIN_BUFFER_LEN
-        )
-    }
-
-    /// Reads a signed LEB128 `i8`.
-    #[inline]
-    pub fn read_i8(&mut self) -> Result<i8> {
-        read_leb128_value!(
-            self,
-            i8,
-            P,
-            Leb128Codec::<i8, NonStrict>::REQUIRED_MIN_BUFFER_LEN
-        )
-    }
-
-    /// Reads a signed LEB128 `i16`.
-    #[inline]
-    pub fn read_i16(&mut self) -> Result<i16> {
-        read_leb128_value!(
-            self,
-            i16,
-            P,
-            Leb128Codec::<i16, NonStrict>::REQUIRED_MIN_BUFFER_LEN
-        )
-    }
-
-    /// Reads a signed LEB128 `i32`.
-    #[inline]
-    pub fn read_i32(&mut self) -> Result<i32> {
-        read_leb128_value!(
-            self,
-            i32,
-            P,
-            Leb128Codec::<i32, NonStrict>::REQUIRED_MIN_BUFFER_LEN
-        )
-    }
-
-    /// Reads a signed LEB128 `i64`.
-    #[inline]
-    pub fn read_i64(&mut self) -> Result<i64> {
-        read_leb128_value!(
-            self,
-            i64,
-            P,
-            Leb128Codec::<i64, NonStrict>::REQUIRED_MIN_BUFFER_LEN
-        )
-    }
-
-    /// Reads a signed LEB128 `i128`.
-    #[inline]
-    pub fn read_i128(&mut self) -> Result<i128> {
-        read_leb128_value!(
-            self,
-            i128,
-            P,
-            Leb128Codec::<i128, NonStrict>::REQUIRED_MIN_BUFFER_LEN
-        )
-    }
-
-    /// Reads a signed LEB128 `isize`.
-    #[inline]
-    pub fn read_isize(&mut self) -> Result<isize> {
-        read_leb128_value!(
-            self,
-            isize,
-            P,
-            Leb128Codec::<isize, NonStrict>::REQUIRED_MIN_BUFFER_LEN
-        )
-    }
-
-    /// Reads a UTF-8 string prefixed by an unsigned LEB128 byte length.
-    ///
-    /// # Parameters
-    ///
-    /// - `max_len`: Maximum accepted UTF-8 payload length in bytes.
-    ///
-    /// # Returns
-    ///
-    /// Returns the decoded UTF-8 string.
-    ///
-    /// # Errors
-    ///
-    /// Returns an I/O error for length or payload reads, [`std::io::ErrorKind::InvalidData`]
-    /// when the encoded length exceeds `max_len`, or [`std::io::ErrorKind::InvalidData`]
-    /// when the payload is not valid UTF-8.
-    #[inline]
-    pub fn read_utf8_string(&mut self, max_len: usize) -> Result<String> {
-        let len = self.read_usize()?;
-        read_utf8_payload(&mut self.inner, len, max_len)
-    }
 }
+
+impl_for_policy!(NonStrict);
+impl_for_policy!(Strict);
 
 impl<R, P> Read for Leb128Reader<R, P>
 where
@@ -311,10 +226,7 @@ fn map_leb128_decode_error(error: Leb128DecodeError) -> Error {
 /// Reads one byte from the internal LEB128 buffer without an extra bounds check.
 #[inline(always)]
 fn read_byte(buffer: &[u8; 19], index: usize) -> u8 {
-    debug_assert!(
-        index < buffer.len(),
-        "LEB128 read index exceeds internal buffer"
-    );
+    debug_assert!(index < buffer.len(), "LEB128 read index exceeds internal buffer");
     // SAFETY: `read_leb128` only calls this with an index produced by
     // `0..N`, where N is a codec-declared length that fits `buffer`.
     unsafe { *buffer.as_ptr().add(index) }
