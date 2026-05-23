@@ -112,42 +112,7 @@ fn test_binary_write_ext_writes_all_scalar_methods() {
 }
 
 #[test]
-fn test_binary_write_ext_writes_length_prefixed_strings() {
-    let mut output = Vec::new();
-    output
-        .write_utf8_string_u16("hi", ByteOrder::BigEndian)
-        .expect("u16 BE string should be written");
-    output
-        .write_utf8_string_u16("ok", ByteOrder::LittleEndian)
-        .expect("u16 LE string should be written");
-    output
-        .write_utf8_string_u32("up", ByteOrder::BigEndian)
-        .expect("u32 BE string should be written");
-    output
-        .write_utf8_string_u32("dn", ByteOrder::LittleEndian)
-        .expect("u32 LE string should be written");
-
-    assert_eq!(
-        vec![
-            0x00, 0x02, b'h', b'i', 0x02, 0x00, b'o', b'k', 0x00, 0x00, 0x00, 0x02, b'u', b'p',
-            0x02, 0x00, 0x00, 0x00, b'd', b'n'
-        ],
-        output
-    );
-}
-
-#[test]
 fn test_binary_write_ext_reports_errors() {
-    let mut output = Vec::new();
-    let value = "x".repeat(usize::from(u16::MAX) + 1);
-    assert_eq!(
-        ErrorKind::InvalidInput,
-        output
-            .write_utf8_string_u16(&value, ByteOrder::BigEndian)
-            .expect_err("oversized u16 string should fail")
-            .kind()
-    );
-
     let mut writer = FailingWriter;
     assert_eq!(
         ErrorKind::Other,

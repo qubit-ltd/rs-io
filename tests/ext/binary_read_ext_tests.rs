@@ -105,41 +105,6 @@ fn test_binary_read_ext_reads_all_scalar_methods() {
 }
 
 #[test]
-fn test_binary_read_ext_reads_length_prefixed_strings() {
-    let mut input = Cursor::new(vec![0x00, 0x02, b'h', b'i']);
-    assert_eq!(
-        "hi",
-        input
-            .read_utf8_string_u16(ByteOrder::BigEndian)
-            .expect("u16 BE string should be read")
-    );
-
-    let mut input = Cursor::new(vec![0x02, 0x00, b'h', b'i']);
-    assert_eq!(
-        "hi",
-        input
-            .read_utf8_string_u16(ByteOrder::LittleEndian)
-            .expect("u16 LE string should be read")
-    );
-
-    let mut input = Cursor::new(vec![0x00, 0x00, 0x00, 0x02, b'o', b'k']);
-    assert_eq!(
-        "ok",
-        input
-            .read_utf8_string_u32(ByteOrder::BigEndian)
-            .expect("u32 BE string should be read")
-    );
-
-    let mut input = Cursor::new(vec![0x02, 0x00, 0x00, 0x00, b'o', b'k']);
-    assert_eq!(
-        "ok",
-        input
-            .read_utf8_string_u32(ByteOrder::LittleEndian)
-            .expect("u32 LE string should be read")
-    );
-}
-
-#[test]
 fn test_binary_read_ext_reports_errors() {
     let mut input = Cursor::new([0x12, 0x34, 0x56]);
     assert_eq!(
@@ -147,15 +112,6 @@ fn test_binary_read_ext_reports_errors() {
         input
             .read_u32_be()
             .expect_err("truncated u32 should fail")
-            .kind()
-    );
-
-    let mut input = Cursor::new(vec![0x00, 0x02, 0xff, 0xff]);
-    assert_eq!(
-        ErrorKind::InvalidData,
-        input
-            .read_utf8_string_u16(ByteOrder::BigEndian)
-            .expect_err("invalid UTF-8 should fail")
             .kind()
     );
 }

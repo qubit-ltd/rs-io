@@ -4,7 +4,10 @@ use std::io::{
     Write,
 };
 
-use qubit_io::StringWriteExt;
+use qubit_io::{
+    ByteOrder,
+    StringWriteExt,
+};
 
 struct FailingWriter;
 
@@ -23,25 +26,42 @@ fn test_string_write_ext_writes_all_length_prefix_kinds() {
     let mut output = Vec::new();
 
     output
+        .write_utf8_payload("raw")
+        .expect("payload should be written");
+    output
         .write_utf8_string_uleb("hi")
         .expect("ULEB string should be written");
+    output
+        .write_utf8_string_u16("rt", ByteOrder::BigEndian)
+        .expect("runtime u16 BE string should be written");
     output
         .write_utf8_string_u16_be("be")
         .expect("u16 BE string should be written");
     output
+        .write_utf8_string_u16("lr", ByteOrder::LittleEndian)
+        .expect("runtime u16 LE string should be written");
+    output
         .write_utf8_string_u16_le("le")
         .expect("u16 LE string should be written");
     output
+        .write_utf8_string_u32("up", ByteOrder::BigEndian)
+        .expect("runtime u32 BE string should be written");
+    output
         .write_utf8_string_u32_be("up")
         .expect("u32 BE string should be written");
+    output
+        .write_utf8_string_u32("dn", ByteOrder::LittleEndian)
+        .expect("runtime u32 LE string should be written");
     output
         .write_utf8_string_u32_le("dn")
         .expect("u32 LE string should be written");
 
     assert_eq!(
         vec![
-            0x02, b'h', b'i', 0x00, 0x02, b'b', b'e', 0x02, 0x00, b'l', b'e', 0x00, 0x00, 0x00,
-            0x02, b'u', b'p', 0x02, 0x00, 0x00, 0x00, b'd', b'n'
+            b'r', b'a', b'w', 0x02, b'h', b'i', 0x00, 0x02, b'r', b't', 0x00, 0x02, b'b', b'e',
+            0x02, 0x00, b'l', b'r', 0x02, 0x00, b'l', b'e', 0x00, 0x00, 0x00, 0x02, b'u', b'p',
+            0x00, 0x00, 0x00, 0x02, b'u', b'p', 0x02, 0x00, 0x00, 0x00, b'd', b'n', 0x02, 0x00,
+            0x00, 0x00, b'd', b'n'
         ],
         output
     );
@@ -51,6 +71,13 @@ fn test_string_write_ext_writes_all_length_prefix_kinds() {
 fn test_string_write_ext_reports_length_and_writer_errors() {
     let mut output = Vec::new();
     let value = "x".repeat(usize::from(u16::MAX) + 1);
+    assert_eq!(
+        ErrorKind::InvalidInput,
+        output
+            .write_utf8_string_u16(&value, ByteOrder::BigEndian)
+            .expect_err("oversized runtime u16 string should fail")
+            .kind()
+    );
     assert_eq!(
         ErrorKind::InvalidInput,
         output
@@ -70,8 +97,71 @@ fn test_string_write_ext_reports_length_and_writer_errors() {
     assert_eq!(
         ErrorKind::Other,
         writer
+            .write_utf8_payload("hi")
+            .expect_err("payload writer error should be returned")
+            .kind()
+    );
+
+    let mut writer = FailingWriter;
+    assert_eq!(
+        ErrorKind::Other,
+        writer
             .write_utf8_string_uleb("hi")
             .expect_err("writer error should be returned")
+            .kind()
+    );
+
+    let mut writer = FailingWriter;
+    assert_eq!(
+        ErrorKind::Other,
+        writer
+            .write_utf8_string_u16("hi", ByteOrder::BigEndian)
+            .expect_err("runtime u16 writer error should be returned")
+            .kind()
+    );
+
+    let mut writer = FailingWriter;
+    assert_eq!(
+        ErrorKind::Other,
+        writer
+            .write_utf8_string_u16_be("hi")
+            .expect_err("u16 BE writer error should be returned")
+            .kind()
+    );
+
+    let mut writer = FailingWriter;
+    assert_eq!(
+        ErrorKind::Other,
+        writer
+            .write_utf8_string_u16_le("hi")
+            .expect_err("u16 LE writer error should be returned")
+            .kind()
+    );
+
+    let mut writer = FailingWriter;
+    assert_eq!(
+        ErrorKind::Other,
+        writer
+            .write_utf8_string_u32("hi", ByteOrder::BigEndian)
+            .expect_err("runtime u32 writer error should be returned")
+            .kind()
+    );
+
+    let mut writer = FailingWriter;
+    assert_eq!(
+        ErrorKind::Other,
+        writer
+            .write_utf8_string_u32_be("hi")
+            .expect_err("u32 BE writer error should be returned")
+            .kind()
+    );
+
+    let mut writer = FailingWriter;
+    assert_eq!(
+        ErrorKind::Other,
+        writer
+            .write_utf8_string_u32_le("hi")
+            .expect_err("u32 LE writer error should be returned")
             .kind()
     );
 }

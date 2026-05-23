@@ -9,8 +9,6 @@
  ******************************************************************************/
 
 use std::io::{
-    Error,
-    ErrorKind,
     Result,
     Write,
 };
@@ -21,8 +19,6 @@ use crate::codec::{
     ByteOrder,
     LittleEndian,
 };
-
-// qubit-style: allow coverage-cfg
 
 macro_rules! write_binary_value {
     ($writer:expr, $value:expr, $ty:ty, $order:ty) => {
@@ -274,22 +270,6 @@ pub trait BinaryWriteExt: Write {
     fn write_f64_le(&mut self, value: f64) -> Result<()> {
         write_binary_value!(self, value, f64, LittleEndian)
     }
-
-    /// Writes a UTF-8 string prefixed by a 16-bit byte length.
-    #[inline]
-    fn write_utf8_string_u16(&mut self, value: &str, byte_order: ByteOrder) -> Result<()> {
-        let len = checked_len_u16(value.len())?;
-        self.write_u16(len, byte_order)?;
-        self.write_all(value.as_bytes())
-    }
-
-    /// Writes a UTF-8 string prefixed by a 32-bit byte length.
-    #[inline]
-    fn write_utf8_string_u32(&mut self, value: &str, byte_order: ByteOrder) -> Result<()> {
-        let len = checked_len_u32(value.len())?;
-        self.write_u32(len, byte_order)?;
-        self.write_all(value.as_bytes())
-    }
 }
 
 impl<W> BinaryWriteExt for W where W: Write + ?Sized {}
@@ -303,21 +283,4 @@ where
     let mut bytes = [0u8; N];
     encode(&mut bytes, value);
     writer.write_all(&bytes)
-}
-
-#[inline]
-fn checked_len_u16(len: usize) -> Result<u16> {
-    u16::try_from(len).map_err(|_| Error::new(ErrorKind::InvalidInput, "string is too long"))
-}
-
-#[cfg(not(coverage))]
-#[inline]
-fn checked_len_u32(len: usize) -> Result<u32> {
-    u32::try_from(len).map_err(|_| Error::new(ErrorKind::InvalidInput, "string is too long"))
-}
-
-#[cfg(coverage)]
-#[inline]
-fn checked_len_u32(len: usize) -> Result<u32> {
-    Ok(len as u32)
 }
