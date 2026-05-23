@@ -21,6 +21,10 @@ use std::io::{
 /// branch writer fails, the primary writer may already have accepted bytes and
 /// the branch error is returned.
 ///
+/// Seeking moves the primary writer first, then seeks the branch writer to the
+/// primary writer's resulting absolute position. If the branch seek fails, the
+/// primary writer may already have moved.
+///
 /// # Examples
 /// ```
 /// use std::io::Write;
@@ -125,6 +129,17 @@ where
     P: Seek,
     B: Seek,
 {
+    /// Seeks both wrapped writers to the same resulting absolute position.
+    ///
+    /// # Parameters
+    /// - `position`: Target position for the primary writer.
+    ///
+    /// # Returns
+    /// The new primary writer position.
+    ///
+    /// # Errors
+    /// Returns the primary seek error, or the branch seek error after the
+    /// primary writer has already moved.
     fn seek(&mut self, position: SeekFrom) -> Result<u64> {
         let primary_position = self.primary.seek(position)?;
         self.branch.seek(SeekFrom::Start(primary_position))?;

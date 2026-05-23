@@ -6,7 +6,7 @@ use qubit_io::{
 };
 
 #[test]
-fn test_leb128_codec_exposes_min_buffer_len() {
+fn test_leb128_codec_exposes_required_min_buffer_len() {
     assert_eq!(2, Leb128Codec::<u8, NonStrict>::REQUIRED_MIN_BUFFER_LEN);
     assert_eq!(3, Leb128Codec::<u16, NonStrict>::REQUIRED_MIN_BUFFER_LEN);
     assert_eq!(5, Leb128Codec::<u32, NonStrict>::REQUIRED_MIN_BUFFER_LEN);

@@ -22,6 +22,10 @@ use std::io::{
 /// If the branch writer fails, the source bytes have already been read from the
 /// inner reader and the branch error is returned.
 ///
+/// Seeking a `TeeReader` seeks only the source reader. It does not seek or
+/// otherwise modify the branch writer; bytes mirrored after the seek are simply
+/// appended or written according to the branch writer's own state.
+///
 /// # Examples
 /// ```
 /// use std::io::{
@@ -124,6 +128,16 @@ impl<R, W> Seek for TeeReader<R, W>
 where
     R: Seek,
 {
+    /// Seeks the source reader without touching the branch writer.
+    ///
+    /// # Parameters
+    /// - `position`: Target position for the source reader.
+    ///
+    /// # Returns
+    /// The new source reader position.
+    ///
+    /// # Errors
+    /// Returns the seek error reported by the source reader.
     #[inline]
     fn seek(&mut self, position: SeekFrom) -> Result<u64> {
         self.reader.seek(position)

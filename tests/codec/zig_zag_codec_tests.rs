@@ -6,7 +6,7 @@ use qubit_io::{
 };
 
 #[test]
-fn test_zig_zag_codec_exposes_min_buffer_len() {
+fn test_zig_zag_codec_exposes_required_min_buffer_len() {
     assert_eq!(2, ZigZagCodec::<i8, NonStrict>::REQUIRED_MIN_BUFFER_LEN);
     assert_eq!(3, ZigZagCodec::<i16, NonStrict>::REQUIRED_MIN_BUFFER_LEN);
     assert_eq!(5, ZigZagCodec::<i32, NonStrict>::REQUIRED_MIN_BUFFER_LEN);

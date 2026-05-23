@@ -26,6 +26,9 @@ use std::io::{
 /// not cryptographic digests; use this wrapper for stream instrumentation
 /// unless the chosen hasher explicitly documents stronger guarantees.
 ///
+/// Seeking changes only the wrapped reader position. It does not rewind,
+/// subtract from, or otherwise adjust the hasher state.
+///
 /// # Examples
 /// ```
 /// use std::collections::hash_map::DefaultHasher;
@@ -142,6 +145,16 @@ where
     R: Seek,
     H: Hasher,
 {
+    /// Seeks the wrapped reader without changing the hasher state.
+    ///
+    /// # Parameters
+    /// - `position`: Target reader position.
+    ///
+    /// # Returns
+    /// The new reader position.
+    ///
+    /// # Errors
+    /// Returns the seek error reported by the wrapped reader.
     #[inline]
     fn seek(&mut self, position: SeekFrom) -> Result<u64> {
         self.inner.seek(position)
