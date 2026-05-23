@@ -9,8 +9,6 @@
  ******************************************************************************/
 
 use std::io::{
-    Error,
-    ErrorKind,
     Read,
     Result,
 };
@@ -273,20 +271,6 @@ pub trait BinaryReadExt: Read {
     fn read_f64_le(&mut self) -> Result<f64> {
         read_binary_value!(self, f64, LittleEndian)
     }
-
-    /// Reads a UTF-8 string prefixed by a 16-bit byte length.
-    #[inline]
-    fn read_utf8_string_u16(&mut self, byte_order: ByteOrder) -> Result<String> {
-        let len = usize::from(self.read_u16(byte_order)?);
-        read_utf8_string(self, len)
-    }
-
-    /// Reads a UTF-8 string prefixed by a 32-bit byte length.
-    #[inline]
-    fn read_utf8_string_u32(&mut self, byte_order: ByteOrder) -> Result<String> {
-        let len = self.read_u32(byte_order)? as usize;
-        read_utf8_string(self, len)
-    }
 }
 
 impl<R> BinaryReadExt for R where R: Read + ?Sized {}
@@ -300,14 +284,4 @@ where
     let mut bytes = [0u8; N];
     reader.read_exact(&mut bytes)?;
     Ok(decode(&bytes))
-}
-
-#[inline]
-fn read_utf8_string<R>(reader: &mut R, len: usize) -> Result<String>
-where
-    R: Read + ?Sized,
-{
-    let mut bytes = vec![0u8; len];
-    reader.read_exact(&mut bytes)?;
-    String::from_utf8(bytes).map_err(|error| Error::new(ErrorKind::InvalidData, error))
 }
