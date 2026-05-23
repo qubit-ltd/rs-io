@@ -7,18 +7,10 @@
  *    Licensed under the Apache License, Version 2.0.
  *
  ******************************************************************************/
-use std::io::{
-    BufRead,
-    Error,
-    ErrorKind,
-    Result,
-};
+use std::io::{BufRead, Error, ErrorKind, Result};
 use std::string::FromUtf8Error;
 
-use crate::util::{
-    try_reserve_string,
-    try_reserve_vec,
-};
+use crate::util::{try_reserve_string, try_reserve_vec};
 
 /// Extension methods for [`BufRead`] values.
 ///
@@ -65,7 +57,12 @@ pub trait BufReadExt: BufRead {
     /// Returns [`ErrorKind::InvalidData`] when more than `max_len` bytes are
     /// required before reaching `delimiter` or EOF. Returns the first I/O error
     /// reported by the underlying reader.
-    fn read_until_limited_into(&mut self, delimiter: u8, output: &mut Vec<u8>, max_len: usize) -> Result<usize>;
+    fn read_until_limited_into(
+        &mut self,
+        delimiter: u8,
+        output: &mut Vec<u8>,
+        max_len: usize,
+    ) -> Result<usize>;
 
     /// Reads one UTF-8 line while enforcing `max_len`.
     ///
@@ -135,7 +132,12 @@ where
     }
 
     #[inline]
-    fn read_until_limited_into(&mut self, delimiter: u8, output: &mut Vec<u8>, max_len: usize) -> Result<usize> {
+    fn read_until_limited_into(
+        &mut self,
+        delimiter: u8,
+        output: &mut Vec<u8>,
+        max_len: usize,
+    ) -> Result<usize> {
         read_until_limited_into_impl(self, delimiter, output, max_len)
     }
 
@@ -192,7 +194,12 @@ where
 /// # Errors
 /// Returns an invalid-data error when the limit is exceeded, or an I/O error
 /// from `reader`.
-fn read_until_limited_into_impl<T>(reader: &mut T, delimiter: u8, output: &mut Vec<u8>, max_len: usize) -> Result<usize>
+fn read_until_limited_into_impl<T>(
+    reader: &mut T,
+    delimiter: u8,
+    output: &mut Vec<u8>,
+    max_len: usize,
+) -> Result<usize>
 where
     T: BufRead + ?Sized,
 {
@@ -259,7 +266,11 @@ where
 /// # Errors
 /// Returns an invalid-data error when the line exceeds the limit or is not
 /// valid UTF-8, or an I/O error from `reader`.
-fn read_line_limited_into_impl<T>(reader: &mut T, output: &mut String, max_len: usize) -> Result<usize>
+fn read_line_limited_into_impl<T>(
+    reader: &mut T,
+    output: &mut String,
+    max_len: usize,
+) -> Result<usize>
 where
     T: BufRead + ?Sized,
 {

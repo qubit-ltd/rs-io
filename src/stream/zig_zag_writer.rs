@@ -8,18 +8,10 @@
  *
  ******************************************************************************/
 
-use std::io::{
-    Result,
-    Seek,
-    SeekFrom,
-    Write,
-};
+use std::io::{Result, Seek, SeekFrom, Write};
 
+use crate::codec::{NonStrict, ZigZagCodec};
 use crate::WriteExt;
-use crate::codec::{
-    NonStrict,
-    ZigZagCodec,
-};
 
 /// Writer wrapper for canonical ZigZag + unsigned LEB128 integers.
 pub struct ZigZagWriter<W> {
@@ -32,7 +24,10 @@ impl<W> ZigZagWriter<W> {
     #[must_use]
     #[inline]
     pub const fn new(inner: W) -> Self {
-        Self { inner, buffer: [0; 19] }
+        Self {
+            inner,
+            buffer: [0; 19],
+        }
     }
 
     /// Returns a shared reference to the underlying writer.
@@ -64,9 +59,10 @@ macro_rules! impl_write_value {
         pub fn $method(&mut self, value: $ty) -> Result<()> {
             type Codec = ZigZagCodec<$ty, NonStrict>;
 
-            self.write_zig_zag::<$ty, { Codec::REQUIRED_MIN_BUFFER_LEN }, _>(value, |bytes, value| unsafe {
-                Codec::write_unchecked(bytes, 0, value)
-            })
+            self.write_zig_zag::<$ty, { Codec::REQUIRED_MIN_BUFFER_LEN }, _>(
+                value,
+                |bytes, value| unsafe { Codec::write_unchecked(bytes, 0, value) },
+            )
         }
     };
 }

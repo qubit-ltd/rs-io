@@ -7,17 +7,10 @@
  *    Licensed under the Apache License, Version 2.0.
  *
  ******************************************************************************/
-use std::io::{
-    Read,
-    Result,
-};
+use std::io::{Read, Result};
 
 use crate::util::read_utf8_payload as read_utf8_payload_impl;
-use crate::{
-    BinaryReadExt,
-    ByteOrder,
-    Leb128ReadExt,
-};
+use crate::{BinaryReadExt, ByteOrder, Leb128ReadExt};
 
 /// Extension methods for reading length-prefixed UTF-8 strings.
 pub trait StringReadExt: Read {

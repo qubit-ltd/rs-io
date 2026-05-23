@@ -9,23 +9,10 @@
  ******************************************************************************/
 
 use core::marker::PhantomData;
-use std::io::{
-    Error,
-    ErrorKind,
-    Result,
-    Seek,
-    SeekFrom,
-    Write,
-};
+use std::io::{Error, ErrorKind, Result, Seek, SeekFrom, Write};
 
+use crate::codec::{BigEndian, BinaryCodec, ByteOrder, ByteOrderSpec, LittleEndian};
 use crate::WriteExt;
-use crate::codec::{
-    BigEndian,
-    BinaryCodec,
-    ByteOrder,
-    ByteOrderSpec,
-    LittleEndian,
-};
 
 /// Writer wrapper for fixed-width binary values.
 ///
@@ -119,7 +106,12 @@ macro_rules! impl_for_order {
             impl_value_write!($order, write_u16, u16, "Writes an unsigned 16-bit integer.");
             impl_value_write!($order, write_u32, u32, "Writes an unsigned 32-bit integer.");
             impl_value_write!($order, write_u64, u64, "Writes an unsigned 64-bit integer.");
-            impl_value_write!($order, write_u128, u128, "Writes an unsigned 128-bit integer.");
+            impl_value_write!(
+                $order,
+                write_u128,
+                u128,
+                "Writes an unsigned 128-bit integer."
+            );
             impl_value_write!($order, write_i16, i16, "Writes a signed 16-bit integer.");
             impl_value_write!($order, write_i32, i32, "Writes a signed 32-bit integer.");
             impl_value_write!($order, write_i64, i64, "Writes a signed 64-bit integer.");
@@ -222,6 +214,9 @@ pub(crate) fn checked_u32_len(len: usize) -> Result<u32> {
     if len <= u32::MAX as usize {
         Ok(len as u32)
     } else {
-        Err(Error::new(ErrorKind::InvalidInput, format!("length {len} exceeds u32")))
+        Err(Error::new(
+            ErrorKind::InvalidInput,
+            format!("length {len} exceeds u32"),
+        ))
     }
 }

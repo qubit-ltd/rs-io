@@ -8,12 +8,7 @@
  *
  ******************************************************************************/
 use std::hash::Hasher;
-use std::io::{
-    Result,
-    Seek,
-    SeekFrom,
-    Write,
-};
+use std::io::{Result, Seek, SeekFrom, Write};
 
 /// Writer wrapper that updates a checksum hasher with bytes written.
 ///

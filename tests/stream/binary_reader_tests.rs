@@ -1,14 +1,6 @@
-use std::io::{
-    Cursor,
-    ErrorKind,
-};
+use std::io::{Cursor, ErrorKind};
 
-use qubit_io::{
-    BigEndian,
-    BinaryReader,
-    ByteOrder,
-    LittleEndian,
-};
+use qubit_io::{BigEndian, BinaryReader, ByteOrder, LittleEndian};
 
 fn push_be_values(output: &mut Vec<u8>) {
     output.extend_from_slice(&[0xaa, 0xbb]);
@@ -64,14 +56,20 @@ fn test_binary_reader_reads_all_big_endian_methods() {
     assert_eq!(-2, reader.read_i8().expect("i8 should be read"));
     assert_eq!(0x1234, reader.read_u16().expect("u16 should be read"));
     assert_eq!(0x1234_5678, reader.read_u32().expect("u32 should be read"));
-    assert_eq!(0x0123_4567_89ab_cdef, reader.read_u64().expect("u64 should be read"));
+    assert_eq!(
+        0x0123_4567_89ab_cdef,
+        reader.read_u64().expect("u64 should be read")
+    );
     assert_eq!(
         0x0123_4567_89ab_cdef_fedc_ba98_7654_3210,
         reader.read_u128().expect("u128 should be read")
     );
     assert_eq!(-0x1234, reader.read_i16().expect("i16 should be read"));
     assert_eq!(-0x0123_4567, reader.read_i32().expect("i32 should be read"));
-    assert_eq!(-0x0123_4567_89ab_cdef, reader.read_i64().expect("i64 should be read"));
+    assert_eq!(
+        -0x0123_4567_89ab_cdef,
+        reader.read_i64().expect("i64 should be read")
+    );
     assert_eq!(
         -0x0123_4567_89ab_cdef_fedc_ba98_7654_3210,
         reader.read_i128().expect("i128 should be read")
@@ -109,14 +107,20 @@ fn test_binary_reader_reads_little_endian_and_exposes_accessors() {
     assert_eq!(-2, reader.read_i8().expect("i8 should be read"));
     assert_eq!(0x1234, reader.read_u16().expect("u16 should be read"));
     assert_eq!(0x1234_5678, reader.read_u32().expect("u32 should be read"));
-    assert_eq!(0x0123_4567_89ab_cdef, reader.read_u64().expect("u64 should be read"));
+    assert_eq!(
+        0x0123_4567_89ab_cdef,
+        reader.read_u64().expect("u64 should be read")
+    );
     assert_eq!(
         0x0123_4567_89ab_cdef_fedc_ba98_7654_3210,
         reader.read_u128().expect("u128 should be read")
     );
     assert_eq!(-0x1234, reader.read_i16().expect("i16 should be read"));
     assert_eq!(-0x0123_4567, reader.read_i32().expect("i32 should be read"));
-    assert_eq!(-0x0123_4567_89ab_cdef, reader.read_i64().expect("i64 should be read"));
+    assert_eq!(
+        -0x0123_4567_89ab_cdef,
+        reader.read_i64().expect("i64 should be read")
+    );
     assert_eq!(
         -0x0123_4567_89ab_cdef_fedc_ba98_7654_3210,
         reader.read_i128().expect("i128 should be read")
@@ -143,7 +147,10 @@ fn test_binary_reader_reports_read_and_utf8_errors() {
     let mut reader = BinaryReader::<_, BigEndian>::new(Cursor::new(vec![0x12]));
     assert_eq!(
         ErrorKind::UnexpectedEof,
-        reader.read_u16().expect_err("truncated u16 should fail").kind()
+        reader
+            .read_u16()
+            .expect_err("truncated u16 should fail")
+            .kind()
     );
 
     let mut reader = BinaryReader::<_, BigEndian>::new(Cursor::new(vec![0x00, 0x02, 0xff, 0xff]));
@@ -155,7 +162,8 @@ fn test_binary_reader_reports_read_and_utf8_errors() {
             .kind()
     );
 
-    let mut reader = BinaryReader::<_, BigEndian>::new(Cursor::new(vec![0x00, 0x03, b'a', b'b', b'c']));
+    let mut reader =
+        BinaryReader::<_, BigEndian>::new(Cursor::new(vec![0x00, 0x03, b'a', b'b', b'c']));
     assert_eq!(
         ErrorKind::InvalidData,
         reader
@@ -164,7 +172,9 @@ fn test_binary_reader_reports_read_and_utf8_errors() {
             .kind()
     );
 
-    let mut reader = BinaryReader::<_, BigEndian>::new(Cursor::new(vec![0x00, 0x00, 0x00, 0x03, b'a', b'b', b'c']));
+    let mut reader = BinaryReader::<_, BigEndian>::new(Cursor::new(vec![
+        0x00, 0x00, 0x00, 0x03, b'a', b'b', b'c',
+    ]));
     assert_eq!(
         ErrorKind::InvalidData,
         reader
@@ -229,11 +239,16 @@ fn test_binary_reader_reports_truncated_scalar_errors_for_all_methods() {
 
 #[test]
 fn test_binary_reader_read_and_seek_delegate_to_inner_reader() {
-    let mut reader = qubit_io::BinaryReader::<_, qubit_io::LittleEndian>::new(std::io::Cursor::new(vec![1, 2, 3, 4]));
+    let mut reader =
+        qubit_io::BinaryReader::<_, qubit_io::LittleEndian>::new(std::io::Cursor::new(vec![
+            1, 2, 3, 4,
+        ]));
 
-    std::io::Seek::seek(&mut reader, std::io::SeekFrom::Start(1)).expect("seeking through BinaryReader should succeed");
+    std::io::Seek::seek(&mut reader, std::io::SeekFrom::Start(1))
+        .expect("seeking through BinaryReader should succeed");
     let mut bytes = [0_u8; 2];
-    std::io::Read::read_exact(&mut reader, &mut bytes).expect("reading through BinaryReader should succeed");
+    std::io::Read::read_exact(&mut reader, &mut bytes)
+        .expect("reading through BinaryReader should succeed");
 
     assert_eq!(bytes, [2, 3]);
 }

@@ -7,13 +7,7 @@
  *    Licensed under the Apache License, Version 2.0.
  *
  ******************************************************************************/
-use std::io::{
-    BufRead,
-    Read,
-    Result,
-    Seek,
-    SeekFrom,
-};
+use std::io::{BufRead, Read, Result, Seek, SeekFrom};
 
 /// Reader wrapper that counts successfully read bytes.
 ///
@@ -52,7 +46,10 @@ impl<R> CountingReader<R> {
     /// A new counting reader with a zero byte count.
     #[inline]
     pub fn new(inner: R) -> Self {
-        Self { inner, bytes_read: 0 }
+        Self {
+            inner,
+            bytes_read: 0,
+        }
     }
 
     /// Returns the number of bytes successfully read through this wrapper.
