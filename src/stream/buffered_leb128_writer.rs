@@ -121,6 +121,12 @@ where
         self.output.write_raw(buffer)
     }
 
+    /// Writes all bytes through the internal buffer.
+    #[inline]
+    fn write_all(&mut self, buffer: &[u8]) -> Result<()> {
+        self.output.write_all_buffered(buffer)
+    }
+
     /// Flushes the internal buffer and then the wrapped writer.
     #[inline]
     fn flush(&mut self) -> Result<()> {
