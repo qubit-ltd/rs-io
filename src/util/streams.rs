@@ -16,7 +16,9 @@ use std::io::{
     Write,
     copy,
 };
+use std::string::FromUtf8Error;
 
+use super::allocation::try_reserve_vec;
 use crate::{
     Leb128DecodeError,
     ReadExt,
@@ -343,4 +345,184 @@ where
 fn one_byte_slice(bytes: &mut [u8], index: usize) -> &mut [u8] {
     // SAFETY: Callers pass an index inside the fixed-size local buffer.
     unsafe { core::slice::from_raw_parts_mut(bytes.as_mut_ptr().add(index), 1) }
+}
+
+/// Reads a UTF-8 payload after its length has already been decoded.
+///
+/// # Parameters
+///
+/// - `reader`: Reader that provides the UTF-8 payload bytes.
+/// - `len`: Payload length in bytes.
+/// - `max_len`: Maximum accepted payload length in bytes.
+///
+/// # Returns
+///
+/// Returns the decoded UTF-8 string.
+///
+/// # Errors
+///
+/// Returns [`ErrorKind::InvalidData`] when `len` exceeds `max_len`, an
+/// allocation error when reserving the output buffer fails, an I/O error from
+/// `reader`, or [`ErrorKind::InvalidData`] when the payload is not valid UTF-8.
+pub(crate) fn read_utf8_payload<R>(reader: &mut R, len: usize, max_len: usize) -> Result<String>
+where
+    R: Read + ?Sized,
+{
+    if len > max_len {
+        return Err(length_exceeded_error(len, max_len));
+    }
+    let mut bytes = Vec::new();
+    try_reserve_vec(&mut bytes, len)?;
+    bytes.resize(len, 0);
+    reader.read_exact(&mut bytes)?;
+    String::from_utf8(bytes).map_err(invalid_utf8_error)
+}
+
+/// Writes a UTF-8 payload without a length prefix.
+///
+/// # Parameters
+///
+/// - `writer`: Destination writer.
+/// - `value`: String slice to write.
+///
+/// # Errors
+///
+/// Returns the I/O error reported by `writer`.
+pub(crate) fn write_utf8_payload<W>(writer: &mut W, value: &str) -> Result<()>
+where
+    W: Write + ?Sized,
+{
+    writer.write_all(value.as_bytes())
+}
+
+/// Writes a UTF-8 string after a `u16` byte-length prefix.
+///
+/// # Parameters
+///
+/// - `writer`: Destination writer.
+/// - `value`: String slice to write.
+/// - `write_len`: Callback that writes the encoded `u16` length.
+///
+/// # Errors
+///
+/// Returns [`ErrorKind::InvalidInput`] when the UTF-8 byte length does not fit
+/// into `u16`, or an I/O error from the underlying writer.
+pub(crate) fn write_utf8_string_with_u16_len<W, F>(
+    writer: &mut W,
+    value: &str,
+    write_len: F,
+) -> Result<()>
+where
+    W: Write + ?Sized,
+    F: FnOnce(&mut W, u16) -> Result<()>,
+{
+    let bytes = value.as_bytes();
+    write_len(writer, checked_u16_len(bytes.len())?)?;
+    writer.write_all(bytes)
+}
+
+/// Writes a UTF-8 string after a `u32` byte-length prefix.
+///
+/// # Parameters
+///
+/// - `writer`: Destination writer.
+/// - `value`: String slice to write.
+/// - `write_len`: Callback that writes the encoded `u32` length.
+///
+/// # Errors
+///
+/// Returns [`ErrorKind::InvalidInput`] when the UTF-8 byte length does not fit
+/// into `u32`, or an I/O error from the underlying writer.
+pub(crate) fn write_utf8_string_with_u32_len<W, F>(
+    writer: &mut W,
+    value: &str,
+    write_len: F,
+) -> Result<()>
+where
+    W: Write + ?Sized,
+    F: FnOnce(&mut W, u32) -> Result<()>,
+{
+    let bytes = value.as_bytes();
+    write_len(writer, checked_u32_len(bytes.len())?)?;
+    writer.write_all(bytes)
+}
+
+/// Converts a UTF-8 payload length to a `u16` length prefix value.
+///
+/// # Parameters
+///
+/// - `len`: Payload length in bytes.
+///
+/// # Returns
+///
+/// Returns the payload length represented as `u16`.
+///
+/// # Errors
+///
+/// Returns [`ErrorKind::InvalidInput`] when `len` is larger than `u16::MAX`.
+pub(crate) fn checked_u16_len(len: usize) -> Result<u16> {
+    u16::try_from(len).map_err(|_| {
+        Error::new(
+            ErrorKind::InvalidInput,
+            format!("string length {len} exceeds maximum encodable u16 length"),
+        )
+    })
+}
+
+/// Converts a UTF-8 payload length to a `u32` length prefix value.
+///
+/// # Parameters
+///
+/// - `len`: Payload length in bytes.
+///
+/// # Returns
+///
+/// Returns the payload length represented as `u32`.
+///
+/// # Errors
+///
+/// Returns [`ErrorKind::InvalidInput`] when `len` is larger than `u32::MAX`.
+pub(crate) fn checked_u32_len(len: usize) -> Result<u32> {
+    if len > u32::MAX as usize {
+        Err(Error::new(
+            ErrorKind::InvalidInput,
+            format!("string length {len} exceeds maximum encodable u32 length"),
+        ))
+    } else {
+        Ok(len as u32)
+    }
+}
+
+/// Builds an invalid-data error for UTF-8 payloads that exceed their limit.
+///
+/// # Parameters
+///
+/// - `len`: Decoded payload length.
+/// - `max_len`: Maximum accepted payload length.
+///
+/// # Returns
+///
+/// Returns an [`ErrorKind::InvalidData`] error.
+fn length_exceeded_error(len: usize, max_len: usize) -> Error {
+    Error::new(
+        ErrorKind::InvalidData,
+        format!("string length {len} exceeds maximum length of {max_len} bytes"),
+    )
+}
+
+/// Converts an invalid UTF-8 payload error into an I/O error.
+///
+/// # Parameters
+///
+/// - `error`: UTF-8 conversion error.
+///
+/// # Returns
+///
+/// Returns an [`ErrorKind::InvalidData`] error containing the UTF-8 error
+/// context.
+fn invalid_utf8_error(error: FromUtf8Error) -> Error {
+    Error::new(
+        ErrorKind::InvalidData,
+        format!("length-prefixed string is not valid UTF-8: {error}"),
+    )
 }
