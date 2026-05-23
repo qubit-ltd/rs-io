@@ -1,4 +1,6 @@
+use std::cell::RefCell;
 use std::io::{Error, ErrorKind, Write};
+use std::rc::Rc;
 
 use qubit_io::{BinaryWriteExt, BufferedBinaryWriter, ByteOrder, LittleEndian};
 
@@ -7,6 +9,75 @@ struct FailingWriter;
 impl Write for FailingWriter {
     fn write(&mut self, _buffer: &[u8]) -> std::io::Result<usize> {
         Err(Error::other("write failed"))
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+struct ChunkedWriter {
+    output: Rc<RefCell<Vec<u8>>>,
+    request_lengths: Rc<RefCell<Vec<usize>>>,
+    max_chunk_len: usize,
+}
+
+impl ChunkedWriter {
+    fn new(
+        output: Rc<RefCell<Vec<u8>>>,
+        request_lengths: Rc<RefCell<Vec<usize>>>,
+        max_chunk_len: usize,
+    ) -> Self {
+        Self {
+            output,
+            request_lengths,
+            max_chunk_len,
+        }
+    }
+}
+
+impl Write for ChunkedWriter {
+    fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
+        self.request_lengths.borrow_mut().push(buffer.len());
+        let count = buffer.len().min(self.max_chunk_len);
+        self.output.borrow_mut().extend_from_slice(&buffer[..count]);
+        Ok(count)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+struct PartialErrorWriter {
+    output: Rc<RefCell<Vec<u8>>>,
+    write_count: usize,
+}
+
+impl PartialErrorWriter {
+    fn new(output: Rc<RefCell<Vec<u8>>>) -> Self {
+        Self {
+            output,
+            write_count: 0,
+        }
+    }
+}
+
+impl Write for PartialErrorWriter {
+    fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
+        self.write_count += 1;
+        match self.write_count {
+            1 => {
+                let count = buffer.len().min(2);
+                self.output.borrow_mut().extend_from_slice(&buffer[..count]);
+                Ok(count)
+            }
+            2 => Err(Error::other("write failed after partial write")),
+            _ => {
+                self.output.borrow_mut().extend_from_slice(buffer);
+                Ok(buffer.len())
+            }
+        }
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
@@ -87,4 +158,35 @@ fn test_buffered_binary_writer_returns_writer_error() {
     let error = writer.flush().expect_err("flush should fail");
 
     assert_eq!(ErrorKind::Other, error.kind());
+}
+
+#[test]
+fn test_buffered_binary_writer_delegates_large_raw_write_once() {
+    let output = Rc::new(RefCell::new(Vec::new()));
+    let request_lengths = Rc::new(RefCell::new(Vec::new()));
+    let inner = ChunkedWriter::new(Rc::clone(&output), Rc::clone(&request_lengths), 8);
+    let mut writer = BufferedBinaryWriter::<_, LittleEndian>::with_capacity(inner, 19);
+    let bytes: Vec<u8> = (0u8..32).collect();
+
+    let count = writer.write(&bytes).expect("raw bytes should be written");
+
+    assert_eq!(8, count);
+    assert_eq!((0u8..8).collect::<Vec<_>>(), *output.borrow());
+    assert_eq!(vec![32], *request_lengths.borrow());
+}
+
+#[test]
+fn test_buffered_binary_writer_drops_flushed_prefix_after_error() {
+    let output = Rc::new(RefCell::new(Vec::new()));
+    let inner = PartialErrorWriter::new(Rc::clone(&output));
+    let mut writer = BufferedBinaryWriter::<_, LittleEndian>::with_capacity(inner, 19);
+
+    writer.write_u32(0x0102_0304).expect("value should buffer");
+    let error = writer.flush().expect_err("partial flush should fail");
+    assert_eq!(ErrorKind::Other, error.kind());
+    writer
+        .flush()
+        .expect("remaining buffered bytes should flush");
+
+    assert_eq!([4, 3, 2, 1], output.borrow().as_slice());
 }
