@@ -69,7 +69,9 @@ assert_eq!(&[0xac, 0x02], &compact[..written]);
 
 Stream-oriented reader/writer wrappers live under the separate stream wrapper
 surface: `BinaryReader`, `BinaryWriter`, `Leb128Reader`, `Leb128Writer`,
-`ZigZagReader`, and `ZigZagWriter`.
+`ZigZagReader`, and `ZigZagWriter`. Reader wrappers also implement `Read`,
+writer wrappers implement `Write`, and both sides pass through `Seek` when the
+wrapped stream supports it.
 
 ## Installation
 
@@ -409,11 +411,11 @@ use std::io::Cursor;
 use qubit_io::{Leb128ReadExt, Leb128WriteExt, ZigZagReadExt, ZigZagWriteExt};
 
 let mut buffer = Vec::new();
-buffer.write_uleb128_u64(300)?;
+buffer.write_uleb_u64(300)?;
 buffer.write_zig_zag_i64(-42)?;
 
 let mut input = Cursor::new(buffer);
-assert_eq!(300, input.read_uleb128_u64()?);
+assert_eq!(300, input.read_uleb_u64()?);
 assert_eq!(-42, input.read_zig_zag_i64()?);
 # Ok::<(), std::io::Error>(())
 ```
@@ -430,10 +432,10 @@ use std::io::Cursor;
 use qubit_io::{StringReadExt, StringWriteExt};
 
 let mut buffer = Vec::new();
-buffer.write_utf8_string_uleb128("hello")?;
+buffer.write_utf8_string_uleb("hello")?;
 
 let mut input = Cursor::new(buffer);
-let value = input.read_utf8_string_uleb128(32)?;
+let value = input.read_utf8_string_uleb(32)?;
 
 assert_eq!("hello", value);
 # Ok::<(), std::io::Error>(())
@@ -526,7 +528,9 @@ assert_eq!(0, input.position());
 If you prefer object-style codec APIs over extension traits, use reader and
 writer wrappers. These wrappers own the underlying stream and delegate to the
 same encoding logic as the extension traits. They are convenient when codec
-configuration should live in the reader or writer object.
+configuration should live in the reader or writer object. They remain normal
+stream wrappers: readers implement `Read`, writers implement `Write`, and both
+pass through `Seek` when the wrapped stream supports seeking.
 
 | Wrapper | Purpose |
 | --- | --- |
@@ -537,21 +541,21 @@ configuration should live in the reader or writer object.
 ### BinaryReader and BinaryWriter
 
 Use binary wrappers when parsing or writing fixed-width scalar formats and you
-want byte-order operations grouped on a dedicated object.
+want byte-order selection to live in the wrapper type.
 
 ```rust
 use std::io::Cursor;
 
-use qubit_io::{BinaryReader, BinaryWriter};
+use qubit_io::{BigEndian, BinaryReader, BinaryWriter};
 
-let mut writer = BinaryWriter::new(Vec::new());
-writer.write_u16_be(0x0102)?;
-writer.write_i32_le(-7)?;
+let mut writer = BinaryWriter::<_, BigEndian>::new(Vec::new());
+writer.write_u16(0x0102)?;
+writer.write_i32(-7)?;
 let bytes = writer.into_inner();
 
-let mut reader = BinaryReader::new(Cursor::new(bytes));
-assert_eq!(0x0102, reader.read_u16_be()?);
-assert_eq!(-7, reader.read_i32_le()?);
+let mut reader = BinaryReader::<_, BigEndian>::new(Cursor::new(bytes));
+assert_eq!(0x0102, reader.read_u16()?);
+assert_eq!(-7, reader.read_i32()?);
 
 # Ok::<(), std::io::Error>(())
 ```
@@ -565,14 +569,14 @@ be rejected at format boundaries.
 ```rust
 use std::io::Cursor;
 
-use qubit_io::{Leb128Reader, Leb128Writer};
+use qubit_io::{Leb128Reader, Leb128Writer, Strict};
 
 let mut writer = Leb128Writer::new(Vec::new());
 writer.write_u64(300)?;
 writer.write_i64(-42)?;
 let bytes = writer.into_inner();
 
-let mut reader = Leb128Reader::new(Cursor::new(bytes)).with_strict(true);
+let mut reader = Leb128Reader::<_, Strict>::new(Cursor::new(bytes));
 assert_eq!(300, reader.read_u64()?);
 assert_eq!(-42, reader.read_i64()?);
 
@@ -588,14 +592,14 @@ so `-1`, `0`, and `1` remain compact.
 ```rust
 use std::io::Cursor;
 
-use qubit_io::{ZigZagReader, ZigZagWriter};
+use qubit_io::{Strict, ZigZagReader, ZigZagWriter};
 
 let mut writer = ZigZagWriter::new(Vec::new());
 writer.write_i64(-1)?;
 writer.write_i64(42)?;
 let bytes = writer.into_inner();
 
-let mut reader = ZigZagReader::new(Cursor::new(bytes)).with_strict(true);
+let mut reader = ZigZagReader::<_, Strict>::new(Cursor::new(bytes));
 assert_eq!(-1, reader.read_i64()?);
 assert_eq!(42, reader.read_i64()?);
 

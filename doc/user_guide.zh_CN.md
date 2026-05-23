@@ -67,7 +67,8 @@ assert_eq!(&[0xac, 0x02], &compact[..written]);
 
 面向 stream 的 reader/writer wrapper 使用单独的 stream wrapper API：
 `BinaryReader`、`BinaryWriter`、`Leb128Reader`、`Leb128Writer`、`ZigZagReader`
-和 `ZigZagWriter`。
+和 `ZigZagWriter`。Reader wrapper 同时实现 `Read`，writer wrapper 同时实现
+`Write`，当底层 stream 支持 seek 时还会透传 `Seek`。
 
 ## 安装
 
@@ -391,11 +392,11 @@ use std::io::Cursor;
 use qubit_io::{Leb128ReadExt, Leb128WriteExt, ZigZagReadExt, ZigZagWriteExt};
 
 let mut buffer = Vec::new();
-buffer.write_uleb128_u64(300)?;
+buffer.write_uleb_u64(300)?;
 buffer.write_zig_zag_i64(-42)?;
 
 let mut input = Cursor::new(buffer);
-assert_eq!(300, input.read_uleb128_u64()?);
+assert_eq!(300, input.read_uleb_u64()?);
 assert_eq!(-42, input.read_zig_zag_i64()?);
 # Ok::<(), std::io::Error>(())
 ```
@@ -411,10 +412,10 @@ use std::io::Cursor;
 use qubit_io::{StringReadExt, StringWriteExt};
 
 let mut buffer = Vec::new();
-buffer.write_utf8_string_uleb128("hello")?;
+buffer.write_utf8_string_uleb("hello")?;
 
 let mut input = Cursor::new(buffer);
-let value = input.read_utf8_string_uleb128(32)?;
+let value = input.read_utf8_string_uleb(32)?;
 
 assert_eq!("hello", value);
 # Ok::<(), std::io::Error>(())
@@ -501,7 +502,9 @@ assert_eq!(0, input.position());
 
 如果偏好 object-style codec API，而不是 extension trait，可以使用 reader 和 writer
 wrapper。这些 wrapper 持有底层 stream，并复用与 extension trait 相同的编码逻辑。当 codec
-配置应该跟随 reader 或 writer 对象时，这种风格会更合适。
+配置应该跟随 reader 或 writer 对象时，这种风格会更合适。它们仍然是普通 stream
+wrapper：reader 实现 `Read`，writer 实现 `Write`，底层 stream 支持 seek 时会透传
+`Seek`。
 
 | Wrapper | 用途 |
 | --- | --- |
@@ -511,22 +514,22 @@ wrapper。这些 wrapper 持有底层 stream，并复用与 extension trait 相�
 
 ### BinaryReader 和 BinaryWriter
 
-当解析或写入 fixed-width scalar 格式，并希望把字节序操作集中在一个专门对象上时，使用
+当解析或写入 fixed-width scalar 格式，并希望字节序选择跟随 wrapper 类型时，使用
 binary wrapper。
 
 ```rust
 use std::io::Cursor;
 
-use qubit_io::{BinaryReader, BinaryWriter};
+use qubit_io::{BigEndian, BinaryReader, BinaryWriter};
 
-let mut writer = BinaryWriter::new(Vec::new());
-writer.write_u16_be(0x0102)?;
-writer.write_i32_le(-7)?;
+let mut writer = BinaryWriter::<_, BigEndian>::new(Vec::new());
+writer.write_u16(0x0102)?;
+writer.write_i32(-7)?;
 let bytes = writer.into_inner();
 
-let mut reader = BinaryReader::new(Cursor::new(bytes));
-assert_eq!(0x0102, reader.read_u16_be()?);
-assert_eq!(-7, reader.read_i32_le()?);
+let mut reader = BinaryReader::<_, BigEndian>::new(Cursor::new(bytes));
+assert_eq!(0x0102, reader.read_u16()?);
+assert_eq!(-7, reader.read_i32()?);
 
 # Ok::<(), std::io::Error>(())
 ```
@@ -539,14 +542,14 @@ decoding；当格式边界需要拒绝 non-canonical 编码时，这很有用。
 ```rust
 use std::io::Cursor;
 
-use qubit_io::{Leb128Reader, Leb128Writer};
+use qubit_io::{Leb128Reader, Leb128Writer, Strict};
 
 let mut writer = Leb128Writer::new(Vec::new());
 writer.write_u64(300)?;
 writer.write_i64(-42)?;
 let bytes = writer.into_inner();
 
-let mut reader = Leb128Reader::new(Cursor::new(bytes)).with_strict(true);
+let mut reader = Leb128Reader::<_, Strict>::new(Cursor::new(bytes));
 assert_eq!(300, reader.read_u64()?);
 assert_eq!(-42, reader.read_i64()?);
 
@@ -561,14 +564,14 @@ assert_eq!(-42, reader.read_i64()?);
 ```rust
 use std::io::Cursor;
 
-use qubit_io::{ZigZagReader, ZigZagWriter};
+use qubit_io::{Strict, ZigZagReader, ZigZagWriter};
 
 let mut writer = ZigZagWriter::new(Vec::new());
 writer.write_i64(-1)?;
 writer.write_i64(42)?;
 let bytes = writer.into_inner();
 
-let mut reader = ZigZagReader::new(Cursor::new(bytes)).with_strict(true);
+let mut reader = ZigZagReader::<_, Strict>::new(Cursor::new(bytes));
 assert_eq!(-1, reader.read_i64()?);
 assert_eq!(42, reader.read_i64()?);
 
