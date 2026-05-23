@@ -1,14 +1,6 @@
-use std::io::{
-    Cursor,
-    ErrorKind,
-};
+use std::io::{Cursor, ErrorKind};
 
-use qubit_io::{
-    BigEndian,
-    BinaryReader,
-    ByteOrder,
-    LittleEndian,
-};
+use qubit_io::{BigEndian, BinaryReader, ByteOrder, LittleEndian};
 
 fn push_be_values(output: &mut Vec<u8>) {
     output.extend_from_slice(&[0xaa, 0xbb]);
@@ -37,10 +29,9 @@ fn test_binary_reader_reads_all_big_endian_methods() {
     let mut reader = BinaryReader::<_, BigEndian>::new(Cursor::new(bytes));
 
     assert_eq!(ByteOrder::BigEndian, reader.byte_order());
-    assert_eq!(
-        [0xaa, 0xbb],
-        reader.read_bytes::<2>().expect("bytes should be read")
-    );
+    let mut prefix = [0u8; 2];
+    std::io::Read::read_exact(&mut reader, &mut prefix).expect("bytes should be read");
+    assert_eq!([0xaa, 0xbb], prefix);
     assert_eq!(0x12, reader.read_u8().expect("u8 should be read"));
     assert_eq!(-2, reader.read_i8().expect("i8 should be read"));
     assert_eq!(0x1234, reader.read_u16().expect("u16 should be read"));
@@ -88,10 +79,9 @@ fn test_binary_reader_reads_little_endian_and_exposes_accessors() {
     assert_eq!(ByteOrder::LittleEndian, reader.byte_order());
     assert_eq!(0, reader.get_ref().position());
     reader.get_mut().set_position(0);
-    assert_eq!(
-        [0xaa, 0xbb],
-        reader.read_bytes::<2>().expect("bytes should be read")
-    );
+    let mut prefix = [0u8; 2];
+    std::io::Read::read_exact(&mut reader, &mut prefix).expect("bytes should be read");
+    assert_eq!([0xaa, 0xbb], prefix);
     assert_eq!(0x1234, reader.read_u16().expect("u16 should be read"));
     assert_eq!(
         "hi",
