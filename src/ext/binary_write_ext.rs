@@ -8,17 +8,9 @@
  *
  ******************************************************************************/
 
-use std::io::{
-    Result,
-    Write,
-};
+use std::io::{Result, Write};
 
-use crate::codec::{
-    BigEndian,
-    BinaryCodec,
-    ByteOrder,
-    LittleEndian,
-};
+use crate::codec::{BigEndian, BinaryCodec, ByteOrder, LittleEndian};
 
 macro_rules! write_binary_value {
     ($writer:expr, $value:expr, $ty:ty, $order:ty) => {
@@ -35,20 +27,6 @@ macro_rules! write_binary_value {
 
 /// Extension methods for writing fixed-width binary values to byte streams.
 pub trait BinaryWriteExt: Write {
-    /// Writes all bytes in an array.
-    ///
-    /// # Parameters
-    ///
-    /// - `bytes`: Bytes to write.
-    ///
-    /// # Errors
-    ///
-    /// Returns any I/O error reported by the underlying writer.
-    #[inline]
-    fn write_bytes<const N: usize>(&mut self, bytes: [u8; N]) -> Result<()> {
-        self.write_all(&bytes)
-    }
-
     /// Writes an unsigned 8-bit integer.
     #[inline]
     fn write_u8(&mut self, value: u8) -> Result<()> {

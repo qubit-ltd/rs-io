@@ -43,6 +43,7 @@ pub use crate::{
     Strict,
     StringReadExt,
     StringWriteExt,
+    WriteExt,
     WriteSeek,
     WriteSeekExt,
     ZigZagCodec,

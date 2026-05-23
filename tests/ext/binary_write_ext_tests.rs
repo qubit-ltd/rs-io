@@ -1,13 +1,6 @@
-use std::io::{
-    Error,
-    ErrorKind,
-    Write,
-};
+use std::io::{Error, ErrorKind, Write};
 
-use qubit_io::{
-    BinaryWriteExt,
-    ByteOrder,
-};
+use qubit_io::{BinaryWriteExt, ByteOrder};
 
 struct FailingWriter;
 
@@ -68,12 +61,9 @@ macro_rules! assert_write_ordered_float {
 #[test]
 fn test_binary_write_ext_writes_all_scalar_methods() {
     let mut output = Vec::new();
-    output
-        .write_bytes([0x12, 0xfe])
-        .expect("bytes should be written");
     output.write_u8(0x12).expect("u8 should be written");
     output.write_i8(-2).expect("i8 should be written");
-    assert_eq!(vec![0x12, 0xfe, 0x12, 0xfe], output);
+    assert_eq!(vec![0x12, 0xfe], output);
 
     assert_write_ordered_integer!(write_u16, write_u16_be, write_u16_le, u16, 0x1234);
     assert_write_ordered_integer!(write_u32, write_u32_be, write_u32_le, u32, 0x1234_5678);

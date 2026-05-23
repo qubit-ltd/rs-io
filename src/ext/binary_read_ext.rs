@@ -8,17 +8,9 @@
  *
  ******************************************************************************/
 
-use std::io::{
-    Read,
-    Result,
-};
+use std::io::{Read, Result};
 
-use crate::codec::{
-    BigEndian,
-    BinaryCodec,
-    ByteOrder,
-    LittleEndian,
-};
+use crate::codec::{BigEndian, BinaryCodec, ByteOrder, LittleEndian};
 
 macro_rules! read_binary_value {
     ($reader:expr, $ty:ty, $order:ty) => {
@@ -34,22 +26,6 @@ macro_rules! read_binary_value {
 
 /// Extension methods for reading fixed-width binary values from byte streams.
 pub trait BinaryReadExt: Read {
-    /// Reads exactly `N` bytes.
-    ///
-    /// # Returns
-    ///
-    /// Returns the filled byte array.
-    ///
-    /// # Errors
-    ///
-    /// Returns any I/O error reported by the underlying reader.
-    #[inline]
-    fn read_bytes<const N: usize>(&mut self) -> Result<[u8; N]> {
-        let mut bytes = [0u8; N];
-        self.read_exact(&mut bytes)?;
-        Ok(bytes)
-    }
-
     /// Reads an unsigned 8-bit integer.
     #[inline]
     fn read_u8(&mut self) -> Result<u8> {
