@@ -5,7 +5,7 @@ use qubit_io::{
 };
 
 #[test]
-fn test_binary_codec_exposes_min_buffer_len() {
+fn test_binary_codec_exposes_required_min_buffer_len() {
     assert_eq!(1, BinaryCodec::<u8, BigEndian>::REQUIRED_MIN_BUFFER_LEN);
     assert_eq!(1, BinaryCodec::<i8, LittleEndian>::REQUIRED_MIN_BUFFER_LEN);
     assert_eq!(2, BinaryCodec::<u16, BigEndian>::REQUIRED_MIN_BUFFER_LEN);
