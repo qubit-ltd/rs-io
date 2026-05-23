@@ -23,6 +23,7 @@ use crate::codec::{
     ByteOrderSpec,
     LittleEndian,
 };
+use crate::util::try_reserve_vec;
 
 macro_rules! read_binary_value {
     ($reader:expr, $ty:ty, $order:ty) => {
@@ -115,17 +116,35 @@ macro_rules! impl_binary_reader_for_order {
             }
 
             /// Reads a UTF-8 string prefixed by a 16-bit byte length.
+            ///
+            /// # Parameters
+            ///
+            /// - `max_len`: Maximum accepted UTF-8 payload length in bytes.
+            ///
+            /// # Errors
+            ///
+            /// Returns [`ErrorKind::InvalidData`] when the encoded length exceeds
+            /// `max_len` or when the payload is not valid UTF-8.
             #[inline]
-            pub fn read_utf8_string_u16(&mut self) -> Result<String> {
+            pub fn read_utf8_string_u16(&mut self, max_len: usize) -> Result<String> {
                 let len = usize::from(self.read_u16()?);
-                read_utf8_string(&mut self.inner, len)
+                read_utf8_string(&mut self.inner, len, max_len)
             }
 
             /// Reads a UTF-8 string prefixed by a 32-bit byte length.
+            ///
+            /// # Parameters
+            ///
+            /// - `max_len`: Maximum accepted UTF-8 payload length in bytes.
+            ///
+            /// # Errors
+            ///
+            /// Returns [`ErrorKind::InvalidData`] when the encoded length exceeds
+            /// `max_len` or when the payload is not valid UTF-8.
             #[inline]
-            pub fn read_utf8_string_u32(&mut self) -> Result<String> {
+            pub fn read_utf8_string_u32(&mut self, max_len: usize) -> Result<String> {
                 let len = self.read_u32()? as usize;
-                read_utf8_string(&mut self.inner, len)
+                read_utf8_string(&mut self.inner, len, max_len)
             }
         }
     };
@@ -221,11 +240,35 @@ where
 }
 
 #[inline]
-fn read_utf8_string<R>(reader: &mut R, len: usize) -> Result<String>
+/// Reads a UTF-8 payload after its length has already been decoded.
+///
+/// # Parameters
+///
+/// - `reader`: Reader that provides the UTF-8 payload bytes.
+/// - `len`: Payload length in bytes.
+/// - `max_len`: Maximum accepted payload length in bytes.
+///
+/// # Returns
+///
+/// Returns the decoded UTF-8 string.
+///
+/// # Errors
+///
+/// Returns an error when `len` exceeds `max_len`, allocation fails, the reader cannot
+/// provide enough bytes, or the payload is not valid UTF-8.
+fn read_utf8_string<R>(reader: &mut R, len: usize, max_len: usize) -> Result<String>
 where
     R: Read,
 {
-    let mut bytes = vec![0u8; len];
+    if len > max_len {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            format!("string length {len} exceeds maximum length of {max_len} bytes"),
+        ));
+    }
+    let mut bytes = Vec::new();
+    try_reserve_vec(&mut bytes, len)?;
+    bytes.resize(len, 0);
     reader.read_exact(&mut bytes)?;
     String::from_utf8(bytes).map_err(|error| Error::new(ErrorKind::InvalidData, error))
 }
