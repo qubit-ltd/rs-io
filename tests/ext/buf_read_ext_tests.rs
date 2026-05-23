@@ -32,6 +32,17 @@ fn test_read_until_limited_reads_through_delimiter() {
 }
 
 #[test]
+fn test_read_until_limited_accepts_large_limit() {
+    let mut input = Cursor::new(b"abc,def".to_vec());
+
+    let value = input
+        .read_until_limited(b',', 9000)
+        .expect("delimited bytes should be read");
+
+    assert_eq!(b"abc,", value.as_slice());
+}
+
+#[test]
 fn test_read_until_limited_accepts_eof_before_delimiter() {
     let mut input = Cursor::new(b"abc".to_vec());
 
@@ -96,6 +107,23 @@ fn test_read_until_limited_into_rejects_input_beyond_limit_after_prefix() {
 }
 
 #[test]
+fn test_read_until_limited_into_rejects_zero_limit_without_appending() {
+    let mut input = Cursor::new(b"abcdef\n".to_vec());
+    let mut output = b"prefix-".to_vec();
+
+    let error = input
+        .read_until_limited_into(b'\n', &mut output, 0)
+        .expect_err("input beyond the zero limit should be rejected");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!(b"prefix-", output.as_slice());
+    assert_eq!(
+        b"abcdef\n",
+        input.fill_buf().expect("remaining bytes should exist")
+    );
+}
+
+#[test]
 fn test_read_line_limited_reads_utf8_line() {
     let mut input = Cursor::new("hello 世界\nnext".as_bytes().to_vec());
 
@@ -125,6 +153,19 @@ fn test_read_line_limited_into_appends_utf8_line() {
         b"next",
         input.fill_buf().expect("remaining bytes should exist")
     );
+}
+
+#[test]
+fn test_read_line_limited_into_accepts_large_limit() {
+    let mut input = Cursor::new("hello\nnext".as_bytes().to_vec());
+    let mut output = String::new();
+
+    let count = input
+        .read_line_limited_into(&mut output, 9000)
+        .expect("line should be appended within the limit");
+
+    assert_eq!("hello\n".len(), count);
+    assert_eq!("hello\n", output);
 }
 
 #[test]
@@ -204,6 +245,21 @@ fn test_discard_until_limited_rejects_input_beyond_limit() {
     assert_eq!(ErrorKind::InvalidData, error.kind());
     assert_eq!(
         b"def\n",
+        input.fill_buf().expect("remaining bytes should exist")
+    );
+}
+
+#[test]
+fn test_discard_until_limited_rejects_zero_limit_without_consuming() {
+    let mut input = Cursor::new(b"abcdef\n".to_vec());
+
+    let error = input
+        .discard_until_limited(b'\n', 0)
+        .expect_err("input beyond the zero limit should be rejected while discarding");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!(
+        b"abcdef\n",
         input.fill_buf().expect("remaining bytes should exist")
     );
 }

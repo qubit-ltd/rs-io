@@ -9,22 +9,20 @@
  ******************************************************************************/
 
 use std::io::{
-    Error,
-    ErrorKind,
     Read,
     Result,
 };
 
 use crate::codec::{
-    Leb128DecodeError,
     NonStrict,
     Strict,
     ZigZagCodec,
 };
+use crate::util::read_leb128_payload;
 
 macro_rules! read_zig_zag_value {
     ($reader:expr, $ty:ty, $policy:ty) => {
-        read_zig_zag::<{ ZigZagCodec::<$ty, $policy>::REQUIRED_MIN_BUFFER_LEN }, _, _, _>(
+        read_leb128_payload::<{ ZigZagCodec::<$ty, $policy>::REQUIRED_MIN_BUFFER_LEN }, _, _, _>(
             $reader,
             |bytes| {
                 // SAFETY: The local buffer is exactly the codec's minimum buffer length,
@@ -111,30 +109,3 @@ pub trait ZigZagReadExt: Read {
 }
 
 impl<R> ZigZagReadExt for R where R: Read + ?Sized {}
-
-#[inline]
-fn read_zig_zag<const N: usize, T, R, F>(reader: &mut R, decode: F) -> Result<T>
-where
-    R: Read + ?Sized,
-    F: FnOnce(&[u8]) -> std::result::Result<(T, usize), Leb128DecodeError>,
-{
-    let mut bytes = [0u8; N];
-    for index in 0..N {
-        let target = one_byte_slice(&mut bytes, index);
-        reader.read_exact(target)?;
-        if bytes[index] & 0x80 == 0 {
-            return decode(&bytes)
-                .map(|(value, _)| value)
-                .map_err(|error| Error::new(ErrorKind::InvalidData, error));
-        }
-    }
-    decode(&bytes)
-        .map(|(value, _)| value)
-        .map_err(|error| Error::new(ErrorKind::InvalidData, error))
-}
-
-#[inline]
-fn one_byte_slice(bytes: &mut [u8], index: usize) -> &mut [u8] {
-    // SAFETY: Callers pass an index inside the fixed-size local buffer.
-    unsafe { core::slice::from_raw_parts_mut(bytes.as_mut_ptr().add(index), 1) }
-}

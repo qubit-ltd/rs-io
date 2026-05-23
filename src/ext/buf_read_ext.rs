@@ -15,6 +15,11 @@ use std::io::{
 };
 use std::string::FromUtf8Error;
 
+use crate::util::{
+    try_reserve_string,
+    try_reserve_vec,
+};
+
 /// Extension methods for [`BufRead`] values.
 ///
 /// `BufReadExt` provides bounded delimiter-oriented reads. These helpers are
@@ -177,7 +182,8 @@ fn read_until_limited_impl<T>(reader: &mut T, delimiter: u8, max_len: usize) -> 
 where
     T: BufRead + ?Sized,
 {
-    let mut output = Vec::with_capacity(max_len.min(8192));
+    let mut output = Vec::new();
+    try_reserve_vec(&mut output, max_len.min(8192))?;
     read_until_limited_into_impl(reader, delimiter, &mut output, max_len)?;
     Ok(output)
 }
@@ -217,12 +223,14 @@ where
         let remaining = max_len.saturating_sub(appended);
         if requested > remaining {
             if remaining > 0 {
+                try_reserve_vec(output, remaining)?;
                 output.extend_from_slice(&available[..remaining]);
                 reader.consume(remaining);
             }
             return Err(limit_exceeded_error(max_len, delimiter));
         }
 
+        try_reserve_vec(output, requested)?;
         output.extend_from_slice(&available[..requested]);
         reader.consume(requested);
         appended += requested;
@@ -274,9 +282,11 @@ fn read_line_limited_into_impl<T>(
 where
     T: BufRead + ?Sized,
 {
-    let mut bytes = Vec::with_capacity(max_len.min(8192));
+    let mut bytes = Vec::new();
+    try_reserve_vec(&mut bytes, max_len.min(8192))?;
     let count = read_until_limited_into_impl(reader, b'\n', &mut bytes, max_len)?;
     let line = String::from_utf8(bytes).map_err(invalid_utf8_error)?;
+    try_reserve_string(output, line.len())?;
     output.push_str(&line);
     Ok(count)
 }

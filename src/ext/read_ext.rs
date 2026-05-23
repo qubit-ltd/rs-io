@@ -18,6 +18,10 @@ use std::io::{
 use std::string::FromUtf8Error;
 
 use crate::Streams;
+use crate::util::{
+    try_reserve_string,
+    try_reserve_vec,
+};
 
 /// Default stack buffer size used by discard operations.
 const DISCARD_BUFFER_SIZE: usize = 8 * 1024;
@@ -429,7 +433,7 @@ fn read_exact_vec_limited_impl(
     max_len: usize,
 ) -> Result<Vec<u8>> {
     validate_exact_read_len(len, max_len)?;
-    let mut output = Vec::with_capacity(len);
+    let mut output = Vec::new();
     read_exact_vec_limited_into_impl(reader, &mut output, len, max_len)?;
     Ok(output)
 }
@@ -455,7 +459,17 @@ fn read_exact_vec_limited_into_impl(
 ) -> Result<()> {
     validate_exact_read_len(len, max_len)?;
     let original_len = output.len();
-    output.resize(original_len + len, 0);
+    let new_len = match original_len.checked_add(len) {
+        Some(value) => value,
+        None => {
+            return Err(Error::new(
+                ErrorKind::InvalidInput,
+                format!("length {original_len} plus {len} overflows usize"),
+            ));
+        }
+    };
+    try_reserve_vec(output, len)?;
+    output.resize(new_len, 0);
     match reader.read_exact(&mut output[original_len..]) {
         Ok(()) => Ok(()),
         Err(error) => {
@@ -532,7 +546,8 @@ fn discard_exact_or_eof_impl(reader: &mut dyn Read, bytes: u64) -> Result<u64> {
 /// more than `max_len` bytes. Returns the first non-interrupted read error
 /// reported by `reader`.
 fn read_to_end_limited_impl(reader: &mut dyn Read, max_len: usize) -> Result<Vec<u8>> {
-    let mut output = Vec::with_capacity(max_len.min(READ_TO_END_BUFFER_SIZE));
+    let mut output = Vec::new();
+    try_reserve_vec(&mut output, max_len.min(READ_TO_END_BUFFER_SIZE))?;
     read_to_end_limited_into_impl(reader, &mut output, max_len)?;
     Ok(output)
 }
@@ -564,11 +579,13 @@ fn read_to_end_limited_into_impl(
         match reader.read(&mut buffer[..requested]) {
             Ok(0) => return Ok(appended),
             Ok(count) if count <= remaining => {
+                try_reserve_vec(output, count)?;
                 output.extend_from_slice(&buffer[..count]);
                 appended += count;
             }
             Ok(_) => {
                 if remaining > 0 {
+                    try_reserve_vec(output, remaining)?;
                     output.extend_from_slice(&buffer[..remaining]);
                 }
                 return Err(Error::new(
@@ -626,6 +643,7 @@ fn read_to_string_limited_into_impl(
     let bytes = read_to_end_limited_impl(reader, max_len)?;
     let text = String::from_utf8(bytes).map_err(invalid_utf8_error)?;
     let count = text.len();
+    try_reserve_string(output, count)?;
     output.push_str(&text);
     Ok(count)
 }
