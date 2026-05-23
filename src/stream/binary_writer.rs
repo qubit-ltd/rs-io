@@ -9,134 +9,11 @@
  ******************************************************************************/
 
 use core::marker::PhantomData;
-use std::io::{
-    Result,
-    Seek,
-    SeekFrom,
-    Write,
-};
+use std::io::{Error, ErrorKind, Result, Seek, SeekFrom, Write};
 
-use crate::codec::{
-    BigEndian,
-    BinaryCodec,
-    ByteOrder,
-    ByteOrderSpec,
-    LittleEndian,
-};
-use crate::util::{
-    write_utf8_string_with_u16_len,
-    write_utf8_string_with_u32_len,
-};
-
-macro_rules! write_binary_value {
-    ($writer:expr, $value:expr, $ty:ty, $order:ty) => {
-        write_binary::<{ BinaryCodec::<$ty, $order>::REQUIRED_MIN_BUFFER_LEN }, _, _, _>(
-            $writer,
-            $value,
-            |bytes, value| {
-                // SAFETY: The local buffer is exactly the codec's minimum buffer length.
-                unsafe { BinaryCodec::<$ty, $order>::write_unchecked(bytes, 0, value) }
-            },
-        )
-    };
-}
-
-macro_rules! impl_binary_writer_for_order {
-    ($order:ty) => {
-        impl<W> BinaryWriter<W, $order>
-        where
-            W: Write,
-        {
-            /// Writes an unsigned 8-bit integer.
-            #[inline]
-            pub fn write_u8(&mut self, value: u8) -> Result<()> {
-                write_binary_value!(&mut self.inner, value, u8, $order)
-            }
-
-            /// Writes a signed 8-bit integer.
-            #[inline]
-            pub fn write_i8(&mut self, value: i8) -> Result<()> {
-                write_binary_value!(&mut self.inner, value, i8, $order)
-            }
-
-            /// Writes an unsigned 16-bit integer.
-            #[inline]
-            pub fn write_u16(&mut self, value: u16) -> Result<()> {
-                write_binary_value!(&mut self.inner, value, u16, $order)
-            }
-
-            /// Writes an unsigned 32-bit integer.
-            #[inline]
-            pub fn write_u32(&mut self, value: u32) -> Result<()> {
-                write_binary_value!(&mut self.inner, value, u32, $order)
-            }
-
-            /// Writes an unsigned 64-bit integer.
-            #[inline]
-            pub fn write_u64(&mut self, value: u64) -> Result<()> {
-                write_binary_value!(&mut self.inner, value, u64, $order)
-            }
-
-            /// Writes an unsigned 128-bit integer.
-            #[inline]
-            pub fn write_u128(&mut self, value: u128) -> Result<()> {
-                write_binary_value!(&mut self.inner, value, u128, $order)
-            }
-
-            /// Writes a signed 16-bit integer.
-            #[inline]
-            pub fn write_i16(&mut self, value: i16) -> Result<()> {
-                write_binary_value!(&mut self.inner, value, i16, $order)
-            }
-
-            /// Writes a signed 32-bit integer.
-            #[inline]
-            pub fn write_i32(&mut self, value: i32) -> Result<()> {
-                write_binary_value!(&mut self.inner, value, i32, $order)
-            }
-
-            /// Writes a signed 64-bit integer.
-            #[inline]
-            pub fn write_i64(&mut self, value: i64) -> Result<()> {
-                write_binary_value!(&mut self.inner, value, i64, $order)
-            }
-
-            /// Writes a signed 128-bit integer.
-            #[inline]
-            pub fn write_i128(&mut self, value: i128) -> Result<()> {
-                write_binary_value!(&mut self.inner, value, i128, $order)
-            }
-
-            /// Writes a 32-bit float.
-            #[inline]
-            pub fn write_f32(&mut self, value: f32) -> Result<()> {
-                write_binary_value!(&mut self.inner, value, f32, $order)
-            }
-
-            /// Writes a 64-bit float.
-            #[inline]
-            pub fn write_f64(&mut self, value: f64) -> Result<()> {
-                write_binary_value!(&mut self.inner, value, f64, $order)
-            }
-
-            /// Writes a UTF-8 string prefixed by a 16-bit byte length.
-            #[inline]
-            pub fn write_utf8_string_u16(&mut self, value: &str) -> Result<()> {
-                write_utf8_string_with_u16_len(&mut self.inner, value, |writer, len| {
-                    write_binary_value!(writer, len, u16, $order)
-                })
-            }
-
-            /// Writes a UTF-8 string prefixed by a 32-bit byte length.
-            #[inline]
-            pub fn write_utf8_string_u32(&mut self, value: &str) -> Result<()> {
-                write_utf8_string_with_u32_len(&mut self.inner, value, |writer, len| {
-                    write_binary_value!(writer, len, u32, $order)
-                })
-            }
-        }
-    };
-}
+use crate::WriteExt;
+use crate::codec::{BigEndian, ByteOrder, ByteOrderSpec, LittleEndian};
+use crate::stream::macros::impl_binary_writer_for_order;
 
 /// Writer wrapper for fixed-width binary values.
 ///
@@ -145,19 +22,30 @@ macro_rules! impl_binary_writer_for_order {
 /// `BinaryWriter<W, LittleEndian>` for little-endian data.
 pub struct BinaryWriter<W, O = BigEndian> {
     inner: W,
+    buffer: [u8; 16],
     marker: PhantomData<fn() -> O>,
 }
 
 impl<W, O> BinaryWriter<W, O>
 where
+    W: Write,
     O: ByteOrderSpec,
 {
     /// Creates a binary writer.
+    ///
+    /// # Parameters
+    ///
+    /// - `inner`: Underlying byte writer.
+    ///
+    /// # Returns
+    ///
+    /// Returns a writer using the byte order selected by `O`.
     #[must_use]
     #[inline]
     pub const fn new(inner: W) -> Self {
         Self {
             inner,
+            buffer: [0; 16],
             marker: PhantomData,
         }
     }
@@ -189,17 +77,16 @@ where
     pub fn into_inner(self) -> W {
         self.inner
     }
-}
 
-impl<W, O> BinaryWriter<W, O>
-where
-    W: Write,
-    O: ByteOrderSpec,
-{
-    /// Writes all bytes in an array.
     #[inline]
-    pub fn write_bytes<const N: usize>(&mut self, bytes: [u8; N]) -> Result<()> {
-        self.inner.write_all(&bytes)
+    fn write_binary<T, const N: usize, F>(&mut self, value: T, encode: F) -> Result<()>
+    where
+        F: FnOnce(&mut [u8; 16], T),
+    {
+        encode(&mut self.buffer, value);
+        // SAFETY: All in-crate callers pass codec-declared lengths that fit
+        // the fixed internal buffer.
+        unsafe { self.inner.write_all_unchecked(&self.buffer, 0, N) }
     }
 }
 
@@ -263,12 +150,23 @@ where
 }
 
 #[inline]
-fn write_binary<const N: usize, T, W, F>(writer: &mut W, value: T, encode: F) -> Result<()>
-where
-    W: Write,
-    F: FnOnce(&mut [u8], T),
-{
-    let mut bytes = [0u8; N];
-    encode(&mut bytes, value);
-    writer.write_all(&bytes)
+pub(crate) fn checked_u16_len(len: usize) -> Result<u16> {
+    u16::try_from(len).map_err(|_| {
+        Error::new(
+            ErrorKind::InvalidInput,
+            format!("string length {len} exceeds maximum encodable u16 length"),
+        )
+    })
+}
+
+#[inline]
+pub(crate) fn checked_u32_len(len: usize) -> Result<u32> {
+    if len > u32::MAX as usize {
+        Err(Error::new(
+            ErrorKind::InvalidInput,
+            format!("string length {len} exceeds maximum encodable u32 length"),
+        ))
+    } else {
+        Ok(len as u32)
+    }
 }

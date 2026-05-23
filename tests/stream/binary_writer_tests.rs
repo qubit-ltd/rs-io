@@ -1,23 +1,13 @@
-use std::io::{
-    Cursor,
-    ErrorKind,
-};
+use std::io::{Cursor, ErrorKind};
 
-use qubit_io::{
-    BigEndian,
-    BinaryWriter,
-    ByteOrder,
-    LittleEndian,
-};
+use qubit_io::{BigEndian, BinaryWriter, ByteOrder, LittleEndian};
 
 #[test]
 fn test_binary_writer_writes_all_big_endian_methods() {
     let mut writer = BinaryWriter::<_, BigEndian>::new(Vec::new());
 
     assert_eq!(ByteOrder::BigEndian, writer.byte_order());
-    writer
-        .write_bytes([0xaa, 0xbb])
-        .expect("bytes should be written");
+    std::io::Write::write_all(&mut writer, &[0xaa, 0xbb]).expect("bytes should be written");
     writer.write_u8(0x12).expect("u8 should be written");
     writer.write_i8(-2).expect("i8 should be written");
     writer.write_u16(0x1234).expect("u16 should be written");

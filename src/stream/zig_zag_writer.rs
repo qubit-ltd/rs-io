@@ -8,34 +8,15 @@
  *
  ******************************************************************************/
 
-use std::io::{
-    Result,
-    Seek,
-    SeekFrom,
-    Write,
-};
+use std::io::{Result, Seek, SeekFrom, Write};
 
-use crate::codec::{
-    NonStrict,
-    ZigZagCodec,
-};
-
-macro_rules! write_zig_zag_value {
-    ($writer:expr, $value:expr, $ty:ty) => {
-        write_zig_zag::<{ ZigZagCodec::<$ty, NonStrict>::REQUIRED_MIN_BUFFER_LEN }, _, _, _>(
-            $writer,
-            $value,
-            |bytes, value| {
-                // SAFETY: The local buffer is exactly the codec's minimum buffer length.
-                unsafe { ZigZagCodec::<$ty, NonStrict>::write_unchecked(bytes, 0, value) }
-            },
-        )
-    };
-}
+use crate::WriteExt;
+use crate::stream::macros::write_zig_zag_value;
 
 /// Writer wrapper for canonical ZigZag + unsigned LEB128 integers.
 pub struct ZigZagWriter<W> {
     inner: W,
+    buffer: [u8; 19],
 }
 
 impl<W> ZigZagWriter<W> {
@@ -43,7 +24,10 @@ impl<W> ZigZagWriter<W> {
     #[must_use]
     #[inline]
     pub const fn new(inner: W) -> Self {
-        Self { inner }
+        Self {
+            inner,
+            buffer: [0; 19],
+        }
     }
 
     /// Returns a shared reference to the underlying writer.
@@ -72,40 +56,50 @@ impl<W> ZigZagWriter<W>
 where
     W: Write,
 {
+    #[inline]
+    fn write_zig_zag<T, const N: usize, F>(&mut self, value: T, encode: F) -> Result<()>
+    where
+        F: FnOnce(&mut [u8; 19], T) -> usize,
+    {
+        let len = encode(&mut self.buffer, value);
+        // SAFETY: The codec returns a length within the fixed internal buffer.
+        unsafe { self.inner.write_all_unchecked(&self.buffer, 0, len) }
+    }
+
     /// Writes a ZigZag `i8`.
     #[inline]
     pub fn write_i8(&mut self, value: i8) -> Result<()> {
-        write_zig_zag_value!(&mut self.inner, value, i8)
+        write_zig_zag_value!(self, value, i8)
     }
 
     /// Writes a ZigZag `i16`.
     #[inline]
     pub fn write_i16(&mut self, value: i16) -> Result<()> {
-        write_zig_zag_value!(&mut self.inner, value, i16)
+        write_zig_zag_value!(self, value, i16)
     }
 
     /// Writes a ZigZag `i32`.
     #[inline]
     pub fn write_i32(&mut self, value: i32) -> Result<()> {
-        write_zig_zag_value!(&mut self.inner, value, i32)
+        write_zig_zag_value!(self, value, i32)
     }
 
     /// Writes a ZigZag `i64`.
     #[inline]
     pub fn write_i64(&mut self, value: i64) -> Result<()> {
-        write_zig_zag_value!(&mut self.inner, value, i64)
+        write_zig_zag_value!(self, value, i64)
     }
 
     /// Writes a ZigZag `i128`.
     #[inline]
     pub fn write_i128(&mut self, value: i128) -> Result<()> {
-        write_zig_zag_value!(&mut self.inner, value, i128)
+        write_zig_zag_value!(self, value, i128)
     }
 
     /// Writes a ZigZag `isize`.
     #[inline]
     pub fn write_isize(&mut self, value: isize) -> Result<()> {
-        write_zig_zag_value!(&mut self.inner, value, isize)
+        write_zig_zag_value!(self, value, isize)
     }
 }
 
@@ -163,15 +157,4 @@ where
     fn seek(&mut self, position: SeekFrom) -> Result<u64> {
         self.inner.seek(position)
     }
-}
-
-#[inline]
-fn write_zig_zag<const N: usize, T, W, F>(writer: &mut W, value: T, encode: F) -> Result<()>
-where
-    W: Write,
-    F: FnOnce(&mut [u8], T) -> usize,
-{
-    let mut bytes = [0u8; N];
-    let len = encode(&mut bytes, value);
-    writer.write_all(&bytes[..len])
 }
