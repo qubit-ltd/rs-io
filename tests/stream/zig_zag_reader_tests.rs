@@ -237,3 +237,19 @@ fn test_zig_zag_reader_reports_all_instantiated_error_paths() {
         reader.read_isize().expect_err("unterminated isize").kind()
     );
 }
+
+#[test]
+fn test_zig_zag_reader_read_and_seek_delegate_to_inner_reader() {
+    let mut reader =
+        qubit_io::ZigZagReader::<_, qubit_io::NonStrict>::new(std::io::Cursor::new(vec![
+            1, 2, 3, 4,
+        ]));
+
+    std::io::Seek::seek(&mut reader, std::io::SeekFrom::Start(1))
+        .expect("seeking through ZigZagReader should succeed");
+    let mut bytes = [0_u8; 2];
+    std::io::Read::read_exact(&mut reader, &mut bytes)
+        .expect("reading through ZigZagReader should succeed");
+
+    assert_eq!(bytes, [2, 3]);
+}

@@ -105,3 +105,32 @@ fn test_leb128_reader_exposes_accessors_and_reports_errors() {
             .kind()
     );
 }
+
+#[test]
+fn test_leb128_reader_read_utf8_string_reads_length_prefixed_payload() {
+    let bytes = vec![3, b'h', 0xC3, 0xA9];
+    let mut reader =
+        qubit_io::Leb128Reader::<_, qubit_io::NonStrict>::new(std::io::Cursor::new(bytes));
+
+    let text = reader
+        .read_utf8_string(3)
+        .expect("reading a length-prefixed UTF-8 string should succeed");
+
+    assert_eq!(text, "hé");
+}
+
+#[test]
+fn test_leb128_reader_read_and_seek_delegate_to_inner_reader() {
+    let mut reader =
+        qubit_io::Leb128Reader::<_, qubit_io::NonStrict>::new(std::io::Cursor::new(vec![
+            1, 2, 3, 4,
+        ]));
+
+    std::io::Seek::seek(&mut reader, std::io::SeekFrom::Start(1))
+        .expect("seeking through Leb128Reader should succeed");
+    let mut bytes = [0_u8; 2];
+    std::io::Read::read_exact(&mut reader, &mut bytes)
+        .expect("reading through Leb128Reader should succeed");
+
+    assert_eq!(bytes, [2, 3]);
+}

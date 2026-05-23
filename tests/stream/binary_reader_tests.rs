@@ -149,3 +149,19 @@ fn test_binary_reader_reports_read_and_utf8_errors() {
             .kind()
     );
 }
+
+#[test]
+fn test_binary_reader_read_and_seek_delegate_to_inner_reader() {
+    let mut reader =
+        qubit_io::BinaryReader::<_, qubit_io::LittleEndian>::new(std::io::Cursor::new(vec![
+            1, 2, 3, 4,
+        ]));
+
+    std::io::Seek::seek(&mut reader, std::io::SeekFrom::Start(1))
+        .expect("seeking through BinaryReader should succeed");
+    let mut bytes = [0_u8; 2];
+    std::io::Read::read_exact(&mut reader, &mut bytes)
+        .expect("reading through BinaryReader should succeed");
+
+    assert_eq!(bytes, [2, 3]);
+}

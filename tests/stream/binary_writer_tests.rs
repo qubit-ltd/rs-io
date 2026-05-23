@@ -87,3 +87,18 @@ fn test_binary_writer_reports_length_errors() {
             .kind()
     );
 }
+
+#[test]
+fn test_binary_writer_write_and_seek_delegate_to_inner_writer() {
+    let mut writer =
+        qubit_io::BinaryWriter::<_, qubit_io::LittleEndian>::new(std::io::Cursor::new(vec![0; 4]));
+
+    std::io::Seek::seek(&mut writer, std::io::SeekFrom::Start(1))
+        .expect("seeking through BinaryWriter should succeed");
+    std::io::Write::write_all(&mut writer, b"xy")
+        .expect("writing through BinaryWriter should succeed");
+    std::io::Write::flush(&mut writer).expect("flushing through BinaryWriter should succeed");
+
+    let cursor = writer.into_inner();
+    assert_eq!(cursor.into_inner(), vec![0, b'x', b'y', 0]);
+}

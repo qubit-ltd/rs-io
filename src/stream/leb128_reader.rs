@@ -10,22 +10,25 @@
 
 use core::marker::PhantomData;
 use std::io::{
-    Error,
-    ErrorKind,
     Read,
     Result,
+    Seek,
+    SeekFrom,
 };
 
 use crate::codec::{
     DecodePolicy,
     Leb128Codec,
-    Leb128DecodeError,
     NonStrict,
+};
+use crate::util::{
+    read_leb128_payload,
+    read_utf8_payload,
 };
 
 macro_rules! read_leb128_value {
     ($reader:expr, $ty:ty, $policy:ty) => {
-        read_leb128::<{ Leb128Codec::<$ty, NonStrict>::REQUIRED_MIN_BUFFER_LEN }, _, _, _>(
+        read_leb128_payload::<{ Leb128Codec::<$ty, NonStrict>::REQUIRED_MIN_BUFFER_LEN }, _, _, _>(
             $reader,
             |bytes| {
                 // SAFETY: The local buffer is exactly the codec's minimum buffer length,
@@ -165,31 +168,71 @@ where
     pub fn read_isize(&mut self) -> Result<isize> {
         read_leb128_value!(&mut self.inner, isize, P)
     }
+
+    /// Reads a UTF-8 string prefixed by an unsigned LEB128 byte length.
+    ///
+    /// # Parameters
+    ///
+    /// - `max_len`: Maximum accepted UTF-8 payload length in bytes.
+    ///
+    /// # Returns
+    ///
+    /// Returns the decoded UTF-8 string.
+    ///
+    /// # Errors
+    ///
+    /// Returns an I/O error for length or payload reads, [`std::io::ErrorKind::InvalidData`]
+    /// when the encoded length exceeds `max_len`, or [`std::io::ErrorKind::InvalidData`]
+    /// when the payload is not valid UTF-8.
+    #[inline]
+    pub fn read_utf8_string(&mut self, max_len: usize) -> Result<String> {
+        let len = self.read_usize()?;
+        read_utf8_payload(&mut self.inner, len, max_len)
+    }
 }
 
-#[inline]
-fn read_leb128<const N: usize, T, R, F>(reader: &mut R, decode: F) -> Result<T>
+impl<R, P> Read for Leb128Reader<R, P>
 where
     R: Read,
-    F: FnOnce(&[u8]) -> std::result::Result<(T, usize), Leb128DecodeError>,
 {
-    let mut bytes = [0u8; N];
-    for index in 0..N {
-        let target = one_byte_slice(&mut bytes, index);
-        reader.read_exact(target)?;
-        if bytes[index] & 0x80 == 0 {
-            return decode(&bytes)
-                .map(|(value, _)| value)
-                .map_err(|error| Error::new(ErrorKind::InvalidData, error));
-        }
+    /// Reads bytes from the wrapped reader.
+    ///
+    /// # Parameters
+    ///
+    /// - `buffer`: Destination byte buffer.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of bytes read.
+    ///
+    /// # Errors
+    ///
+    /// Returns the I/O error reported by the wrapped reader.
+    #[inline]
+    fn read(&mut self, buffer: &mut [u8]) -> Result<usize> {
+        self.inner.read(buffer)
     }
-    decode(&bytes)
-        .map(|(value, _)| value)
-        .map_err(|error| Error::new(ErrorKind::InvalidData, error))
 }
 
-#[inline]
-fn one_byte_slice(bytes: &mut [u8], index: usize) -> &mut [u8] {
-    // SAFETY: Callers pass an index inside the fixed-size local buffer.
-    unsafe { core::slice::from_raw_parts_mut(bytes.as_mut_ptr().add(index), 1) }
+impl<R, P> Seek for Leb128Reader<R, P>
+where
+    R: Seek,
+{
+    /// Seeks the wrapped reader.
+    ///
+    /// # Parameters
+    ///
+    /// - `position`: Target seek position.
+    ///
+    /// # Returns
+    ///
+    /// Returns the new stream position.
+    ///
+    /// # Errors
+    ///
+    /// Returns the seek error reported by the wrapped reader.
+    #[inline]
+    fn seek(&mut self, position: SeekFrom) -> Result<u64> {
+        self.inner.seek(position)
+    }
 }

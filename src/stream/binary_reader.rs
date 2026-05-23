@@ -10,10 +10,10 @@
 
 use core::marker::PhantomData;
 use std::io::{
-    Error,
-    ErrorKind,
     Read,
     Result,
+    Seek,
+    SeekFrom,
 };
 
 use crate::codec::{
@@ -23,7 +23,7 @@ use crate::codec::{
     ByteOrderSpec,
     LittleEndian,
 };
-use crate::util::try_reserve_vec;
+use crate::util::read_utf8_payload;
 
 macro_rules! read_binary_value {
     ($reader:expr, $ty:ty, $order:ty) => {
@@ -123,12 +123,12 @@ macro_rules! impl_binary_reader_for_order {
             ///
             /// # Errors
             ///
-            /// Returns [`ErrorKind::InvalidData`] when the encoded length exceeds
+            /// Returns [`std::io::ErrorKind::InvalidData`] when the encoded length exceeds
             /// `max_len` or when the payload is not valid UTF-8.
             #[inline]
             pub fn read_utf8_string_u16(&mut self, max_len: usize) -> Result<String> {
                 let len = usize::from(self.read_u16()?);
-                read_utf8_string(&mut self.inner, len, max_len)
+                read_utf8_payload(&mut self.inner, len, max_len)
             }
 
             /// Reads a UTF-8 string prefixed by a 32-bit byte length.
@@ -139,12 +139,12 @@ macro_rules! impl_binary_reader_for_order {
             ///
             /// # Errors
             ///
-            /// Returns [`ErrorKind::InvalidData`] when the encoded length exceeds
+            /// Returns [`std::io::ErrorKind::InvalidData`] when the encoded length exceeds
             /// `max_len` or when the payload is not valid UTF-8.
             #[inline]
             pub fn read_utf8_string_u32(&mut self, max_len: usize) -> Result<String> {
                 let len = self.read_u32()? as usize;
-                read_utf8_string(&mut self.inner, len, max_len)
+                read_utf8_payload(&mut self.inner, len, max_len)
             }
         }
     };
@@ -228,6 +228,52 @@ where
 impl_binary_reader_for_order!(BigEndian);
 impl_binary_reader_for_order!(LittleEndian);
 
+impl<R, O> Read for BinaryReader<R, O>
+where
+    R: Read,
+{
+    /// Reads bytes from the wrapped reader.
+    ///
+    /// # Parameters
+    ///
+    /// - `buffer`: Destination byte buffer.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of bytes read.
+    ///
+    /// # Errors
+    ///
+    /// Returns the I/O error reported by the wrapped reader.
+    #[inline]
+    fn read(&mut self, buffer: &mut [u8]) -> Result<usize> {
+        self.inner.read(buffer)
+    }
+}
+
+impl<R, O> Seek for BinaryReader<R, O>
+where
+    R: Seek,
+{
+    /// Seeks the wrapped reader.
+    ///
+    /// # Parameters
+    ///
+    /// - `position`: Target seek position.
+    ///
+    /// # Returns
+    ///
+    /// Returns the new stream position.
+    ///
+    /// # Errors
+    ///
+    /// Returns the seek error reported by the wrapped reader.
+    #[inline]
+    fn seek(&mut self, position: SeekFrom) -> Result<u64> {
+        self.inner.seek(position)
+    }
+}
+
 #[inline]
 fn read_binary<const N: usize, T, R, F>(reader: &mut R, decode: F) -> Result<T>
 where
@@ -237,38 +283,4 @@ where
     let mut bytes = [0u8; N];
     reader.read_exact(&mut bytes)?;
     Ok(decode(&bytes))
-}
-
-#[inline]
-/// Reads a UTF-8 payload after its length has already been decoded.
-///
-/// # Parameters
-///
-/// - `reader`: Reader that provides the UTF-8 payload bytes.
-/// - `len`: Payload length in bytes.
-/// - `max_len`: Maximum accepted payload length in bytes.
-///
-/// # Returns
-///
-/// Returns the decoded UTF-8 string.
-///
-/// # Errors
-///
-/// Returns an error when `len` exceeds `max_len`, allocation fails, the reader cannot
-/// provide enough bytes, or the payload is not valid UTF-8.
-fn read_utf8_string<R>(reader: &mut R, len: usize, max_len: usize) -> Result<String>
-where
-    R: Read,
-{
-    if len > max_len {
-        return Err(Error::new(
-            ErrorKind::InvalidData,
-            format!("string length {len} exceeds maximum length of {max_len} bytes"),
-        ));
-    }
-    let mut bytes = Vec::new();
-    try_reserve_vec(&mut bytes, len)?;
-    bytes.resize(len, 0);
-    reader.read_exact(&mut bytes)?;
-    String::from_utf8(bytes).map_err(|error| Error::new(ErrorKind::InvalidData, error))
 }

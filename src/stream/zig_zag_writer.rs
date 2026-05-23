@@ -10,6 +10,8 @@
 
 use std::io::{
     Result,
+    Seek,
+    SeekFrom,
     Write,
 };
 
@@ -104,6 +106,62 @@ where
     #[inline]
     pub fn write_isize(&mut self, value: isize) -> Result<()> {
         write_zig_zag_value!(&mut self.inner, value, isize)
+    }
+}
+
+impl<W> Write for ZigZagWriter<W>
+where
+    W: Write,
+{
+    /// Writes bytes to the wrapped writer.
+    ///
+    /// # Parameters
+    ///
+    /// - `buffer`: Source bytes to write.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of bytes written.
+    ///
+    /// # Errors
+    ///
+    /// Returns the I/O error reported by the wrapped writer.
+    #[inline]
+    fn write(&mut self, buffer: &[u8]) -> Result<usize> {
+        self.inner.write(buffer)
+    }
+
+    /// Flushes the wrapped writer.
+    ///
+    /// # Errors
+    ///
+    /// Returns the I/O error reported by the wrapped writer.
+    #[inline]
+    fn flush(&mut self) -> Result<()> {
+        self.inner.flush()
+    }
+}
+
+impl<W> Seek for ZigZagWriter<W>
+where
+    W: Seek,
+{
+    /// Seeks the wrapped writer.
+    ///
+    /// # Parameters
+    ///
+    /// - `position`: Target seek position.
+    ///
+    /// # Returns
+    ///
+    /// Returns the new stream position.
+    ///
+    /// # Errors
+    ///
+    /// Returns the seek error reported by the wrapped writer.
+    #[inline]
+    fn seek(&mut self, position: SeekFrom) -> Result<u64> {
+        self.inner.seek(position)
     }
 }
 

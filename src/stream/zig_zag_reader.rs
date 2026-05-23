@@ -12,6 +12,8 @@ use core::marker::PhantomData;
 use std::io::{
     Read,
     Result,
+    Seek,
+    SeekFrom,
 };
 
 use crate::codec::{
@@ -122,5 +124,51 @@ where
     #[inline]
     pub fn read_isize(&mut self) -> Result<isize> {
         read_zig_zag_value!(&mut self.inner, isize, P)
+    }
+}
+
+impl<R, P> Read for ZigZagReader<R, P>
+where
+    R: Read,
+{
+    /// Reads bytes from the wrapped reader.
+    ///
+    /// # Parameters
+    ///
+    /// - `buffer`: Destination byte buffer.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of bytes read.
+    ///
+    /// # Errors
+    ///
+    /// Returns the I/O error reported by the wrapped reader.
+    #[inline]
+    fn read(&mut self, buffer: &mut [u8]) -> Result<usize> {
+        self.inner.read(buffer)
+    }
+}
+
+impl<R, P> Seek for ZigZagReader<R, P>
+where
+    R: Seek,
+{
+    /// Seeks the wrapped reader.
+    ///
+    /// # Parameters
+    ///
+    /// - `position`: Target seek position.
+    ///
+    /// # Returns
+    ///
+    /// Returns the new stream position.
+    ///
+    /// # Errors
+    ///
+    /// Returns the seek error reported by the wrapped reader.
+    #[inline]
+    fn seek(&mut self, position: SeekFrom) -> Result<u64> {
+        self.inner.seek(position)
     }
 }

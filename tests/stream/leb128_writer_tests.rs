@@ -62,3 +62,28 @@ fn test_leb128_writer_returns_writer_error() {
 
     assert_eq!(ErrorKind::Other, error.kind());
 }
+
+#[test]
+fn test_leb128_writer_write_utf8_string_writes_length_prefixed_payload() {
+    let mut writer = qubit_io::Leb128Writer::new(Vec::new());
+
+    writer
+        .write_utf8_string("hé")
+        .expect("writing a length-prefixed UTF-8 string should succeed");
+
+    assert_eq!(writer.into_inner(), vec![3, b'h', 0xC3, 0xA9]);
+}
+
+#[test]
+fn test_leb128_writer_write_and_seek_delegate_to_inner_writer() {
+    let mut writer = qubit_io::Leb128Writer::new(std::io::Cursor::new(vec![0; 4]));
+
+    std::io::Seek::seek(&mut writer, std::io::SeekFrom::Start(1))
+        .expect("seeking through Leb128Writer should succeed");
+    std::io::Write::write_all(&mut writer, b"xy")
+        .expect("writing through Leb128Writer should succeed");
+    std::io::Write::flush(&mut writer).expect("flushing through Leb128Writer should succeed");
+
+    let cursor = writer.into_inner();
+    assert_eq!(cursor.into_inner(), vec![0, b'x', b'y', 0]);
+}
