@@ -1,4 +1,6 @@
+use std::cell::RefCell;
 use std::io::{Cursor, ErrorKind, Read};
+use std::rc::Rc;
 
 use qubit_io::{BinaryWriteExt, BufferedBinaryReader, ByteOrder, LittleEndian};
 
@@ -29,6 +31,35 @@ fn encoded_values() -> Vec<u8> {
     bytes.write_f32_le(12.5).expect("f32 should be encoded");
     bytes.write_f64_le(-25.25).expect("f64 should be encoded");
     bytes
+}
+
+struct ChunkedReader {
+    bytes: Vec<u8>,
+    position: usize,
+    max_chunk_len: usize,
+    request_lengths: Rc<RefCell<Vec<usize>>>,
+}
+
+impl ChunkedReader {
+    fn new(bytes: Vec<u8>, max_chunk_len: usize, request_lengths: Rc<RefCell<Vec<usize>>>) -> Self {
+        Self {
+            bytes,
+            position: 0,
+            max_chunk_len,
+            request_lengths,
+        }
+    }
+}
+
+impl Read for ChunkedReader {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        self.request_lengths.borrow_mut().push(buffer.len());
+        let remaining = self.bytes.len() - self.position;
+        let count = remaining.min(buffer.len()).min(self.max_chunk_len);
+        buffer[..count].copy_from_slice(&self.bytes[self.position..self.position + count]);
+        self.position += count;
+        Ok(count)
+    }
 }
 
 #[test]
@@ -85,4 +116,30 @@ fn test_buffered_binary_reader_implements_read() {
 
     assert_eq!([1, 2, 3], bytes);
     assert_eq!(4, reader.read_u8().expect("remaining byte should be read"));
+}
+
+#[test]
+fn test_buffered_binary_reader_bypasses_buffer_for_large_raw_read() {
+    let request_lengths = Rc::new(RefCell::new(Vec::new()));
+    let inner = ChunkedReader::new((0u8..32).collect(), usize::MAX, Rc::clone(&request_lengths));
+    let mut reader = BufferedBinaryReader::<_, LittleEndian>::with_capacity(inner, 19);
+    let mut bytes = [0u8; 32];
+
+    let count = reader.read(&mut bytes).expect("raw bytes should be read");
+
+    assert_eq!(32, count);
+    assert_eq!((0u8..32).collect::<Vec<_>>(), bytes);
+    assert_eq!(vec![32], *request_lengths.borrow());
+}
+
+#[test]
+fn test_buffered_binary_reader_appends_before_backshifting() {
+    let request_lengths = Rc::new(RefCell::new(Vec::new()));
+    let inner = ChunkedReader::new((0u8..40).collect(), 20, Rc::clone(&request_lengths));
+    let mut reader = BufferedBinaryReader::<_, LittleEndian>::with_capacity(inner, 32);
+
+    let _ = reader.read_u128().expect("u128 should be read");
+    let _ = reader.read_u64().expect("u64 should be read");
+
+    assert_eq!(vec![32, 12], *request_lengths.borrow());
 }
