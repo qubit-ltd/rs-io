@@ -8,6 +8,7 @@ mod read_seek_ext_tests;
 mod seek_ext_tests;
 mod string_read_ext_tests;
 mod string_write_ext_tests;
+mod write_ext_tests;
 mod write_seek_ext_tests;
 mod zig_zag_read_ext_tests;
 mod zig_zag_write_ext_tests;

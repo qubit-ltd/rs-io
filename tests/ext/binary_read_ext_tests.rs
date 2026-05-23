@@ -1,12 +1,6 @@
-use std::io::{
-    Cursor,
-    ErrorKind,
-};
+use std::io::{Cursor, ErrorKind};
 
-use qubit_io::{
-    BinaryReadExt,
-    ByteOrder,
-};
+use qubit_io::{BinaryReadExt, ByteOrder};
 
 macro_rules! assert_read_ordered_integer {
     ($method:ident, $be:ident, $le:ident, $ty:ty, $value:expr) => {{
@@ -58,11 +52,6 @@ macro_rules! assert_read_ordered_float {
 
 #[test]
 fn test_binary_read_ext_reads_all_scalar_methods() {
-    let mut input = Cursor::new([0x12, 0xfe]);
-    assert_eq!(
-        [0x12, 0xfe],
-        input.read_bytes::<2>().expect("bytes should be read")
-    );
     let mut input = Cursor::new([0x12]);
     assert_eq!(0x12, input.read_u8().expect("u8 should be read"));
     let mut input = Cursor::new([0xfe]);

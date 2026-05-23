@@ -8,12 +8,7 @@
  *
  ******************************************************************************/
 
-use std::io::{
-    Cursor,
-    Error,
-    ErrorKind,
-    Read,
-};
+use std::io::{Cursor, Error, ErrorKind, Read};
 
 use qubit_io::ReadExt;
 
@@ -143,6 +138,123 @@ fn test_read_exact_array_returns_unexpected_eof() {
         .expect_err("short input should return the standard read_exact EOF error");
 
     assert_eq!(ErrorKind::UnexpectedEof, error.kind());
+}
+
+#[test]
+fn test_read_unchecked_reads_into_middle_range_once() {
+    let mut reader = ShortReader::new(b"abcd", 2);
+    let mut buffer = *b"xx----yy";
+
+    // SAFETY: `start_index..start_index + count` is `2..6`, which is within
+    // `buffer` and uniquely borrowed for the duration of the read.
+    let count = unsafe {
+        reader
+            .read_unchecked(&mut buffer, 2, 4)
+            .expect("middle range should accept a short read")
+    };
+
+    assert_eq!(2, count);
+    assert_eq!(b"xxab--yy", &buffer);
+}
+
+#[test]
+fn test_read_exact_or_eof_unchecked_reads_into_middle_range() {
+    let mut reader = ShortReader::new(b"abcd", 2);
+    let mut buffer = *b"xx----yy";
+
+    // SAFETY: `start_index..start_index + count` is `2..6`, which is within
+    // `buffer` and uniquely borrowed for the duration of the read.
+    let count = unsafe {
+        reader
+            .read_exact_or_eof_unchecked(&mut buffer, 2, 4)
+            .expect("middle range should be filled across short reads")
+    };
+
+    assert_eq!(4, count);
+    assert_eq!(b"xxabcdyy", &buffer);
+}
+
+#[test]
+fn test_read_exact_or_eof_unchecked_returns_partial_count_at_eof() {
+    let mut reader = ShortReader::new(b"ab", 2);
+    let mut buffer = *b"xx----yy";
+
+    // SAFETY: `start_index..start_index + count` is `2..6`, which is within
+    // `buffer` and uniquely borrowed for the duration of the read.
+    let count = unsafe {
+        reader
+            .read_exact_or_eof_unchecked(&mut buffer, 2, 4)
+            .expect("EOF after partial data should not be an error")
+    };
+
+    assert_eq!(2, count);
+    assert_eq!(b"xxab--yy", &buffer);
+}
+
+#[test]
+fn test_read_exact_or_eof_unchecked_retries_interrupted_reads() {
+    let mut reader = InterruptedOnceReader::new(b"abcd");
+    let mut buffer = *b"xx----yy";
+
+    // SAFETY: `start_index..start_index + count` is `2..6`, which is within
+    // `buffer` and uniquely borrowed for the duration of the read.
+    let count = unsafe {
+        reader
+            .read_exact_or_eof_unchecked(&mut buffer, 2, 4)
+            .expect("interrupted read should be retried")
+    };
+
+    assert_eq!(4, count);
+    assert_eq!(b"xxabcdyy", &buffer);
+}
+
+#[test]
+fn test_read_exact_unchecked_reads_into_middle_range() {
+    let mut reader = ShortReader::new(b"abcd", 2);
+    let mut buffer = *b"xx----yy";
+
+    // SAFETY: `start_index..start_index + count` is `2..6`, which is within
+    // `buffer` and uniquely borrowed for the duration of the read.
+    unsafe {
+        reader
+            .read_exact_unchecked(&mut buffer, 2, 4)
+            .expect("middle range should be filled across short reads");
+    }
+
+    assert_eq!(b"xxabcdyy", &buffer);
+}
+
+#[test]
+fn test_read_exact_unchecked_retries_interrupted_reads() {
+    let mut reader = InterruptedOnceReader::new(b"abcd");
+    let mut buffer = *b"xx----yy";
+
+    // SAFETY: `start_index..start_index + count` is `2..6`, which is within
+    // `buffer` and uniquely borrowed for the duration of the read.
+    unsafe {
+        reader
+            .read_exact_unchecked(&mut buffer, 2, 4)
+            .expect("interrupted read should be retried");
+    }
+
+    assert_eq!(b"xxabcdyy", &buffer);
+}
+
+#[test]
+fn test_read_exact_unchecked_returns_unexpected_eof() {
+    let mut reader = ShortReader::new(b"ab", 2);
+    let mut buffer = *b"xx----yy";
+
+    // SAFETY: `start_index..start_index + count` is `2..6`, which is within
+    // `buffer` and uniquely borrowed for the duration of the read.
+    let error = unsafe {
+        reader
+            .read_exact_unchecked(&mut buffer, 2, 4)
+            .expect_err("short input should return unexpected EOF")
+    };
+
+    assert_eq!(ErrorKind::UnexpectedEof, error.kind());
+    assert_eq!(b"xxab--yy", &buffer);
 }
 
 #[test]
@@ -287,21 +399,38 @@ fn test_read_exact_vec_limited_into_rolls_back_on_read_error() {
 
 #[test]
 fn test_read_exact_helpers_work_on_dyn_read_with_ufcs() {
-    let mut cursor = Cursor::new(b"abcdef".to_vec());
+    let mut cursor = Cursor::new(b"abcdefgh".to_vec());
     let reader: &mut dyn Read = &mut cursor;
+    let mut prefix = [b'-'; 4];
+
+    // SAFETY: `0..2` is within `prefix` and uniquely borrowed for the read.
+    let count = unsafe {
+        <dyn Read as ReadExt>::read_unchecked(reader, &mut prefix, 0, 2)
+            .expect("UFCS read_unchecked should work on dyn Read")
+    };
+    assert_eq!(2, count);
+    assert_eq!(b"ab--", &prefix);
+
+    // SAFETY: `2..4` is within `prefix` and uniquely borrowed for the read.
+    let count = unsafe {
+        <dyn Read as ReadExt>::read_exact_or_eof_unchecked(reader, &mut prefix, 2, 2)
+            .expect("UFCS read_exact_or_eof_unchecked should work on dyn Read")
+    };
+    assert_eq!(2, count);
+    assert_eq!(b"abcd", &prefix);
 
     let array = <dyn Read as ReadExt>::read_exact_array::<2>(reader)
         .expect("UFCS read_exact_array should work on dyn Read");
-    assert_eq!(*b"ab", array);
+    assert_eq!(*b"ef", array);
 
     let data = <dyn Read as ReadExt>::read_exact_vec_limited(reader, 2, 4)
         .expect("UFCS read_exact_vec_limited should work on dyn Read");
-    assert_eq!(b"cd", data.as_slice());
+    assert_eq!(b"gh", data.as_slice());
 
     let mut output = b"prefix-".to_vec();
-    <dyn Read as ReadExt>::read_exact_vec_limited_into(reader, &mut output, 2, 4)
+    <dyn Read as ReadExt>::read_exact_vec_limited_into(reader, &mut output, 0, 4)
         .expect("UFCS read_exact_vec_limited_into should work on dyn Read");
-    assert_eq!(b"prefix-ef", output.as_slice());
+    assert_eq!(b"prefix-", output.as_slice());
 }
 
 #[test]

@@ -56,6 +56,7 @@ pub use ext::{
     SeekExt,
     StringReadExt,
     StringWriteExt,
+    WriteExt,
     WriteSeekExt,
     ZigZagReadExt,
     ZigZagWriteExt,

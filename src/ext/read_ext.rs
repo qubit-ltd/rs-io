@@ -7,21 +7,11 @@
  *    Licensed under the Apache License, Version 2.0.
  *
  ******************************************************************************/
-use std::io::{
-    Error,
-    ErrorKind,
-    Read,
-    Result,
-    Write,
-    copy as copy_all,
-};
+use std::io::{Error, ErrorKind, Read, Result, Write, copy as copy_all};
 use std::string::FromUtf8Error;
 
 use crate::Streams;
-use crate::util::{
-    try_reserve_string,
-    try_reserve_vec,
-};
+use crate::util::{try_reserve_string, try_reserve_vec};
 
 /// Default stack buffer size used by discard operations.
 const DISCARD_BUFFER_SIZE: usize = 8 * 1024;
@@ -49,6 +39,97 @@ const READ_TO_END_BUFFER_SIZE: usize = 8 * 1024;
 /// # Ok::<(), std::io::Error>(())
 /// ```
 pub trait ReadExt: Read {
+    /// Reads bytes into a range of `buffer` without checking the range bounds
+    /// in release builds.
+    ///
+    /// This method delegates to [`Read::read`] after creating the target slice
+    /// with raw pointer arithmetic. It performs at most one read operation and
+    /// returns the number of bytes read, keeping the same short-read and error
+    /// behavior as [`Read::read`].
+    ///
+    /// # Parameters
+    /// - `buffer`: Destination buffer.
+    /// - `start_index`: Start offset inside `buffer`.
+    /// - `count`: Maximum number of bytes to read.
+    ///
+    /// # Returns
+    /// The number of bytes written into `buffer[start_index..start_index +
+    /// count]`. The value is in `0..=count`.
+    ///
+    /// # Errors
+    /// Returns the error reported by [`Read::read`].
+    ///
+    /// # Safety
+    /// The caller must guarantee that `start_index..start_index + count` is a
+    /// valid range within `buffer` and that `start_index + count` does not
+    /// overflow `usize`.
+    unsafe fn read_unchecked(
+        &mut self,
+        buffer: &mut [u8],
+        start_index: usize,
+        count: usize,
+    ) -> Result<usize>;
+
+    /// Reads exactly `count` bytes into a range of `buffer` without checking
+    /// the range bounds in release builds.
+    ///
+    /// This method delegates to [`Read::read_exact`] after creating the target
+    /// slice with raw pointer arithmetic. It keeps the same blocking and error
+    /// behavior as [`Read::read_exact`].
+    ///
+    /// # Parameters
+    /// - `buffer`: Destination buffer.
+    /// - `start_index`: Start offset inside `buffer`.
+    /// - `count`: Number of bytes to read.
+    ///
+    /// # Errors
+    /// Returns the error reported by [`Read::read_exact`], including
+    /// [`ErrorKind::UnexpectedEof`] when EOF is reached before `count` bytes
+    /// are read.
+    ///
+    /// # Safety
+    /// The caller must guarantee that `start_index..start_index + count` is a
+    /// valid range within `buffer` and that `start_index + count` does not
+    /// overflow `usize`.
+    unsafe fn read_exact_unchecked(
+        &mut self,
+        buffer: &mut [u8],
+        start_index: usize,
+        count: usize,
+    ) -> Result<()>;
+
+    /// Reads bytes into a range of `buffer` until that range is full or EOF is
+    /// reached, without checking the range bounds in release builds.
+    ///
+    /// This method has the same EOF and retry behavior as
+    /// [`ReadExt::read_exact_or_eof`], but writes into
+    /// `buffer[start_index..start_index + count]` using raw pointer
+    /// arithmetic.
+    ///
+    /// # Parameters
+    /// - `buffer`: Destination buffer.
+    /// - `start_index`: Start offset inside `buffer`.
+    /// - `count`: Number of bytes to try to read.
+    ///
+    /// # Returns
+    /// The number of bytes written into `buffer[start_index..start_index +
+    /// count]`. The value is in `0..=count`.
+    ///
+    /// # Errors
+    /// Returns the first non-[`ErrorKind::Interrupted`] error reported by the
+    /// underlying reader. Interrupted reads are retried.
+    ///
+    /// # Safety
+    /// The caller must guarantee that `start_index..start_index + count` is a
+    /// valid range within `buffer` and that `start_index + count` does not
+    /// overflow `usize`.
+    unsafe fn read_exact_or_eof_unchecked(
+        &mut self,
+        buffer: &mut [u8],
+        start_index: usize,
+        count: usize,
+    ) -> Result<usize>;
+
     /// Reads bytes until `buffer` is full or EOF is reached.
     ///
     /// This method differs from [`Read::read_exact`] by treating EOF as a
@@ -288,25 +369,130 @@ impl<T> ReadExt for T
 where
     T: Read + ?Sized,
 {
-    #[inline]
+    #[inline(always)]
+    unsafe fn read_unchecked(
+        &mut self,
+        buffer: &mut [u8],
+        start_index: usize,
+        count: usize,
+    ) -> Result<usize> {
+        debug_assert!(
+            start_index
+                .checked_add(count)
+                .is_some_and(|end_index| end_index <= buffer.len()),
+            "unchecked read range exceeds buffer"
+        );
+        // SAFETY: The caller guarantees that the requested range is valid for
+        // `buffer`, and that the computed pointer and length form a valid
+        // mutable subslice of `buffer`.
+        let target = unsafe {
+            core::slice::from_raw_parts_mut(buffer.as_mut_ptr().add(start_index), count)
+        };
+        self.read(target)
+    }
+
+    unsafe fn read_exact_or_eof_unchecked(
+        &mut self,
+        buffer: &mut [u8],
+        start_index: usize,
+        count: usize,
+    ) -> Result<usize> {
+        debug_assert!(
+            start_index
+                .checked_add(count)
+                .is_some_and(|end_index| end_index <= buffer.len()),
+            "unchecked read range exceeds buffer"
+        );
+        let base = unsafe { buffer.as_mut_ptr().add(start_index) };
+        let mut total = 0;
+        while total < count {
+            // SAFETY: The caller guarantees that `start_index..start_index +
+            // count` is valid for `buffer`; `total < count`, so this remaining
+            // suffix is also a valid mutable subslice.
+            let target = unsafe {
+                core::slice::from_raw_parts_mut(base.add(total), count - total)
+            };
+            match self.read(target) {
+                Ok(0) => break,
+                Ok(read) => total += read,
+                Err(error) => {
+                    if error.kind() == ErrorKind::Interrupted {
+                        continue;
+                    }
+                    return Err(error);
+                }
+            }
+        }
+        Ok(total)
+    }
+
+    unsafe fn read_exact_unchecked(
+        &mut self,
+        buffer: &mut [u8],
+        start_index: usize,
+        count: usize,
+    ) -> Result<()> {
+        debug_assert!(
+            start_index
+                .checked_add(count)
+                .is_some_and(|end_index| end_index <= buffer.len()),
+            "unchecked read range exceeds buffer"
+        );
+        let base = unsafe { buffer.as_mut_ptr().add(start_index) };
+        let mut total = 0;
+        while total < count {
+            // SAFETY: The caller guarantees that `start_index..start_index +
+            // count` is valid for `buffer`; `total < count`, so this remaining
+            // suffix is also a valid mutable subslice.
+            let target = unsafe { core::slice::from_raw_parts_mut(base.add(total), count - total) };
+            match self.read(target) {
+                Ok(0) => return Err(ErrorKind::UnexpectedEof.into()),
+                Ok(read) => total += read,
+                Err(error) => {
+                    if error.kind() == ErrorKind::Interrupted {
+                        continue;
+                    }
+                    return Err(error);
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn read_exact_or_eof(&mut self, buffer: &mut [u8]) -> Result<usize> {
-        let mut reader = self;
-        read_exact_or_eof_impl(&mut reader, buffer)
+        let mut total = 0;
+        while total < buffer.len() {
+            match self.read(&mut buffer[total..]) {
+                Ok(0) => break,
+                Ok(count) => total += count,
+                Err(error) => {
+                    if error.kind() == ErrorKind::Interrupted {
+                        continue;
+                    }
+                    return Err(error);
+                }
+            }
+        }
+        Ok(total)
     }
 
-    #[inline]
+    #[inline(always)]
     fn read_exact_array<const N: usize>(&mut self) -> Result<[u8; N]> {
-        let mut reader = self;
-        read_exact_array_impl::<N>(&mut reader)
+        let mut buffer = [0; N];
+        self.read_exact(&mut buffer)?;
+        Ok(buffer)
     }
 
-    #[inline]
+
     fn read_exact_vec_limited(&mut self, len: usize, max_len: usize) -> Result<Vec<u8>> {
+        validate_exact_read_len(len, max_len)?;
+        let mut output = Vec::new();
         let mut reader = self;
-        read_exact_vec_limited_impl(&mut reader, len, max_len)
+        read_exact_vec_limited_into_impl(&mut reader, &mut output, len, max_len)?;
+        Ok(output)
     }
 
-    #[inline]
+    #[inline(always)]
     fn read_exact_vec_limited_into(
         &mut self,
         output: &mut Vec<u8>,
@@ -317,125 +503,78 @@ where
         read_exact_vec_limited_into_impl(&mut reader, output, len, max_len)
     }
 
-    #[inline]
     fn discard_exact_or_eof(&mut self, bytes: u64) -> Result<u64> {
-        let mut reader = self;
-        discard_exact_or_eof_impl(&mut reader, bytes)
+        let mut buffer = [0; DISCARD_BUFFER_SIZE];
+        let mut remaining = bytes;
+        let mut discarded = 0;
+        while remaining > 0 {
+            let requested = remaining.min(DISCARD_BUFFER_SIZE as u64) as usize;
+            match self.read(&mut buffer[..requested]) {
+                Ok(0) => break,
+                Ok(count) => {
+                    let count = count as u64;
+                    remaining -= count;
+                    discarded += count;
+                }
+                Err(error) => {
+                    if error.kind() == ErrorKind::Interrupted {
+                        continue;
+                    }
+                    return Err(error);
+                }
+            }
+        }
+        Ok(discarded)
     }
 
-    #[inline]
+    #[inline(always)]
     fn copy_to(&mut self, writer: &mut dyn Write) -> Result<u64> {
-        let mut reader = self;
-        copy_to_impl(&mut reader, writer)
+        copy_all(self, writer)
     }
 
-    #[inline]
+    #[inline(always)]
     fn copy_to_at_most(&mut self, writer: &mut dyn Write, max_bytes: u64) -> Result<u64> {
         let mut reader = self;
         Streams::copy_at_most(&mut reader, writer, max_bytes)
     }
 
-    #[inline]
+    #[inline(always)]
     fn copy_to_end_limited(&mut self, writer: &mut dyn Write, max_bytes: u64) -> Result<u64> {
         let mut reader = self;
         Streams::copy_to_end_limited(&mut reader, writer, max_bytes)
     }
 
-    #[inline]
+    #[inline(always)]
     fn read_to_end_limited(&mut self, max_len: usize) -> Result<Vec<u8>> {
         let mut reader = self;
         read_to_end_limited_impl(&mut reader, max_len)
     }
 
-    #[inline]
+    #[inline(always)]
     fn read_to_end_limited_into(&mut self, output: &mut Vec<u8>, max_len: usize) -> Result<usize> {
         let mut reader = self;
         read_to_end_limited_into_impl(&mut reader, output, max_len)
     }
 
-    #[inline]
     fn read_to_string_limited(&mut self, max_len: usize) -> Result<String> {
         let mut reader = self;
-        read_to_string_limited_impl(&mut reader, max_len)
+        let bytes = read_to_end_limited_impl(&mut reader, max_len)?;
+        String::from_utf8(bytes).map_err(invalid_utf8_error)
     }
 
-    #[inline]
     fn read_to_string_limited_into(
         &mut self,
         output: &mut String,
         max_len: usize,
     ) -> Result<usize> {
         let mut reader = self;
-        read_to_string_limited_into_impl(&mut reader, output, max_len)
+        let bytes = read_to_end_limited_impl(&mut reader, max_len)?;
+        let text = String::from_utf8(bytes).map_err(invalid_utf8_error)?;
+        let count = text.len();
+        try_reserve_string(output, count)?;
+        output.push_str(&text);
+        Ok(count)
     }
-}
-
-/// Reads from `reader` until `buffer` is full or EOF is reached.
-///
-/// # Parameters
-/// - `reader`: Source reader.
-/// - `buffer`: Destination buffer to fill.
-///
-/// # Returns
-/// The number of bytes written into `buffer`.
-///
-/// # Errors
-/// Returns the first non-interrupted read error reported by `reader`.
-fn read_exact_or_eof_impl(reader: &mut dyn Read, buffer: &mut [u8]) -> Result<usize> {
-    let mut total = 0;
-    while total < buffer.len() {
-        match reader.read(&mut buffer[total..]) {
-            Ok(0) => break,
-            Ok(count) => total += count,
-            Err(error) => {
-                if error.kind() == ErrorKind::Interrupted {
-                    continue;
-                }
-                return Err(error);
-            }
-        }
-    }
-    Ok(total)
-}
-
-/// Reads exactly `N` bytes from `reader` into an array.
-///
-/// # Parameters
-/// - `reader`: Source reader.
-///
-/// # Returns
-/// A stack-allocated array containing exactly `N` bytes.
-///
-/// # Errors
-/// Returns the error reported by [`Read::read_exact`].
-fn read_exact_array_impl<const N: usize>(reader: &mut dyn Read) -> Result<[u8; N]> {
-    let mut buffer = [0; N];
-    reader.read_exact(&mut buffer)?;
-    Ok(buffer)
-}
-
-/// Reads exactly `len` bytes from `reader` when `len` is within `max_len`.
-///
-/// # Parameters
-/// - `reader`: Source reader.
-/// - `len`: Exact number of bytes to read.
-/// - `max_len`: Maximum accepted exact read length.
-///
-/// # Returns
-/// A vector containing exactly `len` bytes.
-///
-/// # Errors
-/// Returns [`ErrorKind::InvalidData`] when `len > max_len`. Returns the error
-/// reported by [`Read::read_exact`] for read failures.
-fn read_exact_vec_limited_impl(
-    reader: &mut dyn Read,
-    len: usize,
-    max_len: usize,
-) -> Result<Vec<u8>> {
-    validate_exact_read_len(len, max_len)?;
-    let mut output = Vec::new();
-    read_exact_vec_limited_into_impl(reader, &mut output, len, max_len)?;
-    Ok(output)
 }
 
 /// Reads exactly `len` bytes from `reader` and appends them to `output`.
@@ -487,6 +626,7 @@ fn read_exact_vec_limited_into_impl(
 ///
 /// # Errors
 /// Returns [`ErrorKind::InvalidData`] when `len > max_len`.
+#[inline(always)]
 fn validate_exact_read_len(len: usize, max_len: usize) -> Result<()> {
     if len > max_len {
         return Err(Error::new(
@@ -495,41 +635,6 @@ fn validate_exact_read_len(len: usize, max_len: usize) -> Result<()> {
         ));
     }
     Ok(())
-}
-
-/// Discards up to `bytes` bytes from `reader`.
-///
-/// # Parameters
-/// - `reader`: Source reader.
-/// - `bytes`: Maximum number of bytes to discard.
-///
-/// # Returns
-/// The number of bytes actually discarded.
-///
-/// # Errors
-/// Returns the first non-interrupted read error reported by `reader`.
-fn discard_exact_or_eof_impl(reader: &mut dyn Read, bytes: u64) -> Result<u64> {
-    let mut buffer = [0; DISCARD_BUFFER_SIZE];
-    let mut remaining = bytes;
-    let mut discarded = 0;
-    while remaining > 0 {
-        let requested = remaining.min(DISCARD_BUFFER_SIZE as u64) as usize;
-        match reader.read(&mut buffer[..requested]) {
-            Ok(0) => break,
-            Ok(count) => {
-                let count = count as u64;
-                remaining -= count;
-                discarded += count;
-            }
-            Err(error) => {
-                if error.kind() == ErrorKind::Interrupted {
-                    continue;
-                }
-                return Err(error);
-            }
-        }
-    }
-    Ok(discarded)
 }
 
 /// Reads all remaining bytes from `reader` when the result fits `max_len`.
@@ -601,66 +706,6 @@ fn read_to_end_limited_into_impl(
             }
         }
     }
-}
-
-/// Reads all remaining bytes from `reader` as UTF-8 when the input fits `max_len`.
-///
-/// # Parameters
-/// - `reader`: Source reader.
-/// - `max_len`: Maximum accepted input length in bytes.
-///
-/// # Returns
-/// Decoded UTF-8 string.
-///
-/// # Errors
-/// Returns [`ErrorKind::InvalidData`] when the input is oversized or is not
-/// valid UTF-8. Returns the first non-interrupted read error reported by
-/// `reader`.
-fn read_to_string_limited_impl(reader: &mut dyn Read, max_len: usize) -> Result<String> {
-    let bytes = read_to_end_limited_impl(reader, max_len)?;
-    String::from_utf8(bytes).map_err(invalid_utf8_error)
-}
-
-/// Reads all remaining UTF-8 text from `reader` into `output`.
-///
-/// # Parameters
-/// - `reader`: Source reader.
-/// - `output`: Destination string to append to.
-/// - `max_len`: Maximum accepted input length in bytes.
-///
-/// # Returns
-/// The number of bytes appended to `output`.
-///
-/// # Errors
-/// Returns [`ErrorKind::InvalidData`] when the input is oversized or is not
-/// valid UTF-8. Returns the first non-interrupted read error reported by
-/// `reader`.
-fn read_to_string_limited_into_impl(
-    reader: &mut dyn Read,
-    output: &mut String,
-    max_len: usize,
-) -> Result<usize> {
-    let bytes = read_to_end_limited_impl(reader, max_len)?;
-    let text = String::from_utf8(bytes).map_err(invalid_utf8_error)?;
-    let count = text.len();
-    try_reserve_string(output, count)?;
-    output.push_str(&text);
-    Ok(count)
-}
-
-/// Copies all remaining bytes from `reader` into `writer`.
-///
-/// # Parameters
-/// - `reader`: Source reader.
-/// - `writer`: Destination writer.
-///
-/// # Returns
-/// The number of bytes copied.
-///
-/// # Errors
-/// Returns the first read or write error reported by the underlying streams.
-fn copy_to_impl(reader: &mut dyn Read, writer: &mut dyn Write) -> Result<u64> {
-    copy_all(reader, writer)
 }
 
 /// Converts an invalid UTF-8 read result into an I/O error.
