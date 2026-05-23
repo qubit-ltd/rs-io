@@ -28,14 +28,13 @@ fn test_leb128_codec_reads_and_writes_unsigned_values_unchecked() {
     assert_eq!(2, len);
     assert_eq!([0x00, 0xac, 0x02, 0x00, 0x00], output);
 
-    let decoded = unsafe { Leb128Codec::<u16, NonStrict>::read_unchecked(&output, 1) }
-        .expect("valid u16 should decode");
+    let decoded =
+        unsafe { Leb128Codec::<u16, NonStrict>::read_unchecked(&output, 1) }.expect("valid u16 should decode");
     assert_eq!((300, 2), decoded);
 
     let mut output = [0u8; Leb128Codec::<u16, NonStrict>::REQUIRED_MIN_BUFFER_LEN];
     let len = unsafe { Leb128Codec::<u16, NonStrict>::write_unchecked(&mut output, 0, u16::MAX) };
-    let decoded = unsafe { Leb128Codec::<u16, NonStrict>::read_unchecked(&output, 0) }
-        .expect("u16::MAX should decode");
+    let decoded = unsafe { Leb128Codec::<u16, NonStrict>::read_unchecked(&output, 0) }.expect("u16::MAX should decode");
     assert_eq!((u16::MAX, len), decoded);
 }
 
@@ -47,20 +46,20 @@ fn test_leb128_codec_reads_and_writes_signed_values_unchecked() {
     assert_eq!(2, len);
     assert_eq!([0x00, 0xd4, 0x7d, 0x00, 0x00], output);
 
-    let decoded = unsafe { Leb128Codec::<i16, NonStrict>::read_unchecked(&output, 1) }
-        .expect("valid i16 should decode");
+    let decoded =
+        unsafe { Leb128Codec::<i16, NonStrict>::read_unchecked(&output, 1) }.expect("valid i16 should decode");
     assert_eq!((-300, 2), decoded);
 
     let mut output = [0u8; Leb128Codec::<i16, NonStrict>::REQUIRED_MIN_BUFFER_LEN];
     let len = unsafe { Leb128Codec::<i16, NonStrict>::write_unchecked(&mut output, 0, 300) };
-    let decoded = unsafe { Leb128Codec::<i16, NonStrict>::read_unchecked(&output, 0) }
-        .expect("positive i16 should decode");
+    let decoded =
+        unsafe { Leb128Codec::<i16, NonStrict>::read_unchecked(&output, 0) }.expect("positive i16 should decode");
     assert_eq!((300, len), decoded);
 
     let mut output = [0u8; Leb128Codec::<i128, NonStrict>::REQUIRED_MIN_BUFFER_LEN];
     let len = unsafe { Leb128Codec::<i128, NonStrict>::write_unchecked(&mut output, 0, i128::MIN) };
-    let decoded = unsafe { Leb128Codec::<i128, NonStrict>::read_unchecked(&output, 0) }
-        .expect("i128::MIN should decode");
+    let decoded =
+        unsafe { Leb128Codec::<i128, NonStrict>::read_unchecked(&output, 0) }.expect("i128::MIN should decode");
     assert_eq!((i128::MIN, len), decoded);
 
     let values: [i16; 8] = [0, -1, 63, 64, -64, -65, i16::MIN, i16::MAX];
@@ -81,8 +80,7 @@ fn test_leb128_codec_roundtrips_all_strict_and_non_strict_instantiations() {
             let value = $value as $ty;
 
             let mut output = [0u8; Leb128Codec::<$ty, NonStrict>::REQUIRED_MIN_BUFFER_LEN];
-            let len =
-                unsafe { Leb128Codec::<$ty, NonStrict>::write_unchecked(&mut output, 0, value) };
+            let len = unsafe { Leb128Codec::<$ty, NonStrict>::write_unchecked(&mut output, 0, value) };
             let decoded = unsafe { Leb128Codec::<$ty, NonStrict>::read_unchecked(&output, 0) }
                 .expect("non-strict unsigned value should decode");
             assert_eq!((value, len), decoded);
@@ -100,8 +98,7 @@ fn test_leb128_codec_roundtrips_all_strict_and_non_strict_instantiations() {
             let value = $value as $ty;
 
             let mut output = [0u8; Leb128Codec::<$ty, NonStrict>::REQUIRED_MIN_BUFFER_LEN];
-            let len =
-                unsafe { Leb128Codec::<$ty, NonStrict>::write_unchecked(&mut output, 0, value) };
+            let len = unsafe { Leb128Codec::<$ty, NonStrict>::write_unchecked(&mut output, 0, value) };
             let decoded = unsafe { Leb128Codec::<$ty, NonStrict>::read_unchecked(&output, 0) }
                 .expect("non-strict signed value should decode");
             assert_eq!((value, len), decoded);

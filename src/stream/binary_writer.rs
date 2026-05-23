@@ -9,11 +9,23 @@
  ******************************************************************************/
 
 use core::marker::PhantomData;
-use std::io::{Error, ErrorKind, Result, Seek, SeekFrom, Write};
+use std::io::{
+    Error,
+    ErrorKind,
+    Result,
+    Seek,
+    SeekFrom,
+    Write,
+};
 
 use crate::WriteExt;
-use crate::codec::{BigEndian, ByteOrder, ByteOrderSpec, LittleEndian};
-use crate::stream::macros::impl_binary_writer_for_order;
+use crate::codec::{
+    BigEndian,
+    BinaryCodec,
+    ByteOrder,
+    ByteOrderSpec,
+    LittleEndian,
+};
 
 /// Writer wrapper for fixed-width binary values.
 ///
@@ -77,21 +89,67 @@ where
     pub fn into_inner(self) -> W {
         self.inner
     }
-
-    #[inline]
-    fn write_binary<T, const N: usize, F>(&mut self, value: T, encode: F) -> Result<()>
-    where
-        F: FnOnce(&mut [u8; 16], T),
-    {
-        encode(&mut self.buffer, value);
-        // SAFETY: All in-crate callers pass codec-declared lengths that fit
-        // the fixed internal buffer.
-        unsafe { self.inner.write_all_unchecked(&self.buffer, 0, N) }
-    }
 }
 
-impl_binary_writer_for_order!(BigEndian);
-impl_binary_writer_for_order!(LittleEndian);
+macro_rules! impl_value_write {
+    ($order:ty, $method:ident, $ty:ty, $doc:literal) => {
+        #[doc = $doc]
+        #[inline]
+        pub fn $method(&mut self, value: $ty) -> Result<()> {
+            type Codec = BinaryCodec<$ty, $order>;
+
+            const LEN: usize = Codec::REQUIRED_MIN_BUFFER_LEN;
+            // SAFETY: `LEN` is declared by the codec and fits the fixed internal buffer.
+            unsafe {
+                Codec::write_unchecked(&mut self.buffer, 0, value);
+                self.inner.write_all_unchecked(&self.buffer, 0, LEN)
+            }
+        }
+    };
+}
+
+macro_rules! impl_for_order {
+    ($order:ty) => {
+        impl<W> BinaryWriter<W, $order>
+        where
+            W: Write,
+        {
+            impl_value_write!($order, write_u8, u8, "Writes an unsigned 8-bit integer.");
+            impl_value_write!($order, write_i8, i8, "Writes a signed 8-bit integer.");
+            impl_value_write!($order, write_u16, u16, "Writes an unsigned 16-bit integer.");
+            impl_value_write!($order, write_u32, u32, "Writes an unsigned 32-bit integer.");
+            impl_value_write!($order, write_u64, u64, "Writes an unsigned 64-bit integer.");
+            impl_value_write!($order, write_u128, u128, "Writes an unsigned 128-bit integer.");
+            impl_value_write!($order, write_i16, i16, "Writes a signed 16-bit integer.");
+            impl_value_write!($order, write_i32, i32, "Writes a signed 32-bit integer.");
+            impl_value_write!($order, write_i64, i64, "Writes a signed 64-bit integer.");
+            impl_value_write!($order, write_i128, i128, "Writes a signed 128-bit integer.");
+            impl_value_write!($order, write_f32, f32, "Writes a 32-bit float.");
+            impl_value_write!($order, write_f64, f64, "Writes a 64-bit float.");
+
+            /// Writes a UTF-8 string prefixed by a 16-bit byte length.
+            #[inline]
+            pub fn write_utf8_string_u16(&mut self, value: &str) -> Result<()> {
+                self.write_u16(checked_u16_len(value.len())?)?;
+                let bytes = value.as_bytes();
+                // SAFETY: The range covers the full byte slice produced by `str::as_bytes`.
+                unsafe { self.inner.write_all_unchecked(bytes, 0, bytes.len()) }
+            }
+
+            /// Writes a UTF-8 string prefixed by a 32-bit byte length.
+            #[inline]
+            pub fn write_utf8_string_u32(&mut self, value: &str) -> Result<()> {
+                self.write_u32(checked_u32_len(value.len())?)?;
+                let bytes = value.as_bytes();
+                // SAFETY: The range covers the full byte slice produced by `str::as_bytes`.
+                unsafe { self.inner.write_all_unchecked(bytes, 0, bytes.len()) }
+            }
+        }
+    };
+}
+
+impl_for_order!(BigEndian);
+impl_for_order!(LittleEndian);
 
 impl<W, O> Write for BinaryWriter<W, O>
 where
@@ -161,12 +219,9 @@ pub(crate) fn checked_u16_len(len: usize) -> Result<u16> {
 
 #[inline]
 pub(crate) fn checked_u32_len(len: usize) -> Result<u32> {
-    if len > u32::MAX as usize {
-        Err(Error::new(
-            ErrorKind::InvalidInput,
-            format!("string length {len} exceeds maximum encodable u32 length"),
-        ))
-    } else {
+    if len <= u32::MAX as usize {
         Ok(len as u32)
+    } else {
+        Err(Error::new(ErrorKind::InvalidInput, format!("length {len} exceeds u32")))
     }
 }

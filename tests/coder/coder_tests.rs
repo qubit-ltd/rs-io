@@ -46,9 +46,7 @@ fn test_coder_contract_uses_absolute_indices_and_relative_progress() {
     let mut coder = CopyCoder;
     let mut output = [0_u8; 4];
 
-    let progress = coder
-        .convert(b"abc", 1, &mut output, 2)
-        .expect("infallible copy");
+    let progress = coder.convert(b"abc", 1, &mut output, 2).expect("infallible copy");
 
     assert_eq!(CoderStatus::Complete, progress.status());
     assert_eq!(2, progress.read());

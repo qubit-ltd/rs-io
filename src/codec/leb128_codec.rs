@@ -57,19 +57,10 @@ macro_rules! impl_unsigned_leb128_codec {
             /// read [`Self::REQUIRED_MIN_BUFFER_LEN`] bytes, or that a valid terminating byte
             /// appears before that limit.
             #[inline(always)]
-            pub unsafe fn read_unchecked(
-                input: &[u8],
-                index: usize,
-            ) -> Result<($ty, usize), Leb128DecodeError> {
+            pub unsafe fn read_unchecked(input: &[u8], index: usize) -> Result<($ty, usize), Leb128DecodeError> {
                 // SAFETY: The caller guarantees enough readable bytes for this type.
-                let (value, consumed) = unsafe {
-                    read_uleb_unchecked::<P>(
-                        input,
-                        index,
-                        <$ty>::BITS,
-                        Self::REQUIRED_MIN_BUFFER_LEN,
-                    )?
-                };
+                let (value, consumed) =
+                    unsafe { read_uleb_unchecked::<P>(input, index, <$ty>::BITS, Self::REQUIRED_MIN_BUFFER_LEN)? };
                 Ok((value as $ty, consumed))
             }
 
@@ -129,19 +120,10 @@ macro_rules! impl_signed_leb128_codec {
             /// read [`Self::REQUIRED_MIN_BUFFER_LEN`] bytes, or that a valid terminating byte
             /// appears before that limit.
             #[inline(always)]
-            pub unsafe fn read_unchecked(
-                input: &[u8],
-                index: usize,
-            ) -> Result<($ty, usize), Leb128DecodeError> {
+            pub unsafe fn read_unchecked(input: &[u8], index: usize) -> Result<($ty, usize), Leb128DecodeError> {
                 // SAFETY: The caller guarantees enough readable bytes for this type.
-                let (value, consumed) = unsafe {
-                    read_sleb_unchecked::<P>(
-                        input,
-                        index,
-                        <$ty>::BITS,
-                        Self::REQUIRED_MIN_BUFFER_LEN,
-                    )?
-                };
+                let (value, consumed) =
+                    unsafe { read_sleb_unchecked::<P>(input, index, <$ty>::BITS, Self::REQUIRED_MIN_BUFFER_LEN)? };
                 Ok((value as $ty, consumed))
             }
 

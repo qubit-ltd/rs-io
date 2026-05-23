@@ -8,10 +8,18 @@
  *
  ******************************************************************************/
 
-use std::io::{Result, Seek, SeekFrom, Write};
+use std::io::{
+    Result,
+    Seek,
+    SeekFrom,
+    Write,
+};
 
 use crate::WriteExt;
-use crate::stream::macros::write_zig_zag_value;
+use crate::codec::{
+    NonStrict,
+    ZigZagCodec,
+};
 
 /// Writer wrapper for canonical ZigZag + unsigned LEB128 integers.
 pub struct ZigZagWriter<W> {
@@ -24,10 +32,7 @@ impl<W> ZigZagWriter<W> {
     #[must_use]
     #[inline]
     pub const fn new(inner: W) -> Self {
-        Self {
-            inner,
-            buffer: [0; 19],
-        }
+        Self { inner, buffer: [0; 19] }
     }
 
     /// Returns a shared reference to the underlying writer.
@@ -52,6 +57,20 @@ impl<W> ZigZagWriter<W> {
     }
 }
 
+macro_rules! impl_write_value {
+    ($method:ident, $ty:ty, $doc:literal) => {
+        #[doc = $doc]
+        #[inline]
+        pub fn $method(&mut self, value: $ty) -> Result<()> {
+            type Codec = ZigZagCodec<$ty, NonStrict>;
+
+            self.write_zig_zag::<$ty, { Codec::REQUIRED_MIN_BUFFER_LEN }, _>(value, |bytes, value| unsafe {
+                Codec::write_unchecked(bytes, 0, value)
+            })
+        }
+    };
+}
+
 impl<W> ZigZagWriter<W>
 where
     W: Write,
@@ -66,41 +85,12 @@ where
         unsafe { self.inner.write_all_unchecked(&self.buffer, 0, len) }
     }
 
-    /// Writes a ZigZag `i8`.
-    #[inline]
-    pub fn write_i8(&mut self, value: i8) -> Result<()> {
-        write_zig_zag_value!(self, value, i8)
-    }
-
-    /// Writes a ZigZag `i16`.
-    #[inline]
-    pub fn write_i16(&mut self, value: i16) -> Result<()> {
-        write_zig_zag_value!(self, value, i16)
-    }
-
-    /// Writes a ZigZag `i32`.
-    #[inline]
-    pub fn write_i32(&mut self, value: i32) -> Result<()> {
-        write_zig_zag_value!(self, value, i32)
-    }
-
-    /// Writes a ZigZag `i64`.
-    #[inline]
-    pub fn write_i64(&mut self, value: i64) -> Result<()> {
-        write_zig_zag_value!(self, value, i64)
-    }
-
-    /// Writes a ZigZag `i128`.
-    #[inline]
-    pub fn write_i128(&mut self, value: i128) -> Result<()> {
-        write_zig_zag_value!(self, value, i128)
-    }
-
-    /// Writes a ZigZag `isize`.
-    #[inline]
-    pub fn write_isize(&mut self, value: isize) -> Result<()> {
-        write_zig_zag_value!(self, value, isize)
-    }
+    impl_write_value!(write_i8, i8, "Writes a ZigZag `i8`.");
+    impl_write_value!(write_i16, i16, "Writes a ZigZag `i16`.");
+    impl_write_value!(write_i32, i32, "Writes a ZigZag `i32`.");
+    impl_write_value!(write_i64, i64, "Writes a ZigZag `i64`.");
+    impl_write_value!(write_i128, i128, "Writes a ZigZag `i128`.");
+    impl_write_value!(write_isize, isize, "Writes a ZigZag `isize`.");
 }
 
 impl<W> Write for ZigZagWriter<W>

@@ -46,9 +46,7 @@ fn test_limit_writer_writes_at_most_limit() {
     assert_eq!(4, writer.remaining());
     assert!(writer.get_ref().is_empty());
 
-    let count = writer
-        .write(b"abcdef")
-        .expect("limited write should succeed");
+    let count = writer.write(b"abcdef").expect("limited write should succeed");
 
     assert_eq!(4, count);
     assert_eq!(0, writer.remaining());
@@ -77,9 +75,7 @@ fn test_limit_writer_get_mut_allows_inner_access() {
 fn test_limit_writer_zero_limit_does_not_write_inner() {
     let mut writer = LimitWriter::new(PanicOnWrite, 0);
 
-    let count = writer
-        .write(b"a")
-        .expect("zero limit should report zero bytes written");
+    let count = writer.write(b"a").expect("zero limit should report zero bytes written");
 
     assert_eq!(0, count);
     assert_eq!(0, writer.remaining());
@@ -89,9 +85,7 @@ fn test_limit_writer_zero_limit_does_not_write_inner() {
 fn test_limit_writer_empty_buffer_does_not_write_inner() {
     let mut writer = LimitWriter::new(PanicOnWrite, 1);
 
-    let count = writer
-        .write(b"")
-        .expect("empty buffer should complete without writing");
+    let count = writer.write(b"").expect("empty buffer should complete without writing");
 
     assert_eq!(0, count);
     assert_eq!(1, writer.remaining());
@@ -101,9 +95,7 @@ fn test_limit_writer_empty_buffer_does_not_write_inner() {
 fn test_limit_writer_preserves_remaining_on_error() {
     let mut writer = LimitWriter::new(FailingWriter, 3);
 
-    let error = writer
-        .write(b"ab")
-        .expect_err("inner write error should be returned");
+    let error = writer.write(b"ab").expect_err("inner write error should be returned");
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("write failed", error.to_string());
@@ -114,9 +106,7 @@ fn test_limit_writer_preserves_remaining_on_error() {
 fn test_limit_writer_flush_delegates_to_inner_writer() {
     let mut writer = LimitWriter::new(FailingWriter, 3);
 
-    let error = writer
-        .flush()
-        .expect_err("inner flush error should be returned");
+    let error = writer.flush().expect_err("inner flush error should be returned");
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("flush failed", error.to_string());

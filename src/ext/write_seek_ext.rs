@@ -58,11 +58,7 @@ where
 ///
 /// # Errors
 /// Returns an error when position lookup, seeking, writing, or restoration fails.
-fn write_all_at_preserving_position_impl(
-    writer: &mut dyn WriteSeek,
-    offset: u64,
-    buffer: &[u8],
-) -> Result<()> {
+fn write_all_at_preserving_position_impl(writer: &mut dyn WriteSeek, offset: u64, buffer: &[u8]) -> Result<()> {
     let position = writer.stream_position()?;
     let write_result = match writer.seek(SeekFrom::Start(offset)) {
         Ok(_) => writer.write_all(buffer),

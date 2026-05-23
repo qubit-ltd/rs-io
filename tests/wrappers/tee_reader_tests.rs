@@ -170,9 +170,7 @@ fn test_tee_reader_does_not_write_branch_at_eof() {
     let mut reader = TeeReader::new(source, branch);
     let mut buffer = [0; 2];
 
-    let count = reader
-        .read(&mut buffer)
-        .expect("EOF should not be an error");
+    let count = reader.read(&mut buffer).expect("EOF should not be an error");
 
     assert_eq!(0, count);
     assert!(reader.branch_ref().as_slice().is_empty());
@@ -185,9 +183,7 @@ fn test_tee_reader_copies_partial_buffer_at_eof() {
     let mut reader = TeeReader::new(source, branch);
     let mut buffer = [0; 4];
 
-    let count = reader
-        .read(&mut buffer)
-        .expect("partial read should succeed");
+    let count = reader.read(&mut buffer).expect("partial read should succeed");
 
     assert_eq!(2, count);
     assert_eq!(b"ab", &buffer[..count]);
@@ -229,13 +225,9 @@ fn test_tee_reader_forwards_seek_to_source_reader() {
     let branch = Vec::new();
     let mut reader = TeeReader::new(source, branch);
 
-    reader
-        .seek(SeekFrom::Start(2))
-        .expect("seek should be forwarded");
+    reader.seek(SeekFrom::Start(2)).expect("seek should be forwarded");
     let mut buffer = [0; 2];
-    reader
-        .read_exact(&mut buffer)
-        .expect("read after seek should succeed");
+    reader.read_exact(&mut buffer).expect("read after seek should succeed");
 
     assert_eq!(b"cd", &buffer);
     assert_eq!(b"cd", reader.branch_ref().as_slice());

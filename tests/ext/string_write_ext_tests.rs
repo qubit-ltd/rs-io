@@ -25,9 +25,7 @@ impl Write for FailingWriter {
 fn test_string_write_ext_writes_all_length_prefix_kinds() {
     let mut output = Vec::new();
 
-    output
-        .write_utf8_payload("raw")
-        .expect("payload should be written");
+    output.write_utf8_payload("raw").expect("payload should be written");
     output
         .write_utf8_string_uleb("hi")
         .expect("ULEB string should be written");
@@ -58,10 +56,9 @@ fn test_string_write_ext_writes_all_length_prefix_kinds() {
 
     assert_eq!(
         vec![
-            b'r', b'a', b'w', 0x02, b'h', b'i', 0x00, 0x02, b'r', b't', 0x00, 0x02, b'b', b'e',
-            0x02, 0x00, b'l', b'r', 0x02, 0x00, b'l', b'e', 0x00, 0x00, 0x00, 0x02, b'u', b'p',
-            0x00, 0x00, 0x00, 0x02, b'u', b'p', 0x02, 0x00, 0x00, 0x00, b'd', b'n', 0x02, 0x00,
-            0x00, 0x00, b'd', b'n'
+            b'r', b'a', b'w', 0x02, b'h', b'i', 0x00, 0x02, b'r', b't', 0x00, 0x02, b'b', b'e', 0x02, 0x00, b'l', b'r',
+            0x02, 0x00, b'l', b'e', 0x00, 0x00, 0x00, 0x02, b'u', b'p', 0x00, 0x00, 0x00, 0x02, b'u', b'p', 0x02, 0x00,
+            0x00, 0x00, b'd', b'n', 0x02, 0x00, 0x00, 0x00, b'd', b'n'
         ],
         output
     );

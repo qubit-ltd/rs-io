@@ -63,9 +63,7 @@ fn test_checksum_writer_hashes_successfully_written_bytes_and_exposes_accessors(
 
     writer.get_mut().data.extend_from_slice(b"x");
     writer.hasher_mut().write(b"y");
-    let count = writer
-        .write(b"abcdef")
-        .expect("checksum write should succeed");
+    let count = writer.write(b"abcdef").expect("checksum write should succeed");
     writer.flush().expect("flush should succeed");
 
     assert_eq!(3, count);
@@ -82,9 +80,7 @@ fn test_checksum_writer_hashes_successfully_written_bytes_and_exposes_accessors(
 fn test_checksum_writer_does_not_hash_failed_writes_and_flush_errors() {
     let mut writer = ChecksumWriter::new(FailingWriter, DefaultHasher::new());
 
-    let error = writer
-        .write(b"abc")
-        .expect_err("write error should be returned");
+    let error = writer.write(b"abc").expect_err("write error should be returned");
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!(expected_checksum(b""), writer.checksum());
 
@@ -98,9 +94,7 @@ fn test_checksum_writer_forwards_seek() {
     let mut writer = ChecksumWriter::new(primary, DefaultHasher::new());
 
     writer.write_all(b"abc").expect("write should succeed");
-    writer
-        .seek(SeekFrom::Start(1))
-        .expect("seek should be forwarded");
+    writer.seek(SeekFrom::Start(1)).expect("seek should be forwarded");
     writer.write_all(b"z").expect("write should succeed");
 
     let (primary, hasher) = writer.into_inner();

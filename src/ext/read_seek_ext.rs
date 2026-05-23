@@ -113,11 +113,7 @@ fn peek_exact_or_eof_impl(reader: &mut dyn ReadSeek, buffer: &mut [u8]) -> Resul
 ///
 /// # Errors
 /// Returns an error when position lookup, seeking, reading, or position restoration fails.
-fn read_exact_or_eof_at_impl(
-    reader: &mut dyn ReadSeek,
-    offset: u64,
-    buffer: &mut [u8],
-) -> Result<usize> {
+fn read_exact_or_eof_at_impl(reader: &mut dyn ReadSeek, offset: u64, buffer: &mut [u8]) -> Result<usize> {
     let position = reader.stream_position()?;
     let read_result = match reader.seek(SeekFrom::Start(offset)) {
         Ok(_) => read_exact_or_eof(reader, buffer),

@@ -22,24 +22,12 @@ impl Write for FailingWriter {
 fn test_zig_zag_write_ext_writes_all_methods() {
     let mut output = Vec::new();
 
-    output
-        .write_zig_zag_i8(i8::MIN)
-        .expect("i8 should be written");
-    output
-        .write_zig_zag_i16(-300)
-        .expect("i16 should be written");
-    output
-        .write_zig_zag_i32(-0x1f600)
-        .expect("i32 should be written");
-    output
-        .write_zig_zag_i64(i64::MIN)
-        .expect("i64 should be written");
-    output
-        .write_zig_zag_i128(i128::MIN)
-        .expect("i128 should be written");
-    output
-        .write_zig_zag_isize(isize::MIN)
-        .expect("isize should be written");
+    output.write_zig_zag_i8(i8::MIN).expect("i8 should be written");
+    output.write_zig_zag_i16(-300).expect("i16 should be written");
+    output.write_zig_zag_i32(-0x1f600).expect("i32 should be written");
+    output.write_zig_zag_i64(i64::MIN).expect("i64 should be written");
+    output.write_zig_zag_i128(i128::MIN).expect("i128 should be written");
+    output.write_zig_zag_isize(isize::MIN).expect("isize should be written");
 
     assert!(!output.is_empty());
 }

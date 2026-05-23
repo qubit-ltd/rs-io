@@ -247,11 +247,7 @@ fn copy_at_most_impl(reader: &mut dyn Read, writer: &mut dyn Write, max_bytes: u
 /// Returns [`ErrorKind::InvalidData`] when the remaining input is longer than
 /// `max_bytes`. Returns the first non-interrupted read error or write error
 /// reported by the underlying streams. Interrupted reads are retried.
-fn copy_to_end_limited_impl(
-    reader: &mut dyn Read,
-    writer: &mut dyn Write,
-    max_bytes: u64,
-) -> Result<u64> {
+fn copy_to_end_limited_impl(reader: &mut dyn Read, writer: &mut dyn Write, max_bytes: u64) -> Result<u64> {
     let copied = copy_at_most_impl(reader, writer, max_bytes)?;
     if copied < max_bytes {
         return Ok(copied);
@@ -407,11 +403,7 @@ where
 ///
 /// Returns [`ErrorKind::InvalidInput`] when the UTF-8 byte length does not fit
 /// into `u16`, or an I/O error from the underlying writer.
-pub(crate) fn write_utf8_string_with_u16_len<W, F>(
-    writer: &mut W,
-    value: &str,
-    write_len: F,
-) -> Result<()>
+pub(crate) fn write_utf8_string_with_u16_len<W, F>(writer: &mut W, value: &str, write_len: F) -> Result<()>
 where
     W: Write + ?Sized,
     F: FnOnce(&mut W, u16) -> Result<()>,
@@ -433,11 +425,7 @@ where
 ///
 /// Returns [`ErrorKind::InvalidInput`] when the UTF-8 byte length does not fit
 /// into `u32`, or an I/O error from the underlying writer.
-pub(crate) fn write_utf8_string_with_u32_len<W, F>(
-    writer: &mut W,
-    value: &str,
-    write_len: F,
-) -> Result<()>
+pub(crate) fn write_utf8_string_with_u32_len<W, F>(writer: &mut W, value: &str, write_len: F) -> Result<()>
 where
     W: Write + ?Sized,
     F: FnOnce(&mut W, u32) -> Result<()>,

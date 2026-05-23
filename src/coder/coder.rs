@@ -245,11 +245,7 @@ pub trait Coder<Input, Output> {
     /// Returns `Self::Error` if pending state cannot be flushed according to the
     /// coder's policy.
     #[inline]
-    fn finish(
-        &mut self,
-        _output: &mut [Output],
-        _output_index: usize,
-    ) -> Result<CoderProgress, Self::Error> {
+    fn finish(&mut self, _output: &mut [Output], _output_index: usize) -> Result<CoderProgress, Self::Error> {
         Ok(CoderProgress::complete(0, 0))
     }
 }

@@ -8,19 +8,24 @@
  *
  ******************************************************************************/
 
-use std::io::{Read, Result};
+use std::io::{
+    Read,
+    Result,
+};
 
-use crate::codec::{BigEndian, BinaryCodec, ByteOrder, LittleEndian};
+use crate::codec::{
+    BigEndian,
+    BinaryCodec,
+    ByteOrder,
+    LittleEndian,
+};
 
 macro_rules! read_binary_value {
     ($reader:expr, $ty:ty, $order:ty) => {
-        read_binary::<{ BinaryCodec::<$ty, $order>::REQUIRED_MIN_BUFFER_LEN }, _, _, _>(
-            $reader,
-            |bytes| {
-                // SAFETY: The local buffer is exactly the codec's minimum buffer length.
-                unsafe { BinaryCodec::<$ty, $order>::read_unchecked(bytes, 0) }
-            },
-        )
+        read_binary::<{ BinaryCodec::<$ty, $order>::REQUIRED_MIN_BUFFER_LEN }, _, _, _>($reader, |bytes| {
+            // SAFETY: The local buffer is exactly the codec's minimum buffer length.
+            unsafe { BinaryCodec::<$ty, $order>::read_unchecked(bytes, 0) }
+        })
     };
 }
 

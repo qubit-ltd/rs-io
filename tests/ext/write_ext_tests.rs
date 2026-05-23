@@ -82,6 +82,18 @@ impl Write for ZeroWriter {
     }
 }
 
+struct FailingWriter;
+
+impl Write for FailingWriter {
+    fn write(&mut self, _buffer: &[u8]) -> std::io::Result<usize> {
+        Err(Error::other("write failed"))
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
 #[test]
 fn test_write_unchecked_writes_middle_range_once() {
     let mut writer = ShortWriter::new(2);
@@ -97,6 +109,23 @@ fn test_write_unchecked_writes_middle_range_once() {
 
     assert_eq!(2, count);
     assert_eq!(b"ab", writer.output.as_slice());
+}
+
+#[test]
+fn test_write_unchecked_returns_write_error() {
+    let mut writer = FailingWriter;
+    let buffer = *b"xxabcdyy";
+
+    // SAFETY: `start_index..start_index + count` is `2..6`, which is within
+    // `buffer` for the duration of the write.
+    let error = unsafe {
+        writer
+            .write_unchecked(&buffer, 2, 4)
+            .expect_err("write errors should be returned")
+    };
+
+    assert_eq!(ErrorKind::Other, error.kind());
+    assert_eq!("write failed", error.to_string());
 }
 
 #[test]
@@ -129,6 +158,23 @@ fn test_write_all_unchecked_retries_interrupted_writes() {
     }
 
     assert_eq!(b"abcd", writer.inner.output.as_slice());
+}
+
+#[test]
+fn test_write_all_unchecked_returns_non_interrupted_error() {
+    let mut writer = FailingWriter;
+    let buffer = *b"xxabcdyy";
+
+    // SAFETY: `start_index..start_index + count` is `2..6`, which is within
+    // `buffer` for the duration of the write.
+    let error = unsafe {
+        writer
+            .write_all_unchecked(&buffer, 2, 4)
+            .expect_err("non-interrupted write errors should be returned")
+    };
+
+    assert_eq!(ErrorKind::Other, error.kind());
+    assert_eq!("write failed", error.to_string());
 }
 
 #[test]
