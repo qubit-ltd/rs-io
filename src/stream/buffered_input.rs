@@ -69,15 +69,27 @@ impl<R> BufferedInput<R> {
         self.limit - self.position
     }
 
-    /// Clears consumed bytes from the front of the buffer.
+    /// Returns the unused capacity at the end of the buffer.
     #[inline]
-    fn compact(&mut self) {
+    fn tail_capacity(&self) -> usize {
+        self.buffer.len() - self.limit
+    }
+
+    /// Invalidates all buffered bytes.
+    #[inline]
+    fn discard_buffer(&mut self) {
+        self.position = 0;
+        self.limit = 0;
+    }
+
+    /// Moves unread bytes to the front of the buffer.
+    #[inline]
+    fn backshift(&mut self) {
         if self.position == 0 {
             return;
         }
         if self.position == self.limit {
-            self.position = 0;
-            self.limit = 0;
+            self.discard_buffer();
             return;
         }
         self.buffer.copy_within(self.position..self.limit, 0);
@@ -90,14 +102,17 @@ impl<R> BufferedInput<R>
 where
     R: Read,
 {
-    /// Reads one more chunk from the wrapped reader into the internal buffer.
-    fn refill_once(&mut self) -> Result<bool> {
-        self.compact();
-        let count = self.buffer.len() - self.limit;
+    /// Appends one more chunk from the wrapped reader to the internal buffer.
+    fn read_more(&mut self) -> Result<bool> {
+        let count = self.tail_capacity();
+        debug_assert!(count > 0, "buffer has no tail capacity");
         loop {
             // SAFETY: `limit` is always within `buffer`, and `count` is the
             // remaining capacity from `limit` to the end of `buffer`.
-            match unsafe { self.inner.read_unchecked(&mut self.buffer, self.limit, count) } {
+            match unsafe {
+                self.inner
+                    .read_unchecked(&mut self.buffer, self.limit, count)
+            } {
                 Ok(0) => return Ok(false),
                 Ok(read) => {
                     self.limit += read;
@@ -110,13 +125,22 @@ where
     }
 
     /// Ensures that at least `count` unread bytes are available.
-    fn ensure_available(&mut self, count: usize) -> Result<()> {
+    fn ensure_available_slow(&mut self, count: usize) -> Result<()> {
         debug_assert!(
             count <= self.buffer.len(),
             "requested range exceeds buffer capacity"
         );
         while self.available() < count {
-            if !self.refill_once()? {
+            let available = self.available();
+            if available == 0 {
+                self.discard_buffer();
+            } else {
+                let missing = count - available;
+                if self.tail_capacity() < missing {
+                    self.backshift();
+                }
+            }
+            if !self.read_more()? {
                 self.position = self.limit;
                 return Err(Error::new(
                     ErrorKind::UnexpectedEof,
@@ -133,7 +157,9 @@ where
     where
         F: FnOnce(&[u8], usize) -> T,
     {
-        self.ensure_available(count)?;
+        if self.available() < count {
+            self.ensure_available_slow(count)?;
+        }
         let index = self.position;
         let value = decode(&self.buffer, index);
         self.position += count;
@@ -151,7 +177,10 @@ where
         F: FnOnce(&[u8], usize) -> std::result::Result<(T, usize), E>,
         M: FnOnce(E) -> Error,
     {
-        let decode_len = self.ensure_variable_payload(max_len)?;
+        let decode_len = match self.variable_payload_len(max_len) {
+            Some(len) => len,
+            None => self.ensure_variable_payload_slow(max_len)?,
+        };
         let index = self.position;
         match decode(&self.buffer, index) {
             Ok((value, consumed)) => {
@@ -165,25 +194,40 @@ where
         }
     }
 
+    /// Finds the available length of a terminated or max-width variable payload.
+    #[inline]
+    fn variable_payload_len(&self, max_len: usize) -> Option<usize> {
+        let available = self.available();
+        let scan_len = available.min(max_len);
+        for offset in 0..scan_len {
+            let byte = self.buffer[self.position + offset];
+            if byte & 0x80 == 0 {
+                return Some(offset + 1);
+            }
+        }
+        if available >= max_len {
+            Some(max_len)
+        } else {
+            None
+        }
+    }
+
     /// Ensures that a terminated or max-width variable payload is buffered.
-    fn ensure_variable_payload(&mut self, max_len: usize) -> Result<usize> {
+    fn ensure_variable_payload_slow(&mut self, max_len: usize) -> Result<usize> {
         debug_assert!(
             max_len <= self.buffer.len(),
             "variable payload length exceeds buffer capacity"
         );
         loop {
-            let available = self.available();
-            let scan_len = available.min(max_len);
-            for offset in 0..scan_len {
-                let byte = self.buffer[self.position + offset];
-                if byte & 0x80 == 0 {
-                    return Ok(offset + 1);
-                }
+            if let Some(len) = self.variable_payload_len(max_len) {
+                return Ok(len);
             }
-            if available >= max_len {
-                return Ok(max_len);
+            if self.available() == 0 {
+                self.discard_buffer();
+            } else if self.tail_capacity() == 0 {
+                self.backshift();
             }
-            if !self.refill_once()? {
+            if !self.read_more()? {
                 self.position = self.limit;
                 return Err(Error::new(
                     ErrorKind::UnexpectedEof,
@@ -198,8 +242,14 @@ where
         if output.is_empty() {
             return Ok(0);
         }
-        if self.available() == 0 && !self.refill_once()? {
-            return Ok(0);
+        if self.available() == 0 {
+            self.discard_buffer();
+            if output.len() >= self.buffer.len() {
+                return self.inner.read(output);
+            }
+            if !self.read_more()? {
+                return Ok(0);
+            }
         }
         let count = output.len().min(self.available());
         output[..count].copy_from_slice(&self.buffer[self.position..self.position + count]);
