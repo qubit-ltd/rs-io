@@ -11,8 +11,8 @@
 use std::io::{Error, ErrorKind, Result, Seek, SeekFrom, Write};
 use std::ptr;
 
-use crate::stream::buffered_input::{DEFAULT_BUFFER_CAPACITY, MIN_CODEC_BUFFER_CAPACITY};
 use crate::WriteExt;
+use crate::stream::buffered_input::{DEFAULT_BUFFER_CAPACITY, MIN_CODEC_BUFFER_CAPACITY};
 
 /// Buffered output core shared by codec-oriented writers.
 pub(crate) struct BufferedOutput<W> {
@@ -120,6 +120,25 @@ where
         // states the actual invariant directly: the cursor advances from the
         // position that was checked before the codec wrote into the buffer.
         self.length = start + written;
+        Ok(())
+    }
+
+    /// Encodes one fixed-width value directly into the internal buffer.
+    #[inline]
+    pub(crate) fn write_fixed<const N: usize, T, F>(&mut self, value: T, encode: F) -> Result<()>
+    where
+        F: FnOnce(&mut [u8], usize, T),
+    {
+        debug_assert!(
+            N <= self.buffer.len(),
+            "requested range exceeds buffer capacity"
+        );
+        if self.spare_capacity() < N {
+            self.ensure_space_slow(N)?;
+        }
+        let start = self.length;
+        encode(&mut self.buffer, start, value);
+        self.length = start + N;
         Ok(())
     }
 

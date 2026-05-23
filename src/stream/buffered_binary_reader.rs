@@ -89,7 +89,7 @@ macro_rules! impl_value_read {
             type Codec = BinaryCodec<$ty, $order>;
 
             const LEN: usize = Codec::REQUIRED_MIN_BUFFER_LEN;
-            self.input.read_fixed(LEN, |bytes, index| {
+            self.input.read_fixed::<LEN, _, _>(|bytes, index| {
                 // SAFETY: `read_fixed` guarantees that `LEN` readable bytes
                 // starting at `index` are available in the internal buffer.
                 unsafe { Codec::read_unchecked(bytes, index) }

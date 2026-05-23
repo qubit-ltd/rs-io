@@ -91,13 +91,12 @@ macro_rules! impl_value_write {
 
             const LEN: usize = Codec::REQUIRED_MIN_BUFFER_LEN;
             self.output
-                .write_encoded(LEN, value, |bytes, index, value| {
-                    // SAFETY: `write_encoded` guarantees that `LEN` writable bytes
+                .write_fixed::<LEN, _, _>(value, |bytes, index, value| {
+                    // SAFETY: `write_fixed` guarantees that `LEN` writable bytes
                     // starting at `index` are available in the internal buffer.
                     unsafe {
                         Codec::write_unchecked(bytes, index, value);
                     }
-                    LEN
                 })
         }
     };
