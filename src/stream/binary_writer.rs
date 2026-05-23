@@ -24,8 +24,6 @@ use crate::codec::{
     LittleEndian,
 };
 
-// qubit-style: allow coverage-cfg
-
 macro_rules! write_binary_value {
     ($writer:expr, $value:expr, $ty:ty, $order:ty) => {
         write_binary::<{ BinaryCodec::<$ty, $order>::REQUIRED_MIN_BUFFER_LEN }, _, _, _>(
@@ -220,14 +218,11 @@ fn checked_len_u16(len: usize) -> Result<u16> {
     u16::try_from(len).map_err(|_| Error::new(ErrorKind::InvalidInput, "string is too long"))
 }
 
-#[cfg(not(coverage))]
 #[inline]
 fn checked_len_u32(len: usize) -> Result<u32> {
-    u32::try_from(len).map_err(|_| Error::new(ErrorKind::InvalidInput, "string is too long"))
-}
-
-#[cfg(coverage)]
-#[inline]
-fn checked_len_u32(len: usize) -> Result<u32> {
-    Ok(len as u32)
+    if len > u32::MAX as usize {
+        Err(Error::new(ErrorKind::InvalidInput, "string is too long"))
+    } else {
+        Ok(len as u32)
+    }
 }

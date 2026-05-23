@@ -68,26 +68,44 @@ fn test_binary_reader_reads_all_big_endian_methods() {
     assert_eq!(
         "hi",
         reader
-            .read_utf8_string_u16()
+            .read_utf8_string_u16(usize::MAX)
             .expect("u16 string should be read")
     );
     assert_eq!(
         "ok",
         reader
-            .read_utf8_string_u32()
+            .read_utf8_string_u32(usize::MAX)
             .expect("u32 string should be read")
     );
 }
 
 #[test]
 fn test_binary_reader_reads_little_endian_and_exposes_accessors() {
-    let mut reader = BinaryReader::<_, LittleEndian>::new(Cursor::new(vec![0x34, 0x12]));
+    let mut reader = BinaryReader::<_, LittleEndian>::new(Cursor::new(vec![
+        0xaa, 0xbb, 0x34, 0x12, 0x02, 0x00, b'h', b'i', 0x02, 0x00, 0x00, 0x00, b'o', b'k',
+    ]));
 
     assert_eq!(ByteOrder::LittleEndian, reader.byte_order());
     assert_eq!(0, reader.get_ref().position());
     reader.get_mut().set_position(0);
+    assert_eq!(
+        [0xaa, 0xbb],
+        reader.read_bytes::<2>().expect("bytes should be read")
+    );
     assert_eq!(0x1234, reader.read_u16().expect("u16 should be read"));
-    assert_eq!(2, reader.into_inner().position());
+    assert_eq!(
+        "hi",
+        reader
+            .read_utf8_string_u16(usize::MAX)
+            .expect("u16 string should be read")
+    );
+    assert_eq!(
+        "ok",
+        reader
+            .read_utf8_string_u32(usize::MAX)
+            .expect("u32 string should be read")
+    );
+    assert_eq!(14, reader.into_inner().position());
 }
 
 #[test]
@@ -105,8 +123,29 @@ fn test_binary_reader_reports_read_and_utf8_errors() {
     assert_eq!(
         ErrorKind::InvalidData,
         reader
-            .read_utf8_string_u16()
+            .read_utf8_string_u16(usize::MAX)
             .expect_err("invalid UTF-8 should fail")
+            .kind()
+    );
+
+    let mut reader =
+        BinaryReader::<_, BigEndian>::new(Cursor::new(vec![0x00, 0x03, b'a', b'b', b'c']));
+    assert_eq!(
+        ErrorKind::InvalidData,
+        reader
+            .read_utf8_string_u16(2)
+            .expect_err("oversized u16 string should fail")
+            .kind()
+    );
+
+    let mut reader = BinaryReader::<_, BigEndian>::new(Cursor::new(vec![
+        0x00, 0x00, 0x00, 0x03, b'a', b'b', b'c',
+    ]));
+    assert_eq!(
+        ErrorKind::InvalidData,
+        reader
+            .read_utf8_string_u32(2)
+            .expect_err("oversized u32 string should fail")
             .kind()
     );
 }

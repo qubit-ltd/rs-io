@@ -60,7 +60,18 @@ fn test_binary_writer_writes_little_endian_and_exposes_accessors() {
     assert_eq!(0, writer.get_ref().position());
     writer.get_mut().set_position(0);
     writer.write_u16(0x1234).expect("u16 should be written");
-    assert_eq!(vec![0x34, 0x12], writer.into_inner().into_inner());
+    writer
+        .write_utf8_string_u16("hi")
+        .expect("u16 string should be written");
+    writer
+        .write_utf8_string_u32("ok")
+        .expect("u32 string should be written");
+    assert_eq!(
+        vec![
+            0x34, 0x12, 0x02, 0x00, b'h', b'i', 0x02, 0x00, 0x00, 0x00, b'o', b'k'
+        ],
+        writer.into_inner().into_inner()
+    );
 }
 
 #[test]
