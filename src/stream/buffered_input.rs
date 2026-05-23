@@ -153,16 +153,20 @@ where
 
     /// Reads one fixed-width value directly from the internal buffer.
     #[inline]
-    pub(crate) fn read_fixed<T, F>(&mut self, count: usize, decode: F) -> Result<T>
+    pub(crate) fn read_fixed<const N: usize, T, F>(&mut self, decode: F) -> Result<T>
     where
         F: FnOnce(&[u8], usize) -> T,
     {
-        if self.available() < count {
-            self.ensure_available_slow(count)?;
+        debug_assert!(
+            N <= self.buffer.len(),
+            "requested range exceeds buffer capacity"
+        );
+        if self.available() < N {
+            self.ensure_available_slow(N)?;
         }
         let index = self.position;
         let value = decode(&self.buffer, index);
-        self.position += count;
+        self.position = index + N;
         Ok(value)
     }
 
