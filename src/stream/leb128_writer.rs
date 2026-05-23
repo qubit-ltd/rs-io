@@ -10,6 +10,8 @@
 
 use std::io::{
     Result,
+    Seek,
+    SeekFrom,
     Write,
 };
 
@@ -17,6 +19,7 @@ use crate::codec::{
     Leb128Codec,
     NonStrict,
 };
+use crate::util::write_utf8_payload;
 
 macro_rules! write_leb128_value {
     ($writer:expr, $value:expr, $ty:ty) => {
@@ -140,6 +143,77 @@ where
     #[inline]
     pub fn write_isize(&mut self, value: isize) -> Result<()> {
         write_leb128_value!(&mut self.inner, value, isize)
+    }
+
+    /// Writes a UTF-8 string prefixed by an unsigned LEB128 byte length.
+    ///
+    /// # Parameters
+    ///
+    /// - `value`: String slice to write.
+    ///
+    /// # Errors
+    ///
+    /// Returns an I/O error from the underlying writer.
+    #[inline]
+    pub fn write_utf8_string(&mut self, value: &str) -> Result<()> {
+        self.write_usize(value.len())?;
+        write_utf8_payload(&mut self.inner, value)
+    }
+}
+
+impl<W> Write for Leb128Writer<W>
+where
+    W: Write,
+{
+    /// Writes bytes to the wrapped writer.
+    ///
+    /// # Parameters
+    ///
+    /// - `buffer`: Source bytes to write.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of bytes written.
+    ///
+    /// # Errors
+    ///
+    /// Returns the I/O error reported by the wrapped writer.
+    #[inline]
+    fn write(&mut self, buffer: &[u8]) -> Result<usize> {
+        self.inner.write(buffer)
+    }
+
+    /// Flushes the wrapped writer.
+    ///
+    /// # Errors
+    ///
+    /// Returns the I/O error reported by the wrapped writer.
+    #[inline]
+    fn flush(&mut self) -> Result<()> {
+        self.inner.flush()
+    }
+}
+
+impl<W> Seek for Leb128Writer<W>
+where
+    W: Seek,
+{
+    /// Seeks the wrapped writer.
+    ///
+    /// # Parameters
+    ///
+    /// - `position`: Target seek position.
+    ///
+    /// # Returns
+    ///
+    /// Returns the new stream position.
+    ///
+    /// # Errors
+    ///
+    /// Returns the seek error reported by the wrapped writer.
+    #[inline]
+    fn seek(&mut self, position: SeekFrom) -> Result<u64> {
+        self.inner.seek(position)
     }
 }
 

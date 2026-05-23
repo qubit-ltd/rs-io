@@ -10,9 +10,9 @@
 
 use core::marker::PhantomData;
 use std::io::{
-    Error,
-    ErrorKind,
     Result,
+    Seek,
+    SeekFrom,
     Write,
 };
 
@@ -22,6 +22,10 @@ use crate::codec::{
     ByteOrder,
     ByteOrderSpec,
     LittleEndian,
+};
+use crate::util::{
+    write_utf8_string_with_u16_len,
+    write_utf8_string_with_u32_len,
 };
 
 macro_rules! write_binary_value {
@@ -118,17 +122,17 @@ macro_rules! impl_binary_writer_for_order {
             /// Writes a UTF-8 string prefixed by a 16-bit byte length.
             #[inline]
             pub fn write_utf8_string_u16(&mut self, value: &str) -> Result<()> {
-                let len = checked_len_u16(value.len())?;
-                self.write_u16(len)?;
-                self.inner.write_all(value.as_bytes())
+                write_utf8_string_with_u16_len(&mut self.inner, value, |writer, len| {
+                    write_binary_value!(writer, len, u16, $order)
+                })
             }
 
             /// Writes a UTF-8 string prefixed by a 32-bit byte length.
             #[inline]
             pub fn write_utf8_string_u32(&mut self, value: &str) -> Result<()> {
-                let len = checked_len_u32(value.len())?;
-                self.write_u32(len)?;
-                self.inner.write_all(value.as_bytes())
+                write_utf8_string_with_u32_len(&mut self.inner, value, |writer, len| {
+                    write_binary_value!(writer, len, u32, $order)
+                })
             }
         }
     };
@@ -202,6 +206,62 @@ where
 impl_binary_writer_for_order!(BigEndian);
 impl_binary_writer_for_order!(LittleEndian);
 
+impl<W, O> Write for BinaryWriter<W, O>
+where
+    W: Write,
+{
+    /// Writes bytes to the wrapped writer.
+    ///
+    /// # Parameters
+    ///
+    /// - `buffer`: Source bytes to write.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of bytes written.
+    ///
+    /// # Errors
+    ///
+    /// Returns the I/O error reported by the wrapped writer.
+    #[inline]
+    fn write(&mut self, buffer: &[u8]) -> Result<usize> {
+        self.inner.write(buffer)
+    }
+
+    /// Flushes the wrapped writer.
+    ///
+    /// # Errors
+    ///
+    /// Returns the I/O error reported by the wrapped writer.
+    #[inline]
+    fn flush(&mut self) -> Result<()> {
+        self.inner.flush()
+    }
+}
+
+impl<W, O> Seek for BinaryWriter<W, O>
+where
+    W: Seek,
+{
+    /// Seeks the wrapped writer.
+    ///
+    /// # Parameters
+    ///
+    /// - `position`: Target seek position.
+    ///
+    /// # Returns
+    ///
+    /// Returns the new stream position.
+    ///
+    /// # Errors
+    ///
+    /// Returns the seek error reported by the wrapped writer.
+    #[inline]
+    fn seek(&mut self, position: SeekFrom) -> Result<u64> {
+        self.inner.seek(position)
+    }
+}
+
 #[inline]
 fn write_binary<const N: usize, T, W, F>(writer: &mut W, value: T, encode: F) -> Result<()>
 where
@@ -211,18 +271,4 @@ where
     let mut bytes = [0u8; N];
     encode(&mut bytes, value);
     writer.write_all(&bytes)
-}
-
-#[inline]
-fn checked_len_u16(len: usize) -> Result<u16> {
-    u16::try_from(len).map_err(|_| Error::new(ErrorKind::InvalidInput, "string is too long"))
-}
-
-#[inline]
-fn checked_len_u32(len: usize) -> Result<u32> {
-    if len > u32::MAX as usize {
-        Err(Error::new(ErrorKind::InvalidInput, "string is too long"))
-    } else {
-        Ok(len as u32)
-    }
 }
