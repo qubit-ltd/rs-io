@@ -8,10 +8,7 @@
  *
  ******************************************************************************/
 
-use super::{
-    ByteOrder,
-    ByteOrderSpec,
-};
+use super::{ByteOrder, ByteOrderSpec};
 
 /// Type-level marker for big-endian byte order.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]

@@ -7,11 +7,7 @@
  *    Licensed under the Apache License, Version 2.0.
  *
  ******************************************************************************/
-use std::io::{
-    BufRead,
-    Read,
-    Result,
-};
+use std::io::{BufRead, Read, Result};
 
 /// Reader wrapper that exposes at most a fixed number of bytes.
 ///

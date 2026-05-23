@@ -8,15 +8,9 @@
  *
  ******************************************************************************/
 
-use std::io::{
-    Result,
-    Write,
-};
+use std::io::{Result, Write};
 
-use crate::codec::{
-    NonStrict,
-    ZigZagCodec,
-};
+use crate::codec::{NonStrict, ZigZagCodec};
 
 macro_rules! write_zig_zag_value {
     ($writer:expr, $value:expr, $ty:ty) => {

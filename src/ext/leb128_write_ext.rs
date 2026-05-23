@@ -8,15 +8,9 @@
  *
  ******************************************************************************/
 
-use std::io::{
-    Result,
-    Write,
-};
+use std::io::{Result, Write};
 
-use crate::codec::{
-    Leb128Codec,
-    NonStrict,
-};
+use crate::codec::{Leb128Codec, NonStrict};
 
 macro_rules! write_leb128_value {
     ($writer:expr, $value:expr, $ty:ty) => {

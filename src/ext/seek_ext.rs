@@ -7,11 +7,7 @@
  *    Licensed under the Apache License, Version 2.0.
  *
  ******************************************************************************/
-use std::io::{
-    Result,
-    Seek,
-    SeekFrom,
-};
+use std::io::{Result, Seek, SeekFrom};
 
 /// Extension methods for [`Seek`] values.
 ///

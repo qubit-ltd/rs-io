@@ -7,21 +7,13 @@
  *    Licensed under the Apache License, Version 2.0.
  *
  ******************************************************************************/
-use std::io::{
-    Result,
-    Write,
-};
+use std::io::{Result, Write};
 
 use crate::util::{
-    write_utf8_payload as write_utf8_payload_impl,
-    write_utf8_string_with_u16_len,
+    write_utf8_payload as write_utf8_payload_impl, write_utf8_string_with_u16_len,
     write_utf8_string_with_u32_len,
 };
-use crate::{
-    BinaryWriteExt,
-    ByteOrder,
-    Leb128WriteExt,
-};
+use crate::{BinaryWriteExt, ByteOrder, Leb128WriteExt};
 
 /// Extension methods for writing length-prefixed UTF-8 strings.
 pub trait StringWriteExt: Write {

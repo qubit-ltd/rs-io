@@ -1,14 +1,6 @@
-use std::io::{
-    Cursor,
-    ErrorKind,
-};
+use std::io::{Cursor, ErrorKind};
 
-use qubit_io::{
-    BigEndian,
-    BinaryWriter,
-    ByteOrder,
-    LittleEndian,
-};
+use qubit_io::{BigEndian, BinaryWriter, ByteOrder, LittleEndian};
 
 #[test]
 fn test_binary_writer_writes_all_big_endian_methods() {
@@ -19,14 +11,22 @@ fn test_binary_writer_writes_all_big_endian_methods() {
     writer.write_u8(0x12).expect("u8 should be written");
     writer.write_i8(-2).expect("i8 should be written");
     writer.write_u16(0x1234).expect("u16 should be written");
-    writer.write_u32(0x1234_5678).expect("u32 should be written");
-    writer.write_u64(0x0123_4567_89ab_cdef).expect("u64 should be written");
+    writer
+        .write_u32(0x1234_5678)
+        .expect("u32 should be written");
+    writer
+        .write_u64(0x0123_4567_89ab_cdef)
+        .expect("u64 should be written");
     writer
         .write_u128(0x0123_4567_89ab_cdef_fedc_ba98_7654_3210)
         .expect("u128 should be written");
     writer.write_i16(-0x1234).expect("i16 should be written");
-    writer.write_i32(-0x0123_4567).expect("i32 should be written");
-    writer.write_i64(-0x0123_4567_89ab_cdef).expect("i64 should be written");
+    writer
+        .write_i32(-0x0123_4567)
+        .expect("i32 should be written");
+    writer
+        .write_i64(-0x0123_4567_89ab_cdef)
+        .expect("i64 should be written");
     writer
         .write_i128(-0x0123_4567_89ab_cdef_fedc_ba98_7654_3210)
         .expect("i128 should be written");
@@ -52,14 +52,22 @@ fn test_binary_writer_writes_little_endian_and_exposes_accessors() {
     writer.write_u8(0x12).expect("u8 should be written");
     writer.write_i8(-2).expect("i8 should be written");
     writer.write_u16(0x1234).expect("u16 should be written");
-    writer.write_u32(0x1234_5678).expect("u32 should be written");
-    writer.write_u64(0x0123_4567_89ab_cdef).expect("u64 should be written");
+    writer
+        .write_u32(0x1234_5678)
+        .expect("u32 should be written");
+    writer
+        .write_u64(0x0123_4567_89ab_cdef)
+        .expect("u64 should be written");
     writer
         .write_u128(0x0123_4567_89ab_cdef_fedc_ba98_7654_3210)
         .expect("u128 should be written");
     writer.write_i16(-0x1234).expect("i16 should be written");
-    writer.write_i32(-0x0123_4567).expect("i32 should be written");
-    writer.write_i64(-0x0123_4567_89ab_cdef).expect("i64 should be written");
+    writer
+        .write_i32(-0x0123_4567)
+        .expect("i32 should be written");
+    writer
+        .write_i64(-0x0123_4567_89ab_cdef)
+        .expect("i64 should be written");
     writer
         .write_i128(-0x0123_4567_89ab_cdef_fedc_ba98_7654_3210)
         .expect("i128 should be written");
@@ -108,10 +116,13 @@ fn test_binary_writer_reports_length_errors() {
 
 #[test]
 fn test_binary_writer_write_and_seek_delegate_to_inner_writer() {
-    let mut writer = qubit_io::BinaryWriter::<_, qubit_io::LittleEndian>::new(std::io::Cursor::new(vec![0; 4]));
+    let mut writer =
+        qubit_io::BinaryWriter::<_, qubit_io::LittleEndian>::new(std::io::Cursor::new(vec![0; 4]));
 
-    std::io::Seek::seek(&mut writer, std::io::SeekFrom::Start(1)).expect("seeking through BinaryWriter should succeed");
-    std::io::Write::write_all(&mut writer, b"xy").expect("writing through BinaryWriter should succeed");
+    std::io::Seek::seek(&mut writer, std::io::SeekFrom::Start(1))
+        .expect("seeking through BinaryWriter should succeed");
+    std::io::Write::write_all(&mut writer, b"xy")
+        .expect("writing through BinaryWriter should succeed");
     std::io::Write::flush(&mut writer).expect("flushing through BinaryWriter should succeed");
 
     let cursor = writer.into_inner();

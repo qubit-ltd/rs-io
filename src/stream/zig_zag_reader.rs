@@ -9,23 +9,10 @@
  ******************************************************************************/
 
 use core::marker::PhantomData;
-use std::io::{
-    Error,
-    ErrorKind,
-    Read,
-    Result,
-    Seek,
-    SeekFrom,
-};
+use std::io::{Error, ErrorKind, Read, Result, Seek, SeekFrom};
 
+use crate::codec::{DecodePolicy, Leb128DecodeError, NonStrict, Strict, ZigZagCodec};
 use crate::ReadExt;
-use crate::codec::{
-    DecodePolicy,
-    Leb128DecodeError,
-    NonStrict,
-    Strict,
-    ZigZagCodec,
-};
 
 /// Reader wrapper for ZigZag + unsigned LEB128 integers.
 pub struct ZigZagReader<R, P = NonStrict> {
@@ -118,12 +105,16 @@ where
     where
         F: FnOnce(&[u8; 19]) -> std::result::Result<(T, usize), Leb128DecodeError>,
     {
-        debug_assert!(N <= self.buffer.len(), "ZigZag read length exceeds internal buffer");
+        debug_assert!(
+            N <= self.buffer.len(),
+            "ZigZag read length exceeds internal buffer"
+        );
         for index in 0..N {
             // SAFETY: `index` is produced by `0..N`, where `N` is a
             // codec-declared length that fits the fixed internal buffer.
             unsafe {
-                self.inner.read_exact_unchecked(&mut self.buffer, index, 1)?;
+                self.inner
+                    .read_exact_unchecked(&mut self.buffer, index, 1)?;
             }
             if read_byte(&self.buffer, index) & 0x80 == 0 {
                 return decode(&self.buffer)
@@ -194,7 +185,10 @@ fn map_leb128_decode_error(error: Leb128DecodeError) -> Error {
 /// Reads one byte from the internal ZigZag buffer without an extra bounds check.
 #[inline(always)]
 fn read_byte(buffer: &[u8; 19], index: usize) -> u8 {
-    debug_assert!(index < buffer.len(), "ZigZag read index exceeds internal buffer");
+    debug_assert!(
+        index < buffer.len(),
+        "ZigZag read index exceeds internal buffer"
+    );
     // SAFETY: `read_leb128` only calls this with an index produced by
     // `0..N`, where N is a codec-declared length that fits `buffer`.
     unsafe { *buffer.as_ptr().add(index) }

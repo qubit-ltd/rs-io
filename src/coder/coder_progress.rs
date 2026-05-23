@@ -35,7 +35,11 @@ impl CoderProgress {
     #[must_use]
     #[inline]
     pub const fn new(status: CoderStatus, read: usize, written: usize) -> Self {
-        Self { status, read, written }
+        Self {
+            status,
+            read,
+            written,
+        }
     }
 
     /// Creates a completed progress value.
