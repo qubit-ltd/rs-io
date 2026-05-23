@@ -100,6 +100,15 @@ fn test_zig_zag_read_ext_reports_invalid_data_and_eof() {
             .kind()
     );
 
+    let mut input = Cursor::new([0x80, 0x80]);
+    assert_eq!(
+        ErrorKind::InvalidData,
+        input
+            .read_zig_zag_i8()
+            .expect_err("unterminated max-width i8 value should fail")
+            .kind()
+    );
+
     let mut input = Cursor::new([0x80]);
     assert_eq!(
         ErrorKind::UnexpectedEof,

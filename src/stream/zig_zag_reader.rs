@@ -10,41 +10,28 @@
 
 use core::marker::PhantomData;
 use std::io::{
-    Error,
-    ErrorKind,
     Read,
     Result,
 };
 
 use crate::codec::{
     DecodePolicy,
-    Leb128DecodeErrorKind,
     NonStrict,
     ZigZagCodec,
 };
+use crate::util::read_leb128_payload;
 
 macro_rules! read_zig_zag_value {
-    ($reader:expr, $ty:ty, $policy:ty) => {{
-        let mut bytes = [0u8; ZigZagCodec::<$ty, NonStrict>::REQUIRED_MIN_BUFFER_LEN];
-        for index in 0..bytes.len() {
-            // SAFETY: The loop index is always inside the fixed-size local buffer.
-            let target =
-                unsafe { core::slice::from_raw_parts_mut(bytes.as_mut_ptr().add(index), 1) };
-            $reader.read_exact(target)?;
-            if bytes[index] & 0x80 == 0 {
+    ($reader:expr, $ty:ty, $policy:ty) => {
+        read_leb128_payload::<{ ZigZagCodec::<$ty, NonStrict>::REQUIRED_MIN_BUFFER_LEN }, _, _, _>(
+            $reader,
+            |bytes| {
                 // SAFETY: The local buffer is exactly the codec's minimum buffer length,
                 // or it contains an earlier terminating byte before decoding.
-                let result = unsafe { ZigZagCodec::<$ty, $policy>::read_unchecked(&bytes, 0) };
-                return match result {
-                    Ok((value, _)) => Ok(value),
-                    Err(error) => Err(Error::new(ErrorKind::InvalidData, error)),
-                };
-            }
-        }
-        let kind = Leb128DecodeErrorKind::Malformed;
-        let error = crate::Leb128DecodeError::new(kind, bytes.len() - 1);
-        Err(Error::new(ErrorKind::InvalidData, error))
-    }};
+                unsafe { ZigZagCodec::<$ty, $policy>::read_unchecked(bytes, 0) }
+            },
+        )
+    };
 }
 
 /// Reader wrapper for ZigZag + unsigned LEB128 integers.

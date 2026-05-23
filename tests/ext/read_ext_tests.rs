@@ -183,6 +183,17 @@ fn test_read_exact_vec_limited_rejects_len_over_max_before_reading() {
 }
 
 #[test]
+fn test_read_exact_vec_limited_reports_allocation_failure_before_reading() {
+    let mut reader = PanicOnRead;
+
+    let error = reader
+        .read_exact_vec_limited(usize::MAX, usize::MAX)
+        .expect_err("allocation failure should be returned before reading");
+
+    assert_eq!(ErrorKind::Other, error.kind());
+}
+
+#[test]
 fn test_read_exact_vec_limited_returns_unexpected_eof() {
     let mut reader = Cursor::new(b"ab".to_vec());
 
