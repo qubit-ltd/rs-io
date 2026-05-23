@@ -1,7 +1,9 @@
-use std::io::Cursor;
-use std::time::Duration;
+use std::fs::{self, File};
+use std::io::{BufReader, BufWriter, Cursor, Write};
+use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use qubit_io::{
     BinaryReadExt, BinaryReader, BinaryWriteExt, BinaryWriter, Leb128ReadExt, Leb128Reader,
     Leb128WriteExt, Leb128Writer, LittleEndian, NonStrict, ZigZagReadExt, ZigZagReader,
@@ -9,9 +11,39 @@ use qubit_io::{
 };
 
 const BINARY_BATCH: usize = 1_048_576;
-const BINARY_REPEAT: usize = 512;
+const BINARY_REPEAT: usize = 32;
+const BINARY_RECORD_BYTES: usize = 41;
 const VARINT_COUNT: usize = 1_048_576;
 const VARINT_REPEAT: usize = 512;
+
+struct BenchmarkFiles {
+    dir: PathBuf,
+}
+
+impl BenchmarkFiles {
+    fn new() -> Self {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be after unix epoch")
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "qubit-io-stream-bench-{}-{now}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&dir).expect("benchmark temp directory should be created");
+        Self { dir }
+    }
+
+    fn path(&self, name: &str) -> PathBuf {
+        self.dir.join(name)
+    }
+}
+
+impl Drop for BenchmarkFiles {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.dir);
+    }
+}
 
 #[derive(Clone, Copy)]
 struct Record {
@@ -128,9 +160,10 @@ fn build_records() -> Vec<Record> {
 }
 
 #[inline]
-fn write_records_wrapper(records: &[Record]) -> Vec<u8> {
-    let mut payload = Vec::with_capacity(records.len() * 48);
-    let mut writer = BinaryWriter::<_, LittleEndian>::new(Cursor::new(&mut payload));
+fn write_records_wrapper_file(records: &[Record], path: &Path) {
+    let file = File::create(path).expect("binary wrapper output file should be created");
+    let buffer = BufWriter::new(file);
+    let mut writer = BinaryWriter::<_, LittleEndian>::new(buffer);
 
     for value in records {
         writer.write_u64(value.id).unwrap();
@@ -142,30 +175,35 @@ fn write_records_wrapper(records: &[Record]) -> Vec<u8> {
         writer.write_u64(value.ts_ms).unwrap();
     }
 
-    payload
+    writer
+        .into_inner()
+        .flush()
+        .expect("binary wrapper output file should flush");
 }
 
 #[inline]
-fn write_records_ext(records: &[Record]) -> Vec<u8> {
-    let mut payload = Vec::with_capacity(records.len() * 48);
-    let mut cursor = Cursor::new(&mut payload);
+fn write_records_ext_file(records: &[Record], path: &Path) {
+    let file = File::create(path).expect("binary ext output file should be created");
+    let mut writer = BufWriter::new(file);
 
     for value in records {
-        cursor.write_u64_le(value.id).unwrap();
-        cursor.write_u32_le(value.user_id).unwrap();
-        cursor.write_u8(value.flag).unwrap();
-        cursor.write_i64_le(value.delta).unwrap();
-        cursor.write_f32_le(value.score).unwrap();
-        cursor.write_f64_le(value.weight).unwrap();
-        cursor.write_u64_le(value.ts_ms).unwrap();
+        writer.write_u64_le(value.id).unwrap();
+        writer.write_u32_le(value.user_id).unwrap();
+        writer.write_u8(value.flag).unwrap();
+        writer.write_i64_le(value.delta).unwrap();
+        writer.write_f32_le(value.score).unwrap();
+        writer.write_f64_le(value.weight).unwrap();
+        writer.write_u64_le(value.ts_ms).unwrap();
     }
 
-    payload
+    writer.flush().expect("binary ext output file should flush");
 }
 
 #[inline]
-fn read_records_wrapper(mut bytes: &[u8]) {
-    let mut reader = BinaryReader::<_, LittleEndian>::new(Cursor::new(&mut bytes));
+fn read_records_wrapper_file(path: &Path) {
+    let file = File::open(path).expect("binary wrapper input file should open");
+    let buffer = BufReader::new(file);
+    let mut reader = BinaryReader::<_, LittleEndian>::new(buffer);
     let mut digest = 0u64;
 
     for _ in 0..BINARY_BATCH {
@@ -190,18 +228,19 @@ fn read_records_wrapper(mut bytes: &[u8]) {
 }
 
 #[inline]
-fn read_records_ext(mut bytes: &[u8]) {
-    let mut cursor = Cursor::new(&mut bytes);
+fn read_records_ext_file(path: &Path) {
+    let file = File::open(path).expect("binary ext input file should open");
+    let mut reader = BufReader::new(file);
     let mut digest = 0u64;
 
     for _ in 0..BINARY_BATCH {
-        let id = cursor.read_u64_le().unwrap();
-        let user_id = cursor.read_u32_le().unwrap();
-        let flag = cursor.read_u8().unwrap();
-        let delta = cursor.read_i64_le().unwrap();
-        let score = cursor.read_f32_le().unwrap();
-        let weight = cursor.read_f64_le().unwrap();
-        let ts_ms = cursor.read_u64_le().unwrap();
+        let id = reader.read_u64_le().unwrap();
+        let user_id = reader.read_u32_le().unwrap();
+        let flag = reader.read_u8().unwrap();
+        let delta = reader.read_i64_le().unwrap();
+        let score = reader.read_f32_le().unwrap();
+        let weight = reader.read_f64_le().unwrap();
+        let ts_ms = reader.read_u64_le().unwrap();
 
         digest ^= id;
         digest ^= user_id as u64;
@@ -257,10 +296,19 @@ fn build_signed_values() -> Vec<i64> {
 
 fn bench_prod_binary_pipeline(c: &mut Criterion) {
     let records = build_records();
-    let encoded = write_records_wrapper(&records);
-    let ext_encoded = write_records_ext(&records);
-    assert_eq!(encoded, ext_encoded);
-    let bytes_processed = (BINARY_BATCH * BINARY_REPEAT * 41) as u64;
+    let files = BenchmarkFiles::new();
+    let wrapper_source_path = files.path("binary-wrapper-source.bin");
+    let ext_source_path = files.path("binary-ext-source.bin");
+    let ext_write_path = files.path("binary-ext-write.bin");
+    let wrapper_write_path = files.path("binary-wrapper-write.bin");
+
+    write_records_wrapper_file(&records, &wrapper_source_path);
+    write_records_ext_file(&records, &ext_source_path);
+    assert_eq!(
+        fs::read(&wrapper_source_path).expect("binary wrapper source should be readable"),
+        fs::read(&ext_source_path).expect("binary ext source should be readable")
+    );
+    let bytes_processed = (BINARY_BATCH * BINARY_REPEAT * BINARY_RECORD_BYTES) as u64;
 
     let mut group = c.benchmark_group("prod_binary_pipeline");
     group.warm_up_time(Duration::from_secs(2));
@@ -270,20 +318,9 @@ fn bench_prod_binary_pipeline(c: &mut Criterion) {
 
     group.bench_function(BenchmarkId::from_parameter("ext_write_record_batch"), |b| {
         b.iter(|| {
-            let mut payload = Vec::with_capacity(records.len() * 48);
             for _ in 0..BINARY_REPEAT {
-                payload.clear();
-                let mut cursor = Cursor::new(&mut payload);
-                for value in &records {
-                    cursor.write_u64_le(value.id).unwrap();
-                    cursor.write_u32_le(value.user_id).unwrap();
-                    cursor.write_u8(value.flag).unwrap();
-                    cursor.write_i64_le(value.delta).unwrap();
-                    cursor.write_f32_le(value.score).unwrap();
-                    cursor.write_f64_le(value.weight).unwrap();
-                    cursor.write_u64_le(value.ts_ms).unwrap();
-                }
-                criterion::black_box(cursor.position());
+                write_records_ext_file(&records, &ext_write_path);
+                criterion::black_box(BINARY_BATCH * BINARY_RECORD_BYTES);
             }
         })
     });
@@ -292,21 +329,9 @@ fn bench_prod_binary_pipeline(c: &mut Criterion) {
         BenchmarkId::from_parameter("wrapper_write_record_batch"),
         |b| {
             b.iter(|| {
-                let mut payload = Vec::with_capacity(records.len() * 48);
                 for _ in 0..BINARY_REPEAT {
-                    payload.clear();
-                    let mut cursor = Cursor::new(&mut payload);
-                    let mut writer = BinaryWriter::<_, LittleEndian>::new(&mut cursor);
-                    for value in &records {
-                        writer.write_u64(value.id).unwrap();
-                        writer.write_u32(value.user_id).unwrap();
-                        writer.write_u8(value.flag).unwrap();
-                        writer.write_i64(value.delta).unwrap();
-                        writer.write_f32(value.score).unwrap();
-                        writer.write_f64(value.weight).unwrap();
-                        writer.write_u64(value.ts_ms).unwrap();
-                    }
-                    criterion::black_box(cursor.position());
+                    write_records_wrapper_file(&records, &wrapper_write_path);
+                    criterion::black_box(BINARY_BATCH * BINARY_RECORD_BYTES);
                 }
             })
         },
@@ -315,7 +340,7 @@ fn bench_prod_binary_pipeline(c: &mut Criterion) {
     group.bench_function(BenchmarkId::from_parameter("ext_read_record_batch"), |b| {
         b.iter(|| {
             for _ in 0..BINARY_REPEAT {
-                read_records_ext(&encoded);
+                read_records_ext_file(&wrapper_source_path);
             }
         })
     });
@@ -325,7 +350,7 @@ fn bench_prod_binary_pipeline(c: &mut Criterion) {
         |b| {
             b.iter(|| {
                 for _ in 0..BINARY_REPEAT {
-                    read_records_wrapper(&encoded);
+                    read_records_wrapper_file(&wrapper_source_path);
                 }
             })
         },
