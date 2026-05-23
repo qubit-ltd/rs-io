@@ -27,64 +27,22 @@ mod util;
 mod wrappers;
 
 pub use codec::{
-    BigEndian,
-    BinaryCodec,
-    ByteOrder,
-    ByteOrderSpec,
-    DecodePolicy,
-    Leb128Codec,
-    Leb128DecodeError,
-    Leb128DecodeErrorKind,
-    LittleEndian,
-    NonStrict,
-    Strict,
-    ZigZagCodec,
+    BigEndian, BinaryCodec, ByteOrder, ByteOrderSpec, DecodePolicy, Leb128Codec, Leb128DecodeError,
+    Leb128DecodeErrorKind, LittleEndian, NonStrict, Strict, ZigZagCodec,
 };
-pub use coder::{
-    Coder,
-    CoderProgress,
-    CoderStatus,
-};
+pub use coder::{Coder, CoderProgress, CoderStatus};
 pub use ext::{
-    BinaryReadExt,
-    BinaryWriteExt,
-    BufReadExt,
-    Leb128ReadExt,
-    Leb128WriteExt,
-    ReadExt,
-    ReadSeekExt,
-    SeekExt,
-    StringReadExt,
-    StringWriteExt,
-    WriteExt,
-    WriteSeekExt,
-    ZigZagReadExt,
-    ZigZagWriteExt,
+    BinaryReadExt, BinaryWriteExt, BufReadExt, Leb128ReadExt, Leb128WriteExt, ReadExt, ReadSeekExt,
+    SeekExt, StringReadExt, StringWriteExt, WriteExt, WriteSeekExt, ZigZagReadExt, ZigZagWriteExt,
 };
 pub use stream::{
-    BinaryReader,
-    BinaryWriter,
-    Leb128Reader,
-    Leb128Writer,
-    ZigZagReader,
-    ZigZagWriter,
+    BinaryReader, BinaryWriter, BufferedBinaryReader, BufferedBinaryWriter, BufferedLeb128Reader,
+    BufferedLeb128Writer, BufferedZigZagReader, BufferedZigZagWriter, Leb128Reader, Leb128Writer,
+    ZigZagReader, ZigZagWriter,
 };
-pub use traits::{
-    BufReadSeek,
-    ReadSeek,
-    ReadWrite,
-    ReadWriteSeek,
-    WriteSeek,
-};
+pub use traits::{BufReadSeek, ReadSeek, ReadWrite, ReadWriteSeek, WriteSeek};
 pub use util::Streams;
 pub use wrappers::{
-    ChecksumReader,
-    ChecksumWriter,
-    CountingReader,
-    CountingWriter,
-    LimitReader,
-    LimitWriter,
-    PositionGuard,
-    TeeReader,
-    TeeWriter,
+    ChecksumReader, ChecksumWriter, CountingReader, CountingWriter, LimitReader, LimitWriter,
+    PositionGuard, TeeReader, TeeWriter,
 };
