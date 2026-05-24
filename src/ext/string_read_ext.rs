@@ -7,10 +7,17 @@
  *    Licensed under the Apache License, Version 2.0.
  *
  ******************************************************************************/
-use std::io::{Read, Result};
+use std::io::{
+    Read,
+    Result,
+};
 
 use crate::util::read_utf8_payload as read_utf8_payload_impl;
-use crate::{BinaryReadExt, ByteOrder, Leb128ReadExt};
+use crate::{
+    BinaryReadExt,
+    ByteOrder,
+    Leb128ReadExt,
+};
 
 /// Extension methods for reading length-prefixed UTF-8 strings.
 pub trait StringReadExt: Read {
@@ -31,6 +38,10 @@ pub trait StringReadExt: Read {
 
     /// Reads a UTF-8 string with an unsigned LEB128 byte-length prefix.
     ///
+    /// The length prefix is decoded as `usize`, so this format is target-width
+    /// dependent. Prefer `u16` or `u32` length-prefix methods for persistent
+    /// files and cross-platform protocols.
+    ///
     /// # Parameters
     /// - `max_len`: Maximum accepted UTF-8 payload length in bytes.
     ///
@@ -44,6 +55,10 @@ pub trait StringReadExt: Read {
     fn read_utf8_string_uleb(&mut self, max_len: usize) -> Result<String>;
 
     /// Reads a UTF-8 string with a canonical unsigned LEB128 byte-length prefix.
+    ///
+    /// The length prefix is decoded as `usize`, so this format is target-width
+    /// dependent. Prefer `u16` or `u32` length-prefix methods for persistent
+    /// files and cross-platform protocols.
     ///
     /// # Parameters
     /// - `max_len`: Maximum accepted UTF-8 payload length in bytes.

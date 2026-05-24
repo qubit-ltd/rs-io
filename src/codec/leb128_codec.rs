@@ -10,7 +10,12 @@
 
 use core::marker::PhantomData;
 
-use crate::{DecodePolicy, Leb128DecodeError, Leb128DecodeErrorKind, NonStrict};
+use crate::{
+    DecodePolicy,
+    Leb128DecodeError,
+    Leb128DecodeErrorKind,
+    NonStrict,
+};
 
 /// Type-level unchecked LEB128 codec.
 ///
@@ -52,19 +57,10 @@ macro_rules! impl_unsigned_leb128_codec {
             /// read [`Self::REQUIRED_MIN_BUFFER_LEN`] bytes, or that a valid terminating byte
             /// appears before that limit.
             #[inline(always)]
-            pub unsafe fn read_unchecked(
-                input: &[u8],
-                index: usize,
-            ) -> Result<($ty, usize), Leb128DecodeError> {
+            pub unsafe fn read_unchecked(input: &[u8], index: usize) -> Result<($ty, usize), Leb128DecodeError> {
                 // SAFETY: The caller guarantees enough readable bytes for this type.
-                let (value, consumed) = unsafe {
-                    read_uleb_unchecked::<P>(
-                        input,
-                        index,
-                        <$ty>::BITS,
-                        Self::REQUIRED_MIN_BUFFER_LEN,
-                    )?
-                };
+                let (value, consumed) =
+                    unsafe { read_uleb_unchecked::<P>(input, index, <$ty>::BITS, Self::REQUIRED_MIN_BUFFER_LEN)? };
                 Ok((value as $ty, consumed))
             }
 
@@ -170,19 +166,10 @@ macro_rules! impl_signed_leb128_codec {
             /// read [`Self::REQUIRED_MIN_BUFFER_LEN`] bytes, or that a valid terminating byte
             /// appears before that limit.
             #[inline(always)]
-            pub unsafe fn read_unchecked(
-                input: &[u8],
-                index: usize,
-            ) -> Result<($ty, usize), Leb128DecodeError> {
+            pub unsafe fn read_unchecked(input: &[u8], index: usize) -> Result<($ty, usize), Leb128DecodeError> {
                 // SAFETY: The caller guarantees enough readable bytes for this type.
-                let (value, consumed) = unsafe {
-                    read_sleb_unchecked::<P>(
-                        input,
-                        index,
-                        <$ty>::BITS,
-                        Self::REQUIRED_MIN_BUFFER_LEN,
-                    )?
-                };
+                let (value, consumed) =
+                    unsafe { read_sleb_unchecked::<P>(input, index, <$ty>::BITS, Self::REQUIRED_MIN_BUFFER_LEN)? };
                 Ok((value as $ty, consumed))
             }
 
@@ -301,10 +288,7 @@ unsafe fn read_uleb_available_unchecked<P>(
 where
     P: DecodePolicy,
 {
-    debug_assert!(
-        available <= max_bytes,
-        "available bytes exceed LEB128 maximum width"
-    );
+    debug_assert!(available <= max_bytes, "available bytes exceed LEB128 maximum width");
     let mut value = 0u128;
     let mut shift = 0u32;
     for offset in 0..available {
@@ -330,10 +314,7 @@ where
         return Ok(None);
     }
     let kind = Leb128DecodeErrorKind::Malformed;
-    Err((
-        Leb128DecodeError::new(kind, index + max_bytes - 1),
-        max_bytes,
-    ))
+    Err((Leb128DecodeError::new(kind, index + max_bytes - 1), max_bytes))
 }
 
 #[inline(always)]
@@ -366,10 +347,7 @@ unsafe fn read_sleb_available_unchecked<P>(
 where
     P: DecodePolicy,
 {
-    debug_assert!(
-        available <= max_bytes,
-        "available bytes exceed LEB128 maximum width"
-    );
+    debug_assert!(available <= max_bytes, "available bytes exceed LEB128 maximum width");
     let mut value = 0i128;
     let mut shift = 0u32;
     for offset in 0..available {
@@ -398,10 +376,7 @@ where
         return Ok(None);
     }
     let kind = Leb128DecodeErrorKind::Malformed;
-    Err((
-        Leb128DecodeError::new(kind, index + max_bytes - 1),
-        max_bytes,
-    ))
+    Err((Leb128DecodeError::new(kind, index + max_bytes - 1), max_bytes))
 }
 
 #[must_use]

@@ -8,7 +8,10 @@
  *
  ******************************************************************************/
 use std::collections::TryReserveError;
-use std::io::{Error, Result};
+use std::io::{
+    Error,
+    Result,
+};
 
 /// Converts a fallible allocation error into an I/O error.
 ///

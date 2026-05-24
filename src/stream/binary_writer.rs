@@ -9,10 +9,25 @@
  ******************************************************************************/
 
 use core::marker::PhantomData;
-use std::io::{Error, ErrorKind, Result, Seek, SeekFrom, Write};
+use std::io::{
+    Result,
+    Seek,
+    SeekFrom,
+    Write,
+};
 
-use crate::codec::{BigEndian, BinaryCodec, ByteOrder, ByteOrderSpec, LittleEndian};
 use crate::WriteExt;
+use crate::codec::{
+    BigEndian,
+    BinaryCodec,
+    ByteOrder,
+    ByteOrderSpec,
+    LittleEndian,
+};
+use crate::util::{
+    checked_u16_len,
+    checked_u32_len,
+};
 
 /// Writer wrapper for fixed-width binary values.
 ///
@@ -106,12 +121,7 @@ macro_rules! impl_for_order {
             impl_value_write!($order, write_u16, u16, "Writes an unsigned 16-bit integer.");
             impl_value_write!($order, write_u32, u32, "Writes an unsigned 32-bit integer.");
             impl_value_write!($order, write_u64, u64, "Writes an unsigned 64-bit integer.");
-            impl_value_write!(
-                $order,
-                write_u128,
-                u128,
-                "Writes an unsigned 128-bit integer."
-            );
+            impl_value_write!($order, write_u128, u128, "Writes an unsigned 128-bit integer.");
             impl_value_write!($order, write_i16, i16, "Writes a signed 16-bit integer.");
             impl_value_write!($order, write_i32, i32, "Writes a signed 32-bit integer.");
             impl_value_write!($order, write_i64, i64, "Writes a signed 64-bit integer.");
@@ -196,27 +206,5 @@ where
     #[inline]
     fn seek(&mut self, position: SeekFrom) -> Result<u64> {
         self.inner.seek(position)
-    }
-}
-
-#[inline]
-pub(crate) fn checked_u16_len(len: usize) -> Result<u16> {
-    u16::try_from(len).map_err(|_| {
-        Error::new(
-            ErrorKind::InvalidInput,
-            format!("string length {len} exceeds maximum encodable u16 length"),
-        )
-    })
-}
-
-#[inline]
-pub(crate) fn checked_u32_len(len: usize) -> Result<u32> {
-    if len <= u32::MAX as usize {
-        Ok(len as u32)
-    } else {
-        Err(Error::new(
-            ErrorKind::InvalidInput,
-            format!("length {len} exceeds u32"),
-        ))
     }
 }
