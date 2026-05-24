@@ -307,20 +307,21 @@ where
     );
     let mut value = 0u128;
     let mut shift = 0u32;
+    // SAFETY: The caller guarantees that `available` bytes are readable from
+    // `index`, so this base pointer can be advanced by every loop offset.
+    let base = unsafe { input.as_ptr().add(index) };
     for offset in 0..available {
         // SAFETY: The caller guarantees enough readable bytes for this loop.
-        let byte = unsafe { *input.as_ptr().add(index + offset) };
+        let byte = unsafe { *base.add(offset) };
         let payload = u128::from(byte & 0x7F);
         value |= payload << shift;
         if byte & 0x80 == 0 {
             if offset == max_bytes - 1 && !unsigned_final_payload_fits(byte, bits, offset) {
-                let kind = Leb128DecodeErrorKind::Malformed;
-                return Err((Leb128DecodeError::new(kind, index + offset), offset + 1));
+                return Err(malformed_decode_error(index + offset, offset + 1));
             }
             let consumed = offset + 1;
             if P::STRICT && !has_canonical_uleb_len(value, consumed) {
-                let kind = Leb128DecodeErrorKind::NonCanonical;
-                return Err((Leb128DecodeError::new(kind, index), consumed));
+                return Err(noncanonical_decode_error(index, consumed));
             }
             return Ok(Some((value, consumed)));
         }
@@ -329,11 +330,7 @@ where
     if available < max_bytes {
         return Ok(None);
     }
-    let kind = Leb128DecodeErrorKind::Malformed;
-    Err((
-        Leb128DecodeError::new(kind, index + max_bytes - 1),
-        max_bytes,
-    ))
+    Err(malformed_decode_error(index + max_bytes - 1, max_bytes))
 }
 
 #[inline(always)]
@@ -372,23 +369,24 @@ where
     );
     let mut value = 0i128;
     let mut shift = 0u32;
+    // SAFETY: The caller guarantees that `available` bytes are readable from
+    // `index`, so this base pointer can be advanced by every loop offset.
+    let base = unsafe { input.as_ptr().add(index) };
     for offset in 0..available {
         // SAFETY: The caller guarantees enough readable bytes for this loop.
-        let byte = unsafe { *input.as_ptr().add(index + offset) };
+        let byte = unsafe { *base.add(offset) };
         let payload = i128::from(byte & 0x7F);
         value |= payload << shift;
         if byte & 0x80 == 0 {
             if offset == max_bytes - 1 && !signed_final_payload_fits(byte, bits, offset) {
-                let kind = Leb128DecodeErrorKind::Malformed;
-                return Err((Leb128DecodeError::new(kind, index + offset), offset + 1));
+                return Err(malformed_decode_error(index + offset, offset + 1));
             }
             if byte & 0x40 != 0 && shift + 7 < i128::BITS {
                 value |= (!0i128) << (shift + 7);
             }
             let consumed = offset + 1;
             if P::STRICT && !has_canonical_sleb_len(value, consumed) {
-                let kind = Leb128DecodeErrorKind::NonCanonical;
-                return Err((Leb128DecodeError::new(kind, index), consumed));
+                return Err(noncanonical_decode_error(index, consumed));
             }
             return Ok(Some((value, consumed)));
         }
@@ -397,11 +395,47 @@ where
     if available < max_bytes {
         return Ok(None);
     }
-    let kind = Leb128DecodeErrorKind::Malformed;
-    Err((
-        Leb128DecodeError::new(kind, index + max_bytes - 1),
-        max_bytes,
-    ))
+    Err(malformed_decode_error(index + max_bytes - 1, max_bytes))
+}
+
+/// Builds a malformed LEB128 error on the cold error path.
+///
+/// # Parameters
+///
+/// - `index`: Absolute byte index associated with the malformed payload.
+/// - `consumed`: Number of bytes that should be consumed before reporting the
+///   error.
+///
+/// # Returns
+///
+/// Returns the error and the byte count to consume.
+#[cold]
+#[inline(never)]
+fn malformed_decode_error(index: usize, consumed: usize) -> (Leb128DecodeError, usize) {
+    (
+        Leb128DecodeError::new(Leb128DecodeErrorKind::Malformed, index),
+        consumed,
+    )
+}
+
+/// Builds a non-canonical LEB128 error on the cold error path.
+///
+/// # Parameters
+///
+/// - `index`: Absolute byte index at which the non-canonical payload starts.
+/// - `consumed`: Number of bytes that should be consumed before reporting the
+///   error.
+///
+/// # Returns
+///
+/// Returns the error and the byte count to consume.
+#[cold]
+#[inline(never)]
+fn noncanonical_decode_error(index: usize, consumed: usize) -> (Leb128DecodeError, usize) {
+    (
+        Leb128DecodeError::new(Leb128DecodeErrorKind::NonCanonical, index),
+        consumed,
+    )
 }
 
 #[must_use]
