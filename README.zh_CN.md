@@ -19,7 +19,8 @@ Qubit IO 专注于基于 `std::io` 的 stream 和字节 I/O。它不尝试成为
 - 需要精确读取、有界读取、有界分隔符读取和保持位置不变的 seek 操作；
 - 需要有界复制、EOF 限制复制、内容比较等 stream helper；
 - 需要 binary、LEB128、ZigZag 和 length-prefixed UTF-8 编解码 helper；
-- 需要计数、限制、tee、checksum、seek 位置恢复等 stream wrapper。
+- 需要计数、限制、tee、checksum、seek 位置恢复等 stream wrapper；
+- 需要 reader/writer codec object，包括面向高吞吐标量编解码的 buffered 变体。
 
 详细用法、示例和 API 选择建议请参见[中文用户手册](doc/user_guide.zh_CN.md)。API 参考文档可在 [docs.rs](https://docs.rs/qubit-io) 查看。
 
@@ -107,6 +108,11 @@ extension trait 让常见底层 I/O 模式保持接近标准库，同时减少�
 | `ZigZagReadExt` / `ZigZagWriteExt` | ZigZag 映射有符号整数编解码 |
 | `StringReadExt` / `StringWriteExt` | length-prefixed UTF-8 字符串 |
 
+`usize` 和 `isize` 的 LEB128/ZigZag 方法使用当前 Rust target 的指针宽度。它们适合
+进程内 Rust 数据，但持久化文件和跨平台协议更建议使用 `u64` 或 `i64` 这类 fixed-width
+整数方法。ULEB 字符串 helper 会把字节长度编码为 `usize`；如果 wire format 必须与 target
+无关，请使用 `u16` 或 `u32` 字符串 helper。
+
 ### Streams 命名空间
 
 `Streams` 包含 stream 层 associated function：
@@ -142,6 +148,15 @@ writer 实现 `Write`，底层 stream 支持 seek 时还会透传 `Seek`。
 | `BinaryReader`、`BinaryWriter` | 使用类型级字节序的 fixed-width 标量编解码 |
 | `Leb128Reader`、`Leb128Writer` | LEB128 整数和 ULEB 长度前缀 UTF-8 字符串 |
 | `ZigZagReader`、`ZigZagWriter` | 基于 unsigned LEB128 payload 的 ZigZag 编解码 |
+| `BufferedBinaryReader`、`BufferedBinaryWriter` | buffered fixed-width 标量编解码 |
+| `BufferedLeb128Reader`、`BufferedLeb128Writer` | buffered LEB128 整数和 ULEB 长度前缀 UTF-8 字符串 |
+| `BufferedZigZagReader`、`BufferedZigZagWriter` | 基于 unsigned LEB128 payload 的 buffered ZigZag 编解码 |
+
+Buffered reader 可能会预取字节，因此底层 reader 的物理位置可能已经超过 wrapper 暴露的逻辑
+位置。对 buffered reader 调用 `into_inner` 会丢弃尚未消费的预取字节。
+
+Buffered writer 不会在 `Drop` 时 flush 待写入字节。必须调用 `flush()` 或 `into_inner()`
+才能保证数据已经送达底层 writer。Buffered writer 在执行 `Seek` 前会先 flush 待写入字节。
 
 ## Prelude
 
