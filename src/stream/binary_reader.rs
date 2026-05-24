@@ -9,11 +9,22 @@
  ******************************************************************************/
 
 use core::marker::PhantomData;
-use std::io::{Read, Result, Seek, SeekFrom};
+use std::io::{
+    Read,
+    Result,
+    Seek,
+    SeekFrom,
+};
 
-use crate::codec::{BigEndian, BinaryCodec, ByteOrder, ByteOrderSpec, LittleEndian};
-use crate::util::read_utf8_payload;
 use crate::ReadExt;
+use crate::codec::{
+    BigEndian,
+    BinaryCodec,
+    ByteOrder,
+    ByteOrderSpec,
+    LittleEndian,
+};
+use crate::util::read_utf8_payload;
 
 /// Reader wrapper for fixed-width binary values.
 ///
@@ -106,12 +117,7 @@ macro_rules! impl_for_order {
             impl_value_read!($order, read_u16, u16, "Reads an unsigned 16-bit integer.");
             impl_value_read!($order, read_u32, u32, "Reads an unsigned 32-bit integer.");
             impl_value_read!($order, read_u64, u64, "Reads an unsigned 64-bit integer.");
-            impl_value_read!(
-                $order,
-                read_u128,
-                u128,
-                "Reads an unsigned 128-bit integer."
-            );
+            impl_value_read!($order, read_u128, u128, "Reads an unsigned 128-bit integer.");
             impl_value_read!($order, read_i16, i16, "Reads a signed 16-bit integer.");
             impl_value_read!($order, read_i32, i32, "Reads a signed 32-bit integer.");
             impl_value_read!($order, read_i64, i64, "Reads a signed 64-bit integer.");

@@ -6,14 +6,14 @@
  *
  *    Licensed under the Apache License, Version 2.0.
  *
- ******************************************************************************/
-use core::fmt;
-use std::error::Error;
+******************************************************************************/
+use thiserror::Error;
 
 use crate::Leb128DecodeErrorKind;
 
 /// Error reported while decoding a LEB128 integer from a byte buffer.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
+#[error("{kind}")]
 pub struct Leb128DecodeError {
     kind: Leb128DecodeErrorKind,
     index: usize,
@@ -49,12 +49,3 @@ impl Leb128DecodeError {
         self.index
     }
 }
-
-impl fmt::Display for Leb128DecodeError {
-    /// Formats the LEB128 decoding error.
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "{}", self.kind)
-    }
-}
-
-impl Error for Leb128DecodeError {}

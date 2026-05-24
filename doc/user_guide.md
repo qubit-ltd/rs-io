@@ -69,9 +69,14 @@ assert_eq!(&[0xac, 0x02], &compact[..written]);
 
 Stream-oriented reader/writer wrappers live under the separate stream wrapper
 surface: `BinaryReader`, `BinaryWriter`, `Leb128Reader`, `Leb128Writer`,
-`ZigZagReader`, and `ZigZagWriter`. Reader wrappers also implement `Read`,
-writer wrappers implement `Write`, and both sides pass through `Seek` when the
-wrapped stream supports it.
+`ZigZagReader`, `ZigZagWriter`, and their `Buffered*` variants. Reader wrappers
+also implement `Read`, writer wrappers implement `Write`, and both sides pass
+through `Seek` when the wrapped stream supports it.
+
+`usize` and `isize` codec specializations use the current Rust target's pointer
+width. They are useful for process-local Rust data, but persistent files and
+cross-platform protocols should prefer fixed-width integer types such as `u64`
+or `i64`.
 
 ## Installation
 
@@ -405,6 +410,12 @@ encodings.
 `ZigZagReadExt` and `ZigZagWriteExt` encode signed values through an unsigned
 LEB128 payload. Use ZigZag when small negative values should remain compact.
 
+Avoid `usize` and `isize` methods for persistent wire formats unless all
+producers and consumers intentionally share the same target pointer width. Use
+fixed-width methods such as `read_uleb_u64`, `write_uleb_u64`,
+`read_zig_zag_i64`, and `write_zig_zag_i64` when the encoded data crosses
+platform boundaries.
+
 ```rust
 use std::io::Cursor;
 
@@ -424,7 +435,8 @@ assert_eq!(-42, input.read_zig_zag_i64()?);
 
 `StringReadExt` and `StringWriteExt` read and write UTF-8 strings with ULEB128,
 `u16`, or `u32` byte-length prefixes. Reads are bounded by caller-provided size
-limits.
+limits. The ULEB string helpers encode the length as `usize`; use `u16` or
+`u32` length prefixes when the wire format must be target-independent.
 
 ```rust
 use std::io::Cursor;
@@ -459,7 +471,7 @@ let mut output = Vec::new();
 
 reader.read_to_end(&mut output)?;
 
-assert_eq!(3, reader.count());
+assert_eq!(3, reader.bytes_read());
 # Ok::<(), std::io::Error>(())
 ```
 
@@ -509,9 +521,9 @@ use std::io::{Cursor, Read};
 use qubit_io::PositionGuard;
 
 fn looks_like_qubit(input: &mut Cursor<Vec<u8>>) -> std::io::Result<bool> {
-    let _guard = PositionGuard::new(input)?;
+    let mut guard = PositionGuard::new(input)?;
     let mut magic = [0_u8; 4];
-    input.read_exact(&mut magic)?;
+    guard.get_mut().read_exact(&mut magic)?;
     Ok(&magic == b"QBIT")
 }
 
@@ -537,6 +549,9 @@ pass through `Seek` when the wrapped stream supports seeking.
 | `BinaryReader`, `BinaryWriter` | fixed-width scalar values |
 | `Leb128Reader`, `Leb128Writer` | LEB128 integers |
 | `ZigZagReader`, `ZigZagWriter` | ZigZag signed integers |
+| `BufferedBinaryReader`, `BufferedBinaryWriter` | buffered fixed-width scalar values |
+| `BufferedLeb128Reader`, `BufferedLeb128Writer` | buffered LEB128 integers |
+| `BufferedZigZagReader`, `BufferedZigZagWriter` | buffered ZigZag signed integers |
 
 ### BinaryReader and BinaryWriter
 
@@ -602,6 +617,36 @@ let bytes = writer.into_inner();
 let mut reader = ZigZagReader::<_, Strict>::new(Cursor::new(bytes));
 assert_eq!(-1, reader.read_i64()?);
 assert_eq!(42, reader.read_i64()?);
+
+# Ok::<(), std::io::Error>(())
+```
+
+### Buffered Codec Wrappers
+
+Use buffered codec wrappers when repeatedly reading or writing scalar values and
+you want the wrapper to batch I/O internally. The buffered readers may prefetch
+bytes from the wrapped reader, so `get_ref` can observe a physical stream
+position ahead of the logical wrapper position. Calling `into_inner` on a
+buffered reader discards unread prefetched bytes.
+
+Buffered writers flush when their internal buffer is full, when `flush()` is
+called, when `into_inner()` is called, or before seeking. They do not flush from
+`Drop`, so call `flush()` or `into_inner()` before relying on the wrapped writer
+having received all bytes.
+
+```rust
+use std::io::Cursor;
+
+use qubit_io::{BufferedBinaryReader, BufferedBinaryWriter, LittleEndian};
+
+let mut writer = BufferedBinaryWriter::<_, LittleEndian>::with_capacity(Vec::new(), 64);
+writer.write_u32(0x0102_0304)?;
+writer.write_i16(-7)?;
+let bytes = writer.into_inner()?;
+
+let mut reader = BufferedBinaryReader::<_, LittleEndian>::with_capacity(Cursor::new(bytes), 64);
+assert_eq!(0x0102_0304, reader.read_u32()?);
+assert_eq!(-7, reader.read_i16()?);
 
 # Ok::<(), std::io::Error>(())
 ```

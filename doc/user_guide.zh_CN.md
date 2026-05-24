@@ -66,9 +66,12 @@ assert_eq!(&[0xac, 0x02], &compact[..written]);
 ```
 
 面向 stream 的 reader/writer wrapper 使用单独的 stream wrapper API：
-`BinaryReader`、`BinaryWriter`、`Leb128Reader`、`Leb128Writer`、`ZigZagReader`
-和 `ZigZagWriter`。Reader wrapper 同时实现 `Read`，writer wrapper 同时实现
-`Write`，当底层 stream 支持 seek 时还会透传 `Seek`。
+`BinaryReader`、`BinaryWriter`、`Leb128Reader`、`Leb128Writer`、`ZigZagReader`、
+`ZigZagWriter` 以及对应的 `Buffered*` 变体。Reader wrapper 同时实现 `Read`，
+writer wrapper 同时实现 `Write`，当底层 stream 支持 seek 时还会透传 `Seek`。
+
+`usize` 和 `isize` codec 实例化使用当前 Rust target 的指针宽度。它们适合进程内 Rust
+数据，但持久化文件和跨平台协议应优先使用 `u64` 或 `i64` 这类 fixed-width 整数类型。
 
 ## 安装
 
@@ -386,6 +389,10 @@ assert_eq!(-2, input.read_i16_le()?);
 `ZigZagReadExt` 和 `ZigZagWriteExt` 把有符号值编码成 unsigned LEB128 payload。
 当小的负数也需要保持紧凑时，使用 ZigZag。
 
+除非所有 producer 和 consumer 都明确共享相同 target 指针宽度，否则不要在持久化 wire
+format 中使用 `usize` 和 `isize` 方法。跨平台数据建议使用 `read_uleb_u64`、
+`write_uleb_u64`、`read_zig_zag_i64`、`write_zig_zag_i64` 等 fixed-width 方法。
+
 ```rust
 use std::io::Cursor;
 
@@ -404,7 +411,8 @@ assert_eq!(-42, input.read_zig_zag_i64()?);
 ## Length-Prefixed UTF-8 字符串
 
 `StringReadExt` 和 `StringWriteExt` 使用 ULEB128、`u16` 或 `u32` 字节长度前缀读写 UTF-8
-字符串。读取时由调用方提供大小上限。
+字符串。读取时由调用方提供大小上限。ULEB 字符串 helper 会把长度编码为 `usize`；如果
+wire format 必须与 target 无关，请使用 `u16` 或 `u32` 长度前缀。
 
 ```rust
 use std::io::Cursor;
@@ -438,7 +446,7 @@ let mut output = Vec::new();
 
 reader.read_to_end(&mut output)?;
 
-assert_eq!(3, reader.count());
+assert_eq!(3, reader.bytes_read());
 # Ok::<(), std::io::Error>(())
 ```
 
@@ -484,9 +492,9 @@ use std::io::{Cursor, Read};
 use qubit_io::PositionGuard;
 
 fn looks_like_qubit(input: &mut Cursor<Vec<u8>>) -> std::io::Result<bool> {
-    let _guard = PositionGuard::new(input)?;
+    let mut guard = PositionGuard::new(input)?;
     let mut magic = [0_u8; 4];
-    input.read_exact(&mut magic)?;
+    guard.get_mut().read_exact(&mut magic)?;
     Ok(&magic == b"QBIT")
 }
 
@@ -511,6 +519,9 @@ wrapper：reader 实现 `Read`，writer 实现 `Write`，底层 stream 支持 se
 | `BinaryReader`、`BinaryWriter` | fixed-width 标量 |
 | `Leb128Reader`、`Leb128Writer` | LEB128 整数 |
 | `ZigZagReader`、`ZigZagWriter` | ZigZag 有符号整数 |
+| `BufferedBinaryReader`、`BufferedBinaryWriter` | buffered fixed-width 标量 |
+| `BufferedLeb128Reader`、`BufferedLeb128Writer` | buffered LEB128 整数 |
+| `BufferedZigZagReader`、`BufferedZigZagWriter` | buffered ZigZag 有符号整数 |
 
 ### BinaryReader 和 BinaryWriter
 
@@ -574,6 +585,34 @@ let bytes = writer.into_inner();
 let mut reader = ZigZagReader::<_, Strict>::new(Cursor::new(bytes));
 assert_eq!(-1, reader.read_i64()?);
 assert_eq!(42, reader.read_i64()?);
+
+# Ok::<(), std::io::Error>(())
+```
+
+### Buffered Codec Wrapper
+
+当需要重复读写大量标量值，并希望 wrapper 在内部批量 I/O 时，使用 buffered codec wrapper。
+Buffered reader 可能会从底层 reader 预取字节，因此 `get_ref` 看到的物理 stream 位置可能
+已经超过 wrapper 暴露的逻辑位置。对 buffered reader 调用 `into_inner` 会丢弃尚未消费的
+预取字节。
+
+Buffered writer 会在内部 buffer 满、调用 `flush()`、调用 `into_inner()` 或 seek 前 flush。
+它不会在 `Drop` 时 flush，因此在依赖底层 writer 已收到全部字节前，必须调用 `flush()` 或
+`into_inner()`。
+
+```rust
+use std::io::Cursor;
+
+use qubit_io::{BufferedBinaryReader, BufferedBinaryWriter, LittleEndian};
+
+let mut writer = BufferedBinaryWriter::<_, LittleEndian>::with_capacity(Vec::new(), 64);
+writer.write_u32(0x0102_0304)?;
+writer.write_i16(-7)?;
+let bytes = writer.into_inner()?;
+
+let mut reader = BufferedBinaryReader::<_, LittleEndian>::with_capacity(Cursor::new(bytes), 64);
+assert_eq!(0x0102_0304, reader.read_u32()?);
+assert_eq!(-7, reader.read_i16()?);
 
 # Ok::<(), std::io::Error>(())
 ```

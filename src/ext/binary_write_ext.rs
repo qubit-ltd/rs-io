@@ -8,9 +8,17 @@
  *
  ******************************************************************************/
 
-use std::io::{Result, Write};
+use std::io::{
+    Result,
+    Write,
+};
 
-use crate::codec::{BigEndian, BinaryCodec, ByteOrder, LittleEndian};
+use crate::codec::{
+    BigEndian,
+    BinaryCodec,
+    ByteOrder,
+    LittleEndian,
+};
 
 macro_rules! write_binary_value {
     ($writer:expr, $value:expr, $ty:ty, $order:ty) => {

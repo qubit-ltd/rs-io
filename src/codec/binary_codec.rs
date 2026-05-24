@@ -8,9 +8,15 @@
  *
  ******************************************************************************/
 
-use core::{marker::PhantomData, ptr};
+use core::{
+    marker::PhantomData,
+    ptr,
+};
 
-use crate::{BigEndian, LittleEndian};
+use crate::{
+    BigEndian,
+    LittleEndian,
+};
 
 /// Type-level unchecked binary codec for one scalar type and one byte order.
 ///

@@ -24,7 +24,9 @@ Use this crate when you need:
 - small stream helper functions such as bounded copy and content comparison;
 - binary, LEB128, ZigZag, and length-prefixed UTF-8 encoding helpers;
 - wrapper types for counting, limiting, teeing, checksumming, and seek-position
-  restoration.
+  restoration;
+- reader/writer codec objects, including buffered variants for high-throughput
+  scalar decoding and encoding.
 
 For detailed usage, examples, and API selection guidance, see the [User Guide](doc/user_guide.md).
 API reference documentation is available on [docs.rs](https://docs.rs/qubit-io).
@@ -117,6 +119,13 @@ library while avoiding repeated boilerplate:
 | `ZigZagReadExt` / `ZigZagWriteExt` | ZigZag-mapped signed integer encoding |
 | `StringReadExt` / `StringWriteExt` | length-prefixed UTF-8 strings |
 
+`usize` and `isize` LEB128/ZigZag methods use the current Rust target's pointer
+width. They are convenient for in-process Rust data, but fixed-width integer
+methods such as `u64` or `i64` are the safer choice for persistent files and
+cross-platform protocols. The ULEB string helpers encode the byte length as
+`usize`; use the `u16` or `u32` string helpers when the wire format must be
+target-independent.
+
 ### Streams Namespace
 
 `Streams` contains stream-level associated functions:
@@ -154,6 +163,17 @@ stream supports seeking.
 | `BinaryReader`, `BinaryWriter` | fixed-width scalar encoding and decoding with type-level byte order |
 | `Leb128Reader`, `Leb128Writer` | LEB128 integers and ULEB length-prefixed UTF-8 strings |
 | `ZigZagReader`, `ZigZagWriter` | ZigZag over unsigned LEB128 payloads |
+| `BufferedBinaryReader`, `BufferedBinaryWriter` | buffered fixed-width scalar encoding and decoding |
+| `BufferedLeb128Reader`, `BufferedLeb128Writer` | buffered LEB128 integers and ULEB length-prefixed UTF-8 strings |
+| `BufferedZigZagReader`, `BufferedZigZagWriter` | buffered ZigZag over unsigned LEB128 payloads |
+
+Buffered readers may prefetch bytes, so the wrapped reader's physical position
+can be ahead of the logical position exposed by the wrapper. Calling
+`into_inner` on a buffered reader discards unread prefetched bytes.
+
+Buffered writers do not flush pending bytes from `Drop`. Call `flush()` or
+`into_inner()` to guarantee delivery to the wrapped writer. Buffered writers
+flush pending bytes before `Seek`.
 
 ## Prelude
 

@@ -8,7 +8,12 @@
  *
  ******************************************************************************/
 use std::hash::Hasher;
-use std::io::{Read, Result, Seek, SeekFrom};
+use std::io::{
+    Read,
+    Result,
+    Seek,
+    SeekFrom,
+};
 
 /// Reader wrapper that updates a checksum hasher with bytes read.
 ///
