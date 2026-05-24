@@ -1,15 +1,51 @@
 use std::env;
-use std::fs::{self, File};
-use std::io::{BufReader, BufWriter, Write};
-use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::fs::{
+    self,
+    File,
+};
+use std::io::{
+    BufReader,
+    BufWriter,
+    Write,
+};
+use std::path::{
+    Path,
+    PathBuf,
+};
+use std::time::{
+    Duration,
+    SystemTime,
+    UNIX_EPOCH,
+};
 
-use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
+use criterion::{
+    BenchmarkId,
+    Criterion,
+    Throughput,
+    criterion_group,
+    criterion_main,
+};
 use qubit_io::{
-    BinaryReadExt, BinaryReader, BinaryWriteExt, BinaryWriter, BufferedBinaryReader,
-    BufferedBinaryWriter, BufferedLeb128Reader, BufferedLeb128Writer, BufferedZigZagReader,
-    BufferedZigZagWriter, Leb128ReadExt, Leb128Reader, Leb128WriteExt, Leb128Writer, LittleEndian,
-    NonStrict, ZigZagReadExt, ZigZagReader, ZigZagWriteExt, ZigZagWriter,
+    BinaryReadExt,
+    BinaryReader,
+    BinaryWriteExt,
+    BinaryWriter,
+    BufferedBinaryReader,
+    BufferedBinaryWriter,
+    BufferedLeb128Reader,
+    BufferedLeb128Writer,
+    BufferedZigZagReader,
+    BufferedZigZagWriter,
+    Leb128ReadExt,
+    Leb128Reader,
+    Leb128WriteExt,
+    Leb128Writer,
+    LittleEndian,
+    NonStrict,
+    ZigZagReadExt,
+    ZigZagReader,
+    ZigZagWriteExt,
+    ZigZagWriter,
 };
 
 const BINARY_BATCH: usize = 1_048_576;
@@ -18,11 +54,7 @@ const BINARY_RECORD_BYTES: usize = 41;
 const VARINT_COUNT: usize = 262_144;
 const VARINT_REPEAT: usize = 64;
 const STREAM_BENCH_GROUP_ENV: &str = "QUBIT_IO_STREAM_BENCH_GROUP";
-const STREAM_BENCH_GROUP_NAMES: [&str; 3] = [
-    "prod_binary_pipeline",
-    "prod_varints",
-    "prod_signed_varints",
-];
+const STREAM_BENCH_GROUP_NAMES: [&str; 3] = ["prod_binary_pipeline", "prod_varints", "prod_signed_varints"];
 
 #[derive(Clone, Copy)]
 enum StreamBenchGroup {
@@ -62,10 +94,7 @@ impl BenchmarkFiles {
             .duration_since(UNIX_EPOCH)
             .expect("system clock should be after unix epoch")
             .as_nanos();
-        let dir = std::env::temp_dir().join(format!(
-            "qubit-io-stream-bench-{}-{now}",
-            std::process::id()
-        ));
+        let dir = std::env::temp_dir().join(format!("qubit-io-stream-bench-{}-{now}", std::process::id()));
         fs::create_dir_all(&dir).expect("benchmark temp directory should be created");
         Self { dir }
     }
@@ -190,9 +219,7 @@ impl PseudoRng {
 #[inline]
 fn build_records() -> Vec<Record> {
     let mut rng = PseudoRng::new(0x1234_5678_9abc_def0);
-    (0..BINARY_BATCH as u64)
-        .map(|idx| rng.gen_record(idx))
-        .collect()
+    (0..BINARY_BATCH as u64).map(|idx| rng.gen_record(idx)).collect()
 }
 
 #[inline]
@@ -250,11 +277,8 @@ fn write_records_buffered_file(records: &[Record], path: &Path) {
         writer.write_u64(value.ts_ms).unwrap();
     }
 
-    let mut file = writer
-        .into_inner()
-        .expect("binary buffered output file should flush");
-    file.flush()
-        .expect("binary buffered output file should flush");
+    let mut file = writer.into_inner().expect("binary buffered output file should flush");
+    file.flush().expect("binary buffered output file should flush");
 }
 
 #[inline]
@@ -367,14 +391,8 @@ fn build_uleb_fields() -> Vec<UlebField> {
     for _ in 0..VARINT_COUNT {
         let field = match rng.next_u64() % 6 {
             0 => UlebField::U8(rng.next_normal_u64(128.0, 64.0).min(u64::from(u8::MAX)) as u8),
-            1 => UlebField::U16(
-                rng.next_normal_u64(8_192.0, 6_000.0)
-                    .min(u64::from(u16::MAX)) as u16,
-            ),
-            2 => UlebField::U32(
-                rng.next_normal_u64(1_000_000.0, 600_000.0)
-                    .min(u64::from(u32::MAX)) as u32,
-            ),
+            1 => UlebField::U16(rng.next_normal_u64(8_192.0, 6_000.0).min(u64::from(u16::MAX)) as u16),
+            2 => UlebField::U32(rng.next_normal_u64(1_000_000.0, 600_000.0).min(u64::from(u32::MAX)) as u32),
             3 => UlebField::U64(random_u64_value(&mut rng)),
             4 => UlebField::Usize(random_u64_value(&mut rng) as usize),
             _ => UlebField::U128(random_u128_value(&mut rng)),
@@ -515,11 +533,8 @@ fn write_uleb_buffered_file(fields: &[UlebField], path: &Path) {
         }
     }
 
-    let mut file = writer
-        .into_inner()
-        .expect("LEB128 buffered output file should flush");
-    file.flush()
-        .expect("LEB128 buffered output file should flush");
+    let mut file = writer.into_inner().expect("LEB128 buffered output file should flush");
+    file.flush().expect("LEB128 buffered output file should flush");
 }
 
 #[inline]
@@ -641,11 +656,8 @@ fn write_zigzag_buffered_file(fields: &[ZigZagField], path: &Path) {
         }
     }
 
-    let mut file = writer
-        .into_inner()
-        .expect("ZigZag buffered output file should flush");
-    file.flush()
-        .expect("ZigZag buffered output file should flush");
+    let mut file = writer.into_inner().expect("ZigZag buffered output file should flush");
+    file.flush().expect("ZigZag buffered output file should flush");
 }
 
 #[inline]
@@ -747,29 +759,23 @@ fn bench_prod_binary_pipeline(c: &mut Criterion) {
         })
     });
 
-    group.bench_function(
-        BenchmarkId::from_parameter("wrapper_write_record_batch"),
-        |b| {
-            b.iter(|| {
-                for _ in 0..BINARY_REPEAT {
-                    write_records_wrapper_file(&records, &wrapper_write_path);
-                    criterion::black_box(BINARY_BATCH * BINARY_RECORD_BYTES);
-                }
-            })
-        },
-    );
+    group.bench_function(BenchmarkId::from_parameter("wrapper_write_record_batch"), |b| {
+        b.iter(|| {
+            for _ in 0..BINARY_REPEAT {
+                write_records_wrapper_file(&records, &wrapper_write_path);
+                criterion::black_box(BINARY_BATCH * BINARY_RECORD_BYTES);
+            }
+        })
+    });
 
-    group.bench_function(
-        BenchmarkId::from_parameter("buffered_write_record_batch"),
-        |b| {
-            b.iter(|| {
-                for _ in 0..BINARY_REPEAT {
-                    write_records_buffered_file(&records, &buffered_write_path);
-                    criterion::black_box(BINARY_BATCH * BINARY_RECORD_BYTES);
-                }
-            })
-        },
-    );
+    group.bench_function(BenchmarkId::from_parameter("buffered_write_record_batch"), |b| {
+        b.iter(|| {
+            for _ in 0..BINARY_REPEAT {
+                write_records_buffered_file(&records, &buffered_write_path);
+                criterion::black_box(BINARY_BATCH * BINARY_RECORD_BYTES);
+            }
+        })
+    });
 
     group.bench_function(BenchmarkId::from_parameter("ext_read_record_batch"), |b| {
         b.iter(|| {
@@ -779,27 +785,21 @@ fn bench_prod_binary_pipeline(c: &mut Criterion) {
         })
     });
 
-    group.bench_function(
-        BenchmarkId::from_parameter("wrapper_read_record_batch"),
-        |b| {
-            b.iter(|| {
-                for _ in 0..BINARY_REPEAT {
-                    read_records_wrapper_file(&wrapper_source_path);
-                }
-            })
-        },
-    );
+    group.bench_function(BenchmarkId::from_parameter("wrapper_read_record_batch"), |b| {
+        b.iter(|| {
+            for _ in 0..BINARY_REPEAT {
+                read_records_wrapper_file(&wrapper_source_path);
+            }
+        })
+    });
 
-    group.bench_function(
-        BenchmarkId::from_parameter("buffered_read_record_batch"),
-        |b| {
-            b.iter(|| {
-                for _ in 0..BINARY_REPEAT {
-                    read_records_buffered_file(&wrapper_source_path);
-                }
-            })
-        },
-    );
+    group.bench_function(BenchmarkId::from_parameter("buffered_read_record_batch"), |b| {
+        b.iter(|| {
+            for _ in 0..BINARY_REPEAT {
+                read_records_buffered_file(&wrapper_source_path);
+            }
+        })
+    });
 
     group.finish();
 }
@@ -834,74 +834,56 @@ fn bench_prod_varints(c: &mut Criterion) {
     group.sample_size(12);
     group.throughput(Throughput::Bytes(bytes_processed));
 
-    group.bench_function(
-        BenchmarkId::from_parameter("ext_leb128_write_mixed_batch"),
-        |b| {
-            b.iter(|| {
-                for _ in 0..VARINT_REPEAT {
-                    write_uleb_ext_file(&fields, &ext_write_path);
-                    criterion::black_box(encoded.len());
-                }
-            })
-        },
-    );
+    group.bench_function(BenchmarkId::from_parameter("ext_leb128_write_mixed_batch"), |b| {
+        b.iter(|| {
+            for _ in 0..VARINT_REPEAT {
+                write_uleb_ext_file(&fields, &ext_write_path);
+                criterion::black_box(encoded.len());
+            }
+        })
+    });
 
-    group.bench_function(
-        BenchmarkId::from_parameter("wrapper_leb128_write_mixed_batch"),
-        |b| {
-            b.iter(|| {
-                for _ in 0..VARINT_REPEAT {
-                    write_uleb_wrapper_file(&fields, &wrapper_write_path);
-                    criterion::black_box(encoded.len());
-                }
-            })
-        },
-    );
+    group.bench_function(BenchmarkId::from_parameter("wrapper_leb128_write_mixed_batch"), |b| {
+        b.iter(|| {
+            for _ in 0..VARINT_REPEAT {
+                write_uleb_wrapper_file(&fields, &wrapper_write_path);
+                criterion::black_box(encoded.len());
+            }
+        })
+    });
 
-    group.bench_function(
-        BenchmarkId::from_parameter("buffered_leb128_write_mixed_batch"),
-        |b| {
-            b.iter(|| {
-                for _ in 0..VARINT_REPEAT {
-                    write_uleb_buffered_file(&fields, &buffered_write_path);
-                    criterion::black_box(encoded.len());
-                }
-            })
-        },
-    );
+    group.bench_function(BenchmarkId::from_parameter("buffered_leb128_write_mixed_batch"), |b| {
+        b.iter(|| {
+            for _ in 0..VARINT_REPEAT {
+                write_uleb_buffered_file(&fields, &buffered_write_path);
+                criterion::black_box(encoded.len());
+            }
+        })
+    });
 
-    group.bench_function(
-        BenchmarkId::from_parameter("ext_leb128_read_mixed_batch"),
-        |b| {
-            b.iter(|| {
-                for _ in 0..VARINT_REPEAT {
-                    read_uleb_ext_file(&ext_source_path, &fields);
-                }
-            })
-        },
-    );
+    group.bench_function(BenchmarkId::from_parameter("ext_leb128_read_mixed_batch"), |b| {
+        b.iter(|| {
+            for _ in 0..VARINT_REPEAT {
+                read_uleb_ext_file(&ext_source_path, &fields);
+            }
+        })
+    });
 
-    group.bench_function(
-        BenchmarkId::from_parameter("wrapper_leb128_read_mixed_batch"),
-        |b| {
-            b.iter(|| {
-                for _ in 0..VARINT_REPEAT {
-                    read_uleb_wrapper_file(&ext_source_path, &fields);
-                }
-            })
-        },
-    );
+    group.bench_function(BenchmarkId::from_parameter("wrapper_leb128_read_mixed_batch"), |b| {
+        b.iter(|| {
+            for _ in 0..VARINT_REPEAT {
+                read_uleb_wrapper_file(&ext_source_path, &fields);
+            }
+        })
+    });
 
-    group.bench_function(
-        BenchmarkId::from_parameter("buffered_leb128_read_mixed_batch"),
-        |b| {
-            b.iter(|| {
-                for _ in 0..VARINT_REPEAT {
-                    read_uleb_buffered_file(&ext_source_path, &fields);
-                }
-            })
-        },
-    );
+    group.bench_function(BenchmarkId::from_parameter("buffered_leb128_read_mixed_batch"), |b| {
+        b.iter(|| {
+            for _ in 0..VARINT_REPEAT {
+                read_uleb_buffered_file(&ext_source_path, &fields);
+            }
+        })
+    });
 
     group.finish();
 }
@@ -936,74 +918,56 @@ fn bench_prod_signed_varints(c: &mut Criterion) {
     group.sample_size(12);
     group.throughput(Throughput::Bytes(bytes_processed));
 
-    group.bench_function(
-        BenchmarkId::from_parameter("ext_zigzag_write_mixed_batch"),
-        |b| {
-            b.iter(|| {
-                for _ in 0..VARINT_REPEAT {
-                    write_zigzag_ext_file(&fields, &ext_write_path);
-                    criterion::black_box(encoded.len());
-                }
-            })
-        },
-    );
+    group.bench_function(BenchmarkId::from_parameter("ext_zigzag_write_mixed_batch"), |b| {
+        b.iter(|| {
+            for _ in 0..VARINT_REPEAT {
+                write_zigzag_ext_file(&fields, &ext_write_path);
+                criterion::black_box(encoded.len());
+            }
+        })
+    });
 
-    group.bench_function(
-        BenchmarkId::from_parameter("wrapper_zigzag_write_mixed_batch"),
-        |b| {
-            b.iter(|| {
-                for _ in 0..VARINT_REPEAT {
-                    write_zigzag_wrapper_file(&fields, &wrapper_write_path);
-                    criterion::black_box(encoded.len());
-                }
-            })
-        },
-    );
+    group.bench_function(BenchmarkId::from_parameter("wrapper_zigzag_write_mixed_batch"), |b| {
+        b.iter(|| {
+            for _ in 0..VARINT_REPEAT {
+                write_zigzag_wrapper_file(&fields, &wrapper_write_path);
+                criterion::black_box(encoded.len());
+            }
+        })
+    });
 
-    group.bench_function(
-        BenchmarkId::from_parameter("buffered_zigzag_write_mixed_batch"),
-        |b| {
-            b.iter(|| {
-                for _ in 0..VARINT_REPEAT {
-                    write_zigzag_buffered_file(&fields, &buffered_write_path);
-                    criterion::black_box(encoded.len());
-                }
-            })
-        },
-    );
+    group.bench_function(BenchmarkId::from_parameter("buffered_zigzag_write_mixed_batch"), |b| {
+        b.iter(|| {
+            for _ in 0..VARINT_REPEAT {
+                write_zigzag_buffered_file(&fields, &buffered_write_path);
+                criterion::black_box(encoded.len());
+            }
+        })
+    });
 
-    group.bench_function(
-        BenchmarkId::from_parameter("ext_zigzag_read_mixed_batch"),
-        |b| {
-            b.iter(|| {
-                for _ in 0..VARINT_REPEAT {
-                    read_zigzag_ext_file(&ext_source_path, &fields);
-                }
-            })
-        },
-    );
+    group.bench_function(BenchmarkId::from_parameter("ext_zigzag_read_mixed_batch"), |b| {
+        b.iter(|| {
+            for _ in 0..VARINT_REPEAT {
+                read_zigzag_ext_file(&ext_source_path, &fields);
+            }
+        })
+    });
 
-    group.bench_function(
-        BenchmarkId::from_parameter("wrapper_zigzag_read_mixed_batch"),
-        |b| {
-            b.iter(|| {
-                for _ in 0..VARINT_REPEAT {
-                    read_zigzag_wrapper_file(&ext_source_path, &fields);
-                }
-            })
-        },
-    );
+    group.bench_function(BenchmarkId::from_parameter("wrapper_zigzag_read_mixed_batch"), |b| {
+        b.iter(|| {
+            for _ in 0..VARINT_REPEAT {
+                read_zigzag_wrapper_file(&ext_source_path, &fields);
+            }
+        })
+    });
 
-    group.bench_function(
-        BenchmarkId::from_parameter("buffered_zigzag_read_mixed_batch"),
-        |b| {
-            b.iter(|| {
-                for _ in 0..VARINT_REPEAT {
-                    read_zigzag_buffered_file(&ext_source_path, &fields);
-                }
-            })
-        },
-    );
+    group.bench_function(BenchmarkId::from_parameter("buffered_zigzag_read_mixed_batch"), |b| {
+        b.iter(|| {
+            for _ in 0..VARINT_REPEAT {
+                read_zigzag_buffered_file(&ext_source_path, &fields);
+            }
+        })
+    });
 
     group.finish();
 }
