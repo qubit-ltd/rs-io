@@ -16,8 +16,8 @@ use crate::stream::BufferedInput;
 
 /// Buffered reader for ZigZag + unsigned LEB128 integers.
 ///
-/// Values are decoded directly from the internal input buffer once a terminating
-/// byte or the codec maximum width is available.
+/// Values are decoded directly from the internal input buffer while the codec
+/// scans for the underlying LEB128 terminating byte.
 pub struct BufferedZigZagReader<R, P = NonStrict> {
     input: BufferedInput<R>,
     marker: PhantomData<fn() -> P>,
@@ -86,12 +86,13 @@ macro_rules! impl_read_value {
         pub fn $method(&mut self) -> Result<$ty> {
             type Codec = ZigZagCodec<$ty, $policy>;
 
-            self.input.read_variable(
+            self.input.read_variable_decoded(
                 Codec::REQUIRED_MIN_BUFFER_LEN,
-                |bytes, index| {
-                    // SAFETY: `read_variable` guarantees that either a
-                    // terminating byte or the codec maximum width is available.
-                    unsafe { Codec::read_unchecked(bytes, index) }
+                |bytes, index, available| {
+                    // SAFETY: `read_variable_decoded` only passes bytes already
+                    // present in the internal buffer and caps `available` at
+                    // the codec maximum width.
+                    unsafe { Codec::read_available_unchecked(bytes, index, available) }
                 },
                 map_leb128_decode_error,
             )

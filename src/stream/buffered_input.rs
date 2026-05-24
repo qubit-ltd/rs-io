@@ -287,13 +287,14 @@ where
         Ok(value)
     }
 
-    /// Reads one variable-width value directly from the internal buffer.
+    /// Reads one variable-width value while the decoder scans available bytes.
     ///
-    /// The method buffers bytes until it can see a terminating byte whose high
-    /// bit is clear, or until `max_len` bytes are available. It then calls
-    /// `decode` at the current buffer position. On decoder failure, the bytes
-    /// identified as the payload are consumed before the mapped error is
-    /// returned.
+    /// The method calls `decode_available` with the unread byte range currently
+    /// available in the internal buffer, capped at `max_len`. The decoder must
+    /// scan for the variable-width terminator and decode the payload in the same
+    /// pass. This avoids the older buffered path that first scanned for a
+    /// terminator and then asked the codec to scan and decode the same bytes
+    /// again.
     ///
     /// # Type Parameters
     ///
@@ -306,8 +307,10 @@ where
     ///
     /// * `max_len` - The maximum number of bytes that can belong to the
     ///   variable-width payload.
-    /// * `decode` - Function that decodes a value and reports how many bytes it
-    ///   consumed.
+    /// * `decode_available` - Function that decodes from currently buffered
+    ///   bytes. It returns `Ok(None)` when more input is needed and
+    ///   `Err((error, consumed))` when invalid bytes should be consumed before
+    ///   reporting the mapped error.
     /// * `map_error` - Function that converts decoder errors into
     ///   [`std::io::Error`].
     ///
@@ -320,91 +323,46 @@ where
     /// Returns [`ErrorKind::UnexpectedEof`] if EOF is reached before a complete
     /// or maximum-width payload is buffered. Returns any non-interrupted I/O
     /// error produced by the wrapped reader while refilling the buffer. Returns
-    /// `map_error(error)` when `decode` rejects the buffered payload.
-    pub(crate) fn read_variable<T, E, F, M>(
+    /// `map_error(error)` when `decode_available` rejects the buffered payload.
+    #[inline]
+    pub(crate) fn read_variable_decoded<T, E, F, M>(
         &mut self,
         max_len: usize,
-        decode: F,
+        mut decode_available: F,
         map_error: M,
     ) -> Result<T>
     where
-        F: FnOnce(&[u8], usize) -> std::result::Result<(T, usize), E>,
+        F: FnMut(&[u8], usize, usize) -> std::result::Result<Option<(T, usize)>, (E, usize)>,
         M: FnOnce(E) -> Error,
     {
-        let decode_len = match self.variable_payload_len(max_len) {
-            Some(len) => len,
-            None => self.ensure_variable_payload_slow(max_len)?,
-        };
-        let index = self.position;
-        match decode(&self.buffer, index) {
-            Ok((value, consumed)) => {
-                self.position += consumed;
-                Ok(value)
-            }
-            Err(error) => {
-                self.position += decode_len;
-                Err(map_error(error))
-            }
-        }
-    }
-
-    /// Finds the available length of a terminated or max-width variable payload.
-    ///
-    /// A variable payload is considered complete when a byte with the high bit
-    /// clear is found, or when `max_len` bytes are already buffered.
-    ///
-    /// # Arguments
-    ///
-    /// * `max_len` - The maximum payload length to inspect.
-    ///
-    /// # Returns
-    ///
-    /// `Some(len)` when a complete or maximum-width payload is currently
-    /// buffered, where `len` is the number of bytes in that payload. Returns
-    /// `None` when more input is needed.
-    #[inline]
-    fn variable_payload_len(&self, max_len: usize) -> Option<usize> {
-        let available = self.available();
-        let scan_len = available.min(max_len);
-        for offset in 0..scan_len {
-            let byte = self.buffer[self.position + offset];
-            if byte & 0x80 == 0 {
-                return Some(offset + 1);
-            }
-        }
-        if available >= max_len {
-            Some(max_len)
-        } else {
-            None
-        }
-    }
-
-    /// Ensures that a terminated or max-width variable payload is buffered.
-    ///
-    /// The method reads until [`Self::variable_payload_len`] can identify a
-    /// complete payload or until EOF is reached.
-    ///
-    /// # Arguments
-    ///
-    /// * `max_len` - The maximum payload length to buffer.
-    ///
-    /// # Returns
-    ///
-    /// The number of bytes in the buffered payload.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ErrorKind::UnexpectedEof`] if EOF is reached before a complete
-    /// or maximum-width payload is available. Returns any non-interrupted I/O
-    /// error produced by the wrapped reader while refilling the buffer.
-    fn ensure_variable_payload_slow(&mut self, max_len: usize) -> Result<usize> {
         debug_assert!(
             max_len <= self.buffer.len(),
             "variable payload length exceeds buffer capacity"
         );
         loop {
-            if let Some(len) = self.variable_payload_len(max_len) {
-                return Ok(len);
+            let available = self.available().min(max_len);
+            if available > 0 {
+                let index = self.position;
+                match decode_available(&self.buffer, index, available) {
+                    Ok(Some((value, consumed))) => {
+                        debug_assert!(consumed > 0, "decoded payload consumed no bytes");
+                        debug_assert!(consumed <= available, "decoded beyond available bytes");
+                        self.position = index + consumed;
+                        return Ok(value);
+                    }
+                    Ok(None) => {
+                        debug_assert!(
+                            available < max_len,
+                            "decoder must reject maximum-width unterminated payload"
+                        );
+                    }
+                    Err((error, consumed)) => {
+                        debug_assert!(consumed > 0, "invalid payload consumed no bytes");
+                        debug_assert!(consumed <= available, "invalid payload exceeded buffer");
+                        self.position = index + consumed;
+                        return Err(map_error(error));
+                    }
+                }
             }
             if self.available() == 0 {
                 self.discard_buffer();

@@ -63,6 +63,47 @@ macro_rules! impl_zig_zag_codec {
                 Ok((value, consumed))
             }
 
+            /// Tries to decode from the currently available bytes without bounds checks.
+            ///
+            /// This internal entry point lets buffered readers decode the underlying
+            /// unsigned LEB128 payload while scanning for its terminating byte.
+            ///
+            /// # Parameters
+            ///
+            /// - `input`: Source byte buffer.
+            /// - `index`: Start index in `input`.
+            /// - `available`: Number of readable bytes currently available from
+            ///   `index`.
+            ///
+            /// # Returns
+            ///
+            /// Returns `Ok(Some((value, consumed)))` when a complete value is
+            /// decoded. Returns `Ok(None)` when more bytes are needed. Returns
+            /// `Err((error, consumed))` when the underlying LEB128 payload is
+            /// invalid and should be consumed before the error is reported.
+            ///
+            /// # Safety
+            ///
+            /// The caller must guarantee that `input.as_ptr().add(index)` is valid
+            /// to read `available` bytes and that `available` is no greater than
+            /// [`Self::REQUIRED_MIN_BUFFER_LEN`].
+            #[inline(always)]
+            pub(crate) unsafe fn read_available_unchecked(
+                input: &[u8],
+                index: usize,
+                available: usize,
+            ) -> Result<Option<($signed, usize)>, (Leb128DecodeError, usize)> {
+                // SAFETY: The caller guarantees that exactly `available` bytes
+                // are readable from `index`.
+                let result = unsafe {
+                    Leb128Codec::<$unsigned, P>::read_available_unchecked(input, index, available)?
+                };
+                Ok(result.map(|(encoded, consumed)| {
+                    let value = ((encoded >> 1) as $signed) ^ (-((encoded & 1) as $signed));
+                    (value, consumed)
+                }))
+            }
+
             /// Encodes `value` into `output` starting at `index` without bounds checks.
             ///
             /// # Parameters
