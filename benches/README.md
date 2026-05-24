@@ -20,6 +20,7 @@
 - `prod_binary_pipeline` 使用真实文件系统文件作为输入输出：
   - 写入基准使用 `File::create` + `BufWriter<File>`，每轮覆盖写同一个临时文件。
   - 读取基准先由 writer 生成临时源文件，再使用 `File::open` + `BufReader<File>` 读取。
+  - `std_native_*` 使用标准库原生 fixed-width 路径：`write_all()` + `to_le_bytes()`，以及 `read_exact()` + `from_le_bytes()`。该组只适用于固定宽度二进制字段；标准库没有原生 LEB128 / ZigZag 编码器。
   - 基准不调用 `sync_all()`，因此结果仍可能受 OS page cache 影响；目标是排除 `Cursor<&[u8]>` / `Cursor<Vec<u8>>` 的内存特化，而不是测物理磁盘落盘延迟。
   - 临时文件目录创建在系统临时目录下，benchmark 结束时尽力清理。
 - `prod_varints` 与 `prod_signed_varints` 同样使用真实文件系统文件：
@@ -37,6 +38,7 @@
 当前基线口径是同一次 benchmark run 内的 `Read` / `Write` extension trait 实现：
 
 - `ext_*`：使用 `BinaryReadExt` / `BinaryWriteExt`、`Leb128ReadExt` / `Leb128WriteExt`、`ZigZagReadExt` / `ZigZagWriteExt`。
+- `std_native_*`：仅在 `prod_binary_pipeline` 中出现，使用标准库 `BufReader<File>` / `BufWriter<File>` 加 `read_exact()` / `write_all()` 和基础类型字节序转换。
 - `wrapper_*`：使用 `BinaryReader` / `BinaryWriter`、`Leb128Reader` / `Leb128Writer`、`ZigZagReader` / `ZigZagWriter`。
 - `buffered_*`：使用自带大缓冲区并直接在缓冲区上调用 codec unsafe 方法的 buffered reader/writer。
 

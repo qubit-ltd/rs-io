@@ -1,10 +1,10 @@
 use std::env;
 use std::fs::{self, File};
-use std::io::{BufReader, BufWriter, Write};
+use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use qubit_io::{
     BinaryReadExt, BinaryReader, BinaryWriteExt, BinaryWriter, BufferedBinaryReader,
     BufferedBinaryWriter, BufferedLeb128Reader, BufferedLeb128Writer, BufferedZigZagReader,
@@ -236,6 +236,26 @@ fn write_records_ext_file(records: &[Record], path: &Path) {
 }
 
 #[inline]
+fn write_records_std_native_file(records: &[Record], path: &Path) {
+    let file = File::create(path).expect("binary std native output file should be created");
+    let mut writer = BufWriter::new(file);
+
+    for value in records {
+        writer.write_all(&value.id.to_le_bytes()).unwrap();
+        writer.write_all(&value.user_id.to_le_bytes()).unwrap();
+        writer.write_all(&[value.flag]).unwrap();
+        writer.write_all(&value.delta.to_le_bytes()).unwrap();
+        writer.write_all(&value.score.to_le_bytes()).unwrap();
+        writer.write_all(&value.weight.to_le_bytes()).unwrap();
+        writer.write_all(&value.ts_ms.to_le_bytes()).unwrap();
+    }
+
+    writer
+        .flush()
+        .expect("binary std native output file should flush");
+}
+
+#[inline]
 fn write_records_buffered_file(records: &[Record], path: &Path) {
     let file = File::create(path).expect("binary buffered output file should be created");
     let mut writer = BufferedBinaryWriter::<_, LittleEndian>::new(file);
@@ -299,6 +319,43 @@ fn read_records_ext_file(path: &Path) {
         let score = reader.read_f32_le().unwrap();
         let weight = reader.read_f64_le().unwrap();
         let ts_ms = reader.read_u64_le().unwrap();
+
+        digest ^= id;
+        digest ^= user_id as u64;
+        digest ^= u64::from(flag);
+        digest ^= delta as u64;
+        digest ^= score.to_bits() as u64;
+        digest ^= weight.to_bits();
+        digest ^= ts_ms;
+    }
+
+    criterion::black_box(digest);
+}
+
+#[inline]
+fn read_records_std_native_file(path: &Path) {
+    let file = File::open(path).expect("binary std native input file should open");
+    let mut reader = BufReader::new(file);
+    let mut digest = 0u64;
+    let mut u64_buffer = [0u8; 8];
+    let mut u32_buffer = [0u8; 4];
+    let mut u8_buffer = [0u8; 1];
+
+    for _ in 0..BINARY_BATCH {
+        reader.read_exact(&mut u64_buffer).unwrap();
+        let id = u64::from_le_bytes(u64_buffer);
+        reader.read_exact(&mut u32_buffer).unwrap();
+        let user_id = u32::from_le_bytes(u32_buffer);
+        reader.read_exact(&mut u8_buffer).unwrap();
+        let flag = u8_buffer[0];
+        reader.read_exact(&mut u64_buffer).unwrap();
+        let delta = i64::from_le_bytes(u64_buffer);
+        reader.read_exact(&mut u32_buffer).unwrap();
+        let score = f32::from_le_bytes(u32_buffer);
+        reader.read_exact(&mut u64_buffer).unwrap();
+        let weight = f64::from_le_bytes(u64_buffer);
+        reader.read_exact(&mut u64_buffer).unwrap();
+        let ts_ms = u64::from_le_bytes(u64_buffer);
 
         digest ^= id;
         digest ^= user_id as u64;
@@ -714,17 +771,24 @@ fn bench_prod_binary_pipeline(c: &mut Criterion) {
     let files = BenchmarkFiles::new();
     let wrapper_source_path = files.path("binary-wrapper-source.bin");
     let ext_source_path = files.path("binary-ext-source.bin");
+    let std_native_source_path = files.path("binary-std-native-source.bin");
     let buffered_source_path = files.path("binary-buffered-source.bin");
     let ext_write_path = files.path("binary-ext-write.bin");
+    let std_native_write_path = files.path("binary-std-native-write.bin");
     let wrapper_write_path = files.path("binary-wrapper-write.bin");
     let buffered_write_path = files.path("binary-buffered-write.bin");
 
     write_records_wrapper_file(&records, &wrapper_source_path);
     write_records_ext_file(&records, &ext_source_path);
+    write_records_std_native_file(&records, &std_native_source_path);
     write_records_buffered_file(&records, &buffered_source_path);
     assert_eq!(
         fs::read(&wrapper_source_path).expect("binary wrapper source should be readable"),
         fs::read(&ext_source_path).expect("binary ext source should be readable")
+    );
+    assert_eq!(
+        fs::read(&wrapper_source_path).expect("binary wrapper source should be readable"),
+        fs::read(&std_native_source_path).expect("binary std native source should be readable")
     );
     assert_eq!(
         fs::read(&wrapper_source_path).expect("binary wrapper source should be readable"),
@@ -746,6 +810,18 @@ fn bench_prod_binary_pipeline(c: &mut Criterion) {
             }
         })
     });
+
+    group.bench_function(
+        BenchmarkId::from_parameter("std_native_write_record_batch"),
+        |b| {
+            b.iter(|| {
+                for _ in 0..BINARY_REPEAT {
+                    write_records_std_native_file(&records, &std_native_write_path);
+                    criterion::black_box(BINARY_BATCH * BINARY_RECORD_BYTES);
+                }
+            })
+        },
+    );
 
     group.bench_function(
         BenchmarkId::from_parameter("wrapper_write_record_batch"),
@@ -778,6 +854,17 @@ fn bench_prod_binary_pipeline(c: &mut Criterion) {
             }
         })
     });
+
+    group.bench_function(
+        BenchmarkId::from_parameter("std_native_read_record_batch"),
+        |b| {
+            b.iter(|| {
+                for _ in 0..BINARY_REPEAT {
+                    read_records_std_native_file(&wrapper_source_path);
+                }
+            })
+        },
+    );
 
     group.bench_function(
         BenchmarkId::from_parameter("wrapper_read_record_batch"),
