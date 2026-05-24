@@ -37,7 +37,7 @@ For local filesystem capabilities, see [qubit-local-files](https://github.com/qu
 
 ```toml
 [dependencies]
-qubit-io = "0.2"
+qubit-io = "0.3"
 ```
 
 ## Quick Example

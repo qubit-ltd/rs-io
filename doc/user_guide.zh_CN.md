@@ -77,7 +77,7 @@ writer wrapper 同时实现 `Write`，当底层 stream 支持 seek 时还会透�
 
 ```toml
 [dependencies]
-qubit-io = "0.2"
+qubit-io = "0.3"
 ```
 
 ## 导入方式

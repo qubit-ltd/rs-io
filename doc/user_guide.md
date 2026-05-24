@@ -82,7 +82,7 @@ or `i64`.
 
 ```toml
 [dependencies]
-qubit-io = "0.2"
+qubit-io = "0.3"
 ```
 
 ## Import Patterns
