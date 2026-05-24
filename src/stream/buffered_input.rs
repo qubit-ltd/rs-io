@@ -19,6 +19,10 @@ pub(crate) const DEFAULT_BUFFER_CAPACITY: usize = 8 * 1024;
 pub(crate) const MIN_CODEC_BUFFER_CAPACITY: usize = 19;
 
 /// Buffered input core shared by codec-oriented readers.
+///
+/// This type owns a wrapped input object and an internal byte buffer. It keeps
+/// unread bytes in `buffer[position..limit]` so codec readers can decode scalar
+/// values without repeatedly allocating temporary storage.
 pub(crate) struct BufferedInput<R> {
     inner: R,
     buffer: Vec<u8>,
@@ -28,12 +32,35 @@ pub(crate) struct BufferedInput<R> {
 
 impl<R> BufferedInput<R> {
     /// Creates a buffered input core with the default capacity.
+    ///
+    /// # Arguments
+    ///
+    /// * `inner` - The input object wrapped by this buffer.
+    ///
+    /// # Returns
+    ///
+    /// A new buffered input whose internal buffer has at least
+    /// [`DEFAULT_BUFFER_CAPACITY`] bytes.
     #[inline]
     pub(crate) fn new(inner: R) -> Self {
         Self::with_capacity(inner, DEFAULT_BUFFER_CAPACITY)
     }
 
     /// Creates a buffered input core with at least the requested capacity.
+    ///
+    /// The actual capacity is raised to [`MIN_CODEC_BUFFER_CAPACITY`] when the
+    /// requested value is smaller, so every scalar codec payload can fit in the
+    /// buffer.
+    ///
+    /// # Arguments
+    ///
+    /// * `inner` - The input object wrapped by this buffer.
+    /// * `capacity` - The requested internal buffer capacity, in bytes.
+    ///
+    /// # Returns
+    ///
+    /// A new buffered input whose internal buffer capacity is
+    /// `capacity.max(MIN_CODEC_BUFFER_CAPACITY)`.
     #[inline]
     pub(crate) fn with_capacity(inner: R, capacity: usize) -> Self {
         let capacity = capacity.max(MIN_CODEC_BUFFER_CAPACITY);
@@ -45,37 +72,66 @@ impl<R> BufferedInput<R> {
         }
     }
 
-    /// Returns a shared reference to the wrapped reader.
+    /// Returns a shared reference to the wrapped input object.
+    ///
+    /// # Returns
+    ///
+    /// A shared reference to the inner input object.
     #[inline]
     pub(crate) const fn get_ref(&self) -> &R {
         &self.inner
     }
 
-    /// Returns an exclusive reference to the wrapped reader.
+    /// Returns an exclusive reference to the wrapped input object.
+    ///
+    /// Mutating the inner object directly may invalidate assumptions about the
+    /// bytes already buffered by this value. Callers must keep the buffered
+    /// state and the wrapped input position consistent.
+    ///
+    /// # Returns
+    ///
+    /// An exclusive reference to the inner input object.
     #[inline]
     pub(crate) fn get_mut(&mut self) -> &mut R {
         &mut self.inner
     }
 
-    /// Consumes this buffered input and returns the wrapped reader.
+    /// Consumes this buffered input and returns the wrapped input object.
+    ///
+    /// Any unread bytes currently held in the internal buffer are discarded.
+    ///
+    /// # Returns
+    ///
+    /// The wrapped input object.
     #[inline]
     pub(crate) fn into_inner(self) -> R {
         self.inner
     }
 
     /// Returns the number of unread bytes currently buffered.
+    ///
+    /// # Returns
+    ///
+    /// The length of `buffer[position..limit]`, in bytes.
     #[inline]
     fn available(&self) -> usize {
         self.limit - self.position
     }
 
     /// Returns the unused capacity at the end of the buffer.
+    ///
+    /// # Returns
+    ///
+    /// The number of writable bytes in `buffer[limit..]`.
     #[inline]
     fn tail_capacity(&self) -> usize {
         self.buffer.len() - self.limit
     }
 
     /// Invalidates all buffered bytes.
+    ///
+    /// After this call, the buffer is considered empty and subsequent reads will
+    /// refill it from the wrapped reader.
     #[inline]
     fn discard_buffer(&mut self) {
         self.position = 0;
@@ -83,6 +139,9 @@ impl<R> BufferedInput<R> {
     }
 
     /// Moves unread bytes to the front of the buffer.
+    ///
+    /// This preserves the unread range while reclaiming tail capacity for
+    /// future reads. If there are no unread bytes, the buffer is discarded.
     #[inline]
     fn backshift(&mut self) {
         if self.position == 0 {
@@ -103,6 +162,19 @@ where
     R: Read,
 {
     /// Appends one more chunk from the wrapped reader to the internal buffer.
+    ///
+    /// This method reads into `buffer[limit..]` and advances `limit` by the
+    /// number of bytes read. It retries automatically when the wrapped reader
+    /// returns [`ErrorKind::Interrupted`].
+    ///
+    /// # Returns
+    ///
+    /// `Ok(true)` if at least one byte was appended, or `Ok(false)` if the
+    /// wrapped reader reached EOF.
+    ///
+    /// # Errors
+    ///
+    /// Returns any non-interrupted I/O error produced by the wrapped reader.
     fn read_more(&mut self) -> Result<bool> {
         let count = self.tail_capacity();
         debug_assert!(count > 0, "buffer has no tail capacity");
@@ -125,6 +197,19 @@ where
     }
 
     /// Ensures that at least `count` unread bytes are available.
+    ///
+    /// The method may discard consumed bytes or move unread bytes to the front
+    /// of the buffer before reading more data.
+    ///
+    /// # Arguments
+    ///
+    /// * `count` - The minimum number of unread bytes required in the buffer.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ErrorKind::UnexpectedEof`] if EOF is reached before `count`
+    /// bytes are available. Returns any non-interrupted I/O error produced by
+    /// the wrapped reader while refilling the buffer.
     fn ensure_available_slow(&mut self, count: usize) -> Result<()> {
         debug_assert!(
             count <= self.buffer.len(),
@@ -152,6 +237,30 @@ where
     }
 
     /// Reads one fixed-width value directly from the internal buffer.
+    ///
+    /// The method ensures that `N` bytes are buffered, calls `decode` at the
+    /// current buffer position, and then advances the position by `N` bytes.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `N` - The exact number of bytes consumed by the fixed-width value.
+    /// * `T` - The decoded value type.
+    /// * `F` - The decoder function type.
+    ///
+    /// # Arguments
+    ///
+    /// * `decode` - Function that decodes a value from the internal buffer and
+    ///   the starting index of the value.
+    ///
+    /// # Returns
+    ///
+    /// The decoded value.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ErrorKind::UnexpectedEof`] if EOF is reached before `N` bytes
+    /// are available. Returns any non-interrupted I/O error produced by the
+    /// wrapped reader while refilling the buffer.
     #[inline]
     pub(crate) fn read_fixed<const N: usize, T, F>(&mut self, decode: F) -> Result<T>
     where
@@ -166,11 +275,52 @@ where
         }
         let index = self.position;
         let value = decode(&self.buffer, index);
+        // Keep the cursor update based on the saved `index` instead of
+        // writing `self.position += N`. This fixed-width read path is hot
+        // enough that the exact expression shape has measured impact: using
+        // `index + N` states the real invariant directly, namely that the
+        // cursor advances from the position that was checked before `decode`
+        // ran. Re-reading and incrementing `self.position` after the callback
+        // makes the optimizer reason about the field again and was slower in
+        // the production-style binary read benchmark.
         self.position = index + N;
         Ok(value)
     }
 
     /// Reads one variable-width value directly from the internal buffer.
+    ///
+    /// The method buffers bytes until it can see a terminating byte whose high
+    /// bit is clear, or until `max_len` bytes are available. It then calls
+    /// `decode` at the current buffer position. On decoder failure, the bytes
+    /// identified as the payload are consumed before the mapped error is
+    /// returned.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - The decoded value type.
+    /// * `E` - The decoder-specific error type.
+    /// * `F` - The decoder function type.
+    /// * `M` - The error mapping function type.
+    ///
+    /// # Arguments
+    ///
+    /// * `max_len` - The maximum number of bytes that can belong to the
+    ///   variable-width payload.
+    /// * `decode` - Function that decodes a value and reports how many bytes it
+    ///   consumed.
+    /// * `map_error` - Function that converts decoder errors into
+    ///   [`std::io::Error`].
+    ///
+    /// # Returns
+    ///
+    /// The decoded value.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ErrorKind::UnexpectedEof`] if EOF is reached before a complete
+    /// or maximum-width payload is buffered. Returns any non-interrupted I/O
+    /// error produced by the wrapped reader while refilling the buffer. Returns
+    /// `map_error(error)` when `decode` rejects the buffered payload.
     pub(crate) fn read_variable<T, E, F, M>(
         &mut self,
         max_len: usize,
@@ -199,6 +349,19 @@ where
     }
 
     /// Finds the available length of a terminated or max-width variable payload.
+    ///
+    /// A variable payload is considered complete when a byte with the high bit
+    /// clear is found, or when `max_len` bytes are already buffered.
+    ///
+    /// # Arguments
+    ///
+    /// * `max_len` - The maximum payload length to inspect.
+    ///
+    /// # Returns
+    ///
+    /// `Some(len)` when a complete or maximum-width payload is currently
+    /// buffered, where `len` is the number of bytes in that payload. Returns
+    /// `None` when more input is needed.
     #[inline]
     fn variable_payload_len(&self, max_len: usize) -> Option<usize> {
         let available = self.available();
@@ -217,6 +380,23 @@ where
     }
 
     /// Ensures that a terminated or max-width variable payload is buffered.
+    ///
+    /// The method reads until [`Self::variable_payload_len`] can identify a
+    /// complete payload or until EOF is reached.
+    ///
+    /// # Arguments
+    ///
+    /// * `max_len` - The maximum payload length to buffer.
+    ///
+    /// # Returns
+    ///
+    /// The number of bytes in the buffered payload.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ErrorKind::UnexpectedEof`] if EOF is reached before a complete
+    /// or maximum-width payload is available. Returns any non-interrupted I/O
+    /// error produced by the wrapped reader while refilling the buffer.
     fn ensure_variable_payload_slow(&mut self, max_len: usize) -> Result<usize> {
         debug_assert!(
             max_len <= self.buffer.len(),
@@ -242,6 +422,26 @@ where
     }
 
     /// Reads raw bytes through the internal buffer.
+    ///
+    /// If the internal buffer is empty and `output` is at least as large as the
+    /// buffer, the read is delegated directly to the wrapped reader to avoid an
+    /// unnecessary copy. Otherwise, bytes are served from the internal buffer.
+    ///
+    /// # Arguments
+    ///
+    /// * `output` - Destination slice that receives the bytes read.
+    ///
+    /// # Returns
+    ///
+    /// The number of bytes written to `output`. A return value of `0` means that
+    /// `output` was empty or EOF was reached before any bytes were read.
+    ///
+    /// # Errors
+    ///
+    /// Returns any I/O error produced by the wrapped reader. Interrupted reads
+    /// are retried when the method refills the internal buffer through
+    /// [`Self::read_more`]; direct delegated reads follow the wrapped reader's
+    /// own [`Read::read`] behavior.
     pub(crate) fn read_raw(&mut self, output: &mut [u8]) -> Result<usize> {
         if output.is_empty() {
             return Ok(0);
@@ -262,6 +462,22 @@ where
     }
 
     /// Seeks the wrapped reader after discarding buffered bytes.
+    ///
+    /// For [`SeekFrom::Current`], the offset is adjusted by the number of
+    /// unread bytes already buffered, so seeking is relative to the logical
+    /// position observed by callers of this buffered input.
+    ///
+    /// # Arguments
+    ///
+    /// * `position` - The target seek position.
+    ///
+    /// # Returns
+    ///
+    /// The new absolute stream position reported by the wrapped reader.
+    ///
+    /// # Errors
+    ///
+    /// Returns any seek error produced by the wrapped reader.
     pub(crate) fn seek_raw(&mut self, position: SeekFrom) -> Result<u64>
     where
         R: Seek,
@@ -281,6 +497,18 @@ where
     R: Read,
 {
     /// Reads bytes through the internal buffer.
+    ///
+    /// # Arguments
+    ///
+    /// * `output` - Destination slice that receives the bytes read.
+    ///
+    /// # Returns
+    ///
+    /// The number of bytes written to `output`.
+    ///
+    /// # Errors
+    ///
+    /// Returns any I/O error produced by the wrapped reader.
     #[inline]
     fn read(&mut self, output: &mut [u8]) -> Result<usize> {
         self.read_raw(output)
