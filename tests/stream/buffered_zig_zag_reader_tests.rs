@@ -51,3 +51,35 @@ fn test_buffered_zig_zag_reader_reports_invalid_and_truncated_values() {
             .kind()
     );
 }
+
+#[test]
+fn test_buffered_zig_zag_reader_consumes_invalid_payload_before_reporting_error() {
+    let mut reader =
+        BufferedZigZagReader::<_, Strict>::with_capacity(Cursor::new([0x80, 0x00, 0x02]), 2);
+
+    assert_eq!(
+        ErrorKind::InvalidData,
+        reader
+            .read_i16()
+            .expect_err("non-canonical value should fail")
+            .kind()
+    );
+    assert_eq!(
+        1,
+        reader.read_i8().expect("next value should remain readable")
+    );
+
+    let mut reader =
+        BufferedZigZagReader::<_, NonStrict>::with_capacity(Cursor::new([0x80, 0x02, 0x02]), 2);
+    assert_eq!(
+        ErrorKind::InvalidData,
+        reader
+            .read_i8()
+            .expect_err("out-of-range ZigZag i8 encoding should fail")
+            .kind()
+    );
+    assert_eq!(
+        1,
+        reader.read_i8().expect("next value should remain readable")
+    );
+}
