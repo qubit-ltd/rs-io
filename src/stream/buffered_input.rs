@@ -290,7 +290,7 @@ where
     /// Reads one variable-width value while the decoder scans available bytes.
     ///
     /// The method calls `decode_available` with the unread byte range currently
-    /// available in the internal buffer, capped at `max_len`. The decoder must
+    /// available in the internal buffer, capped at `N`. The decoder must
     /// scan for the variable-width terminator and decode the payload in the same
     /// pass. This avoids the older buffered path that first scanned for a
     /// terminator and then asked the codec to scan and decode the same bytes
@@ -298,6 +298,8 @@ where
     ///
     /// # Type Parameters
     ///
+    /// * `N` - The maximum number of bytes that can belong to the
+    ///   variable-width payload.
     /// * `T` - The decoded value type.
     /// * `E` - The decoder-specific error type.
     /// * `F` - The decoder function type.
@@ -305,8 +307,6 @@ where
     ///
     /// # Arguments
     ///
-    /// * `max_len` - The maximum number of bytes that can belong to the
-    ///   variable-width payload.
     /// * `decode_available` - Function that decodes from currently buffered
     ///   bytes. It returns `Ok(None)` when more input is needed and
     ///   `Err((error, consumed))` when invalid bytes should be consumed before
@@ -324,10 +324,9 @@ where
     /// or maximum-width payload is buffered. Returns any non-interrupted I/O
     /// error produced by the wrapped reader while refilling the buffer. Returns
     /// `map_error(error)` when `decode_available` rejects the buffered payload.
-    #[inline]
-    pub(crate) fn read_variable_decoded<T, E, F, M>(
+    #[inline(always)]
+    pub(crate) fn read_variable_decoded<const N: usize, T, E, F, M>(
         &mut self,
-        max_len: usize,
         mut decode_available: F,
         map_error: M,
     ) -> Result<T>
@@ -336,11 +335,11 @@ where
         M: FnOnce(E) -> Error,
     {
         debug_assert!(
-            max_len <= self.buffer.len(),
+            N <= self.buffer.len(),
             "variable payload length exceeds buffer capacity"
         );
         loop {
-            let available = self.available().min(max_len);
+            let available = self.available().min(N);
             if available > 0 {
                 let index = self.position;
                 match decode_available(&self.buffer, index, available) {
@@ -352,7 +351,7 @@ where
                     }
                     Ok(None) => {
                         debug_assert!(
-                            available < max_len,
+                            available < N,
                             "decoder must reject maximum-width unterminated payload"
                         );
                     }

@@ -86,16 +86,16 @@ macro_rules! impl_read_value {
         pub fn $method(&mut self) -> Result<$ty> {
             type Codec = ZigZagCodec<$ty, $policy>;
 
-            self.input.read_variable_decoded(
-                Codec::REQUIRED_MIN_BUFFER_LEN,
-                |bytes, index, available| {
-                    // SAFETY: `read_variable_decoded` only passes bytes already
-                    // present in the internal buffer and caps `available` at
-                    // the codec maximum width.
-                    unsafe { Codec::read_available_unchecked(bytes, index, available) }
-                },
-                map_leb128_decode_error,
-            )
+            self.input
+                .read_variable_decoded::<{ Codec::REQUIRED_MIN_BUFFER_LEN }, _, _, _, _>(
+                    |bytes, index, available| {
+                        // SAFETY: `read_variable_decoded` only passes bytes already
+                        // present in the internal buffer and caps `available` at
+                        // the codec maximum width.
+                        unsafe { Codec::read_available_unchecked(bytes, index, available) }
+                    },
+                    map_leb128_decode_error,
+                )
         }
     };
 }
