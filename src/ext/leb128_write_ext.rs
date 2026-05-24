@@ -8,9 +8,15 @@
  *
  ******************************************************************************/
 
-use std::io::{Result, Write};
+use std::io::{
+    Result,
+    Write,
+};
 
-use crate::codec::{Leb128Codec, NonStrict};
+use crate::codec::{
+    Leb128Codec,
+    NonStrict,
+};
 
 macro_rules! write_leb128_value {
     ($writer:expr, $value:expr, $ty:ty) => {
@@ -26,6 +32,12 @@ macro_rules! write_leb128_value {
 }
 
 /// Extension methods for writing canonical LEB128 integers to byte streams.
+///
+/// # Target-width integers
+///
+/// `usize` and `isize` methods use the current Rust target's pointer width.
+/// Prefer fixed-width integer methods such as [`Self::write_uleb_u64`] or
+/// [`Self::write_sleb_i64`] for persistent files and cross-platform protocols.
 pub trait Leb128WriteExt: Write {
     /// Writes an unsigned LEB128 `u8`.
     #[inline]

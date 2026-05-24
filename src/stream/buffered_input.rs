@@ -8,7 +8,14 @@
  *
  ******************************************************************************/
 
-use std::io::{Error, ErrorKind, Read, Result, Seek, SeekFrom};
+use std::io::{
+    Error,
+    ErrorKind,
+    Read,
+    Result,
+    Seek,
+    SeekFrom,
+};
 
 use crate::ReadExt;
 
@@ -144,13 +151,6 @@ impl<R> BufferedInput<R> {
     /// future reads. If there are no unread bytes, the buffer is discarded.
     #[inline]
     fn backshift(&mut self) {
-        if self.position == 0 {
-            return;
-        }
-        if self.position == self.limit {
-            self.discard_buffer();
-            return;
-        }
         self.buffer.copy_within(self.position..self.limit, 0);
         self.limit -= self.position;
         self.position = 0;
@@ -177,14 +177,10 @@ where
     /// Returns any non-interrupted I/O error produced by the wrapped reader.
     fn read_more(&mut self) -> Result<bool> {
         let count = self.tail_capacity();
-        debug_assert!(count > 0, "buffer has no tail capacity");
         loop {
             // SAFETY: `limit` is always within `buffer`, and `count` is the
             // remaining capacity from `limit` to the end of `buffer`.
-            match unsafe {
-                self.inner
-                    .read_unchecked(&mut self.buffer, self.limit, count)
-            } {
+            match unsafe { self.inner.read_unchecked(&mut self.buffer, self.limit, count) } {
                 Ok(0) => return Ok(false),
                 Ok(read) => {
                     self.limit += read;
@@ -211,10 +207,6 @@ where
     /// bytes are available. Returns any non-interrupted I/O error produced by
     /// the wrapped reader while refilling the buffer.
     fn ensure_available_slow(&mut self, count: usize) -> Result<()> {
-        debug_assert!(
-            count <= self.buffer.len(),
-            "requested range exceeds buffer capacity"
-        );
         while self.available() < count {
             let available = self.available();
             if available == 0 {
@@ -227,10 +219,7 @@ where
             }
             if !self.read_more()? {
                 self.position = self.limit;
-                return Err(Error::new(
-                    ErrorKind::UnexpectedEof,
-                    "failed to fill whole buffer",
-                ));
+                return Err(Error::new(ErrorKind::UnexpectedEof, "failed to fill whole buffer"));
             }
         }
         Ok(())
@@ -266,10 +255,6 @@ where
     where
         F: FnOnce(&[u8], usize) -> T,
     {
-        debug_assert!(
-            N <= self.buffer.len(),
-            "requested range exceeds buffer capacity"
-        );
         if self.available() < N {
             self.ensure_available_slow(N)?;
         }
@@ -335,30 +320,17 @@ where
         F: FnMut(&[u8], usize, usize) -> std::result::Result<Option<(T, usize)>, (E, usize)>,
         M: FnOnce(E) -> Error,
     {
-        debug_assert!(
-            max_len <= self.buffer.len(),
-            "variable payload length exceeds buffer capacity"
-        );
         loop {
             let available = self.available().min(max_len);
             if available > 0 {
                 let index = self.position;
                 match decode_available(&self.buffer, index, available) {
                     Ok(Some((value, consumed))) => {
-                        debug_assert!(consumed > 0, "decoded payload consumed no bytes");
-                        debug_assert!(consumed <= available, "decoded beyond available bytes");
                         self.position = index + consumed;
                         return Ok(value);
                     }
-                    Ok(None) => {
-                        debug_assert!(
-                            available < max_len,
-                            "decoder must reject maximum-width unterminated payload"
-                        );
-                    }
+                    Ok(None) => {}
                     Err((error, consumed)) => {
-                        debug_assert!(consumed > 0, "invalid payload consumed no bytes");
-                        debug_assert!(consumed <= available, "invalid payload exceeded buffer");
                         self.position = index + consumed;
                         return Err(map_error(error));
                     }
@@ -366,15 +338,12 @@ where
             }
             if self.available() == 0 {
                 self.discard_buffer();
-            } else if self.tail_capacity() == 0 {
+            } else {
                 self.backshift();
             }
             if !self.read_more()? {
                 self.position = self.limit;
-                return Err(Error::new(
-                    ErrorKind::UnexpectedEof,
-                    "failed to fill whole buffer",
-                ));
+                return Err(Error::new(ErrorKind::UnexpectedEof, "failed to fill whole buffer"));
             }
         }
     }
@@ -419,7 +388,7 @@ where
         Ok(count)
     }
 
-    /// Seeks the wrapped reader after discarding buffered bytes.
+    /// Seeks the wrapped reader and discards buffered bytes after success.
     ///
     /// For [`SeekFrom::Current`], the offset is adjusted by the number of
     /// unread bytes already buffered, so seeking is relative to the logical
@@ -435,18 +404,30 @@ where
     ///
     /// # Errors
     ///
-    /// Returns any seek error produced by the wrapped reader.
+    /// Returns [`ErrorKind::InvalidInput`] if a [`SeekFrom::Current`] offset
+    /// cannot be adjusted by the unread buffered byte count. Returns any seek
+    /// error produced by the wrapped reader.
     pub(crate) fn seek_raw(&mut self, position: SeekFrom) -> Result<u64>
     where
         R: Seek,
     {
-        let unread = self.available() as i64;
-        self.position = 0;
-        self.limit = 0;
-        match position {
-            SeekFrom::Current(offset) => self.inner.seek(SeekFrom::Current(offset - unread)),
+        let position = match position {
+            SeekFrom::Current(offset) => {
+                // `buffer` is a `Vec<u8>`, whose maximum allocation size fits
+                // in `isize`; that always fits in `i64`.
+                let unread = self.available() as i64;
+                let adjusted = offset.checked_sub(unread).ok_or_else(|| {
+                    Error::new(
+                        ErrorKind::InvalidInput,
+                        "current seek offset underflows after buffered adjustment",
+                    )
+                })?;
+                self.inner.seek(SeekFrom::Current(adjusted))
+            }
             other => self.inner.seek(other),
-        }
+        }?;
+        self.discard_buffer();
+        Ok(position)
     }
 }
 

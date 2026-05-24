@@ -8,15 +8,36 @@
  *
  ******************************************************************************/
 
-use std::io::{Result, Seek, SeekFrom, Write};
+use std::io::{
+    Result,
+    Seek,
+    SeekFrom,
+    Write,
+};
 
-use crate::codec::{Leb128Codec, NonStrict};
+use crate::codec::{
+    Leb128Codec,
+    NonStrict,
+};
 use crate::stream::BufferedOutput;
 
 /// Buffered writer for canonical LEB128 integers.
 ///
 /// Values are encoded directly into the internal output buffer and flushed to
 /// the wrapped writer in larger chunks.
+///
+/// # Flush contract
+///
+/// Pending buffered bytes are not flushed from [`Drop`]. Call [`Write::flush`]
+/// or [`Self::into_inner`] to guarantee that all bytes reach the wrapped
+/// writer. [`Self::get_ref`] and [`Self::get_mut`] can observe the wrapped
+/// writer before pending bytes have been flushed.
+///
+/// # Target-width integers
+///
+/// `usize` and `isize` methods use the current Rust target's pointer width.
+/// Prefer fixed-width integer methods such as `write_u64` or `write_i64` for
+/// persistent files and cross-platform protocols.
 pub struct BufferedLeb128Writer<W> {
     output: BufferedOutput<W>,
 }
@@ -41,6 +62,8 @@ impl<W> BufferedLeb128Writer<W> {
     }
 
     /// Returns a shared reference to the underlying writer.
+    ///
+    /// Pending bytes may still be held in this wrapper's internal buffer.
     #[must_use]
     #[inline]
     pub const fn get_ref(&self) -> &W {
@@ -48,6 +71,9 @@ impl<W> BufferedLeb128Writer<W> {
     }
 
     /// Returns an exclusive reference to the underlying writer.
+    ///
+    /// Pending bytes may still be held in this wrapper's internal buffer.
+    /// Flush first if the underlying writer must observe all previous writes.
     #[must_use]
     #[inline]
     pub fn get_mut(&mut self) -> &mut W {
@@ -66,6 +92,10 @@ where
     }
 
     /// Writes a UTF-8 string prefixed by an unsigned LEB128 byte length.
+    ///
+    /// The length prefix is encoded as `usize`, so this format is target-width
+    /// dependent. Prefer a fixed-width length prefix for persistent files and
+    /// cross-platform protocols.
     #[inline]
     pub fn write_utf8_string(&mut self, value: &str) -> Result<()> {
         self.write_usize(value.len())?;
@@ -80,15 +110,12 @@ macro_rules! impl_write_value {
         pub fn $method(&mut self, value: $ty) -> Result<()> {
             type Codec = Leb128Codec<$ty, NonStrict>;
 
-            self.output.write_encoded(
-                Codec::REQUIRED_MIN_BUFFER_LEN,
-                value,
-                |bytes, index, value| {
+            self.output
+                .write_encoded(Codec::REQUIRED_MIN_BUFFER_LEN, value, |bytes, index, value| {
                     // SAFETY: `write_encoded` guarantees enough writable bytes
                     // for the codec-declared maximum encoded width.
                     unsafe { Codec::write_unchecked(bytes, index, value) }
-                },
-            )
+                })
         }
     };
 }

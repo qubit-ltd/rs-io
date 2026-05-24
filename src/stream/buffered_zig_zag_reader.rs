@@ -9,15 +9,41 @@
  ******************************************************************************/
 
 use core::marker::PhantomData;
-use std::io::{Error, ErrorKind, Read, Result, Seek, SeekFrom};
+use std::io::{
+    Error,
+    ErrorKind,
+    Read,
+    Result,
+    Seek,
+    SeekFrom,
+};
 
-use crate::codec::{DecodePolicy, Leb128DecodeError, NonStrict, Strict, ZigZagCodec};
+use crate::codec::{
+    DecodePolicy,
+    Leb128DecodeError,
+    NonStrict,
+    Strict,
+    ZigZagCodec,
+};
 use crate::stream::BufferedInput;
 
 /// Buffered reader for ZigZag + unsigned LEB128 integers.
 ///
 /// Values are decoded directly from the internal input buffer while the codec
 /// scans for the underlying LEB128 terminating byte.
+///
+/// # Buffered state
+///
+/// This reader may prefetch bytes from the wrapped reader. As a result,
+/// [`Self::get_ref`] can observe an underlying stream position ahead of the
+/// logical position exposed by this wrapper, and [`Self::into_inner`] discards
+/// any prefetched bytes that have not been consumed.
+///
+/// # Target-width integers
+///
+/// `isize` methods use the current Rust target's pointer width. Prefer
+/// fixed-width integer methods such as `read_i64` for persistent files and
+/// cross-platform protocols.
 pub struct BufferedZigZagReader<R, P = NonStrict> {
     input: BufferedInput<R>,
     marker: PhantomData<fn() -> P>,
@@ -55,6 +81,9 @@ where
     }
 
     /// Returns a shared reference to the underlying reader.
+    ///
+    /// The underlying reader may already be positioned past unread bytes held
+    /// in this wrapper's internal buffer.
     #[must_use]
     #[inline]
     pub const fn get_ref(&self) -> &R {
@@ -62,6 +91,9 @@ where
     }
 
     /// Returns an exclusive reference to the underlying reader.
+    ///
+    /// Mutating the underlying reader directly can invalidate prefetched bytes
+    /// already held in this wrapper's internal buffer.
     #[must_use]
     #[inline]
     pub fn get_mut(&mut self) -> &mut R {
@@ -134,7 +166,7 @@ impl<R, P> Seek for BufferedZigZagReader<R, P>
 where
     R: Read + Seek,
 {
-    /// Seeks the wrapped reader after discarding buffered bytes.
+    /// Seeks the wrapped reader and discards buffered bytes after success.
     #[inline]
     fn seek(&mut self, position: SeekFrom) -> Result<u64> {
         self.input.seek_raw(position)

@@ -8,12 +8,26 @@
  *
  ******************************************************************************/
 
-use std::io::{Result, Seek, SeekFrom, Write};
+use std::io::{
+    Result,
+    Seek,
+    SeekFrom,
+    Write,
+};
 
-use crate::codec::{NonStrict, ZigZagCodec};
 use crate::WriteExt;
+use crate::codec::{
+    NonStrict,
+    ZigZagCodec,
+};
 
 /// Writer wrapper for canonical ZigZag + unsigned LEB128 integers.
+///
+/// # Target-width integers
+///
+/// `isize` methods use the current Rust target's pointer width. Prefer
+/// fixed-width integer methods such as `write_i64` for persistent files and
+/// cross-platform protocols.
 pub struct ZigZagWriter<W> {
     inner: W,
     buffer: [u8; 19],
@@ -24,10 +38,7 @@ impl<W> ZigZagWriter<W> {
     #[must_use]
     #[inline]
     pub const fn new(inner: W) -> Self {
-        Self {
-            inner,
-            buffer: [0; 19],
-        }
+        Self { inner, buffer: [0; 19] }
     }
 
     /// Returns a shared reference to the underlying writer.
@@ -59,10 +70,9 @@ macro_rules! impl_write_value {
         pub fn $method(&mut self, value: $ty) -> Result<()> {
             type Codec = ZigZagCodec<$ty, NonStrict>;
 
-            self.write_zig_zag::<$ty, { Codec::REQUIRED_MIN_BUFFER_LEN }, _>(
-                value,
-                |bytes, value| unsafe { Codec::write_unchecked(bytes, 0, value) },
-            )
+            self.write_zig_zag::<$ty, { Codec::REQUIRED_MIN_BUFFER_LEN }, _>(value, |bytes, value| unsafe {
+                Codec::write_unchecked(bytes, 0, value)
+            })
         }
     };
 }

@@ -8,15 +8,36 @@
  *
  ******************************************************************************/
 
-use std::io::{Result, Seek, SeekFrom, Write};
+use std::io::{
+    Result,
+    Seek,
+    SeekFrom,
+    Write,
+};
 
-use crate::codec::{NonStrict, ZigZagCodec};
+use crate::codec::{
+    NonStrict,
+    ZigZagCodec,
+};
 use crate::stream::BufferedOutput;
 
 /// Buffered writer for canonical ZigZag + unsigned LEB128 integers.
 ///
 /// Values are encoded directly into the internal output buffer and flushed to
 /// the wrapped writer in larger chunks.
+///
+/// # Flush contract
+///
+/// Pending buffered bytes are not flushed from [`Drop`]. Call [`Write::flush`]
+/// or [`Self::into_inner`] to guarantee that all bytes reach the wrapped
+/// writer. [`Self::get_ref`] and [`Self::get_mut`] can observe the wrapped
+/// writer before pending bytes have been flushed.
+///
+/// # Target-width integers
+///
+/// `isize` methods use the current Rust target's pointer width. Prefer
+/// fixed-width integer methods such as `write_i64` for persistent files and
+/// cross-platform protocols.
 pub struct BufferedZigZagWriter<W> {
     output: BufferedOutput<W>,
 }
@@ -41,6 +62,8 @@ impl<W> BufferedZigZagWriter<W> {
     }
 
     /// Returns a shared reference to the underlying writer.
+    ///
+    /// Pending bytes may still be held in this wrapper's internal buffer.
     #[must_use]
     #[inline]
     pub const fn get_ref(&self) -> &W {
@@ -48,6 +71,9 @@ impl<W> BufferedZigZagWriter<W> {
     }
 
     /// Returns an exclusive reference to the underlying writer.
+    ///
+    /// Pending bytes may still be held in this wrapper's internal buffer.
+    /// Flush first if the underlying writer must observe all previous writes.
     #[must_use]
     #[inline]
     pub fn get_mut(&mut self) -> &mut W {
@@ -73,15 +99,12 @@ macro_rules! impl_write_value {
         pub fn $method(&mut self, value: $ty) -> Result<()> {
             type Codec = ZigZagCodec<$ty, NonStrict>;
 
-            self.output.write_encoded(
-                Codec::REQUIRED_MIN_BUFFER_LEN,
-                value,
-                |bytes, index, value| {
+            self.output
+                .write_encoded(Codec::REQUIRED_MIN_BUFFER_LEN, value, |bytes, index, value| {
                     // SAFETY: `write_encoded` guarantees enough writable bytes
                     // for the codec-declared maximum encoded width.
                     unsafe { Codec::write_unchecked(bytes, index, value) }
-                },
-            )
+                })
         }
     };
 }

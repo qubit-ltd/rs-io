@@ -9,9 +9,22 @@
  ******************************************************************************/
 
 use core::marker::PhantomData;
-use std::io::{Error, ErrorKind, Read, Result, Seek, SeekFrom};
+use std::io::{
+    Error,
+    ErrorKind,
+    Read,
+    Result,
+    Seek,
+    SeekFrom,
+};
 
-use crate::codec::{DecodePolicy, Leb128Codec, Leb128DecodeError, NonStrict, Strict};
+use crate::codec::{
+    DecodePolicy,
+    Leb128Codec,
+    Leb128DecodeError,
+    NonStrict,
+    Strict,
+};
 use crate::stream::BufferedInput;
 use crate::util::read_utf8_payload;
 
@@ -19,6 +32,19 @@ use crate::util::read_utf8_payload;
 ///
 /// Values are decoded directly from the internal input buffer while the codec
 /// scans for the LEB128 terminating byte.
+///
+/// # Buffered state
+///
+/// This reader may prefetch bytes from the wrapped reader. As a result,
+/// [`Self::get_ref`] can observe an underlying stream position ahead of the
+/// logical position exposed by this wrapper, and [`Self::into_inner`] discards
+/// any prefetched bytes that have not been consumed.
+///
+/// # Target-width integers
+///
+/// `usize` and `isize` methods use the current Rust target's pointer width.
+/// Prefer fixed-width integer methods such as `read_u64` or `read_i64` for
+/// persistent files and cross-platform protocols.
 pub struct BufferedLeb128Reader<R, P = NonStrict> {
     input: BufferedInput<R>,
     marker: PhantomData<fn() -> P>,
@@ -56,6 +82,9 @@ where
     }
 
     /// Returns a shared reference to the underlying reader.
+    ///
+    /// The underlying reader may already be positioned past unread bytes held
+    /// in this wrapper's internal buffer.
     #[must_use]
     #[inline]
     pub const fn get_ref(&self) -> &R {
@@ -63,6 +92,9 @@ where
     }
 
     /// Returns an exclusive reference to the underlying reader.
+    ///
+    /// Mutating the underlying reader directly can invalidate prefetched bytes
+    /// already held in this wrapper's internal buffer.
     #[must_use]
     #[inline]
     pub fn get_mut(&mut self) -> &mut R {
@@ -112,12 +144,7 @@ macro_rules! impl_for_policy {
             impl_read_value!($policy, read_u32, u32, "Reads an unsigned LEB128 `u32`.");
             impl_read_value!($policy, read_u64, u64, "Reads an unsigned LEB128 `u64`.");
             impl_read_value!($policy, read_u128, u128, "Reads an unsigned LEB128 `u128`.");
-            impl_read_value!(
-                $policy,
-                read_usize,
-                usize,
-                "Reads an unsigned LEB128 `usize`."
-            );
+            impl_read_value!($policy, read_usize, usize, "Reads an unsigned LEB128 `usize`.");
             impl_read_value!($policy, read_i8, i8, "Reads a signed LEB128 `i8`.");
             impl_read_value!($policy, read_i16, i16, "Reads a signed LEB128 `i16`.");
             impl_read_value!($policy, read_i32, i32, "Reads a signed LEB128 `i32`.");
@@ -126,6 +153,10 @@ macro_rules! impl_for_policy {
             impl_read_value!($policy, read_isize, isize, "Reads a signed LEB128 `isize`.");
 
             /// Reads a UTF-8 string prefixed by an unsigned LEB128 byte length.
+            ///
+            /// The length prefix is decoded as `usize`, so this format is
+            /// target-width dependent. Prefer a fixed-width length prefix for
+            /// persistent files and cross-platform protocols.
             #[inline]
             pub fn read_utf8_string(&mut self, max_len: usize) -> Result<String> {
                 let len = self.read_usize()?;
@@ -153,7 +184,7 @@ impl<R, P> Seek for BufferedLeb128Reader<R, P>
 where
     R: Read + Seek,
 {
-    /// Seeks the wrapped reader after discarding buffered bytes.
+    /// Seeks the wrapped reader and discards buffered bytes after success.
     #[inline]
     fn seek(&mut self, position: SeekFrom) -> Result<u64> {
         self.input.seek_raw(position)

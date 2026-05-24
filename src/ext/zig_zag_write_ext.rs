@@ -8,9 +8,15 @@
  *
  ******************************************************************************/
 
-use std::io::{Result, Write};
+use std::io::{
+    Result,
+    Write,
+};
 
-use crate::codec::{NonStrict, ZigZagCodec};
+use crate::codec::{
+    NonStrict,
+    ZigZagCodec,
+};
 
 macro_rules! write_zig_zag_value {
     ($writer:expr, $value:expr, $ty:ty) => {
@@ -26,6 +32,12 @@ macro_rules! write_zig_zag_value {
 }
 
 /// Extension methods for writing ZigZag + unsigned LEB128 integers.
+///
+/// # Target-width integers
+///
+/// `isize` methods use the current Rust target's pointer width. Prefer
+/// fixed-width integer methods such as [`Self::write_zig_zag_i64`] for
+/// persistent files and cross-platform protocols.
 pub trait ZigZagWriteExt: Write {
     /// Writes a ZigZag `i8`.
     #[inline]
