@@ -7,13 +7,21 @@
  *    Licensed under the Apache License, Version 2.0.
  *
  ******************************************************************************/
-use std::io::{Result, Write};
+use std::io::{
+    Result,
+    Write,
+};
 
 use crate::util::{
-    write_utf8_payload as write_utf8_payload_impl, write_utf8_string_with_u16_len,
+    write_utf8_payload as write_utf8_payload_impl,
+    write_utf8_string_with_u16_len,
     write_utf8_string_with_u32_len,
 };
-use crate::{BinaryWriteExt, ByteOrder, Leb128WriteExt};
+use crate::{
+    BinaryWriteExt,
+    ByteOrder,
+    Leb128WriteExt,
+};
 
 /// Extension methods for writing length-prefixed UTF-8 strings.
 pub trait StringWriteExt: Write {
@@ -27,6 +35,10 @@ pub trait StringWriteExt: Write {
     fn write_utf8_payload(&mut self, value: &str) -> Result<()>;
 
     /// Writes a UTF-8 string with an unsigned LEB128 byte-length prefix.
+    ///
+    /// The length prefix is encoded as `usize`, so this format is target-width
+    /// dependent. Prefer `u16` or `u32` length-prefix methods for persistent
+    /// files and cross-platform protocols.
     ///
     /// # Parameters
     /// - `value`: String slice to write.

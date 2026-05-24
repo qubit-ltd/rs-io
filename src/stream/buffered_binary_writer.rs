@@ -9,9 +9,20 @@
  ******************************************************************************/
 
 use core::marker::PhantomData;
-use std::io::{Result, Seek, SeekFrom, Write};
+use std::io::{
+    Result,
+    Seek,
+    SeekFrom,
+    Write,
+};
 
-use crate::codec::{BigEndian, BinaryCodec, ByteOrder, ByteOrderSpec, LittleEndian};
+use crate::codec::{
+    BigEndian,
+    BinaryCodec,
+    ByteOrder,
+    ByteOrderSpec,
+    LittleEndian,
+};
 use crate::stream::BufferedOutput;
 
 /// Buffered writer for fixed-width binary values.
@@ -19,6 +30,13 @@ use crate::stream::BufferedOutput;
 /// Scalar writes encode directly into the internal output buffer and flush that
 /// buffer to the wrapped writer only when it becomes full or when explicitly
 /// flushed.
+///
+/// # Flush contract
+///
+/// Pending buffered bytes are not flushed from [`Drop`]. Call [`Write::flush`]
+/// or [`Self::into_inner`] to guarantee that all bytes reach the wrapped
+/// writer. [`Self::get_ref`] and [`Self::get_mut`] can observe the wrapped
+/// writer before pending bytes have been flushed.
 pub struct BufferedBinaryWriter<W, O = BigEndian> {
     output: BufferedOutput<W>,
     marker: PhantomData<fn() -> O>,
@@ -56,6 +74,8 @@ where
     }
 
     /// Returns a shared reference to the underlying writer.
+    ///
+    /// Pending bytes may still be held in this wrapper's internal buffer.
     #[must_use]
     #[inline]
     pub const fn get_ref(&self) -> &W {
@@ -63,6 +83,9 @@ where
     }
 
     /// Returns an exclusive reference to the underlying writer.
+    ///
+    /// Pending bytes may still be held in this wrapper's internal buffer.
+    /// Flush first if the underlying writer must observe all previous writes.
     #[must_use]
     #[inline]
     pub fn get_mut(&mut self) -> &mut W {
@@ -113,12 +136,7 @@ macro_rules! impl_for_order {
             impl_value_write!($order, write_u16, u16, "Writes an unsigned 16-bit integer.");
             impl_value_write!($order, write_u32, u32, "Writes an unsigned 32-bit integer.");
             impl_value_write!($order, write_u64, u64, "Writes an unsigned 64-bit integer.");
-            impl_value_write!(
-                $order,
-                write_u128,
-                u128,
-                "Writes an unsigned 128-bit integer."
-            );
+            impl_value_write!($order, write_u128, u128, "Writes an unsigned 128-bit integer.");
             impl_value_write!($order, write_i16, i16, "Writes a signed 16-bit integer.");
             impl_value_write!($order, write_i32, i32, "Writes a signed 32-bit integer.");
             impl_value_write!($order, write_i64, i64, "Writes a signed 64-bit integer.");

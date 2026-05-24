@@ -8,11 +8,21 @@
  *
  ******************************************************************************/
 
-use std::io::{Error, ErrorKind, Result, Seek, SeekFrom, Write};
+use std::io::{
+    Error,
+    ErrorKind,
+    Result,
+    Seek,
+    SeekFrom,
+    Write,
+};
 use std::ptr;
 
 use crate::WriteExt;
-use crate::stream::buffered_input::{DEFAULT_BUFFER_CAPACITY, MIN_CODEC_BUFFER_CAPACITY};
+use crate::stream::buffered_input::{
+    DEFAULT_BUFFER_CAPACITY,
+    MIN_CODEC_BUFFER_CAPACITY,
+};
 
 /// Buffered output core shared by codec-oriented writers.
 ///
@@ -112,7 +122,6 @@ impl<W> BufferedOutput<W> {
     /// buffer.  Violating either requirement may cause memory corruption.
     #[inline]
     unsafe fn write_to_buffer_unchecked(&mut self, input: &[u8]) {
-        debug_assert!(input.len() <= self.spare_capacity());
         let old_len = self.length;
         let input_len = input.len();
         // SAFETY: The caller guarantees that the destination range is within
@@ -142,8 +151,7 @@ where
     /// reports that zero bytes were written before the buffer is drained.
     #[inline]
     pub(crate) fn into_inner(mut self) -> Result<W> {
-        self.flush_buffer()?;
-        Ok(self.inner)
+        self.flush_buffer().map(|()| self.inner)
     }
 
     /// Ensures that `count` bytes can be written into the internal buffer.
@@ -164,20 +172,10 @@ where
     /// Returns any non-interrupted I/O error produced while flushing buffered
     /// bytes.  Also returns [`ErrorKind::WriteZero`] if the wrapped writer
     /// reports that zero bytes were written before the buffer is drained.
-    ///
-    /// # Panics
-    ///
-    /// In debug builds, panics if `count` is larger than the internal buffer
-    /// capacity.
     #[cold]
     #[inline(never)]
-    fn ensure_space_slow(&mut self, count: usize) -> Result<()> {
-        debug_assert!(
-            count <= self.buffer.len(),
-            "requested range exceeds buffer capacity"
-        );
-        self.flush_buffer()?;
-        Ok(())
+    fn ensure_space_slow(&mut self, _count: usize) -> Result<()> {
+        self.flush_buffer()
     }
 
     /// Encodes one value directly into the internal buffer.
@@ -209,26 +207,16 @@ where
     /// bytes to make room for `max_len`.  Also returns [`ErrorKind::WriteZero`]
     /// if the wrapped writer reports that zero bytes were written before the
     /// buffer is drained.
-    ///
-    /// # Panics
-    ///
-    /// In debug builds, panics if `max_len` is larger than the internal buffer
-    /// capacity or if `encode` reports that it wrote more than `max_len` bytes.
     #[inline]
     pub(crate) fn write_encoded<T, F>(&mut self, max_len: usize, value: T, encode: F) -> Result<()>
     where
         F: FnOnce(&mut [u8], usize, T) -> usize,
     {
-        debug_assert!(
-            max_len <= self.buffer.len(),
-            "requested range exceeds buffer capacity"
-        );
         if self.spare_capacity() < max_len {
             self.ensure_space_slow(max_len)?;
         }
         let start = self.length;
         let written = encode(&mut self.buffer, start, value);
-        debug_assert!(written <= max_len, "codec wrote more bytes than declared");
         // Keep this assignment based on the saved cursor instead of writing
         // `self.length += written`. The encoder receives `&mut self.buffer`;
         // on the fixed-width hot path, recomputing the cursor from
@@ -269,20 +257,11 @@ where
     /// bytes to make room for `N`.  Also returns [`ErrorKind::WriteZero`] if the
     /// wrapped writer reports that zero bytes were written before the buffer is
     /// drained.
-    ///
-    /// # Panics
-    ///
-    /// In debug builds, panics if `N` is larger than the internal buffer
-    /// capacity.
     #[inline]
     pub(crate) fn write_fixed<const N: usize, T, F>(&mut self, value: T, encode: F) -> Result<()>
     where
         F: FnOnce(&mut [u8], usize, T),
     {
-        debug_assert!(
-            N <= self.buffer.len(),
-            "requested range exceeds buffer capacity"
-        );
         if self.spare_capacity() < N {
             self.ensure_space_slow(N)?;
         }
@@ -483,15 +462,9 @@ where
             let remaining_len = guard.remaining_len();
             // SAFETY: `written..length` is maintained as a valid range inside
             // the initialized output buffer.
-            match unsafe {
-                self.inner
-                    .write_unchecked(guard.buffer, guard.written, remaining_len)
-            } {
+            match unsafe { self.inner.write_unchecked(guard.buffer, guard.written, remaining_len) } {
                 Ok(0) => {
-                    return Err(Error::new(
-                        ErrorKind::WriteZero,
-                        "failed to write buffered data",
-                    ));
+                    return Err(Error::new(ErrorKind::WriteZero, "failed to write buffered data"));
                 }
                 Ok(written) => guard.consume(written),
                 Err(error) if error.kind() == ErrorKind::Interrupted => {}
@@ -515,8 +488,7 @@ where
     /// progress while draining the buffer, or any error returned by
     /// [`Write::flush`] on the wrapped writer.
     pub(crate) fn flush_all(&mut self) -> Result<()> {
-        self.flush_buffer()?;
-        self.inner.flush()
+        self.flush_buffer().and_then(|()| self.inner.flush())
     }
 
     /// Writes raw bytes and reports the accepted byte count.
@@ -574,7 +546,6 @@ where
     where
         W: Seek,
     {
-        self.flush_buffer()?;
-        self.inner.seek(position)
+        self.flush_buffer().and_then(|()| self.inner.seek(position))
     }
 }

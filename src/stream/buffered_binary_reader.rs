@@ -9,9 +9,20 @@
  ******************************************************************************/
 
 use core::marker::PhantomData;
-use std::io::{Read, Result, Seek, SeekFrom};
+use std::io::{
+    Read,
+    Result,
+    Seek,
+    SeekFrom,
+};
 
-use crate::codec::{BigEndian, BinaryCodec, ByteOrder, ByteOrderSpec, LittleEndian};
+use crate::codec::{
+    BigEndian,
+    BinaryCodec,
+    ByteOrder,
+    ByteOrderSpec,
+    LittleEndian,
+};
 use crate::stream::BufferedInput;
 
 /// Buffered reader for fixed-width binary values.
@@ -19,6 +30,13 @@ use crate::stream::BufferedInput;
 /// Scalar reads decode directly from the internal input buffer whenever enough
 /// bytes are available, avoiding the per-value temporary buffer used by the
 /// extension trait helpers.
+///
+/// # Buffered state
+///
+/// This reader may prefetch bytes from the wrapped reader. As a result,
+/// [`Self::get_ref`] can observe an underlying stream position ahead of the
+/// logical position exposed by this wrapper, and [`Self::into_inner`] discards
+/// any prefetched bytes that have not been consumed.
 pub struct BufferedBinaryReader<R, O = BigEndian> {
     input: BufferedInput<R>,
     marker: PhantomData<fn() -> O>,
@@ -56,6 +74,9 @@ where
     }
 
     /// Returns a shared reference to the underlying reader.
+    ///
+    /// The underlying reader may already be positioned past unread bytes held
+    /// in this wrapper's internal buffer.
     #[must_use]
     #[inline]
     pub const fn get_ref(&self) -> &R {
@@ -63,6 +84,9 @@ where
     }
 
     /// Returns an exclusive reference to the underlying reader.
+    ///
+    /// Mutating the underlying reader directly can invalidate prefetched bytes
+    /// already held in this wrapper's internal buffer.
     #[must_use]
     #[inline]
     pub fn get_mut(&mut self) -> &mut R {
@@ -109,12 +133,7 @@ macro_rules! impl_for_order {
             impl_value_read!($order, read_u16, u16, "Reads an unsigned 16-bit integer.");
             impl_value_read!($order, read_u32, u32, "Reads an unsigned 32-bit integer.");
             impl_value_read!($order, read_u64, u64, "Reads an unsigned 64-bit integer.");
-            impl_value_read!(
-                $order,
-                read_u128,
-                u128,
-                "Reads an unsigned 128-bit integer."
-            );
+            impl_value_read!($order, read_u128, u128, "Reads an unsigned 128-bit integer.");
             impl_value_read!($order, read_i16, i16, "Reads a signed 16-bit integer.");
             impl_value_read!($order, read_i32, i32, "Reads a signed 32-bit integer.");
             impl_value_read!($order, read_i64, i64, "Reads a signed 64-bit integer.");
@@ -143,7 +162,7 @@ impl<R, O> Seek for BufferedBinaryReader<R, O>
 where
     R: Read + Seek,
 {
-    /// Seeks the wrapped reader after discarding buffered bytes.
+    /// Seeks the wrapped reader and discards buffered bytes after success.
     #[inline]
     fn seek(&mut self, position: SeekFrom) -> Result<u64> {
         self.input.seek_raw(position)

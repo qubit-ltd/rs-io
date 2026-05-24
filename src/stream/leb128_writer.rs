@@ -8,12 +8,26 @@
  *
  ******************************************************************************/
 
-use std::io::{Result, Seek, SeekFrom, Write};
+use std::io::{
+    Result,
+    Seek,
+    SeekFrom,
+    Write,
+};
 
-use crate::codec::{Leb128Codec, NonStrict};
 use crate::WriteExt;
+use crate::codec::{
+    Leb128Codec,
+    NonStrict,
+};
 
 /// Writer wrapper for canonical LEB128 integers.
+///
+/// # Target-width integers
+///
+/// `usize` and `isize` methods use the current Rust target's pointer width.
+/// Prefer fixed-width integer methods such as `write_u64` or `write_i64` for
+/// persistent files and cross-platform protocols.
 pub struct Leb128Writer<W> {
     inner: W,
     buffer: [u8; 19],
@@ -24,10 +38,7 @@ impl<W> Leb128Writer<W> {
     #[must_use]
     #[inline]
     pub const fn new(inner: W) -> Self {
-        Self {
-            inner,
-            buffer: [0; 19],
-        }
+        Self { inner, buffer: [0; 19] }
     }
 
     /// Returns a shared reference to the underlying writer.
@@ -59,10 +70,9 @@ macro_rules! impl_write_value {
         pub fn $method(&mut self, value: $ty) -> Result<()> {
             type Codec = Leb128Codec<$ty, NonStrict>;
 
-            self.write_leb128::<$ty, { Codec::REQUIRED_MIN_BUFFER_LEN }, _>(
-                value,
-                |bytes, value| unsafe { Codec::write_unchecked(bytes, 0, value) },
-            )
+            self.write_leb128::<$ty, { Codec::REQUIRED_MIN_BUFFER_LEN }, _>(value, |bytes, value| unsafe {
+                Codec::write_unchecked(bytes, 0, value)
+            })
         }
     };
 }
@@ -95,6 +105,10 @@ where
     impl_write_value!(write_isize, isize, "Writes a signed LEB128 `isize`.");
 
     /// Writes a UTF-8 string prefixed by an unsigned LEB128 byte length.
+    ///
+    /// The length prefix is encoded as `usize`, so this format is target-width
+    /// dependent. Prefer a fixed-width length prefix for persistent files and
+    /// cross-platform protocols.
     ///
     /// # Parameters
     ///

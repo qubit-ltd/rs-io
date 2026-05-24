@@ -8,25 +8,35 @@
  *
  ******************************************************************************/
 
-use std::io::{Read, Result};
+use std::io::{
+    Read,
+    Result,
+};
 
-use crate::codec::{NonStrict, Strict, ZigZagCodec};
+use crate::codec::{
+    NonStrict,
+    Strict,
+    ZigZagCodec,
+};
 use crate::util::read_leb128_payload;
 
 macro_rules! read_zig_zag_value {
     ($reader:expr, $ty:ty, $policy:ty) => {
-        read_leb128_payload::<{ ZigZagCodec::<$ty, $policy>::REQUIRED_MIN_BUFFER_LEN }, _, _, _>(
-            $reader,
-            |bytes| {
-                // SAFETY: The local buffer is exactly the codec's minimum buffer length,
-                // or it contains an earlier terminating byte before decoding.
-                unsafe { ZigZagCodec::<$ty, $policy>::read_unchecked(bytes, 0) }
-            },
-        )
+        read_leb128_payload::<{ ZigZagCodec::<$ty, $policy>::REQUIRED_MIN_BUFFER_LEN }, _, _, _>($reader, |bytes| {
+            // SAFETY: The local buffer is exactly the codec's minimum buffer length,
+            // or it contains an earlier terminating byte before decoding.
+            unsafe { ZigZagCodec::<$ty, $policy>::read_unchecked(bytes, 0) }
+        })
     };
 }
 
 /// Extension methods for reading ZigZag + unsigned LEB128 integers.
+///
+/// # Target-width integers
+///
+/// `isize` methods use the current Rust target's pointer width. Prefer
+/// fixed-width integer methods such as [`Self::read_zig_zag_i64`] for
+/// persistent files and cross-platform protocols.
 pub trait ZigZagReadExt: Read {
     /// Reads a non-strict ZigZag `i8`.
     #[inline]
