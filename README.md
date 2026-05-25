@@ -175,6 +175,30 @@ Buffered writers do not flush pending bytes from `Drop`. Call `flush()` or
 `into_inner()` to guarantee delivery to the wrapped writer. Buffered writers
 flush pending bytes before `Seek`.
 
+### Benchmark Snapshot
+
+The stream benchmark suite uses real filesystem files, randomized field types,
+normally distributed values, and isolated Criterion runs per benchmark group.
+The following snapshot was measured on 2026-05-25. Speed ratios are computed as
+`baseline mean time / candidate mean time`, so values above `1.00x` mean the
+candidate is faster. `std` means `std_native` for fixed-width binary and
+`std_manual` for LEB128/ZigZag, where the latter uses `BufReader`/`BufWriter`
+plus safe hand-written protocol code.
+
+| Scenario | Fastest implementation | Mean time | Speed vs ext | Speed vs std |
+| --- | --- | ---: | ---: | ---: |
+| Fixed-width binary write | `buffered` | `464.77 ms` | `1.02x` | `1.07x` |
+| Fixed-width binary read | `buffered` | `204.41 ms` | `1.19x` | `1.34x` |
+| LEB128 write | `buffered` | `149.96 ms` | `1.31x` | `1.39x` |
+| LEB128 read | `ext` | `152.01 ms` | `1.00x` | `1.09x` |
+| ZigZag write | `buffered` | `152.58 ms` | `1.33x` | `1.41x` |
+| ZigZag read | `ext` | `154.06 ms` | `1.00x` | `1.09x` |
+
+In short, buffered writers are the clearest win, especially for compact integer
+streams. Buffered fixed-width binary reads are also substantially faster. For
+LEB128 and ZigZag reads, the buffered reader is roughly tied with the extension
+trait path, while the safe hand-written standard-library baseline is slower.
+
 ## Prelude
 
 `qubit_io::prelude` re-exports the method-providing extension traits,
