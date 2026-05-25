@@ -77,7 +77,7 @@ writer wrapper 同时实现 `Write`，当底层 stream 支持 seek 时还会透�
 
 ```toml
 [dependencies]
-qubit-io = "0.3"
+qubit-io = "0.4"
 ```
 
 ## 导入方式
@@ -592,7 +592,7 @@ assert_eq!(42, reader.read_i64()?);
 ### Buffered Codec Wrapper
 
 当需要重复读写大量标量值，并希望 wrapper 在内部批量 I/O 时，使用 buffered codec wrapper。
-Buffered reader 可能会从底层 reader 预取字节，因此 `get_ref` 看到的物理 stream 位置可能
+Buffered reader 可能会从底层 reader 预取字节，因此 `inner` 看到的物理 stream 位置可能
 已经超过 wrapper 暴露的逻辑位置。对 buffered reader 调用 `into_inner` 会丢弃尚未消费的
 预取字节。
 

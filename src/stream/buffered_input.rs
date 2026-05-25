@@ -85,7 +85,7 @@ impl<R> BufferedInput<R> {
     ///
     /// A shared reference to the inner input object.
     #[inline]
-    pub(crate) const fn get_ref(&self) -> &R {
+    pub(crate) const fn inner(&self) -> &R {
         &self.inner
     }
 
@@ -99,7 +99,7 @@ impl<R> BufferedInput<R> {
     ///
     /// An exclusive reference to the inner input object.
     #[inline]
-    pub(crate) fn get_mut(&mut self) -> &mut R {
+    pub(crate) fn inner_mut(&mut self) -> &mut R {
         &mut self.inner
     }
 

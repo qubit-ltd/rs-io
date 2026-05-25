@@ -144,8 +144,8 @@ fn test_buffered_leb128_reader_accessors_raw_seek_string_and_into_inner() {
     let mut reader = BufferedLeb128Reader::<_, NonStrict>::new(Cursor::new(vec![3, b'a', b'b', b'c', 9]));
 
     assert!(!reader.is_strict());
-    assert_eq!(0, reader.get_ref().position());
-    reader.get_mut().set_position(0);
+    assert_eq!(0, reader.inner().position());
+    reader.inner_mut().set_position(0);
     assert_eq!("abc", reader.read_utf8_string(3).expect("string should be read"));
     assert_eq!(4, reader.stream_position().expect("current seek should succeed"));
     let mut byte = [0_u8; 1];
