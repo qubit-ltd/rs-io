@@ -4,6 +4,7 @@ use std::fs::{
     File,
 };
 use std::io::{
+    BufRead,
     BufReader,
     BufWriter,
     Read,
@@ -532,6 +533,121 @@ fn clamp_i64_to_i32(value: i64) -> i32 {
 }
 
 #[inline]
+fn invalid_leb128_error() -> std::io::Error {
+    std::io::Error::new(std::io::ErrorKind::InvalidData, "invalid LEB128 value")
+}
+
+#[inline]
+fn unexpected_leb128_eof_error() -> std::io::Error {
+    std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "truncated LEB128 value")
+}
+
+#[inline]
+fn write_uleb_std_manual<W>(writer: &mut W, mut value: u128) -> std::io::Result<()>
+where
+    W: Write,
+{
+    let mut buffer = [0u8; 19];
+    let mut length = 0usize;
+
+    loop {
+        let mut byte = (value & 0x7f) as u8;
+        value >>= 7;
+        if value != 0 {
+            byte |= 0x80;
+        }
+        buffer[length] = byte;
+        length += 1;
+
+        if value == 0 {
+            return writer.write_all(&buffer[..length]);
+        }
+    }
+}
+
+#[inline]
+fn read_uleb_std_manual<R>(reader: &mut R, max_value: u128) -> std::io::Result<u128>
+where
+    R: BufRead,
+{
+    let mut value = 0u128;
+    let mut shift = 0u32;
+
+    loop {
+        let (consumed, finished, invalid) = {
+            let available = reader.fill_buf()?;
+            if available.is_empty() {
+                return Err(unexpected_leb128_eof_error());
+            }
+
+            let mut consumed = 0usize;
+            let mut finished = false;
+            let mut invalid = false;
+
+            for &byte in available {
+                consumed += 1;
+                let payload = u128::from(byte & 0x7f);
+                if shift >= 128 {
+                    invalid = payload != 0;
+                } else {
+                    value |= payload << shift;
+                }
+
+                if byte & 0x80 == 0 {
+                    finished = true;
+                    break;
+                }
+
+                shift = shift.saturating_add(7);
+                if shift > 128 {
+                    invalid = true;
+                    break;
+                }
+            }
+
+            (consumed, finished, invalid)
+        };
+
+        reader.consume(consumed);
+        if invalid || (finished && value > max_value) {
+            return Err(invalid_leb128_error());
+        }
+        if finished {
+            return Ok(value);
+        }
+    }
+}
+
+#[inline]
+fn zigzag_encode_std_manual(value: i128, sign_shift: u32) -> u128 {
+    ((value << 1) ^ (value >> sign_shift)) as u128
+}
+
+#[inline]
+fn zigzag_decode_std_manual(value: u128) -> i128 {
+    ((value >> 1) as i128) ^ -((value & 1) as i128)
+}
+
+#[inline]
+fn write_uleb_std_manual_file(fields: &[UlebField], path: &Path) {
+    let file = File::create(path).expect("LEB128 std manual output file should be created");
+    let mut writer = BufWriter::new(file);
+
+    for field in fields {
+        match *field {
+            UlebField::U8(value) => write_uleb_std_manual(&mut writer, u128::from(value)).unwrap(),
+            UlebField::U16(value) => write_uleb_std_manual(&mut writer, u128::from(value)).unwrap(),
+            UlebField::U32(value) => write_uleb_std_manual(&mut writer, u128::from(value)).unwrap(),
+            UlebField::U64(value) => write_uleb_std_manual(&mut writer, u128::from(value)).unwrap(),
+            UlebField::Usize(value) => write_uleb_std_manual(&mut writer, value as u128).unwrap(),
+            UlebField::U128(value) => write_uleb_std_manual(&mut writer, value).unwrap(),
+        }
+    }
+
+    writer.flush().expect("LEB128 std manual output file should flush");
+}
+
+#[inline]
 fn write_uleb_ext_file(fields: &[UlebField], path: &Path) {
     let file = File::create(path).expect("LEB128 ext output file should be created");
     let mut writer = BufWriter::new(file);
@@ -614,6 +730,26 @@ fn read_uleb_ext_file(path: &Path, fields: &[UlebField]) {
 }
 
 #[inline]
+fn read_uleb_std_manual_file(path: &Path, fields: &[UlebField]) {
+    let file = File::open(path).expect("LEB128 std manual input file should open");
+    let mut reader = BufReader::new(file);
+    let mut checksum = 0u128;
+
+    for field in fields {
+        match *field {
+            UlebField::U8(_) => checksum ^= read_uleb_std_manual(&mut reader, u128::from(u8::MAX)).unwrap(),
+            UlebField::U16(_) => checksum ^= read_uleb_std_manual(&mut reader, u128::from(u16::MAX)).unwrap(),
+            UlebField::U32(_) => checksum ^= read_uleb_std_manual(&mut reader, u128::from(u32::MAX)).unwrap(),
+            UlebField::U64(_) => checksum ^= read_uleb_std_manual(&mut reader, u128::from(u64::MAX)).unwrap(),
+            UlebField::Usize(_) => checksum ^= read_uleb_std_manual(&mut reader, usize::MAX as u128).unwrap(),
+            UlebField::U128(_) => checksum ^= read_uleb_std_manual(&mut reader, u128::MAX).unwrap(),
+        }
+    }
+
+    criterion::black_box(checksum);
+}
+
+#[inline]
 fn read_uleb_wrapper_file(path: &Path, fields: &[UlebField]) {
     let file = File::open(path).expect("LEB128 wrapper input file should open");
     let buffer = BufReader::new(file);
@@ -652,6 +788,26 @@ fn read_uleb_buffered_file(path: &Path, fields: &[UlebField]) {
     }
 
     criterion::black_box(checksum);
+}
+
+#[inline]
+fn write_zigzag_std_manual_file(fields: &[ZigZagField], path: &Path) {
+    let file = File::create(path).expect("ZigZag std manual output file should be created");
+    let mut writer = BufWriter::new(file);
+
+    for field in fields {
+        let encoded = match *field {
+            ZigZagField::I8(value) => zigzag_encode_std_manual(i128::from(value), 7),
+            ZigZagField::I16(value) => zigzag_encode_std_manual(i128::from(value), 15),
+            ZigZagField::I32(value) => zigzag_encode_std_manual(i128::from(value), 31),
+            ZigZagField::I64(value) => zigzag_encode_std_manual(i128::from(value), 63),
+            ZigZagField::Isize(value) => zigzag_encode_std_manual(value as i128, isize::BITS - 1),
+            ZigZagField::I128(value) => zigzag_encode_std_manual(value, 127),
+        };
+        write_uleb_std_manual(&mut writer, encoded).unwrap();
+    }
+
+    writer.flush().expect("ZigZag std manual output file should flush");
 }
 
 #[inline]
@@ -731,6 +887,37 @@ fn read_zigzag_ext_file(path: &Path, fields: &[ZigZagField]) {
             ZigZagField::Isize(_) => checksum ^= reader.read_zig_zag_isize().unwrap() as i128,
             ZigZagField::I128(_) => checksum ^= reader.read_zig_zag_i128().unwrap(),
         }
+    }
+
+    criterion::black_box(checksum);
+}
+
+#[inline]
+fn read_zigzag_std_manual_file(path: &Path, fields: &[ZigZagField]) {
+    let file = File::open(path).expect("ZigZag std manual input file should open");
+    let mut reader = BufReader::new(file);
+    let mut checksum = 0i128;
+
+    for field in fields {
+        let decoded = match *field {
+            ZigZagField::I8(_) => {
+                zigzag_decode_std_manual(read_uleb_std_manual(&mut reader, u128::from(u8::MAX)).unwrap())
+            }
+            ZigZagField::I16(_) => {
+                zigzag_decode_std_manual(read_uleb_std_manual(&mut reader, u128::from(u16::MAX)).unwrap())
+            }
+            ZigZagField::I32(_) => {
+                zigzag_decode_std_manual(read_uleb_std_manual(&mut reader, u128::from(u32::MAX)).unwrap())
+            }
+            ZigZagField::I64(_) => {
+                zigzag_decode_std_manual(read_uleb_std_manual(&mut reader, u128::from(u64::MAX)).unwrap())
+            }
+            ZigZagField::Isize(_) => {
+                zigzag_decode_std_manual(read_uleb_std_manual(&mut reader, usize::MAX as u128).unwrap())
+            }
+            ZigZagField::I128(_) => zigzag_decode_std_manual(read_uleb_std_manual(&mut reader, u128::MAX).unwrap()),
+        };
+        checksum ^= decoded;
     }
 
     criterion::black_box(checksum);
@@ -888,16 +1075,23 @@ fn bench_prod_varints(c: &mut Criterion) {
     let fields = build_uleb_fields();
     let files = BenchmarkFiles::new();
     let ext_source_path = files.path("uleb-ext-source.bin");
+    let std_manual_source_path = files.path("uleb-std-manual-source.bin");
     let wrapper_source_path = files.path("uleb-wrapper-source.bin");
     let buffered_source_path = files.path("uleb-buffered-source.bin");
     let ext_write_path = files.path("uleb-ext-write.bin");
+    let std_manual_write_path = files.path("uleb-std-manual-write.bin");
     let wrapper_write_path = files.path("uleb-wrapper-write.bin");
     let buffered_write_path = files.path("uleb-buffered-write.bin");
 
     write_uleb_ext_file(&fields, &ext_source_path);
+    write_uleb_std_manual_file(&fields, &std_manual_source_path);
     write_uleb_wrapper_file(&fields, &wrapper_source_path);
     write_uleb_buffered_file(&fields, &buffered_source_path);
     let encoded = fs::read(&ext_source_path).expect("LEB128 ext source should be readable");
+    assert_eq!(
+        encoded,
+        fs::read(&std_manual_source_path).expect("LEB128 std manual source should be readable")
+    );
     assert_eq!(
         encoded,
         fs::read(&wrapper_source_path).expect("LEB128 wrapper source should be readable")
@@ -922,6 +1116,18 @@ fn bench_prod_varints(c: &mut Criterion) {
             }
         })
     });
+
+    group.bench_function(
+        BenchmarkId::from_parameter("std_manual_leb128_write_mixed_batch"),
+        |b| {
+            b.iter(|| {
+                for _ in 0..VARINT_REPEAT {
+                    write_uleb_std_manual_file(&fields, &std_manual_write_path);
+                    criterion::black_box(encoded.len());
+                }
+            })
+        },
+    );
 
     group.bench_function(BenchmarkId::from_parameter("wrapper_leb128_write_mixed_batch"), |b| {
         b.iter(|| {
@@ -949,6 +1155,14 @@ fn bench_prod_varints(c: &mut Criterion) {
         })
     });
 
+    group.bench_function(BenchmarkId::from_parameter("std_manual_leb128_read_mixed_batch"), |b| {
+        b.iter(|| {
+            for _ in 0..VARINT_REPEAT {
+                read_uleb_std_manual_file(&ext_source_path, &fields);
+            }
+        })
+    });
+
     group.bench_function(BenchmarkId::from_parameter("wrapper_leb128_read_mixed_batch"), |b| {
         b.iter(|| {
             for _ in 0..VARINT_REPEAT {
@@ -972,16 +1186,23 @@ fn bench_prod_signed_varints(c: &mut Criterion) {
     let fields = build_zigzag_fields();
     let files = BenchmarkFiles::new();
     let ext_source_path = files.path("zigzag-ext-source.bin");
+    let std_manual_source_path = files.path("zigzag-std-manual-source.bin");
     let wrapper_source_path = files.path("zigzag-wrapper-source.bin");
     let buffered_source_path = files.path("zigzag-buffered-source.bin");
     let ext_write_path = files.path("zigzag-ext-write.bin");
+    let std_manual_write_path = files.path("zigzag-std-manual-write.bin");
     let wrapper_write_path = files.path("zigzag-wrapper-write.bin");
     let buffered_write_path = files.path("zigzag-buffered-write.bin");
 
     write_zigzag_ext_file(&fields, &ext_source_path);
+    write_zigzag_std_manual_file(&fields, &std_manual_source_path);
     write_zigzag_wrapper_file(&fields, &wrapper_source_path);
     write_zigzag_buffered_file(&fields, &buffered_source_path);
     let encoded = fs::read(&ext_source_path).expect("ZigZag ext source should be readable");
+    assert_eq!(
+        encoded,
+        fs::read(&std_manual_source_path).expect("ZigZag std manual source should be readable")
+    );
     assert_eq!(
         encoded,
         fs::read(&wrapper_source_path).expect("ZigZag wrapper source should be readable")
@@ -1007,6 +1228,18 @@ fn bench_prod_signed_varints(c: &mut Criterion) {
         })
     });
 
+    group.bench_function(
+        BenchmarkId::from_parameter("std_manual_zigzag_write_mixed_batch"),
+        |b| {
+            b.iter(|| {
+                for _ in 0..VARINT_REPEAT {
+                    write_zigzag_std_manual_file(&fields, &std_manual_write_path);
+                    criterion::black_box(encoded.len());
+                }
+            })
+        },
+    );
+
     group.bench_function(BenchmarkId::from_parameter("wrapper_zigzag_write_mixed_batch"), |b| {
         b.iter(|| {
             for _ in 0..VARINT_REPEAT {
@@ -1029,6 +1262,14 @@ fn bench_prod_signed_varints(c: &mut Criterion) {
         b.iter(|| {
             for _ in 0..VARINT_REPEAT {
                 read_zigzag_ext_file(&ext_source_path, &fields);
+            }
+        })
+    });
+
+    group.bench_function(BenchmarkId::from_parameter("std_manual_zigzag_read_mixed_batch"), |b| {
+        b.iter(|| {
+            for _ in 0..VARINT_REPEAT {
+                read_zigzag_std_manual_file(&ext_source_path, &fields);
             }
         })
     });
