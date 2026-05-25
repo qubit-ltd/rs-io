@@ -36,7 +36,7 @@ use crate::util::read_utf8_payload;
 /// # Buffered state
 ///
 /// This reader may prefetch bytes from the wrapped reader. As a result,
-/// [`Self::get_ref`] can observe an underlying stream position ahead of the
+/// [`Self::inner`] can observe an underlying stream position ahead of the
 /// logical position exposed by this wrapper, and [`Self::into_inner`] discards
 /// any prefetched bytes that have not been consumed.
 ///
@@ -87,8 +87,8 @@ where
     /// in this wrapper's internal buffer.
     #[must_use]
     #[inline]
-    pub const fn get_ref(&self) -> &R {
-        self.input.get_ref()
+    pub const fn inner(&self) -> &R {
+        self.input.inner()
     }
 
     /// Returns an exclusive reference to the underlying reader.
@@ -97,8 +97,8 @@ where
     /// already held in this wrapper's internal buffer.
     #[must_use]
     #[inline]
-    pub fn get_mut(&mut self) -> &mut R {
-        self.input.get_mut()
+    pub fn inner_mut(&mut self) -> &mut R {
+        self.input.inner_mut()
     }
 
     /// Consumes this wrapper and returns the underlying reader.

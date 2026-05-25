@@ -83,7 +83,7 @@ impl<W> BufferedOutput<W> {
     /// An immutable reference to the underlying writer.  Pending bytes may still
     /// be present in the internal buffer and are not flushed by this method.
     #[inline]
-    pub(crate) const fn get_ref(&self) -> &W {
+    pub(crate) const fn inner(&self) -> &W {
         &self.inner
     }
 
@@ -94,7 +94,7 @@ impl<W> BufferedOutput<W> {
     /// A mutable reference to the underlying writer.  Pending bytes may still be
     /// present in the internal buffer and are not flushed by this method.
     #[inline]
-    pub(crate) fn get_mut(&mut self) -> &mut W {
+    pub(crate) fn inner_mut(&mut self) -> &mut W {
         &mut self.inner
     }
 

@@ -311,8 +311,8 @@ fn test_buffered_binary_reader_accessors_raw_read_seek_and_into_inner() {
     let mut reader = BufferedBinaryReader::<_, LittleEndian>::new(Cursor::new(vec![1, 2, 3, 4, 5]));
 
     assert_eq!(ByteOrder::LittleEndian, reader.byte_order());
-    assert_eq!(0, reader.get_ref().position());
-    reader.get_mut().set_position(1);
+    assert_eq!(0, reader.inner().position());
+    reader.inner_mut().set_position(1);
     assert_eq!(0, reader.read(&mut []).expect("empty read should succeed"));
     assert_eq!(0x0302, reader.read_u16().expect("u16 should be read"));
     assert_eq!(

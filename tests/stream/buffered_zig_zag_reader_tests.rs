@@ -46,8 +46,8 @@ fn test_buffered_zig_zag_reader_accessors_raw_seek_and_into_inner() {
     let mut reader = BufferedZigZagReader::<_, NonStrict>::new(Cursor::new(vec![1, 9]));
 
     assert!(!reader.is_strict());
-    assert_eq!(0, reader.get_ref().position());
-    reader.get_mut().set_position(0);
+    assert_eq!(0, reader.inner().position());
+    reader.inner_mut().set_position(0);
     assert_eq!(-1, reader.read_i8().expect("ZigZag value should be read"));
     assert_eq!(1, reader.stream_position().expect("current seek should succeed"));
     let mut byte = [0_u8; 1];

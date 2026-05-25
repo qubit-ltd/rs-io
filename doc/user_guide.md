@@ -82,7 +82,7 @@ or `i64`.
 
 ```toml
 [dependencies]
-qubit-io = "0.3"
+qubit-io = "0.4"
 ```
 
 ## Import Patterns
@@ -625,7 +625,7 @@ assert_eq!(42, reader.read_i64()?);
 
 Use buffered codec wrappers when repeatedly reading or writing scalar values and
 you want the wrapper to batch I/O internally. The buffered readers may prefetch
-bytes from the wrapped reader, so `get_ref` can observe a physical stream
+bytes from the wrapped reader, so `inner` can observe a physical stream
 position ahead of the logical wrapper position. Calling `into_inner` on a
 buffered reader discards unread prefetched bytes.
 

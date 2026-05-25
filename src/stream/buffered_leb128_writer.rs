@@ -30,7 +30,7 @@ use crate::stream::BufferedOutput;
 ///
 /// Pending buffered bytes are not flushed from [`Drop`]. Call [`Write::flush`]
 /// or [`Self::into_inner`] to guarantee that all bytes reach the wrapped
-/// writer. [`Self::get_ref`] and [`Self::get_mut`] can observe the wrapped
+/// writer. [`Self::inner`] and [`Self::inner_mut`] can observe the wrapped
 /// writer before pending bytes have been flushed.
 ///
 /// # Target-width integers
@@ -66,8 +66,8 @@ impl<W> BufferedLeb128Writer<W> {
     /// Pending bytes may still be held in this wrapper's internal buffer.
     #[must_use]
     #[inline]
-    pub const fn get_ref(&self) -> &W {
-        self.output.get_ref()
+    pub const fn inner(&self) -> &W {
+        self.output.inner()
     }
 
     /// Returns an exclusive reference to the underlying writer.
@@ -76,8 +76,8 @@ impl<W> BufferedLeb128Writer<W> {
     /// Flush first if the underlying writer must observe all previous writes.
     #[must_use]
     #[inline]
-    pub fn get_mut(&mut self) -> &mut W {
-        self.output.get_mut()
+    pub fn inner_mut(&mut self) -> &mut W {
+        self.output.inner_mut()
     }
 }
 

@@ -56,8 +56,8 @@ fn test_buffered_zig_zag_writer_writes_values_across_buffer_boundaries() {
 fn test_buffered_zig_zag_writer_accessors_write_all_seek_and_into_inner() {
     let mut writer = BufferedZigZagWriter::new(Cursor::new(Vec::new()));
 
-    assert_eq!(0, writer.get_ref().position());
-    writer.get_mut().set_position(0);
+    assert_eq!(0, writer.inner().position());
+    writer.inner_mut().set_position(0);
     writer.write_i8(-1).expect("ZigZag value should be buffered");
     assert_eq!(1, writer.write(&[9]).expect("raw byte should be buffered"));
     writer.write_all(&[10]).expect("raw byte should be buffered");
