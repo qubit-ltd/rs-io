@@ -30,7 +30,7 @@ Qubit IO 专注于基于 `std::io` 的 stream 和字节 I/O。它不尝试成为
 
 ```toml
 [dependencies]
-qubit-io = "0.4"
+qubit-io = "0.5"
 ```
 
 ## 快速示例
