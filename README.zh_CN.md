@@ -158,6 +158,27 @@ Buffered reader 可能会预取字节，因此底层 reader 的物理位置可�
 Buffered writer 不会在 `Drop` 时 flush 待写入字节。必须调用 `flush()` 或 `into_inner()`
 才能保证数据已经送达底层 writer。Buffered writer 在执行 `Seek` 前会先 flush 待写入字节。
 
+### Benchmark 快照
+
+stream benchmark 套件使用真实文件系统文件、随机字段类型、近似正态分布的字段值，并按
+benchmark group 隔离运行 Criterion。下面的结果来自 2026-05-25 的一次本地测量。速度比
+按 `baseline mean time / candidate mean time` 计算，因此大于 `1.00x` 表示 candidate
+更快。`std` 在 fixed-width binary 场景中表示 `std_native`，在 LEB128/ZigZag 场景中表示
+`std_manual`；后者使用 `BufReader` / `BufWriter` 加安全手写协议实现。
+
+| 场景 | 最快实现 | Mean time | 相对 ext 速度 | 相对 std 速度 |
+| --- | --- | ---: | ---: | ---: |
+| Fixed-width binary 写入 | `buffered` | `464.77 ms` | `1.02x` | `1.07x` |
+| Fixed-width binary 读取 | `buffered` | `204.41 ms` | `1.19x` | `1.34x` |
+| LEB128 写入 | `buffered` | `149.96 ms` | `1.31x` | `1.39x` |
+| LEB128 读取 | `ext` | `152.01 ms` | `1.00x` | `1.09x` |
+| ZigZag 写入 | `buffered` | `152.58 ms` | `1.33x` | `1.41x` |
+| ZigZag 读取 | `ext` | `154.06 ms` | `1.00x` | `1.09x` |
+
+简单来说，buffered writer 的收益最明确，尤其是紧凑整数流。Buffered fixed-width binary
+读取也明显更快。LEB128 和 ZigZag 读取场景中，buffered reader 与 extension trait 路径
+基本持平，而安全手写的标准库 baseline 更慢。
+
 ## Prelude
 
 `qubit_io::prelude` 重导出 method-providing extension trait、object-safe 组合 trait、字节序和缓冲区 codec 类型。它有意不重导出 stream wrapper 类型。

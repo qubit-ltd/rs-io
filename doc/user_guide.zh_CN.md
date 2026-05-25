@@ -617,6 +617,50 @@ assert_eq!(-7, reader.read_i16()?);
 # Ok::<(), std::io::Error>(())
 ```
 
+### Stream Benchmark 结果
+
+`benches/stream.rs` 中的 stream benchmark 套件使用真实文件系统文件、随机字段类型、近似
+正态分布的字段值，并按 benchmark group 隔离运行 Criterion。下面的结果来自 2026-05-25
+的一次本地测量。速度比按 `baseline mean time / candidate mean time` 计算，因此大于
+`1.00x` 表示 candidate 更快。
+
+Fixed-width binary 场景中的 `std` baseline 是 `std_native`，它使用
+`BufReader<File>` / `BufWriter<File>`、`read_exact()` / `write_all()` 和标准字节转换。
+LEB128 和 ZigZag 场景中的 `std` baseline 是 `std_manual`，它使用
+`BufReader<File>` / `BufWriter<File>` 加安全手写的 LEB128/ZigZag 协议实现。
+
+| Group | 方向 | 实现 | Mean time | Throughput | 相对 ext 速度 | 相对 std 速度 |
+| --- | --- | --- | ---: | ---: | ---: | ---: |
+| `prod_binary_pipeline` | 写入 | `ext` | `472.23 ms` | `2.7132 GiB/s` | `1.00x` | `1.05x` |
+| `prod_binary_pipeline` | 写入 | `std_native` | `498.02 ms` | `2.5727 GiB/s` | `0.95x` | `1.00x` |
+| `prod_binary_pipeline` | 写入 | `wrapper` | `484.94 ms` | `2.6421 GiB/s` | `0.97x` | `1.03x` |
+| `prod_binary_pipeline` | 写入 | `buffered` | `464.77 ms` | `2.7567 GiB/s` | `1.02x` | `1.07x` |
+| `prod_binary_pipeline` | 读取 | `ext` | `244.06 ms` | `5.2497 GiB/s` | `1.00x` | `1.12x` |
+| `prod_binary_pipeline` | 读取 | `std_native` | `273.11 ms` | `4.6914 GiB/s` | `0.89x` | `1.00x` |
+| `prod_binary_pipeline` | 读取 | `wrapper` | `273.63 ms` | `4.6825 GiB/s` | `0.89x` | `1.00x` |
+| `prod_binary_pipeline` | 读取 | `buffered` | `204.41 ms` | `6.2680 GiB/s` | `1.19x` | `1.34x` |
+| `prod_varints` | 写入 | `ext` | `196.05 ms` | `263.76 MiB/s` | `1.00x` | `1.06x` |
+| `prod_varints` | 写入 | `std_manual` | `208.53 ms` | `247.97 MiB/s` | `0.94x` | `1.00x` |
+| `prod_varints` | 写入 | `wrapper` | `195.56 ms` | `264.42 MiB/s` | `1.00x` | `1.07x` |
+| `prod_varints` | 写入 | `buffered` | `149.96 ms` | `344.81 MiB/s` | `1.31x` | `1.39x` |
+| `prod_varints` | 读取 | `ext` | `152.01 ms` | `340.18 MiB/s` | `1.00x` | `1.09x` |
+| `prod_varints` | 读取 | `std_manual` | `165.34 ms` | `312.74 MiB/s` | `0.92x` | `1.00x` |
+| `prod_varints` | 读取 | `wrapper` | `153.27 ms` | `337.38 MiB/s` | `0.99x` | `1.08x` |
+| `prod_varints` | 读取 | `buffered` | `153.94 ms` | `335.91 MiB/s` | `0.99x` | `1.07x` |
+| `prod_signed_varints` | 写入 | `ext` | `202.40 ms` | `271.11 MiB/s` | `1.00x` | `1.06x` |
+| `prod_signed_varints` | 写入 | `std_manual` | `214.86 ms` | `255.38 MiB/s` | `0.94x` | `1.00x` |
+| `prod_signed_varints` | 写入 | `wrapper` | `195.84 ms` | `280.20 MiB/s` | `1.03x` | `1.10x` |
+| `prod_signed_varints` | 写入 | `buffered` | `152.58 ms` | `359.64 MiB/s` | `1.33x` | `1.41x` |
+| `prod_signed_varints` | 读取 | `ext` | `154.06 ms` | `356.18 MiB/s` | `1.00x` | `1.09x` |
+| `prod_signed_varints` | 读取 | `std_manual` | `168.56 ms` | `325.53 MiB/s` | `0.91x` | `1.00x` |
+| `prod_signed_varints` | 读取 | `wrapper` | `155.53 ms` | `352.80 MiB/s` | `0.99x` | `1.08x` |
+| `prod_signed_varints` | 读取 | `buffered` | `154.64 ms` | `354.85 MiB/s` | `1.00x` | `1.09x` |
+
+主要结论是：在这些基于真实文件的标量 pipeline 中，buffered writer 持续更快，尤其是
+LEB128 和 ZigZag 这类紧凑整数流。Buffered fixed-width binary 读取也明显快于
+`BufReader<File>` baseline。LEB128 和 ZigZag 读取则不同：buffered、wrapper 和
+extension-trait reader 彼此接近，而安全手写的标准库 baseline 更慢。
+
 ## 错误模型
 
 大多数 API 返回 `std::io::Result`。本 crate 尽量保持标准 I/O 行为，并使用

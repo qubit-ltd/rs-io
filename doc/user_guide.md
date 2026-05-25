@@ -651,6 +651,54 @@ assert_eq!(-7, reader.read_i16()?);
 # Ok::<(), std::io::Error>(())
 ```
 
+### Stream Benchmark Results
+
+The stream benchmark suite in `benches/stream.rs` uses real filesystem files,
+randomized field types, normally distributed values, and isolated Criterion
+runs per benchmark group. The following snapshot was measured on 2026-05-25.
+Speed ratios are computed as `baseline mean time / candidate mean time`, so
+values above `1.00x` mean the candidate is faster.
+
+For fixed-width binary values, the `std` baseline is `std_native`, implemented
+with `BufReader<File>` / `BufWriter<File>`, `read_exact()` / `write_all()`, and
+standard byte conversions. For LEB128 and ZigZag values, the `std` baseline is
+`std_manual`, implemented with `BufReader<File>` / `BufWriter<File>` plus safe
+hand-written LEB128/ZigZag code.
+
+| Group | Direction | Impl | Mean time | Throughput | Speed vs ext | Speed vs std |
+| --- | --- | --- | ---: | ---: | ---: | ---: |
+| `prod_binary_pipeline` | write | `ext` | `472.23 ms` | `2.7132 GiB/s` | `1.00x` | `1.05x` |
+| `prod_binary_pipeline` | write | `std_native` | `498.02 ms` | `2.5727 GiB/s` | `0.95x` | `1.00x` |
+| `prod_binary_pipeline` | write | `wrapper` | `484.94 ms` | `2.6421 GiB/s` | `0.97x` | `1.03x` |
+| `prod_binary_pipeline` | write | `buffered` | `464.77 ms` | `2.7567 GiB/s` | `1.02x` | `1.07x` |
+| `prod_binary_pipeline` | read | `ext` | `244.06 ms` | `5.2497 GiB/s` | `1.00x` | `1.12x` |
+| `prod_binary_pipeline` | read | `std_native` | `273.11 ms` | `4.6914 GiB/s` | `0.89x` | `1.00x` |
+| `prod_binary_pipeline` | read | `wrapper` | `273.63 ms` | `4.6825 GiB/s` | `0.89x` | `1.00x` |
+| `prod_binary_pipeline` | read | `buffered` | `204.41 ms` | `6.2680 GiB/s` | `1.19x` | `1.34x` |
+| `prod_varints` | write | `ext` | `196.05 ms` | `263.76 MiB/s` | `1.00x` | `1.06x` |
+| `prod_varints` | write | `std_manual` | `208.53 ms` | `247.97 MiB/s` | `0.94x` | `1.00x` |
+| `prod_varints` | write | `wrapper` | `195.56 ms` | `264.42 MiB/s` | `1.00x` | `1.07x` |
+| `prod_varints` | write | `buffered` | `149.96 ms` | `344.81 MiB/s` | `1.31x` | `1.39x` |
+| `prod_varints` | read | `ext` | `152.01 ms` | `340.18 MiB/s` | `1.00x` | `1.09x` |
+| `prod_varints` | read | `std_manual` | `165.34 ms` | `312.74 MiB/s` | `0.92x` | `1.00x` |
+| `prod_varints` | read | `wrapper` | `153.27 ms` | `337.38 MiB/s` | `0.99x` | `1.08x` |
+| `prod_varints` | read | `buffered` | `153.94 ms` | `335.91 MiB/s` | `0.99x` | `1.07x` |
+| `prod_signed_varints` | write | `ext` | `202.40 ms` | `271.11 MiB/s` | `1.00x` | `1.06x` |
+| `prod_signed_varints` | write | `std_manual` | `214.86 ms` | `255.38 MiB/s` | `0.94x` | `1.00x` |
+| `prod_signed_varints` | write | `wrapper` | `195.84 ms` | `280.20 MiB/s` | `1.03x` | `1.10x` |
+| `prod_signed_varints` | write | `buffered` | `152.58 ms` | `359.64 MiB/s` | `1.33x` | `1.41x` |
+| `prod_signed_varints` | read | `ext` | `154.06 ms` | `356.18 MiB/s` | `1.00x` | `1.09x` |
+| `prod_signed_varints` | read | `std_manual` | `168.56 ms` | `325.53 MiB/s` | `0.91x` | `1.00x` |
+| `prod_signed_varints` | read | `wrapper` | `155.53 ms` | `352.80 MiB/s` | `0.99x` | `1.08x` |
+| `prod_signed_varints` | read | `buffered` | `154.64 ms` | `354.85 MiB/s` | `1.00x` | `1.09x` |
+
+The main pattern is that buffered writers are consistently faster in these
+file-backed scalar pipelines, especially for LEB128 and ZigZag streams.
+Buffered fixed-width binary reads are also substantially faster than the
+`BufReader<File>` baselines. LEB128 and ZigZag reads are different: buffered,
+wrapper, and extension-trait readers are close to each other, while the safe
+hand-written standard-library baseline is slower.
+
 ## Error Model
 
 Most APIs return `std::io::Result`. The crate preserves standard I/O behavior
