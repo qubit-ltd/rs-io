@@ -3,6 +3,7 @@ use std::fs::{
     self,
     File,
 };
+use std::hint::black_box;
 use std::io::{
     BufRead,
     BufReader,
@@ -326,7 +327,7 @@ fn read_records_wrapper_file(path: &Path) {
         digest ^= ts_ms;
     }
 
-    criterion::black_box(digest);
+    black_box(digest);
 }
 
 #[inline]
@@ -353,7 +354,7 @@ fn read_records_ext_file(path: &Path) {
         digest ^= ts_ms;
     }
 
-    criterion::black_box(digest);
+    black_box(digest);
 }
 
 #[inline]
@@ -390,7 +391,7 @@ fn read_records_std_native_file(path: &Path) {
         digest ^= ts_ms;
     }
 
-    criterion::black_box(digest);
+    black_box(digest);
 }
 
 #[inline]
@@ -417,7 +418,7 @@ fn read_records_buffered_file(path: &Path) {
         digest ^= ts_ms;
     }
 
-    criterion::black_box(digest);
+    black_box(digest);
 }
 
 #[derive(Clone, Copy)]
@@ -726,7 +727,7 @@ fn read_uleb_ext_file(path: &Path, fields: &[UlebField]) {
         }
     }
 
-    criterion::black_box(checksum);
+    black_box(checksum);
 }
 
 #[inline]
@@ -746,7 +747,7 @@ fn read_uleb_std_manual_file(path: &Path, fields: &[UlebField]) {
         }
     }
 
-    criterion::black_box(checksum);
+    black_box(checksum);
 }
 
 #[inline]
@@ -767,7 +768,7 @@ fn read_uleb_wrapper_file(path: &Path, fields: &[UlebField]) {
         }
     }
 
-    criterion::black_box(checksum);
+    black_box(checksum);
 }
 
 #[inline]
@@ -787,7 +788,7 @@ fn read_uleb_buffered_file(path: &Path, fields: &[UlebField]) {
         }
     }
 
-    criterion::black_box(checksum);
+    black_box(checksum);
 }
 
 #[inline]
@@ -889,7 +890,7 @@ fn read_zigzag_ext_file(path: &Path, fields: &[ZigZagField]) {
         }
     }
 
-    criterion::black_box(checksum);
+    black_box(checksum);
 }
 
 #[inline]
@@ -920,7 +921,7 @@ fn read_zigzag_std_manual_file(path: &Path, fields: &[ZigZagField]) {
         checksum ^= decoded;
     }
 
-    criterion::black_box(checksum);
+    black_box(checksum);
 }
 
 #[inline]
@@ -941,7 +942,7 @@ fn read_zigzag_wrapper_file(path: &Path, fields: &[ZigZagField]) {
         }
     }
 
-    criterion::black_box(checksum);
+    black_box(checksum);
 }
 
 #[inline]
@@ -961,7 +962,7 @@ fn read_zigzag_buffered_file(path: &Path, fields: &[ZigZagField]) {
         }
     }
 
-    criterion::black_box(checksum);
+    black_box(checksum);
 }
 
 fn bench_prod_binary_pipeline(c: &mut Criterion) {
@@ -1004,7 +1005,7 @@ fn bench_prod_binary_pipeline(c: &mut Criterion) {
         b.iter(|| {
             for _ in 0..BINARY_REPEAT {
                 write_records_ext_file(&records, &ext_write_path);
-                criterion::black_box(BINARY_BATCH * BINARY_RECORD_BYTES);
+                black_box(BINARY_BATCH * BINARY_RECORD_BYTES);
             }
         })
     });
@@ -1013,7 +1014,7 @@ fn bench_prod_binary_pipeline(c: &mut Criterion) {
         b.iter(|| {
             for _ in 0..BINARY_REPEAT {
                 write_records_std_native_file(&records, &std_native_write_path);
-                criterion::black_box(BINARY_BATCH * BINARY_RECORD_BYTES);
+                black_box(BINARY_BATCH * BINARY_RECORD_BYTES);
             }
         })
     });
@@ -1022,7 +1023,7 @@ fn bench_prod_binary_pipeline(c: &mut Criterion) {
         b.iter(|| {
             for _ in 0..BINARY_REPEAT {
                 write_records_wrapper_file(&records, &wrapper_write_path);
-                criterion::black_box(BINARY_BATCH * BINARY_RECORD_BYTES);
+                black_box(BINARY_BATCH * BINARY_RECORD_BYTES);
             }
         })
     });
@@ -1031,7 +1032,7 @@ fn bench_prod_binary_pipeline(c: &mut Criterion) {
         b.iter(|| {
             for _ in 0..BINARY_REPEAT {
                 write_records_buffered_file(&records, &buffered_write_path);
-                criterion::black_box(BINARY_BATCH * BINARY_RECORD_BYTES);
+                black_box(BINARY_BATCH * BINARY_RECORD_BYTES);
             }
         })
     });
@@ -1112,7 +1113,7 @@ fn bench_prod_varints(c: &mut Criterion) {
         b.iter(|| {
             for _ in 0..VARINT_REPEAT {
                 write_uleb_ext_file(&fields, &ext_write_path);
-                criterion::black_box(encoded.len());
+                black_box(encoded.len());
             }
         })
     });
@@ -1123,7 +1124,7 @@ fn bench_prod_varints(c: &mut Criterion) {
             b.iter(|| {
                 for _ in 0..VARINT_REPEAT {
                     write_uleb_std_manual_file(&fields, &std_manual_write_path);
-                    criterion::black_box(encoded.len());
+                    black_box(encoded.len());
                 }
             })
         },
@@ -1133,7 +1134,7 @@ fn bench_prod_varints(c: &mut Criterion) {
         b.iter(|| {
             for _ in 0..VARINT_REPEAT {
                 write_uleb_wrapper_file(&fields, &wrapper_write_path);
-                criterion::black_box(encoded.len());
+                black_box(encoded.len());
             }
         })
     });
@@ -1142,7 +1143,7 @@ fn bench_prod_varints(c: &mut Criterion) {
         b.iter(|| {
             for _ in 0..VARINT_REPEAT {
                 write_uleb_buffered_file(&fields, &buffered_write_path);
-                criterion::black_box(encoded.len());
+                black_box(encoded.len());
             }
         })
     });
@@ -1223,7 +1224,7 @@ fn bench_prod_signed_varints(c: &mut Criterion) {
         b.iter(|| {
             for _ in 0..VARINT_REPEAT {
                 write_zigzag_ext_file(&fields, &ext_write_path);
-                criterion::black_box(encoded.len());
+                black_box(encoded.len());
             }
         })
     });
@@ -1234,7 +1235,7 @@ fn bench_prod_signed_varints(c: &mut Criterion) {
             b.iter(|| {
                 for _ in 0..VARINT_REPEAT {
                     write_zigzag_std_manual_file(&fields, &std_manual_write_path);
-                    criterion::black_box(encoded.len());
+                    black_box(encoded.len());
                 }
             })
         },
@@ -1244,7 +1245,7 @@ fn bench_prod_signed_varints(c: &mut Criterion) {
         b.iter(|| {
             for _ in 0..VARINT_REPEAT {
                 write_zigzag_wrapper_file(&fields, &wrapper_write_path);
-                criterion::black_box(encoded.len());
+                black_box(encoded.len());
             }
         })
     });
@@ -1253,7 +1254,7 @@ fn bench_prod_signed_varints(c: &mut Criterion) {
         b.iter(|| {
             for _ in 0..VARINT_REPEAT {
                 write_zigzag_buffered_file(&fields, &buffered_write_path);
-                criterion::black_box(encoded.len());
+                black_box(encoded.len());
             }
         })
     });
