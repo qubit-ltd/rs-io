@@ -1,14 +1,6 @@
-mod binary_read_ext_tests;
-mod binary_write_ext_tests;
 mod buf_read_ext_tests;
-mod leb128_read_ext_tests;
-mod leb128_write_ext_tests;
 mod read_ext_tests;
 mod read_seek_ext_tests;
 mod seek_ext_tests;
-mod string_read_ext_tests;
-mod string_write_ext_tests;
 mod write_ext_tests;
 mod write_seek_ext_tests;
-mod zig_zag_read_ext_tests;
-mod zig_zag_write_ext_tests;

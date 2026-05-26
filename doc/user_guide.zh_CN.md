@@ -1,230 +1,29 @@
-# Qubit IO 用户手册
+# Qubit IO 用户指南
 
-Qubit IO 是 Qubit Rust crate 家族中的 stream 和字节 I/O crate。它专注于
-`std::io` trait、extension method、stream wrapper 和 codec helper。它有意不做本地
-文件系统工具库。
+当代码需要可复用的 `std::io` helper，但不应该绑定到具体二进制或文本编码格式时，
+使用 `qubit-io`。本 crate 只保留通用 I/O 层能力。
 
-如果需要本地文件系统相关能力，请参考
-[qubit-local-files](https://github.com/qubit-ltd/rs-local-files)。
+## 能力地图
 
-## 何时使用本 crate
-
-当代码处理的是字节流，而不是文件系统路径时，适合使用 `qubit-io`。典型场景包括 parser、
-binary codec、协议适配器、archive reader、内存 buffer、网络 stream，以及需要接受灵活
-`Read` / `Write` / `Seek` 实现的 API。
-
-适合的场景：
-
-- 读取固定长度，但遇到 EOF 时需要知道实际读了多少字节。
-- 从不可信输入中读取有界字节或有界文本。
-- 只有在大小限制内到达 EOF 时才复制整个 stream。
-- 不把全部内容加载进内存，也能比较 stream 内容。
-- 使用显式字节序读写 binary scalar。
-- 使用 LEB128 或 ZigZag 编码紧凑整数。
-- 暴露类似 `dyn ReadSeek` 的 trait-object-friendly I/O 能力。
-- 给 stream 加上计数、限制、tee、checksum 或位置恢复能力。
-
-不适合的场景：
-
-- 创建临时文件或临时目录。
-- 递归复制或清理本地目录。
-- 校验本地文件名或生成本地临时名。
-- 对本地文件路径做 atomic replacement write。
-- 抽象本地、FTP、对象存储或远程文件系统。
-
-这些本地文件系统能力请参考
-[qubit-local-files](https://github.com/qubit-ltd/rs-local-files)。
-
-## 缓冲区 Codec
-
-当数据已经位于调用方管理的 slice 中，不需要 `std::io::Read` 或 `std::io::Write` 适配器时，
-使用 root-level 缓冲区 codec 类型。
-
-| 类型 | 使用场景 |
-| --- | --- |
-| `Coder` | 实现面向输入/输出 buffer 的 progress-oriented 转换 |
-| `CoderProgress`、`CoderStatus` | 报告转换推进了多少，以及为什么停止 |
-| `BinaryCodec` | 在显式 byte index 上读写 fixed-width 标量 |
-| `Leb128Codec` | 在 byte slice 中编码 unsigned / signed LEB128 值 |
-| `ZigZagCodec` | 通过 ZigZag 加 unsigned LEB128 编码有符号整数 |
-
-这些 codec 是低层静态命名空间，只提供 `unsafe` unchecked buffer 操作；调用方必须在调用前
-自行验证可访问范围。具体实例化类型上的 `REQUIRED_MIN_BUFFER_LEN` 表示一个值所需的最小临时
-buffer 容量。
-
-```rust
-use qubit_io::{BinaryCodec, BigEndian, Leb128Codec, NonStrict};
-
-let mut fixed = [0_u8; BinaryCodec::<u32, BigEndian>::REQUIRED_MIN_BUFFER_LEN];
-unsafe {
-    BinaryCodec::<u32, BigEndian>::write_unchecked(&mut fixed, 0, 0x0102_0304);
-}
-
-let mut compact = [0_u8; Leb128Codec::<u64, NonStrict>::REQUIRED_MIN_BUFFER_LEN];
-let written = unsafe { Leb128Codec::<u64, NonStrict>::write_unchecked(&mut compact, 0, 300) };
-assert_eq!(&[0xac, 0x02], &compact[..written]);
-```
-
-面向 stream 的 reader/writer wrapper 使用单独的 stream wrapper API：
-`BinaryReader`、`BinaryWriter`、`Leb128Reader`、`Leb128Writer`、`ZigZagReader`、
-`ZigZagWriter` 以及对应的 `Buffered*` 变体。Reader wrapper 同时实现 `Read`，
-writer wrapper 同时实现 `Write`，当底层 stream 支持 seek 时还会透传 `Seek`。
-
-`usize` 和 `isize` codec 实例化使用当前 Rust target 的指针宽度。它们适合进程内 Rust
-数据，但持久化文件和跨平台协议应优先使用 `u64` 或 `i64` 这类 fixed-width 整数类型。
+| 领域 | API | 适用场景 |
+| --- | --- | --- |
+| 组合 trait | `ReadSeek`、`ReadWrite`、`ReadWriteSeek`、`BufReadSeek`、`WriteSeek` | API 需要组合 I/O 能力的 trait object |
+| Read helper | `ReadExt` | exact-or-EOF 读取、有界读取和复制 helper |
+| BufRead helper | `BufReadExt` | 有界 delimiter / line 读取 |
+| Seek helper | `SeekExt`、`ReadSeekExt`、`WriteSeekExt` | 查询 stream 大小、保留位置的读写 |
+| Stream 工具 | `Streams` | 命名空间式复制和内容比较 |
+| Wrapper | `CountingReader`、`LimitReader`、`TeeReader`、checksum wrapper、`PositionGuard` | 为现有 stream 组合小型行为 |
 
 ## 安装
 
 ```toml
 [dependencies]
-qubit-io = "0.4"
+qubit-io = "0.6"
 ```
 
-## 导入方式
+## Extension Trait
 
-具体 wrapper 和命名空间从 crate root 导入：
-
-```rust
-use qubit_io::{
-    CountingReader,
-    LimitWriter,
-    Streams,
-};
-```
-
-需要让标准库 I/O 值获得扩展方法时，显式导入 extension trait：
-
-```rust
-use qubit_io::{
-    ReadExt,
-    SeekExt,
-    WriteSeekExt,
-};
-```
-
-如果一个模块主要使用 extension trait、组合 trait 或缓冲区 codec 类型，可以导入 prelude：
-
-```rust
-use qubit_io::prelude::*;
-```
-
-prelude 有意不导入 stream wrapper 类型。这样可以让具体运行时行为在调用点保持明确。
-
-## Object-Safe 组合 Trait
-
-Rust 中直接把多个 trait 组合写成 trait object 并不总是足够顺手。`qubit-io` 为常用
-`std::io` 能力集合提供具名 trait：
-
-| Trait | Supertrait | 使用场景 |
-| --- | --- | --- |
-| `ReadSeek` | `Read + Seek` | 消费方需要可读取的随机访问输入 |
-| `BufReadSeek` | `BufRead + Seek` | 消费方需要带缓冲的随机访问输入 |
-| `ReadWrite` | `Read + Write` | stream 或 buffer 同时可读写 |
-| `WriteSeek` | `Write + Seek` | 输出需要按绝对位置 patch |
-| `ReadWriteSeek` | `Read + Write + Seek` | 输入输出共享一个随机访问对象 |
-
-示例：
-
-```rust
-use std::io::{Read, SeekFrom};
-
-use qubit_io::{ReadSeek, SeekExt};
-
-fn read_header(input: &mut dyn ReadSeek) -> std::io::Result<Vec<u8>> {
-    let size = input.stream_size()?;
-    let mut header = vec![0; size.min(8) as usize];
-    input.seek(SeekFrom::Start(0))?;
-    input.read_exact(&mut header)?;
-    Ok(header)
-}
-```
-
-## Streams 命名空间
-
-`Streams` 提供 generic stream 操作的 associated function。
-
-### 复制全部内容
-
-当你希望通过 Qubit IO 命名空间使用标准 `std::io::copy` 行为时，使用 `Streams::copy`：
-
-```rust
-use std::io::Cursor;
-
-use qubit_io::Streams;
-
-let mut input = Cursor::new(b"payload".to_vec());
-let mut output = Vec::new();
-
-let copied = Streams::copy(&mut input, &mut output)?;
-
-assert_eq!(7, copied);
-assert_eq!(b"payload", output.as_slice());
-# Ok::<(), std::io::Error>(())
-```
-
-### 最多复制 N 字节
-
-当调用方要控制最多消费多少数据时，使用 `copy_at_most`：
-
-```rust
-use std::io::Cursor;
-
-use qubit_io::Streams;
-
-let mut input = Cursor::new(b"abcdef".to_vec());
-let mut output = Vec::new();
-
-let copied = Streams::copy_at_most(&mut input, &mut output, 3)?;
-
-assert_eq!(3, copied);
-assert_eq!(b"abc", output.as_slice());
-# Ok::<(), std::io::Error>(())
-```
-
-### 只有在限制内到达 EOF 才复制
-
-处理不可信 stream 时，使用 `copy_to_end_limited`。如果超过允许大小后仍有数据，它会失败：
-
-```rust
-use std::io::Cursor;
-
-use qubit_io::Streams;
-
-let mut input = Cursor::new(b"small".to_vec());
-let mut output = Vec::new();
-
-let copied = Streams::copy_to_end_limited(&mut input, &mut output, 16)?;
-
-assert_eq!(5, copied);
-assert_eq!(b"small", output.as_slice());
-# Ok::<(), std::io::Error>(())
-```
-
-### 比较 Stream
-
-`content_eq` 用于相等性判断，`compare_content` 用于字典序比较。两者都是增量读取，不需要把
-完整 stream 先加载进内存。
-
-```rust
-use std::io::Cursor;
-
-use qubit_io::Streams;
-
-let mut left = Cursor::new(b"abc".to_vec());
-let mut right = Cursor::new(b"abc".to_vec());
-
-assert!(Streams::content_eq(&mut left, &mut right)?);
-# Ok::<(), std::io::Error>(())
-```
-
-## Read Extension Method
-
-`ReadExt` 包含精确读取、有界读取和复制相关 helper。
-
-### 精确读取或 EOF
-
-`read_exact_or_eof` 会尽量填满目标 buffer；如果先遇到 EOF，则返回实际读取的字节数，而不是把
-提前 EOF 直接变成错误。
+导入需要的方法 trait 后即可调用扩展方法。
 
 ```rust
 use std::io::Cursor;
@@ -232,443 +31,108 @@ use std::io::Cursor;
 use qubit_io::ReadExt;
 
 let mut input = Cursor::new(b"abc".to_vec());
-let mut buffer = [0_u8; 8];
+let mut bytes = [0_u8; 8];
 
-let count = input.read_exact_or_eof(&mut buffer)?;
+let read = input.read_exact_or_eof(&mut bytes)?;
 
-assert_eq!(3, count);
-assert_eq!(b"abc", &buffer[..count]);
+assert_eq!(3, read);
+assert_eq!(b"abc", &bytes[..read]);
 # Ok::<(), std::io::Error>(())
 ```
 
-### 有界读取到内存
+`ReadExt` 包含 `read_to_end_limited` 和 `read_exact_vec_limited` 等有界 helper。
+在协议和文件格式边界，使用这些方法可以避免不受控分配。
 
-当输入大小不完全可信时，使用 `read_to_end_limited` 和 `read_to_string_limited`：
-
-```rust
-use std::io::Cursor;
-
-use qubit_io::ReadExt;
-
-let mut input = Cursor::new(b"hello".to_vec());
-let bytes = input.read_to_end_limited(16)?;
-
-assert_eq!(b"hello", bytes.as_slice());
-# Ok::<(), std::io::Error>(())
-```
-
-`_into` 变体会追加到调用方提供的 buffer，并在方法承诺 rollback 的错误路径上回滚追加内容。
-
-### 方法式复制
-
-`copy_to`、`copy_to_at_most` 和 `copy_to_end_limited` 把 `Streams` 命名空间中的复制能力
-作为 reader 方法提供。
-
-```rust
-use std::io::Cursor;
-
-use qubit_io::ReadExt;
-
-let mut input = Cursor::new(b"abcdef".to_vec());
-let mut output = Vec::new();
-
-let copied = input.copy_to_at_most(&mut output, 4)?;
-
-assert_eq!(4, copied);
-assert_eq!(b"abcd", output.as_slice());
-# Ok::<(), std::io::Error>(())
-```
-
-## BufRead Extension Method
-
-`BufReadExt` 增加有界分隔符操作。适合处理 line-based 或 delimiter-based 协议，避免单行或
-单字段无界增长。
+`BufReadExt` 提供有界 delimiter 操作：
 
 ```rust
 use std::io::Cursor;
 
 use qubit_io::BufReadExt;
 
-let mut input = Cursor::new(b"name=value\nrest".to_vec());
-let line = input.read_line_limited(32)?;
+let mut input = Cursor::new(b"first\nsecond".to_vec());
+let line = input.read_line_limited(16)?;
 
-assert_eq!("name=value\n", line);
+assert_eq!("first\n", line);
 # Ok::<(), std::io::Error>(())
 ```
 
-如果只想跳过一个有界字段，并且不想为这个字段分配 buffer，可以使用
-`discard_until_limited`。
+## 保留位置的 I/O
 
-## Seek Extension Method
-
-`SeekExt::stream_size` 获取 stream 长度，并恢复原始位置。
+`ReadSeekExt` 和 `WriteSeekExt` 适合临时随机访问，但不希望改变调用方可见当前位置的场景。
 
 ```rust
-use std::io::{Cursor, Seek, SeekFrom};
-
-use qubit_io::SeekExt;
-
-let mut cursor = Cursor::new(b"abcdef".to_vec());
-cursor.seek(SeekFrom::Start(2))?;
-
-let size = cursor.stream_size()?;
-
-assert_eq!(6, size);
-assert_eq!(2, cursor.stream_position()?);
-# Ok::<(), std::io::Error>(())
-```
-
-## Read + Seek Extension Method
-
-`ReadSeekExt` 提供不消费当前位置的读取，以及读取绝对 offset 后恢复原位置的能力。
-
-```rust
-use std::io::{Cursor, Seek};
+use std::io::Cursor;
 
 use qubit_io::ReadSeekExt;
 
-let mut cursor = Cursor::new(b"abcdef".to_vec());
-let mut buffer = [0_u8; 3];
+let mut input = Cursor::new(b"abcdef".to_vec());
+let mut header = [0_u8; 2];
 
-let count = cursor.peek_exact_or_eof(&mut buffer)?;
+input.read_exact_or_eof_at(2, &mut header)?;
 
-assert_eq!(3, count);
-assert_eq!(b"abc", &buffer);
-assert_eq!(0, cursor.stream_position()?);
+assert_eq!(b"cd", &header);
+assert_eq!(0, input.position());
 # Ok::<(), std::io::Error>(())
 ```
 
-当需要检查固定 offset，但不能改变调用方可见的 cursor 位置时，使用
-`read_exact_or_eof_at`。
+## Streams
 
-## Write + Seek Extension Method
-
-`WriteSeekExt::write_all_at_preserving_position` 在绝对 offset 写入，并恢复原位置。
-
-```rust
-use std::io::{Cursor, Seek, SeekFrom};
-
-use qubit_io::WriteSeekExt;
-
-let mut cursor = Cursor::new(vec![0; 8]);
-cursor.seek(SeekFrom::Start(7))?;
-
-cursor.write_all_at_preserving_position(2, b"rs")?;
-
-assert_eq!(7, cursor.stream_position()?);
-assert_eq!(&[0, 0, b'r', b's', 0, 0, 0, 0], cursor.get_ref().as_slice());
-# Ok::<(), std::io::Error>(())
-```
-
-## Binary Scalar 编解码
-
-`BinaryReadExt` 和 `BinaryWriteExt` 使用显式字节序读写 fixed-width 数字标量。
+`Streams` 是不可实例化的 stream 操作命名空间。
 
 ```rust
 use std::io::Cursor;
 
-use qubit_io::{BinaryReadExt, BinaryWriteExt};
+use qubit_io::Streams;
 
-let mut buffer = Vec::new();
-buffer.write_u32_be(0x0102_0304)?;
-buffer.write_i16_le(-2)?;
-
-let mut input = Cursor::new(buffer);
-assert_eq!(0x0102_0304, input.read_u32_be()?);
-assert_eq!(-2, input.read_i16_le()?);
-# Ok::<(), std::io::Error>(())
-```
-
-当字节序由格式元数据决定，而不是由代码结构固定时，使用运行时 `ByteOrder` API。
-
-## LEB128 与 ZigZag 编码
-
-`Leb128ReadExt` 和 `Leb128WriteExt` 支持通过 128 位值读写 unsigned / signed LEB128
-整数。严格读取变体会拒绝 non-canonical 编码。
-
-`ZigZagReadExt` 和 `ZigZagWriteExt` 把有符号值编码成 unsigned LEB128 payload。
-当小的负数也需要保持紧凑时，使用 ZigZag。
-
-除非所有 producer 和 consumer 都明确共享相同 target 指针宽度，否则不要在持久化 wire
-format 中使用 `usize` 和 `isize` 方法。跨平台数据建议使用 `read_uleb_u64`、
-`write_uleb_u64`、`read_zig_zag_i64`、`write_zig_zag_i64` 等 fixed-width 方法。
-
-```rust
-use std::io::Cursor;
-
-use qubit_io::{Leb128ReadExt, Leb128WriteExt, ZigZagReadExt, ZigZagWriteExt};
-
-let mut buffer = Vec::new();
-buffer.write_uleb_u64(300)?;
-buffer.write_zig_zag_i64(-42)?;
-
-let mut input = Cursor::new(buffer);
-assert_eq!(300, input.read_uleb_u64()?);
-assert_eq!(-42, input.read_zig_zag_i64()?);
-# Ok::<(), std::io::Error>(())
-```
-
-## Length-Prefixed UTF-8 字符串
-
-`StringReadExt` 和 `StringWriteExt` 使用 ULEB128、`u16` 或 `u32` 字节长度前缀读写 UTF-8
-字符串。读取时由调用方提供大小上限。ULEB 字符串 helper 会把长度编码为 `usize`；如果
-wire format 必须与 target 无关，请使用 `u16` 或 `u32` 长度前缀。
-
-```rust
-use std::io::Cursor;
-
-use qubit_io::{StringReadExt, StringWriteExt};
-
-let mut buffer = Vec::new();
-buffer.write_utf8_string_uleb("hello")?;
-
-let mut input = Cursor::new(buffer);
-let value = input.read_utf8_string_uleb(32)?;
-
-assert_eq!("hello", value);
-# Ok::<(), std::io::Error>(())
-```
-
-## Wrapper 类型
-
-### CountingReader 和 CountingWriter
-
-当 metrics 或校验逻辑需要知道成功读写了多少字节时，使用 counting wrapper。
-
-```rust
-use std::io::{Cursor, Read};
-
-use qubit_io::CountingReader;
-
-let inner = Cursor::new(b"abc".to_vec());
-let mut reader = CountingReader::new(inner);
+let mut input = Cursor::new(b"abcdef".to_vec());
 let mut output = Vec::new();
 
-reader.read_to_end(&mut output)?;
+let copied = Streams::copy_to_end_limited(&mut input, &mut output, 8)?;
 
-assert_eq!(3, reader.bytes_read());
+assert_eq!(6, copied);
+assert_eq!(b"abcdef", output.as_slice());
 # Ok::<(), std::io::Error>(())
 ```
 
-### LimitReader 和 LimitWriter
+比较两个 stream 从当前位置开始的剩余内容时，使用 `Streams::content_eq` 或
+`Streams::compare_content`。
 
-当下游 API 在固定字节预算之后应该看到 EOF 或写入失败时，使用 limit wrapper。
+## Wrapper
+
+Wrapper 可以在不改变底层资源类型的情况下组合小型 stream 行为。
 
 ```rust
 use std::io::Read;
 
-use qubit_io::LimitReader;
+use qubit_io::CountingReader;
 
-let inner = std::io::Cursor::new(b"abcdef".to_vec());
-let mut reader = LimitReader::new(inner, 3);
-let mut output = Vec::new();
+let inner = std::io::Cursor::new(b"abc".to_vec());
+let mut reader = CountingReader::new(inner);
+let mut bytes = [0_u8; 2];
 
-reader.read_to_end(&mut output)?;
+reader.read_exact(&mut bytes)?;
 
-assert_eq!(b"abc", output.as_slice());
+assert_eq!(2, reader.count());
 # Ok::<(), std::io::Error>(())
 ```
 
-### TeeReader 和 TeeWriter
-
-当你希望在保持正常读写流程的同时，把流量复制到 branch writer 时，使用 tee wrapper。
-
-### ChecksumReader 和 ChecksumWriter
-
-checksum wrapper 会对成功读取或写入的字节更新调用方持有的 checksum 状态。它不绑定具体
-checksum 算法。
-
-### PositionGuard
-
-`PositionGuard` 记录当前 stream 位置，并在 drop 时恢复，除非主动 dismiss。它适合函数需要
-检查 header、探测格式元数据、读取 magic number，或者运行一个 speculative parser，但不能
-改变调用方可见 cursor 位置的场景。
-
-当探测操作应该成为新的可见位置时，调用 `dismiss`。否则让 guard drop 即可恢复原位置。
-
-```rust
-use std::io::{Cursor, Read};
-
-use qubit_io::PositionGuard;
-
-fn looks_like_qubit(input: &mut Cursor<Vec<u8>>) -> std::io::Result<bool> {
-    let mut guard = PositionGuard::new(input)?;
-    let mut magic = [0_u8; 4];
-    guard.get_mut().read_exact(&mut magic)?;
-    Ok(&magic == b"QBIT")
-}
-
-let mut input = Cursor::new(b"QBITpayload".to_vec());
-
-assert!(looks_like_qubit(&mut input)?);
-assert_eq!(0, input.position());
-
-# Ok::<(), std::io::Error>(())
-```
-
-## Codec Reader 和 Writer Object
-
-如果偏好 object-style codec API，而不是 extension trait，可以使用 reader 和 writer
-wrapper。这些 wrapper 持有底层 stream，并复用与 extension trait 相同的编码逻辑。当 codec
-配置应该跟随 reader 或 writer 对象时，这种风格会更合适。它们仍然是普通 stream
-wrapper：reader 实现 `Read`，writer 实现 `Write`，底层 stream 支持 seek 时会透传
-`Seek`。
+常用 wrapper：
 
 | Wrapper | 用途 |
 | --- | --- |
-| `BinaryReader`、`BinaryWriter` | fixed-width 标量 |
-| `Leb128Reader`、`Leb128Writer` | LEB128 整数 |
-| `ZigZagReader`、`ZigZagWriter` | ZigZag 有符号整数 |
-| `BufferedBinaryReader`、`BufferedBinaryWriter` | buffered fixed-width 标量 |
-| `BufferedLeb128Reader`、`BufferedLeb128Writer` | buffered LEB128 整数 |
-| `BufferedZigZagReader`、`BufferedZigZagWriter` | buffered ZigZag 有符号整数 |
+| `CountingReader`、`CountingWriter` | 统计成功读写的字节数 |
+| `LimitReader`、`LimitWriter` | 限制可通过的字节数 |
+| `TeeReader`、`TeeWriter` | 将成功读写的字节复制到分支 sink |
+| `ChecksumReader`、`ChecksumWriter` | 用调用方提供的 hasher 统计成功字节 |
+| `PositionGuard` | 除非 dismiss，否则恢复 seek 位置 |
 
-### BinaryReader 和 BinaryWriter
+## 不包含的能力
 
-当解析或写入 fixed-width scalar 格式，并希望字节序选择跟随 wrapper 类型时，使用
-binary wrapper。
+`qubit-io` 不再包含 binary scalar codec、LEB128、ZigZag 或 text charset adapter。
+这些能力由兄弟 crate 提供：
 
-```rust
-use std::io::Cursor;
-
-use qubit_io::{BigEndian, BinaryReader, BinaryWriter};
-
-let mut writer = BinaryWriter::<_, BigEndian>::new(Vec::new());
-writer.write_u16(0x0102)?;
-writer.write_i32(-7)?;
-let bytes = writer.into_inner();
-
-let mut reader = BinaryReader::<_, BigEndian>::new(Cursor::new(bytes));
-assert_eq!(0x0102, reader.read_u16()?);
-assert_eq!(-7, reader.read_i32()?);
-
-# Ok::<(), std::io::Error>(())
-```
-
-### Leb128Reader 和 Leb128Writer
-
-当整数希望以紧凑形式存储时，使用 LEB128 wrapper。reader 可以配置为 strict canonical
-decoding；当格式边界需要拒绝 non-canonical 编码时，这很有用。
-
-```rust
-use std::io::Cursor;
-
-use qubit_io::{Leb128Reader, Leb128Writer, Strict};
-
-let mut writer = Leb128Writer::new(Vec::new());
-writer.write_u64(300)?;
-writer.write_i64(-42)?;
-let bytes = writer.into_inner();
-
-let mut reader = Leb128Reader::<_, Strict>::new(Cursor::new(bytes));
-assert_eq!(300, reader.read_u64()?);
-assert_eq!(-42, reader.read_i64()?);
-
-# Ok::<(), std::io::Error>(())
-```
-
-### ZigZagReader 和 ZigZagWriter
-
-当有符号整数通常在零附近，包括负数也应该保持紧凑时，使用 ZigZag wrapper。ZigZag 会把
-有符号值映射成 unsigned LEB128 payload，使 `-1`、`0`、`1` 这类值保持短编码。
-
-```rust
-use std::io::Cursor;
-
-use qubit_io::{Strict, ZigZagReader, ZigZagWriter};
-
-let mut writer = ZigZagWriter::new(Vec::new());
-writer.write_i64(-1)?;
-writer.write_i64(42)?;
-let bytes = writer.into_inner();
-
-let mut reader = ZigZagReader::<_, Strict>::new(Cursor::new(bytes));
-assert_eq!(-1, reader.read_i64()?);
-assert_eq!(42, reader.read_i64()?);
-
-# Ok::<(), std::io::Error>(())
-```
-
-### Buffered Codec Wrapper
-
-当需要重复读写大量标量值，并希望 wrapper 在内部批量 I/O 时，使用 buffered codec wrapper。
-Buffered reader 可能会从底层 reader 预取字节，因此 `inner` 看到的物理 stream 位置可能
-已经超过 wrapper 暴露的逻辑位置。对 buffered reader 调用 `into_inner` 会丢弃尚未消费的
-预取字节。
-
-Buffered writer 会在内部 buffer 满、调用 `flush()`、调用 `into_inner()` 或 seek 前 flush。
-它不会在 `Drop` 时 flush，因此在依赖底层 writer 已收到全部字节前，必须调用 `flush()` 或
-`into_inner()`。
-
-```rust
-use std::io::Cursor;
-
-use qubit_io::{BufferedBinaryReader, BufferedBinaryWriter, LittleEndian};
-
-let mut writer = BufferedBinaryWriter::<_, LittleEndian>::with_capacity(Vec::new(), 64);
-writer.write_u32(0x0102_0304)?;
-writer.write_i16(-7)?;
-let bytes = writer.into_inner()?;
-
-let mut reader = BufferedBinaryReader::<_, LittleEndian>::with_capacity(Cursor::new(bytes), 64);
-assert_eq!(0x0102_0304, reader.read_u32()?);
-assert_eq!(-7, reader.read_i16()?);
-
-# Ok::<(), std::io::Error>(())
-```
-
-### Stream Benchmark 结果
-
-`benches/stream.rs` 中的 stream benchmark 套件使用真实文件系统文件、随机字段类型、近似
-正态分布的字段值，并按 benchmark group 隔离运行 Criterion。下面的结果来自 2026-05-25
-的一次本地测量。速度比按 `baseline mean time / candidate mean time` 计算，因此大于
-`1.00x` 表示 candidate 更快。
-
-Fixed-width binary 场景中的 `std` baseline 是 `std_native`，它使用
-`BufReader<File>` / `BufWriter<File>`、`read_exact()` / `write_all()` 和标准字节转换。
-LEB128 和 ZigZag 场景中的 `std` baseline 是 `std_manual`，它使用
-`BufReader<File>` / `BufWriter<File>` 加安全手写的 LEB128/ZigZag 协议实现。
-
-| Group | 方向 | 实现 | Mean time | Throughput | 相对 ext 速度 | 相对 std 速度 |
-| --- | --- | --- | ---: | ---: | ---: | ---: |
-| `prod_binary_pipeline` | 写入 | `ext` | `472.23 ms` | `2.7132 GiB/s` | `1.00x` | `1.05x` |
-| `prod_binary_pipeline` | 写入 | `std_native` | `498.02 ms` | `2.5727 GiB/s` | `0.95x` | `1.00x` |
-| `prod_binary_pipeline` | 写入 | `wrapper` | `484.94 ms` | `2.6421 GiB/s` | `0.97x` | `1.03x` |
-| `prod_binary_pipeline` | 写入 | `buffered` | `464.77 ms` | `2.7567 GiB/s` | `1.02x` | `1.07x` |
-| `prod_binary_pipeline` | 读取 | `ext` | `244.06 ms` | `5.2497 GiB/s` | `1.00x` | `1.12x` |
-| `prod_binary_pipeline` | 读取 | `std_native` | `273.11 ms` | `4.6914 GiB/s` | `0.89x` | `1.00x` |
-| `prod_binary_pipeline` | 读取 | `wrapper` | `273.63 ms` | `4.6825 GiB/s` | `0.89x` | `1.00x` |
-| `prod_binary_pipeline` | 读取 | `buffered` | `204.41 ms` | `6.2680 GiB/s` | `1.19x` | `1.34x` |
-| `prod_varints` | 写入 | `ext` | `196.05 ms` | `263.76 MiB/s` | `1.00x` | `1.06x` |
-| `prod_varints` | 写入 | `std_manual` | `208.53 ms` | `247.97 MiB/s` | `0.94x` | `1.00x` |
-| `prod_varints` | 写入 | `wrapper` | `195.56 ms` | `264.42 MiB/s` | `1.00x` | `1.07x` |
-| `prod_varints` | 写入 | `buffered` | `149.96 ms` | `344.81 MiB/s` | `1.31x` | `1.39x` |
-| `prod_varints` | 读取 | `ext` | `152.01 ms` | `340.18 MiB/s` | `1.00x` | `1.09x` |
-| `prod_varints` | 读取 | `std_manual` | `165.34 ms` | `312.74 MiB/s` | `0.92x` | `1.00x` |
-| `prod_varints` | 读取 | `wrapper` | `153.27 ms` | `337.38 MiB/s` | `0.99x` | `1.08x` |
-| `prod_varints` | 读取 | `buffered` | `153.94 ms` | `335.91 MiB/s` | `0.99x` | `1.07x` |
-| `prod_signed_varints` | 写入 | `ext` | `202.40 ms` | `271.11 MiB/s` | `1.00x` | `1.06x` |
-| `prod_signed_varints` | 写入 | `std_manual` | `214.86 ms` | `255.38 MiB/s` | `0.94x` | `1.00x` |
-| `prod_signed_varints` | 写入 | `wrapper` | `195.84 ms` | `280.20 MiB/s` | `1.03x` | `1.10x` |
-| `prod_signed_varints` | 写入 | `buffered` | `152.58 ms` | `359.64 MiB/s` | `1.33x` | `1.41x` |
-| `prod_signed_varints` | 读取 | `ext` | `154.06 ms` | `356.18 MiB/s` | `1.00x` | `1.09x` |
-| `prod_signed_varints` | 读取 | `std_manual` | `168.56 ms` | `325.53 MiB/s` | `0.91x` | `1.00x` |
-| `prod_signed_varints` | 读取 | `wrapper` | `155.53 ms` | `352.80 MiB/s` | `0.99x` | `1.08x` |
-| `prod_signed_varints` | 读取 | `buffered` | `154.64 ms` | `354.85 MiB/s` | `1.00x` | `1.09x` |
-
-主要结论是：在这些基于真实文件的标量 pipeline 中，buffered writer 持续更快，尤其是
-LEB128 和 ZigZag 这类紧凑整数流。Buffered fixed-width binary 读取也明显快于
-`BufReader<File>` baseline。LEB128 和 ZigZag 读取则不同：buffered、wrapper 和
-extension-trait reader 彼此接近，而安全手写的标准库 baseline 更慢。
-
-## 错误模型
-
-大多数 API 返回 `std::io::Result`。本 crate 尽量保持标准 I/O 行为，并使用
-`std::io::ErrorKind` 表达大小限制、non-canonical 编码等校验失败。涉及位置恢复的方法会在
-文档中说明：当原操作和恢复操作都可能失败时，最终返回哪个错误。
-
-## Crate 边界
-
-`qubit-io` 不包含本地文件系统工具。如果需要本地路径工具、临时文件和目录、递归目录操作、
-目录清理或 atomic file write，请使用
-[qubit-local-files](https://github.com/qubit-ltd/rs-local-files)。
+- `qubit-codec-binary`：缓冲区级 binary codec；
+- `qubit-io-binary`：二进制 stream extension trait 和 wrapper；
+- `qubit-codec-text`：文本 codec；
+- `qubit-io-text`：文本 stream adapter。
