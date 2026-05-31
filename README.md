@@ -137,7 +137,7 @@ assert_eq!(b"payl", output.as_slice());
 
 The codec and stream stack is intentionally split:
 
-- `qubit-codec`: core byte order, codec, coder, encoder, and decoder traits;
+- `qubit-codec`: core byte order, codec, transcoder, encoder, and decoder traits;
 - `qubit-codec-binary`: buffer-level binary, LEB128, and ZigZag codecs;
 - `qubit-io`: generic `std::io` helpers;
 - `qubit-io-binary`: binary stream readers, writers, and extension traits;
