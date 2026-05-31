@@ -132,7 +132,7 @@ assert_eq!(b"payl", output.as_slice());
 
 当前 codec 与 stream 分层如下：
 
-- `qubit-codec`：核心 byte order、codec、coder、encoder 和 decoder trait；
+- `qubit-codec`：核心 byte order、codec、transcoder、encoder 和 decoder trait；
 - `qubit-codec-binary`：缓冲区级 binary、LEB128 和 ZigZag codec；
 - `qubit-io`：通用 `std::io` helper；
 - `qubit-io-binary`：二进制 stream reader、writer 和 extension trait；
