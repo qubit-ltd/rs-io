@@ -1,12 +1,10 @@
-/*******************************************************************************
- *
- *    Copyright (c) 2026 Haixing Hu.
- *
- *    SPDX-License-Identifier: Apache-2.0
- *
- *    Licensed under the Apache License, Version 2.0.
- *
- ******************************************************************************/
+// =============================================================================
+//    Copyright (c) 2026 Haixing Hu.
+//
+//    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
+// =============================================================================
 use std::io::{
     Result,
     Seek,
@@ -35,7 +33,11 @@ pub trait WriteSeekExt: Write + Seek {
     /// Returns an error when reading the current position, seeking to `offset`,
     /// writing bytes, or restoring the original position fails. If restoration
     /// fails, the restoration error is returned.
-    fn write_all_at_preserving_position(&mut self, offset: u64, buffer: &[u8]) -> Result<()>;
+    fn write_all_at_preserving_position(
+        &mut self,
+        offset: u64,
+        buffer: &[u8],
+    ) -> Result<()>;
 }
 
 impl<T> WriteSeekExt for T
@@ -43,7 +45,11 @@ where
     T: Write + Seek + ?Sized,
 {
     #[inline]
-    fn write_all_at_preserving_position(&mut self, offset: u64, buffer: &[u8]) -> Result<()> {
+    fn write_all_at_preserving_position(
+        &mut self,
+        offset: u64,
+        buffer: &[u8],
+    ) -> Result<()> {
         let mut writer = self;
         write_all_at_preserving_position_impl(&mut writer, offset, buffer)
     }
@@ -57,8 +63,13 @@ where
 /// - `buffer`: Bytes to write.
 ///
 /// # Errors
-/// Returns an error when position lookup, seeking, writing, or restoration fails.
-fn write_all_at_preserving_position_impl(writer: &mut dyn WriteSeek, offset: u64, buffer: &[u8]) -> Result<()> {
+/// Returns an error when position lookup, seeking, writing, or restoration
+/// fails.
+fn write_all_at_preserving_position_impl(
+    writer: &mut dyn WriteSeek,
+    offset: u64,
+    buffer: &[u8],
+) -> Result<()> {
     let position = writer.stream_position()?;
     let write_result = match writer.seek(SeekFrom::Start(offset)) {
         Ok(_) => writer.write_all(buffer),

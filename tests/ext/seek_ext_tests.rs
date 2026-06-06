@@ -1,12 +1,10 @@
-/*******************************************************************************
- *
- *    Copyright (c) 2026 Haixing Hu.
- *
- *    SPDX-License-Identifier: Apache-2.0
- *
- *    Licensed under the Apache License, Version 2.0.
- *
- ******************************************************************************/
+// =============================================================================
+//    Copyright (c) 2026 Haixing Hu.
+//
+//    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
+// =============================================================================
 
 use std::io::{
     Cursor,
@@ -54,18 +52,20 @@ impl Seek for FailingSeek {
     fn seek(&mut self, position: SeekFrom) -> std::io::Result<u64> {
         match position {
             SeekFrom::Current(0) => Ok(self.original_position),
-            SeekFrom::End(0) => self
-                .end_result
-                .as_ref()
-                .copied()
-                .map_err(|error| Error::new(error.kind(), error.to_string())),
-            SeekFrom::Start(position) if position == self.original_position => self
-                .restore_result
-                .as_ref()
-                .copied()
-                .map_err(|error| Error::new(error.kind(), error.to_string())),
+            SeekFrom::End(0) => {
+                self.end_result.as_ref().copied().map_err(|error| {
+                    Error::new(error.kind(), error.to_string())
+                })
+            }
+            SeekFrom::Start(position) if position == self.original_position => {
+                self.restore_result.as_ref().copied().map_err(|error| {
+                    Error::new(error.kind(), error.to_string())
+                })
+            }
             SeekFrom::Start(position) => Ok(position),
-            SeekFrom::Current(_) | SeekFrom::End(_) => Err(Error::new(ErrorKind::Unsupported, "unsupported seek")),
+            SeekFrom::Current(_) | SeekFrom::End(_) => {
+                Err(Error::new(ErrorKind::Unsupported, "unsupported seek"))
+            }
         }
     }
 }
@@ -77,7 +77,9 @@ impl Seek for PositionFailingSeek {
         match position {
             SeekFrom::Current(0) => Err(Error::other("position failed")),
             SeekFrom::Start(position) => Ok(position),
-            SeekFrom::Current(_) | SeekFrom::End(_) => Err(Error::new(ErrorKind::Unsupported, "unsupported seek")),
+            SeekFrom::Current(_) | SeekFrom::End(_) => {
+                Err(Error::new(ErrorKind::Unsupported, "unsupported seek"))
+            }
         }
     }
 }
@@ -89,10 +91,17 @@ fn test_stream_size_returns_size_without_moving_cursor() {
         .seek(SeekFrom::Start(2))
         .expect("cursor should seek to initial position");
 
-    let size = cursor.stream_size().expect("stream size should be readable");
+    let size = cursor
+        .stream_size()
+        .expect("stream size should be readable");
 
     assert_eq!(6, size);
-    assert_eq!(2, cursor.stream_position().expect("cursor position should be readable"),);
+    assert_eq!(
+        2,
+        cursor
+            .stream_position()
+            .expect("cursor position should be readable"),
+    );
 }
 
 #[test]
@@ -111,7 +120,9 @@ fn test_stream_size_returns_size_error_after_restore() {
 fn test_stream_size_returns_restore_error() {
     let mut stream = FailingSeek::restore_error(4, 10);
 
-    let error = stream.stream_size().expect_err("restore errors should be reported");
+    let error = stream
+        .stream_size()
+        .expect_err("restore errors should be reported");
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("restore failed", error.to_string());
@@ -149,10 +160,17 @@ fn test_stream_size_works_on_dyn_seek() {
         .expect("cursor should seek to initial position");
     let stream: &mut dyn Seek = &mut cursor;
 
-    let size = stream.stream_size().expect("seek extension should work on dyn Seek");
+    let size = stream
+        .stream_size()
+        .expect("seek extension should work on dyn Seek");
 
     assert_eq!(6, size);
-    assert_eq!(3, stream.stream_position().expect("stream position should be restored"),);
+    assert_eq!(
+        3,
+        stream
+            .stream_position()
+            .expect("stream position should be restored"),
+    );
 }
 
 #[test]
@@ -163,8 +181,14 @@ fn test_stream_size_ufcs_works_on_dyn_seek() {
         .expect("cursor should seek to initial position");
     let stream: &mut dyn Seek = &mut cursor;
 
-    let size = <dyn Seek as SeekExt>::stream_size(stream).expect("UFCS stream_size should work on dyn Seek");
+    let size = <dyn Seek as SeekExt>::stream_size(stream)
+        .expect("UFCS stream_size should work on dyn Seek");
 
     assert_eq!(6, size);
-    assert_eq!(2, stream.stream_position().expect("stream position should be restored"),);
+    assert_eq!(
+        2,
+        stream
+            .stream_position()
+            .expect("stream position should be restored"),
+    );
 }
