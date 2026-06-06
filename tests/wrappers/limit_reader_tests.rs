@@ -1,12 +1,10 @@
-/*******************************************************************************
- *
- *    Copyright (c) 2026 Haixing Hu.
- *
- *    SPDX-License-Identifier: Apache-2.0
- *
- *    Licensed under the Apache License, Version 2.0.
- *
- ******************************************************************************/
+// =============================================================================
+//    Copyright (c) 2026 Haixing Hu.
+//
+//    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
+// =============================================================================
 
 use std::io::{
     Cursor,
@@ -39,10 +37,18 @@ fn test_limit_reader_forwards_buf_read_with_limit() {
     assert_eq!(b"abc", reader.fill_buf().expect("buffer should be capped"));
     reader.consume(2);
     assert_eq!(1, reader.remaining());
-    assert_eq!(b"c", reader.fill_buf().expect("remaining buffer should shrink"));
+    assert_eq!(
+        b"c",
+        reader.fill_buf().expect("remaining buffer should shrink")
+    );
     reader.consume(8);
     assert_eq!(0, reader.remaining());
-    assert!(reader.fill_buf().expect("limit should be exhausted").is_empty());
+    assert!(
+        reader
+            .fill_buf()
+            .expect("limit should be exhausted")
+            .is_empty()
+    );
 }
 
 struct FailingReader;
@@ -61,13 +67,17 @@ fn test_limit_reader_reads_at_most_limit() {
     assert_eq!(0, reader.get_ref().position());
 
     let mut buffer = [0; 8];
-    let count = reader.read(&mut buffer).expect("limited read should succeed");
+    let count = reader
+        .read(&mut buffer)
+        .expect("limited read should succeed");
 
     assert_eq!(4, count);
     assert_eq!(b"abcd", &buffer[..count]);
     assert_eq!(0, reader.remaining());
 
-    let count = reader.read(&mut buffer).expect("exhausted reader should report EOF");
+    let count = reader
+        .read(&mut buffer)
+        .expect("exhausted reader should report EOF");
     assert_eq!(0, count);
 
     let inner = reader.into_inner();
@@ -94,7 +104,9 @@ fn test_limit_reader_zero_limit_does_not_read_inner() {
     let mut reader = LimitReader::new(PanicOnRead, 0);
     let mut buffer = [0; 1];
 
-    let count = reader.read(&mut buffer).expect("zero limit should behave like EOF");
+    let count = reader
+        .read(&mut buffer)
+        .expect("zero limit should behave like EOF");
 
     assert_eq!(0, count);
     assert_eq!(0, reader.remaining());

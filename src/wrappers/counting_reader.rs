@@ -1,12 +1,10 @@
-/*******************************************************************************
- *
- *    Copyright (c) 2026 Haixing Hu.
- *
- *    SPDX-License-Identifier: Apache-2.0
- *
- *    Licensed under the Apache License, Version 2.0.
- *
- ******************************************************************************/
+// =============================================================================
+//    Copyright (c) 2026 Haixing Hu.
+//
+//    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
+// =============================================================================
 use std::io::{
     BufRead,
     Read,
@@ -52,7 +50,10 @@ impl<R> CountingReader<R> {
     /// A new counting reader with a zero byte count.
     #[inline]
     pub fn new(inner: R) -> Self {
-        Self { inner, bytes_read: 0 }
+        Self {
+            inner,
+            bytes_read: 0,
+        }
     }
 
     /// Returns the number of bytes successfully read through this wrapper.
