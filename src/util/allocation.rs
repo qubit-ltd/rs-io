@@ -1,12 +1,10 @@
-/*******************************************************************************
- *
- *    Copyright (c) 2026 Haixing Hu.
- *
- *    SPDX-License-Identifier: Apache-2.0
- *
- *    Licensed under the Apache License, Version 2.0.
- *
- ******************************************************************************/
+// =============================================================================
+//    Copyright (c) 2026 Haixing Hu.
+//
+//    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
+// =============================================================================
 use std::collections::TryReserveError;
 use std::io::{
     Error,
@@ -26,7 +24,8 @@ fn allocation_error(error: TryReserveError) -> Error {
     Error::other(format!("failed to reserve output buffer capacity: {error}"))
 }
 
-/// Reserves capacity in a vector and reports allocation failure as an I/O error.
+/// Reserves capacity in a vector and reports allocation failure as an I/O
+/// error.
 ///
 /// # Parameters
 ///
@@ -36,11 +35,15 @@ fn allocation_error(error: TryReserveError) -> Error {
 /// # Errors
 ///
 /// Returns [`ErrorKind::Other`] if the allocation request fails.
-pub(crate) fn try_reserve_vec<T>(output: &mut Vec<T>, additional: usize) -> Result<()> {
+pub(crate) fn try_reserve_vec<T>(
+    output: &mut Vec<T>,
+    additional: usize,
+) -> Result<()> {
     output.try_reserve(additional).map_err(allocation_error)
 }
 
-/// Reserves capacity in a string and reports allocation failure as an I/O error.
+/// Reserves capacity in a string and reports allocation failure as an I/O
+/// error.
 ///
 /// # Parameters
 ///
@@ -50,6 +53,9 @@ pub(crate) fn try_reserve_vec<T>(output: &mut Vec<T>, additional: usize) -> Resu
 /// # Errors
 ///
 /// Returns [`ErrorKind::Other`] if the allocation request fails.
-pub(crate) fn try_reserve_string(output: &mut String, additional: usize) -> Result<()> {
+pub(crate) fn try_reserve_string(
+    output: &mut String,
+    additional: usize,
+) -> Result<()> {
     output.try_reserve(additional).map_err(allocation_error)
 }
