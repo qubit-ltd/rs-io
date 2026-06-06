@@ -1,18 +1,17 @@
-/*******************************************************************************
- *
- *    Copyright (c) 2026 Haixing Hu.
- *
- *    SPDX-License-Identifier: Apache-2.0
- *
- *    Licensed under the Apache License, Version 2.0.
- *
- ******************************************************************************/
+// =============================================================================
+//    Copyright (c) 2026 Haixing Hu.
+//
+//    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
+// =============================================================================
 use std::io::{
     Seek,
     Write,
 };
 
-/// Object-safe capability trait for values that can be written and repositioned.
+/// Object-safe capability trait for values that can be written and
+/// repositioned.
 ///
 /// `WriteSeek` gives the common [`Write`] + [`Seek`] combination a named trait
 /// for APIs that write random-access output through trait objects. It is useful
