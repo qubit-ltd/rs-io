@@ -1,12 +1,10 @@
-/*******************************************************************************
- *
- *    Copyright (c) 2026 Haixing Hu.
- *
- *    SPDX-License-Identifier: Apache-2.0
- *
- *    Licensed under the Apache License, Version 2.0.
- *
- ******************************************************************************/
+// =============================================================================
+//    Copyright (c) 2026 Haixing Hu.
+//
+//    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
+// =============================================================================
 
 use std::io::{
     Error,
@@ -61,7 +59,9 @@ fn test_counting_writer_get_mut_allows_inner_access() {
 fn test_counting_writer_does_not_count_failed_writes() {
     let mut writer = CountingWriter::new(FailingWriter);
 
-    let error = writer.write(b"ab").expect_err("inner write error should be returned");
+    let error = writer
+        .write(b"ab")
+        .expect_err("inner write error should be returned");
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("write failed", error.to_string());
@@ -72,7 +72,9 @@ fn test_counting_writer_does_not_count_failed_writes() {
 fn test_counting_writer_flush_delegates_to_inner_writer() {
     let mut writer = CountingWriter::new(FailingWriter);
 
-    let error = writer.flush().expect_err("inner flush error should be returned");
+    let error = writer
+        .flush()
+        .expect_err("inner flush error should be returned");
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("flush failed", error.to_string());
@@ -88,8 +90,12 @@ fn test_counting_writer_forwards_seek_without_counting() {
 
     let mut writer = CountingWriter::new(Cursor::new(Vec::new()));
 
-    writer.write_all(b"abc").expect("initial write should succeed");
-    writer.seek(SeekFrom::Start(1)).expect("seek should be forwarded");
+    writer
+        .write_all(b"abc")
+        .expect("initial write should succeed");
+    writer
+        .seek(SeekFrom::Start(1))
+        .expect("seek should be forwarded");
     writer.write_all(b"z").expect("patch write should succeed");
 
     assert_eq!(4, writer.bytes_written());

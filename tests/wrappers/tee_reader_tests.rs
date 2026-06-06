@@ -1,12 +1,10 @@
-/*******************************************************************************
- *
- *    Copyright (c) 2026 Haixing Hu.
- *
- *    SPDX-License-Identifier: Apache-2.0
- *
- *    Licensed under the Apache License, Version 2.0.
- *
- ******************************************************************************/
+// =============================================================================
+//    Copyright (c) 2026 Haixing Hu.
+//
+//    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
+// =============================================================================
 
 use std::io::{
     Error,
@@ -151,7 +149,10 @@ fn test_tee_reader_mut_accessors_allow_inner_access() {
 
 #[test]
 fn test_tee_reader_returns_source_read_error() {
-    let mut reader = TeeReader::new(ScriptedReader::error("read failed"), ScriptedBranch::new());
+    let mut reader = TeeReader::new(
+        ScriptedReader::error("read failed"),
+        ScriptedBranch::new(),
+    );
     let mut buffer = [0; 2];
 
     let error = reader
@@ -170,7 +171,9 @@ fn test_tee_reader_does_not_write_branch_at_eof() {
     let mut reader = TeeReader::new(source, branch);
     let mut buffer = [0; 2];
 
-    let count = reader.read(&mut buffer).expect("EOF should not be an error");
+    let count = reader
+        .read(&mut buffer)
+        .expect("EOF should not be an error");
 
     assert_eq!(0, count);
     assert!(reader.branch_ref().as_slice().is_empty());
@@ -183,7 +186,9 @@ fn test_tee_reader_copies_partial_buffer_at_eof() {
     let mut reader = TeeReader::new(source, branch);
     let mut buffer = [0; 4];
 
-    let count = reader.read(&mut buffer).expect("partial read should succeed");
+    let count = reader
+        .read(&mut buffer)
+        .expect("partial read should succeed");
 
     assert_eq!(2, count);
     assert_eq!(b"ab", &buffer[..count]);
@@ -193,7 +198,8 @@ fn test_tee_reader_copies_partial_buffer_at_eof() {
 #[test]
 #[should_panic]
 fn test_tee_reader_panics_when_source_returns_invalid_count() {
-    let mut reader = TeeReader::new(ScriptedReader::invalid_count(), ScriptedBranch::new());
+    let mut reader =
+        TeeReader::new(ScriptedReader::invalid_count(), ScriptedBranch::new());
     let mut buffer = [0; 2];
 
     let _ = reader.read(&mut buffer);
@@ -202,7 +208,8 @@ fn test_tee_reader_panics_when_source_returns_invalid_count() {
 #[test]
 fn test_tee_reader_returns_branch_write_error() {
     let source = ScriptedReader::bytes(b"abc");
-    let mut reader = TeeReader::new(source, ScriptedBranch::failing("branch write failed"));
+    let mut reader =
+        TeeReader::new(source, ScriptedBranch::failing("branch write failed"));
     let mut buffer = [0; 2];
 
     let error = reader
@@ -225,9 +232,13 @@ fn test_tee_reader_forwards_seek_to_source_reader() {
     let branch = Vec::new();
     let mut reader = TeeReader::new(source, branch);
 
-    reader.seek(SeekFrom::Start(2)).expect("seek should be forwarded");
+    reader
+        .seek(SeekFrom::Start(2))
+        .expect("seek should be forwarded");
     let mut buffer = [0; 2];
-    reader.read_exact(&mut buffer).expect("read after seek should succeed");
+    reader
+        .read_exact(&mut buffer)
+        .expect("read after seek should succeed");
 
     assert_eq!(b"cd", &buffer);
     assert_eq!(b"cd", reader.branch_ref().as_slice());

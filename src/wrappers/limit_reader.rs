@@ -1,12 +1,10 @@
-/*******************************************************************************
- *
- *    Copyright (c) 2026 Haixing Hu.
- *
- *    SPDX-License-Identifier: Apache-2.0
- *
- *    Licensed under the Apache License, Version 2.0.
- *
- ******************************************************************************/
+// =============================================================================
+//    Copyright (c) 2026 Haixing Hu.
+//
+//    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
+// =============================================================================
 use std::io::{
     BufRead,
     Read,
@@ -47,7 +45,8 @@ impl<R> LimitReader<R> {
     ///
     /// # Parameters
     /// - `inner`: Reader to wrap.
-    /// - `limit`: Maximum number of bytes that may be read through this wrapper.
+    /// - `limit`: Maximum number of bytes that may be read through this
+    ///   wrapper.
     ///
     /// # Returns
     /// A new limited reader.
