@@ -1,12 +1,10 @@
-/*******************************************************************************
- *
- *    Copyright (c) 2026 Haixing Hu.
- *
- *    SPDX-License-Identifier: Apache-2.0
- *
- *    Licensed under the Apache License, Version 2.0.
- *
- ******************************************************************************/
+// =============================================================================
+//    Copyright (c) 2026 Haixing Hu.
+//
+//    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
+// =============================================================================
 
 use std::io::{
     Cursor,
@@ -37,7 +35,10 @@ fn test_prelude_imports_extension_and_composition_traits() {
     cursor
         .seek(SeekFrom::Start(1))
         .expect("cursor should seek to test stream size");
-    assert_eq!(6, cursor.stream_size().expect("SeekExt should be in prelude"));
+    assert_eq!(
+        6,
+        cursor.stream_size().expect("SeekExt should be in prelude")
+    );
 
     takes_read_seek(&mut cursor);
 }
