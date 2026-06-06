@@ -136,8 +136,10 @@ impl Streams {
 
     /// Tests whether two readable streams have equal remaining contents.
     ///
-    /// The comparison starts at each reader's current position and consumes
-    /// both streams until a difference or EOF is found.
+    /// The comparison starts at each reader's current position and reads both
+    /// streams in fixed-size chunks. A mismatch stops comparison immediately
+    /// after the differing chunks are read, so each reader may have advanced
+    /// past the first differing byte within that chunk.
     ///
     /// # Parameters
     /// - `left`: First stream.
@@ -156,8 +158,10 @@ impl Streams {
     /// Lexicographically compares the remaining contents of two readable
     /// streams.
     ///
-    /// The comparison starts at each reader's current position and consumes
-    /// both streams until a difference or EOF is found.
+    /// The comparison starts at each reader's current position and reads both
+    /// streams in fixed-size chunks. A mismatch stops comparison immediately
+    /// after the differing chunks are read, so each reader may have advanced
+    /// past the first differing byte within that chunk.
     ///
     /// # Parameters
     /// - `left`: First stream.
