@@ -1,12 +1,10 @@
-/*******************************************************************************
- *
- *    Copyright (c) 2026 Haixing Hu.
- *
- *    SPDX-License-Identifier: Apache-2.0
- *
- *    Licensed under the Apache License, Version 2.0.
- *
- ******************************************************************************/
+// =============================================================================
+//    Copyright (c) 2026 Haixing Hu.
+//
+//    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
+// =============================================================================
 
 use std::io::{
     Result,
@@ -43,7 +41,12 @@ pub trait WriteExt: Write {
     /// The caller must guarantee that `start_index..start_index + count` is a
     /// valid range within `buffer` and that `start_index + count` does not
     /// overflow `usize`.
-    unsafe fn write_unchecked(&mut self, buffer: &[u8], start_index: usize, count: usize) -> Result<usize> {
+    unsafe fn write_unchecked(
+        &mut self,
+        buffer: &[u8],
+        start_index: usize,
+        count: usize,
+    ) -> Result<usize> {
         debug_assert!(
             start_index
                 .checked_add(count)
@@ -52,7 +55,9 @@ pub trait WriteExt: Write {
         );
         // SAFETY: The caller guarantees that the computed pointer and length
         // form a valid subslice of `buffer`.
-        let source = unsafe { core::slice::from_raw_parts(buffer.as_ptr().add(start_index), count) };
+        let source = unsafe {
+            core::slice::from_raw_parts(buffer.as_ptr().add(start_index), count)
+        };
         self.write(source)
     }
 
@@ -61,8 +66,8 @@ pub trait WriteExt: Write {
     ///
     /// This method delegates to [`Write::write_all`] after creating the source
     /// slice with raw pointer arithmetic. It keeps the same short-write,
-    /// [`std::io::ErrorKind::Interrupted`], and [`std::io::ErrorKind::WriteZero`]
-    /// behavior as [`Write::write_all`].
+    /// [`std::io::ErrorKind::Interrupted`], and
+    /// [`std::io::ErrorKind::WriteZero`] behavior as [`Write::write_all`].
     ///
     /// # Parameters
     /// - `buffer`: Source buffer.
@@ -76,7 +81,12 @@ pub trait WriteExt: Write {
     /// The caller must guarantee that `start_index..start_index + count` is a
     /// valid range within `buffer` and that `start_index + count` does not
     /// overflow `usize`.
-    unsafe fn write_all_unchecked(&mut self, buffer: &[u8], start_index: usize, count: usize) -> Result<()> {
+    unsafe fn write_all_unchecked(
+        &mut self,
+        buffer: &[u8],
+        start_index: usize,
+        count: usize,
+    ) -> Result<()> {
         debug_assert!(
             start_index
                 .checked_add(count)
@@ -85,7 +95,9 @@ pub trait WriteExt: Write {
         );
         // SAFETY: The caller guarantees that the computed pointer and length
         // form a valid subslice of `buffer`.
-        let source = unsafe { core::slice::from_raw_parts(buffer.as_ptr().add(start_index), count) };
+        let source = unsafe {
+            core::slice::from_raw_parts(buffer.as_ptr().add(start_index), count)
+        };
         self.write_all(source)
     }
 }

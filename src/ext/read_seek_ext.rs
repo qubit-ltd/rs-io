@@ -1,12 +1,10 @@
-/*******************************************************************************
- *
- *    Copyright (c) 2026 Haixing Hu.
- *
- *    SPDX-License-Identifier: Apache-2.0
- *
- *    Licensed under the Apache License, Version 2.0.
- *
- ******************************************************************************/
+// =============================================================================
+//    Copyright (c) 2026 Haixing Hu.
+//
+//    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
+// =============================================================================
 use std::io::{
     ErrorKind,
     Read,
@@ -26,8 +24,8 @@ pub trait ReadSeekExt: Read + Seek {
     /// Reads from the current position and restores the original position.
     ///
     /// This method has the same partial-EOF semantics as
-    /// [`crate::ReadExt::read_exact_or_eof`], but it leaves the stream positioned
-    /// where it was before the call when restoration succeeds.
+    /// [`crate::ReadExt::read_exact_or_eof`], but it leaves the stream
+    /// positioned where it was before the call when restoration succeeds.
     ///
     /// # Parameters
     /// - `buffer`: Destination buffer to fill.
@@ -59,7 +57,11 @@ pub trait ReadSeekExt: Read + Seek {
     /// Returns an error when reading the current position, seeking to `offset`,
     /// reading bytes, or restoring the original position fails. If restoration
     /// fails, the restoration error is returned.
-    fn read_exact_or_eof_at(&mut self, offset: u64, buffer: &mut [u8]) -> Result<usize>;
+    fn read_exact_or_eof_at(
+        &mut self,
+        offset: u64,
+        buffer: &mut [u8],
+    ) -> Result<usize>;
 }
 
 impl<T> ReadSeekExt for T
@@ -73,7 +75,11 @@ where
     }
 
     #[inline]
-    fn read_exact_or_eof_at(&mut self, offset: u64, buffer: &mut [u8]) -> Result<usize> {
+    fn read_exact_or_eof_at(
+        &mut self,
+        offset: u64,
+        buffer: &mut [u8],
+    ) -> Result<usize> {
         let mut reader = self;
         read_exact_or_eof_at_impl(&mut reader, offset, buffer)
     }
@@ -89,8 +95,12 @@ where
 /// The number of bytes written into `buffer`.
 ///
 /// # Errors
-/// Returns an error when position lookup, reading, or position restoration fails.
-fn peek_exact_or_eof_impl(reader: &mut dyn ReadSeek, buffer: &mut [u8]) -> Result<usize> {
+/// Returns an error when position lookup, reading, or position restoration
+/// fails.
+fn peek_exact_or_eof_impl(
+    reader: &mut dyn ReadSeek,
+    buffer: &mut [u8],
+) -> Result<usize> {
     let position = reader.stream_position()?;
     let read_result = read_exact_or_eof(reader, buffer);
     let restore_result = reader.seek(SeekFrom::Start(position));
@@ -112,8 +122,13 @@ fn peek_exact_or_eof_impl(reader: &mut dyn ReadSeek, buffer: &mut [u8]) -> Resul
 /// The number of bytes written into `buffer`.
 ///
 /// # Errors
-/// Returns an error when position lookup, seeking, reading, or position restoration fails.
-fn read_exact_or_eof_at_impl(reader: &mut dyn ReadSeek, offset: u64, buffer: &mut [u8]) -> Result<usize> {
+/// Returns an error when position lookup, seeking, reading, or position
+/// restoration fails.
+fn read_exact_or_eof_at_impl(
+    reader: &mut dyn ReadSeek,
+    offset: u64,
+    buffer: &mut [u8],
+) -> Result<usize> {
     let position = reader.stream_position()?;
     let read_result = match reader.seek(SeekFrom::Start(offset)) {
         Ok(_) => read_exact_or_eof(reader, buffer),
@@ -138,7 +153,10 @@ fn read_exact_or_eof_at_impl(reader: &mut dyn ReadSeek, offset: u64, buffer: &mu
 ///
 /// # Errors
 /// Returns the first non-interrupted read error reported by `reader`.
-fn read_exact_or_eof(reader: &mut dyn ReadSeek, buffer: &mut [u8]) -> Result<usize> {
+fn read_exact_or_eof(
+    reader: &mut dyn ReadSeek,
+    buffer: &mut [u8],
+) -> Result<usize> {
     let mut total = 0;
     while total < buffer.len() {
         match reader.read(&mut buffer[total..]) {
