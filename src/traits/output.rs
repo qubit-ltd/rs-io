@@ -6,7 +6,10 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{Result, Write};
+use std::io::{
+    Result,
+    Write,
+};
 
 /// Minimal indexed output interface over units.
 ///
@@ -15,7 +18,6 @@ use std::io::{Result, Write};
 /// `input[index..index + count]`, plus an explicit flush operation. The caller
 /// owns range validation so hot paths can avoid repeated slicing and bounds
 /// checks.
-///
 pub trait Output {
     /// The unit type written to this output.
     type Item;
@@ -78,7 +80,9 @@ where
         );
         // SAFETY: The caller guarantees that the range is valid inside
         // `input`.
-        let source = unsafe { core::slice::from_raw_parts(input.as_ptr().add(index), count) };
+        let source = unsafe {
+            core::slice::from_raw_parts(input.as_ptr().add(index), count)
+        };
         self.write(source)
     }
 

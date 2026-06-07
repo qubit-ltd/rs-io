@@ -6,10 +6,21 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{BufRead, Error, ErrorKind, Read, Result, Seek, SeekFrom};
+use std::io::{
+    BufRead,
+    Error,
+    ErrorKind,
+    Read,
+    Result,
+    Seek,
+    SeekFrom,
+};
 
 use crate::buffered::DEFAULT_BUFFER_CAPACITY;
-use crate::{Buffer, Input};
+use crate::{
+    Buffer,
+    Input,
+};
 
 /// Buffered unit input over a wrapped input source.
 ///
@@ -445,7 +456,9 @@ where
             self.discard_buffer();
             if count >= self.buffer.capacity() {
                 // SAFETY: The caller guarantees that the target range is valid.
-                let read = unsafe { self.inner.read_unchecked(output, output_index, count) }?;
+                let read = unsafe {
+                    self.inner.read_unchecked(output, output_index, count)
+                }?;
                 validate_read_count(read, count)?;
                 return Ok(read);
             }
@@ -585,7 +598,9 @@ fn validate_read_count(read: usize, requested: usize) -> Result<()> {
     if read > requested {
         return Err(Error::new(
             ErrorKind::InvalidData,
-            format!("reader reported {read} bytes for a {requested}-byte buffer"),
+            format!(
+                "reader reported {read} bytes for a {requested}-byte buffer"
+            ),
         ));
     }
     Ok(())

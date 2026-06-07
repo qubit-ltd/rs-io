@@ -6,7 +6,10 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{Read, Result};
+use std::io::{
+    Read,
+    Result,
+};
 
 /// Minimal indexed input interface over units.
 ///
@@ -14,7 +17,6 @@ use std::io::{Read, Result};
 /// states that an implementor can read up to `count` units into
 /// `output[index..index + count]`. The caller owns range validation so hot
 /// paths can avoid repeated slicing and bounds checks.
-///
 pub trait Input {
     /// The unit type read from this input.
     type Item;
@@ -70,8 +72,12 @@ where
         );
         // SAFETY: The caller guarantees that the range is valid inside
         // `output`.
-        let target =
-            unsafe { core::slice::from_raw_parts_mut(output.as_mut_ptr().add(index), count) };
+        let target = unsafe {
+            core::slice::from_raw_parts_mut(
+                output.as_mut_ptr().add(index),
+                count,
+            )
+        };
         self.read(target)
     }
 }
