@@ -7,14 +7,15 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![English Document](https://img.shields.io/badge/Document-English-blue.svg)](README.md)
 
-面向 Rust 的字节流缓冲与轻量 `std::io` trait 工具库。
+面向 Rust 的通用 unit 缓冲、字节流缓冲与轻量 `std::io` trait 工具库。
 
 ## 概述
 
 `qubit-io` 提供：
 
-- 面向字节的缓冲原语：`Buffer`、`BufferedByteInput` 和
-  `BufferedByteOutput`；
+- 最小化 indexed I/O trait：`Input` 和 `Output`，并为 `Read`
+  与 `Write` 提供字节实现；
+- 面向 unit 的缓冲原语：`Buffer<T>`、`BufferedInput` 和 `BufferedOutput`；
 - 可作为 trait object 使用的组合 trait，例如 `ReadSeek`、`ReadWrite` 和
   `ReadWriteSeek`；
 - `Read`、`BufRead`、`Seek`、`Read + Seek`、`Write` 和 `Write + Seek` 的常用
@@ -33,8 +34,10 @@ binary scalar、LEB128 和 ZigZag 能力已经不在本 crate 中。缓冲区级
 ## 设计目标
 
 - **只做通用 I/O**：保持本 crate 聚焦可复用的 `std::io` helper。
-- **字节级缓冲**：提供高效 byte buffer，但不嵌入 binary codec、text codec
-  或 record format 逻辑。
+- **Unit-Oriented Core**：为已经完成 range 校验的 hot path 提供低层 indexed
+  input / output 契约。
+- **Format-Agnostic Buffering**：提供高效 unit 与 byte buffer，但不嵌入 binary
+  codec、text codec 或 record format 逻辑。
 - **低层契约显式化**：`Buffer` 与 unchecked range helper 面向 hot path，调用方
   责任必须清楚。
 - **组合 Trait 可对象化**：让常见 trait 组合易于命名和传递。
@@ -44,17 +47,28 @@ binary scalar、LEB128 和 ZigZag 能力已经不在本 crate 中。缓冲区级
 
 ## 特性
 
-### Buffered Byte I/O
+### Indexed I/O
+
+- **`Input`**：带关联类型 `Item` 的最小化 unchecked indexed read 契约，将
+  unit 读入 `output[index..index + count]`；所有 `Read` 值都实现
+  `Input<Item = u8>`。
+- **`Output`**：最小化 unchecked indexed write 契约，从
+  `input[index..index + count]` 写出关联类型 `Item` 的 unit，并提供显式
+  flush；所有 `Write` 值都实现 `Output<Item = u8>`。
+
+### Buffered I/O
 
 - **`Buffer<T>`**：低层 position/limit 存储，维护 readable window 与 spare
   tail capacity。
-- **`BufferedByteInput`**：包装 `Read` 的缓冲字节输入，支持查看 unread window、
-  `BufRead`、按数量 refill、逻辑 seek、`into_parts`，以及针对已验证输出
-  range 的 indexed unchecked read。
-- **`BufferedByteOutput`**：包装 `Write` 的缓冲字节输出，支持 spare window 访问、
-  checked / unchecked advance、显式 flush、不执行 I/O 的 `into_parts`、seek，
-  以及大块写入绕过缓冲区。
-- **`DEFAULT_BUFFER_CAPACITY`**：byte input 与 byte output 共用的默认缓冲容量。
+- **`BufferedInput<I>`**：包装 `Input` 的缓冲 unit 输入，支持查看
+  unread window、按数量 refill、`into_parts`，以及针对已验证输出 range 的 indexed
+  unchecked read。当 `I::Item = u8` 时，它实现 `Read` 和 `BufRead`；当被包装输入
+  支持 `Seek` 时，还实现逻辑 `Seek`。
+- **`BufferedOutput<O>`**：包装 `Output` 的缓冲 unit 输出，支持
+  spare window 访问、checked / unchecked advance、显式 flush、不执行 I/O 的
+  `into_parts`，以及大块写入绕过缓冲区。当 `O::Item = u8` 时，它实现
+  `Write`；当被包装输出支持 `Seek` 时，还实现会先 flush 的 `Seek`。
+- **`DEFAULT_BUFFER_CAPACITY`**：input 与 output 共用的默认缓冲容量。
 
 ### 组合 Trait
 
@@ -106,8 +120,8 @@ use std::io::{
 };
 
 use qubit_io::{
-    BufferedByteInput,
-    BufferedByteOutput,
+    BufferedInput,
+    BufferedOutput,
     ReadExt,
     Streams,
 };
@@ -126,7 +140,7 @@ let copied = Streams::copy_at_most(&mut source, &mut output, 4)?;
 assert_eq!(4, copied);
 assert_eq!(b"payl", output.as_slice());
 
-let mut buffered_input = BufferedByteInput::with_capacity(
+let mut buffered_input = BufferedInput::with_capacity(
     Cursor::new(b"abcdef".to_vec()),
     3,
 );
@@ -137,7 +151,7 @@ unsafe {
 }
 
 let mut buffered_output =
-    BufferedByteOutput::with_capacity(Cursor::new(Vec::<u8>::new()), 4);
+    BufferedOutput::with_capacity(Cursor::new(Vec::<u8>::new()), 4);
 buffered_output.ensure_spare_capacity(3)?;
 buffered_output.spare_buffer_mut()[0..3].copy_from_slice(b"xyz");
 unsafe {
@@ -151,6 +165,13 @@ assert_eq!(b"xyz", cursor.into_inner().as_slice());
 ```
 
 ## API 参考
+
+### Indexed I/O Trait
+
+| Trait | 用途 |
+|-------|------|
+| `Input` | 将 unit 读入调用方已校验的 indexed 输出 range |
+| `Output` | 从调用方已校验的 indexed 输入 range 写出 unit，并 flush pending unit |
 
 ### Trait Alias
 
@@ -167,8 +188,8 @@ assert_eq!(b"xyz", cursor.into_inner().as_slice());
 | 类型 | 用途 |
 |------|------|
 | `Buffer` | 面向 hot path buffering 的低层 position/limit 存储 |
-| `BufferedByteInput` | 包装 `Read` 的缓冲字节输入 |
-| `BufferedByteOutput` | 包装 `Write` 的缓冲字节输出 |
+| `BufferedInput` | 包装 `Input` 的缓冲 unit 输入 |
+| `BufferedOutput` | 包装 `Output` 的缓冲 unit 输出 |
 | `Streams` | 用于复制和比较 stream 的静态 helper |
 | `CountingReader` / `CountingWriter` | 统计成功读取或写入的字节数 |
 | `LimitReader` / `LimitWriter` | 限制 wrapper 可读取或写入的字节数 |
@@ -180,7 +201,7 @@ assert_eq!(b"xyz", cursor.into_inner().as_slice());
 
 | 常量 | 用途 |
 |------|------|
-| `DEFAULT_BUFFER_CAPACITY` | byte input 与 byte output 共用的默认缓冲容量 |
+| `DEFAULT_BUFFER_CAPACITY` | input 与 output 共用的默认缓冲容量 |
 
 ## Crate 拆分
 
@@ -197,10 +218,11 @@ assert_eq!(b"xyz", cursor.into_inner().as_slice());
 大多数 helper 直接操作调用方提供的缓冲区，并委托到底层 `Read`、`Write`
 或 `Seek` 实现。Wrapper 类型不做隐藏分配；是否缓冲以及如何缓冲由调用点显式决定。
 
-`Buffer<T>`、`BufferedByteInput::unread_raw_parts` 与
-`BufferedByteOutput::spare_raw_parts_mut` 是低层 API，面向已经完成 range 校验的
-调用方。它们主要用于 binary/text stream adapter 这类 hot path，在这些场景中避免
-重复 slicing 和 bounds check 有明确价值。通用调用仍应优先使用安全方法。
+`Input::read_unchecked`、`Output::write_unchecked`、`Buffer<T>`、
+`BufferedInput::unread_raw_parts` 与 `BufferedOutput::spare_raw_parts_mut` 是低层
+API，面向已经完成 range 校验的调用方。它们主要用于 binary/text stream adapter
+这类 hot path，在这些场景中避免重复 slicing 和 bounds check 有明确价值。通用调用
+仍应优先使用安全方法。
 
 ## 测试与代码覆盖率
 

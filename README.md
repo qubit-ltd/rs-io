@@ -7,14 +7,17 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Chinese Document](https://img.shields.io/badge/Document-Chinese-blue.svg)](README.zh_CN.md)
 
-Byte-stream buffering and small `std::io` trait utilities for Rust.
+Generic unit buffering, byte-stream buffering, and small `std::io` trait
+utilities for Rust.
 
 ## Overview
 
 `qubit-io` provides:
 
-- byte-oriented buffering primitives: `Buffer`, `BufferedByteInput`, and
-  `BufferedByteOutput`;
+- minimal indexed I/O traits: `Input` and `Output`, with blanket
+  byte implementations for `Read` and `Write`;
+- unit-oriented buffering primitives: `Buffer<T>`, `BufferedInput`, and
+  `BufferedOutput`;
 - object-safe composition traits such as `ReadSeek`, `ReadWrite`, and
   `ReadWriteSeek`;
 - extension traits for recurring `Read`, `BufRead`, `Seek`, `Read + Seek`,
@@ -33,8 +36,10 @@ reference documentation is available on [docs.rs](https://docs.rs/qubit-io).
 ## Design Goals
 
 - **Generic I/O Only**: keep this crate focused on reusable `std::io` helpers.
-- **Byte-Level Buffering**: provide efficient byte buffers without embedding
-  binary codec, text codec, or record-format knowledge.
+- **Unit-Oriented Core**: provide low-level indexed input and output contracts
+  for hot paths that have already validated ranges.
+- **Format-Agnostic Buffering**: provide efficient unit and byte buffers
+  without embedding binary codec, text codec, or record-format knowledge.
 - **Explicit Low-Level Contracts**: expose hot-path APIs such as `Buffer` and
   unchecked range helpers with clear caller responsibilities.
 - **Object-Safe Composition**: make common trait combinations easy to name and
@@ -48,18 +53,31 @@ reference documentation is available on [docs.rs](https://docs.rs/qubit-io).
 
 ## Features
 
-### Buffered Byte I/O
+### Indexed I/O
+
+- **`Input`**: minimal unchecked indexed read contract with an associated
+  `Item` type for copying units into `output[index..index + count]`; every
+  `Read` value implements `Input<Item = u8>`.
+- **`Output`**: minimal unchecked indexed write contract for copying
+  units of its associated `Item` type from `input[index..index + count]` plus
+  explicit flushing; every `Write` value implements `Output<Item = u8>`.
+
+### Buffered I/O
 
 - **`Buffer<T>`**: low-level position/limit storage with a readable window and
   spare tail capacity.
-- **`BufferedByteInput`**: buffered byte input over `Read`, with unread-window
-  inspection, `BufRead` support, count-aware refilling, logical seeking,
-  `into_parts`, and indexed unchecked reads for validated output ranges.
-- **`BufferedByteOutput`**: buffered byte output over `Write`, with spare-window
-  access, checked and unchecked advancing, explicit flushing, non-flushing
-  `into_parts`, seeking, and large-write bypass paths.
-- **`DEFAULT_BUFFER_CAPACITY`**: shared default capacity for byte input and
-  output buffering.
+- **`BufferedInput<I>`**: buffered unit input over `Input`,
+  with unread-window inspection, count-aware refilling, `into_parts`, and
+  indexed unchecked reads for validated output ranges. When `I::Item = u8`, it
+  implements `Read` and `BufRead`, plus logical `Seek` when the wrapped input
+  supports `Seek`.
+- **`BufferedOutput<O>`**: buffered unit output over `Output`,
+  with spare-window access, checked and unchecked advancing, explicit
+  flushing, non-flushing `into_parts`, and large-write bypass paths. When
+  `O::Item = u8`, it implements `Write`, plus flushing `Seek` when the wrapped
+  output supports `Seek`.
+- **`DEFAULT_BUFFER_CAPACITY`**: shared default capacity for input and output
+  buffering.
 
 ### Composition Traits
 
@@ -112,8 +130,8 @@ use std::io::{
 };
 
 use qubit_io::{
-    BufferedByteInput,
-    BufferedByteOutput,
+    BufferedInput,
+    BufferedOutput,
     ReadExt,
     Streams,
 };
@@ -132,7 +150,7 @@ let copied = Streams::copy_at_most(&mut source, &mut output, 4)?;
 assert_eq!(4, copied);
 assert_eq!(b"payl", output.as_slice());
 
-let mut buffered_input = BufferedByteInput::with_capacity(
+let mut buffered_input = BufferedInput::with_capacity(
     Cursor::new(b"abcdef".to_vec()),
     3,
 );
@@ -143,7 +161,7 @@ unsafe {
 }
 
 let mut buffered_output =
-    BufferedByteOutput::with_capacity(Cursor::new(Vec::<u8>::new()), 4);
+    BufferedOutput::with_capacity(Cursor::new(Vec::<u8>::new()), 4);
 buffered_output.ensure_spare_capacity(3)?;
 buffered_output.spare_buffer_mut()[0..3].copy_from_slice(b"xyz");
 unsafe {
@@ -157,6 +175,13 @@ assert_eq!(b"xyz", cursor.into_inner().as_slice());
 ```
 
 ## API Reference
+
+### Indexed I/O Traits
+
+| Trait | Purpose |
+|-------|---------|
+| `Input` | Reads units into caller-validated indexed output ranges |
+| `Output` | Writes units from caller-validated indexed input ranges and flushes pending units |
 
 ### Trait Aliases
 
@@ -173,8 +198,8 @@ assert_eq!(b"xyz", cursor.into_inner().as_slice());
 | Type | Purpose |
 |------|---------|
 | `Buffer` | Low-level position/limit storage for hot-path buffering |
-| `BufferedByteInput` | Buffered byte input over a `Read` source |
-| `BufferedByteOutput` | Buffered byte output over a `Write` sink |
+| `BufferedInput` | Buffered unit input over an `Input` source |
+| `BufferedOutput` | Buffered unit output over an `Output` sink |
 | `Streams` | Static helpers for copying and comparing streams |
 | `CountingReader` / `CountingWriter` | Count successful bytes read or written |
 | `LimitReader` / `LimitWriter` | Cap bytes read or written through a wrapper |
@@ -186,7 +211,7 @@ assert_eq!(b"xyz", cursor.into_inner().as_slice());
 
 | Constant | Purpose |
 |----------|---------|
-| `DEFAULT_BUFFER_CAPACITY` | Shared default capacity for buffered byte input and output |
+| `DEFAULT_BUFFER_CAPACITY` | Shared default capacity for buffered input and output |
 
 ## Crate Split
 
@@ -204,11 +229,12 @@ Most helpers operate directly on caller-provided buffers and delegate to the
 underlying `Read`, `Write`, or `Seek` implementation. Wrapper types avoid hidden
 allocation; any buffering policy remains explicit at the call site.
 
-`Buffer<T>`, `BufferedByteInput::unread_raw_parts`, and
-`BufferedByteOutput::spare_raw_parts_mut` are low-level APIs for callers that
-have already validated ranges. They are intended for hot paths such as binary
-and text stream adapters where avoiding repeated slicing and bounds checks
-matters. Safe wrapper methods remain available for general-purpose use.
+`Input::read_unchecked`, `Output::write_unchecked`, `Buffer<T>`,
+`BufferedInput::unread_raw_parts`, and `BufferedOutput::spare_raw_parts_mut`
+are low-level APIs for callers that have already validated ranges. They are
+intended for hot paths such as binary and text stream adapters where avoiding
+repeated slicing and bounds checks matters. Safe wrapper methods remain
+available for general-purpose use.
 
 ## Testing & Code Coverage
 
