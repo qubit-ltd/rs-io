@@ -7,18 +7,130 @@
 // =============================================================================
 
 use std::collections::VecDeque;
-use std::io::{
-    BufRead,
-    Cursor,
-    Error,
-    ErrorKind,
-    Read,
-    Seek,
-    SeekFrom,
-};
+use std::io::{BufRead, Cursor, Error, ErrorKind, Read, Seek, SeekFrom};
 
-use qubit_io::buffered::BufferedByteInput;
+use qubit_io::{BufferedInput, Input};
 
+struct U16Input {
+    chunks: VecDeque<Vec<u16>>,
+}
+
+impl U16Input {
+    fn new(chunks: Vec<Vec<u16>>) -> Self {
+        Self {
+            chunks: VecDeque::from(chunks),
+        }
+    }
+}
+
+impl Input for U16Input {
+    type Item = u16;
+
+    unsafe fn read_unchecked(
+        &mut self,
+        output: &mut [u16],
+        index: usize,
+        count: usize,
+    ) -> std::io::Result<usize> {
+        let Some(chunk) = self.chunks.pop_front() else {
+            return Ok(0);
+        };
+        let read = count.min(chunk.len());
+        output[index..index + read].copy_from_slice(&chunk[..read]);
+        if read < chunk.len() {
+            self.chunks.push_front(chunk[read..].to_vec());
+        }
+        Ok(read)
+    }
+}
+
+struct OverreportingInput;
+
+impl Input for OverreportingInput {
+    type Item = u16;
+
+    unsafe fn read_unchecked(
+        &mut self,
+        _output: &mut [u16],
+        _index: usize,
+        count: usize,
+    ) -> std::io::Result<usize> {
+        Ok(count + 1)
+    }
+}
+
+#[test]
+fn test_buffered_input_reads_generic_units() {
+    let inner = U16Input::new(vec![vec![1, 2, 3], vec![4, 5]]);
+    let mut input = BufferedInput::with_capacity(inner, 4);
+
+    assert!(input.fill_more().expect("initial refill should succeed"));
+    assert_eq!(&[1, 2, 3], input.unread_slice());
+    input.consume(1);
+
+    assert!(input.fill_until(4).expect("refill should append units"));
+    assert_eq!(&[2, 3, 4, 5], input.unread_slice());
+
+    let mut output = [0_u16; 3];
+    // SAFETY: `output[0..3]` is a valid destination range.
+    let read = unsafe {
+        input
+            .read_into_unchecked(&mut output, 0, 3)
+            .expect("buffered read should succeed")
+    };
+
+    assert_eq!(3, read);
+    assert_eq!([2, 3, 4], output);
+    assert_eq!(&[5], input.unread_slice());
+}
+
+#[test]
+fn test_buffered_input_adapts_std_read_as_u8_input() {
+    let cursor = Cursor::new(b"abcdef".to_vec());
+    let mut input = BufferedInput::with_capacity(cursor, 4);
+    let mut output = [0_u8; 5];
+
+    // SAFETY: `output[1..4]` is a valid destination range.
+    let read = unsafe {
+        input
+            .read_into_unchecked(&mut output, 1, 3)
+            .expect("std reader should be an Input<Item = u8>")
+    };
+
+    assert_eq!(3, read);
+    assert_eq!([0, b'a', b'b', b'c', 0], output);
+}
+
+#[test]
+fn test_buffered_input_rejects_overreported_unit_count() {
+    let mut input = BufferedInput::with_capacity(OverreportingInput, 4);
+
+    let error = input
+        .fill_more()
+        .expect_err("overreported read count should fail");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+}
+
+#[test]
+fn test_input_u8_blanket_impl_reuses_std_read_errors() {
+    struct FailingReader;
+
+    impl std::io::Read for FailingReader {
+        fn read(&mut self, _output: &mut [u8]) -> std::io::Result<usize> {
+            Err(Error::other("read failed"))
+        }
+    }
+
+    let mut reader = FailingReader;
+    let mut output = [0_u8; 1];
+
+    // SAFETY: The full output range is valid.
+    let error = unsafe { Input::read_unchecked(&mut reader, &mut output, 0, 1) }
+        .expect_err("std read error should be propagated");
+
+    assert_eq!(ErrorKind::Other, error.kind());
+}
 enum ReadStep {
     Data(Vec<u8>),
     Interrupted,
@@ -50,9 +162,7 @@ impl Read for ScriptedReader {
                 }
                 Ok(count)
             }
-            ReadStep::Interrupted => {
-                Err(Error::new(ErrorKind::Interrupted, "interrupted"))
-            }
+            ReadStep::Interrupted => Err(Error::new(ErrorKind::Interrupted, "interrupted")),
             ReadStep::Error(kind, message) => Err(Error::new(kind, message)),
             ReadStep::Eof => Ok(0),
         }
@@ -91,7 +201,7 @@ impl Seek for FailingSeekReader {
 
 #[test]
 fn test_new_and_accessors_expose_inner_reader() {
-    let mut input = BufferedByteInput::new(Cursor::new(b"abc".to_vec()));
+    let mut input = BufferedInput::new(Cursor::new(b"abc".to_vec()));
 
     assert_eq!(0, input.available());
     assert_eq!(0, input.inner().position());
@@ -106,7 +216,7 @@ fn test_new_and_accessors_expose_inner_reader() {
 #[test]
 fn test_capacity_returns_internal_buffer_capacity() {
     let cursor = Cursor::new(b"abc".to_vec());
-    let input = BufferedByteInput::with_capacity(cursor, 4);
+    let input = BufferedInput::with_capacity(cursor, 4);
 
     assert_eq!(4, input.capacity());
 }
@@ -115,7 +225,7 @@ fn test_capacity_returns_internal_buffer_capacity() {
 #[should_panic(expected = "cannot consume beyond buffered input")]
 fn test_consume_panics_when_count_exceeds_available() {
     let cursor = Cursor::new(b"abc".to_vec());
-    let mut input = BufferedByteInput::with_capacity(cursor, 4);
+    let mut input = BufferedInput::with_capacity(cursor, 4);
 
     input.consume(1);
 }
@@ -123,7 +233,7 @@ fn test_consume_panics_when_count_exceeds_available() {
 #[test]
 fn test_consume_unchecked_advances_without_bounds_check() {
     let cursor = Cursor::new(b"abcd".to_vec());
-    let mut input = BufferedByteInput::with_capacity(cursor, 4);
+    let mut input = BufferedInput::with_capacity(cursor, 4);
     assert!(input.fill_more().expect("initial refill should succeed"));
 
     // SAFETY: The buffer has four readable bytes, so consuming two is valid.
@@ -137,7 +247,7 @@ fn test_consume_unchecked_advances_without_bounds_check() {
 #[test]
 fn test_into_parts_returns_inner_and_unread_bytes() {
     let cursor = Cursor::new(b"abcdef".to_vec());
-    let mut input = BufferedByteInput::with_capacity(cursor, 4);
+    let mut input = BufferedInput::with_capacity(cursor, 4);
     assert!(input.fill_more().expect("initial refill should succeed"));
     input.consume(1);
 
@@ -150,7 +260,7 @@ fn test_into_parts_returns_inner_and_unread_bytes() {
 #[test]
 fn test_unread_raw_parts_exposes_backing_buffer_index_and_count() {
     let cursor = Cursor::new(b"abcdef".to_vec());
-    let mut input = BufferedByteInput::with_capacity(cursor, 4);
+    let mut input = BufferedInput::with_capacity(cursor, 4);
     assert!(input.fill_more().expect("initial refill should succeed"));
     input.consume(1);
 
@@ -164,7 +274,7 @@ fn test_unread_raw_parts_exposes_backing_buffer_index_and_count() {
 #[test]
 fn test_buf_read_fill_buf_exposes_unread_bytes() {
     let cursor = Cursor::new(b"abcdef".to_vec());
-    let mut input = BufferedByteInput::with_capacity(cursor, 4);
+    let mut input = BufferedInput::with_capacity(cursor, 4);
 
     assert_eq!(
         b"abcd",
@@ -191,7 +301,7 @@ fn test_buf_read_fill_buf_exposes_unread_bytes() {
 #[test]
 fn test_fill_more_preserves_unread_tail_and_appends_new_bytes() {
     let cursor = Cursor::new(b"abcdef".to_vec());
-    let mut input = BufferedByteInput::with_capacity(cursor, 4);
+    let mut input = BufferedInput::with_capacity(cursor, 4);
 
     assert!(input.fill_more().expect("initial refill should succeed"));
     assert_eq!(b"abcd", input.unread_slice());
@@ -209,14 +319,14 @@ fn test_fill_until_buffers_requested_available_bytes() {
         ReadStep::Data(b"abc".to_vec()),
         ReadStep::Data(b"de".to_vec()),
     ]);
-    let mut input = BufferedByteInput::with_capacity(reader, 4);
+    let mut input = BufferedInput::with_capacity(reader, 4);
     assert!(input.fill_more().expect("initial refill should succeed"));
     input.consume(1);
 
     assert!(
-        input.fill_until(4).expect(
-            "fill_until should read until requested bytes are buffered"
-        )
+        input
+            .fill_until(4)
+            .expect("fill_until should read until requested bytes are buffered")
     );
 
     assert_eq!(b"bcde", input.unread_slice());
@@ -224,11 +334,8 @@ fn test_fill_until_buffers_requested_available_bytes() {
 
 #[test]
 fn test_fill_until_returns_false_when_eof_prevents_requested_bytes() {
-    let reader = ScriptedReader::new(vec![
-        ReadStep::Data(b"ab".to_vec()),
-        ReadStep::Eof,
-    ]);
-    let mut input = BufferedByteInput::with_capacity(reader, 4);
+    let reader = ScriptedReader::new(vec![ReadStep::Data(b"ab".to_vec()), ReadStep::Eof]);
+    let mut input = BufferedInput::with_capacity(reader, 4);
 
     assert!(
         !input
@@ -242,7 +349,7 @@ fn test_fill_until_returns_false_when_eof_prevents_requested_bytes() {
 #[test]
 fn test_fill_until_rejects_count_exceeding_capacity() {
     let cursor = Cursor::new(b"abc".to_vec());
-    let mut input = BufferedByteInput::with_capacity(cursor, 4);
+    let mut input = BufferedInput::with_capacity(cursor, 4);
 
     let error = input
         .fill_until(5)
@@ -253,11 +360,8 @@ fn test_fill_until_rejects_count_exceeding_capacity() {
 
 #[test]
 fn test_ensure_available_returns_unexpected_eof_and_consumes_partial_bytes() {
-    let reader = ScriptedReader::new(vec![
-        ReadStep::Data(b"ab".to_vec()),
-        ReadStep::Eof,
-    ]);
-    let mut input = BufferedByteInput::with_capacity(reader, 4);
+    let reader = ScriptedReader::new(vec![ReadStep::Data(b"ab".to_vec()), ReadStep::Eof]);
+    let mut input = BufferedInput::with_capacity(reader, 4);
 
     let error = input
         .ensure_available(3)
@@ -270,7 +374,7 @@ fn test_ensure_available_returns_unexpected_eof_and_consumes_partial_bytes() {
 #[test]
 fn test_ensure_available_succeeds_when_requested_bytes_are_buffered() {
     let cursor = Cursor::new(b"abcd".to_vec());
-    let mut input = BufferedByteInput::with_capacity(cursor, 4);
+    let mut input = BufferedInput::with_capacity(cursor, 4);
 
     input
         .ensure_available(3)
@@ -282,7 +386,7 @@ fn test_ensure_available_succeeds_when_requested_bytes_are_buffered() {
 #[test]
 fn test_fill_more_returns_false_at_eof() {
     let cursor = Cursor::new(Vec::new());
-    let mut input = BufferedByteInput::with_capacity(cursor, 4);
+    let mut input = BufferedInput::with_capacity(cursor, 4);
 
     assert!(!input.fill_more().expect("EOF refill should succeed"));
     assert_eq!(0, input.available());
@@ -291,7 +395,7 @@ fn test_fill_more_returns_false_at_eof() {
 #[test]
 fn test_buf_read_fill_buf_returns_empty_slice_at_eof() {
     let cursor = Cursor::new(Vec::new());
-    let mut input = BufferedByteInput::with_capacity(cursor, 4);
+    let mut input = BufferedInput::with_capacity(cursor, 4);
 
     assert_eq!(
         b"",
@@ -301,11 +405,8 @@ fn test_buf_read_fill_buf_returns_empty_slice_at_eof() {
 
 #[test]
 fn test_fill_more_retries_interrupted_reads() {
-    let reader = ScriptedReader::new(vec![
-        ReadStep::Interrupted,
-        ReadStep::Data(b"ab".to_vec()),
-    ]);
-    let mut input = BufferedByteInput::with_capacity(reader, 4);
+    let reader = ScriptedReader::new(vec![ReadStep::Interrupted, ReadStep::Data(b"ab".to_vec())]);
+    let mut input = BufferedInput::with_capacity(reader, 4);
 
     assert!(
         input
@@ -321,7 +422,7 @@ fn test_fill_more_appends_when_tail_capacity_remains() {
         ReadStep::Data(b"ab".to_vec()),
         ReadStep::Data(b"cd".to_vec()),
     ]);
-    let mut input = BufferedByteInput::with_capacity(reader, 4);
+    let mut input = BufferedInput::with_capacity(reader, 4);
     assert!(input.fill_more().expect("initial refill should succeed"));
     input.consume(1);
 
@@ -336,7 +437,7 @@ fn test_fill_more_returns_non_interrupted_error() {
         ErrorKind::PermissionDenied,
         "read failed",
     )]);
-    let mut input = BufferedByteInput::with_capacity(reader, 4);
+    let mut input = BufferedInput::with_capacity(reader, 4);
 
     let error = input
         .fill_more()
@@ -349,7 +450,7 @@ fn test_fill_more_returns_non_interrupted_error() {
 #[test]
 fn test_read_forwards_through_buffered_input() {
     let cursor = Cursor::new(b"abcdef".to_vec());
-    let mut input = BufferedByteInput::with_capacity(cursor, 4);
+    let mut input = BufferedInput::with_capacity(cursor, 4);
     assert!(input.fill_more().expect("initial refill should succeed"));
     input.consume(1);
 
@@ -365,7 +466,7 @@ fn test_read_forwards_through_buffered_input() {
 #[test]
 fn test_read_into_unchecked_writes_at_output_index_and_count() {
     let cursor = Cursor::new(b"abcdef".to_vec());
-    let mut input = BufferedByteInput::with_capacity(cursor, 4);
+    let mut input = BufferedInput::with_capacity(cursor, 4);
     assert!(input.fill_more().expect("initial refill should succeed"));
     input.consume(1);
     let mut output = [b'.'; 6];
@@ -384,7 +485,7 @@ fn test_read_into_unchecked_writes_at_output_index_and_count() {
 
 #[test]
 fn test_read_empty_output_does_not_read() {
-    let mut input = BufferedByteInput::with_capacity(PanicOnRead, 4);
+    let mut input = BufferedInput::with_capacity(PanicOnRead, 4);
     let mut output = [];
 
     let count = input
@@ -397,7 +498,7 @@ fn test_read_empty_output_does_not_read() {
 #[test]
 fn test_read_delegates_large_empty_buffer_read() {
     let cursor = Cursor::new(b"abcdef".to_vec());
-    let mut input = BufferedByteInput::with_capacity(cursor, 4);
+    let mut input = BufferedInput::with_capacity(cursor, 4);
     let mut output = [0_u8; 6];
 
     let count = input
@@ -411,7 +512,7 @@ fn test_read_delegates_large_empty_buffer_read() {
 #[test]
 fn test_read_delegated_large_empty_buffer_returns_zero_at_eof() {
     let cursor = Cursor::new(Vec::new());
-    let mut input = BufferedByteInput::with_capacity(cursor, 4);
+    let mut input = BufferedInput::with_capacity(cursor, 4);
     let mut output = [1_u8; 4];
 
     let count = input
@@ -425,7 +526,7 @@ fn test_read_delegated_large_empty_buffer_returns_zero_at_eof() {
 #[test]
 fn test_read_refills_small_empty_buffer_read() {
     let cursor = Cursor::new(b"abcdef".to_vec());
-    let mut input = BufferedByteInput::with_capacity(cursor, 4);
+    let mut input = BufferedInput::with_capacity(cursor, 4);
     let mut output = [0_u8; 2];
 
     let count = input
@@ -440,7 +541,7 @@ fn test_read_refills_small_empty_buffer_read() {
 #[test]
 fn test_read_returns_zero_when_small_read_reaches_eof() {
     let cursor = Cursor::new(Vec::new());
-    let mut input = BufferedByteInput::with_capacity(cursor, 4);
+    let mut input = BufferedInput::with_capacity(cursor, 4);
     let mut output = [0_u8; 2];
 
     let count = input
@@ -456,7 +557,7 @@ fn test_read_returns_refill_error() {
         ErrorKind::PermissionDenied,
         "refill failed",
     )]);
-    let mut input = BufferedByteInput::with_capacity(reader, 4);
+    let mut input = BufferedInput::with_capacity(reader, 4);
     let mut output = [0_u8; 2];
 
     let error = input
@@ -469,7 +570,7 @@ fn test_read_returns_refill_error() {
 
 #[test]
 fn test_fill_more_rejects_invalid_read_count() {
-    let mut input = BufferedByteInput::with_capacity(OverreportingReader, 4);
+    let mut input = BufferedInput::with_capacity(OverreportingReader, 4);
 
     let error = input
         .fill_more()
@@ -480,7 +581,7 @@ fn test_fill_more_rejects_invalid_read_count() {
 
 #[test]
 fn test_read_rejects_invalid_delegated_read_count() {
-    let mut input = BufferedByteInput::with_capacity(OverreportingReader, 4);
+    let mut input = BufferedInput::with_capacity(OverreportingReader, 4);
     let mut output = [0_u8; 4];
 
     let error = input
@@ -493,7 +594,7 @@ fn test_read_rejects_invalid_delegated_read_count() {
 #[test]
 fn test_seek_current_accounts_for_prefetched_bytes() {
     let cursor = Cursor::new(b"abcdef".to_vec());
-    let mut input = BufferedByteInput::with_capacity(cursor, 4);
+    let mut input = BufferedInput::with_capacity(cursor, 4);
     assert!(input.fill_more().expect("initial refill should succeed"));
     input.consume(1);
 
@@ -507,7 +608,7 @@ fn test_seek_current_accounts_for_prefetched_bytes() {
 #[test]
 fn test_seek_rejects_current_offset_underflow() {
     let cursor = Cursor::new(b"abcdef".to_vec());
-    let mut input = BufferedByteInput::with_capacity(cursor, 4);
+    let mut input = BufferedInput::with_capacity(cursor, 4);
     assert!(input.fill_more().expect("initial refill should succeed"));
 
     let error = input
@@ -520,7 +621,7 @@ fn test_seek_rejects_current_offset_underflow() {
 #[test]
 fn test_seek_accepts_absolute_position_and_discards_buffer() {
     let cursor = Cursor::new(b"abcdef".to_vec());
-    let mut input = BufferedByteInput::with_capacity(cursor, 4);
+    let mut input = BufferedInput::with_capacity(cursor, 4);
     assert!(input.fill_more().expect("initial refill should succeed"));
 
     let position = input
@@ -538,7 +639,7 @@ fn test_seek_accepts_absolute_position_and_discards_buffer() {
 
 #[test]
 fn test_seek_returns_underlying_seek_error() {
-    let mut input = BufferedByteInput::with_capacity(FailingSeekReader, 4);
+    let mut input = BufferedInput::with_capacity(FailingSeekReader, 4);
 
     let error = input
         .seek(SeekFrom::Start(0))
