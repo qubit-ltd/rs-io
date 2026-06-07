@@ -92,6 +92,14 @@ fn test_new_and_inner_mut_expose_writer() {
 }
 
 #[test]
+fn test_capacity_returns_internal_buffer_capacity() {
+    let output =
+        BufferedByteOutput::with_capacity(Cursor::new(Vec::<u8>::new()), 4);
+
+    assert_eq!(4, output.capacity());
+}
+
+#[test]
 #[should_panic(expected = "cannot advance beyond spare output buffer")]
 fn test_advance_panics_when_count_exceeds_spare_capacity() {
     let cursor = Cursor::new(Vec::<u8>::new());
@@ -116,6 +124,22 @@ fn test_spare_buffer_mut_and_advance_append_to_buffer() {
 
     let cursor = output.into_inner().expect("flush should succeed");
     assert_eq!(b"abcd", cursor.into_inner().as_slice());
+}
+
+#[test]
+fn test_advance_unchecked_marks_spare_bytes_as_written() {
+    let cursor = Cursor::new(Vec::new());
+    let mut output = BufferedByteOutput::with_capacity(cursor, 4);
+
+    output.spare_buffer_mut()[0..2].copy_from_slice(b"ab");
+    // SAFETY: Two bytes were initialized in the spare buffer, and the spare
+    // capacity is four bytes.
+    unsafe {
+        output.advance_unchecked(2);
+    }
+
+    let cursor = output.into_inner().expect("flush should succeed");
+    assert_eq!(b"ab", cursor.into_inner().as_slice());
 }
 
 #[test]

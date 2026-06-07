@@ -17,7 +17,7 @@ use std::io::{
 
 use crate::Buffer;
 use crate::WriteExt;
-use crate::buffered::buffered_byte_input::DEFAULT_BUFFER_CAPACITY;
+use crate::buffered::DEFAULT_BUFFER_CAPACITY;
 
 /// Buffered byte output over a wrapped writer.
 ///
@@ -25,6 +25,12 @@ use crate::buffered::buffered_byte_input::DEFAULT_BUFFER_CAPACITY;
 /// small byte writes can be accumulated before they are written to the I/O
 /// target. Large writes may bypass the buffer after pending buffered bytes
 /// have been flushed.
+///
+/// `BufferedByteOutput` is deliberately byte-oriented. It performs no binary
+/// encoding, text encoding, or record framing. Higher-level writers can either
+/// use the standard [`Write`] implementation or write directly into
+/// [`Self::spare_buffer_mut`] and then call [`Self::advance`] or
+/// [`Self::advance_unchecked`] after validating the range they initialized.
 #[derive(Debug)]
 pub struct BufferedByteOutput<W> {
     inner: W,
@@ -43,6 +49,7 @@ impl<W> BufferedByteOutput<W> {
     ///
     /// A new buffered byte output using `DEFAULT_BUFFER_CAPACITY`.
     #[inline(always)]
+    #[must_use]
     pub fn new(inner: W) -> Self {
         Self::with_capacity(inner, DEFAULT_BUFFER_CAPACITY)
     }
@@ -60,6 +67,7 @@ impl<W> BufferedByteOutput<W> {
     /// A new buffered byte output whose actual buffer capacity is
     /// `capacity.max(1)`.
     #[inline(always)]
+    #[must_use]
     pub fn with_capacity(inner: W, capacity: usize) -> Self {
         Self {
             inner,
@@ -92,6 +100,17 @@ impl<W> BufferedByteOutput<W> {
         &mut self.inner
     }
 
+    /// Returns the internal buffer capacity.
+    ///
+    /// # Returns
+    ///
+    /// The total number of bytes that can be held by the internal buffer.
+    #[inline(always)]
+    #[must_use]
+    pub fn capacity(&self) -> usize {
+        self.buffer.capacity()
+    }
+
     /// Returns the unused capacity in the internal buffer.
     ///
     /// # Returns
@@ -99,6 +118,7 @@ impl<W> BufferedByteOutput<W> {
     /// The number of bytes that can still be appended to the internal buffer
     /// before it must be flushed.
     #[inline(always)]
+    #[must_use]
     pub fn spare_capacity(&self) -> usize {
         self.buffer.spare_capacity()
     }
@@ -134,6 +154,26 @@ impl<W> BufferedByteOutput<W> {
             "cannot advance beyond spare output buffer"
         );
         // SAFETY: The assertion proves that `count` is within spare capacity.
+        unsafe {
+            self.buffer.advance_unchecked(count);
+        }
+    }
+
+    /// Marks spare bytes as written without checking bounds.
+    ///
+    /// # Parameters
+    ///
+    /// * `count` - Number of initialized spare bytes to make pending for
+    ///   output.
+    ///
+    /// # Safety
+    ///
+    /// The caller must guarantee that `count <= self.spare_capacity()` and
+    /// that the corresponding bytes returned by [`Self::spare_buffer_mut`]
+    /// have been initialized.
+    #[inline(always)]
+    pub unsafe fn advance_unchecked(&mut self, count: usize) {
+        // SAFETY: The caller guarantees that `count` is within spare capacity.
         unsafe {
             self.buffer.advance_unchecked(count);
         }

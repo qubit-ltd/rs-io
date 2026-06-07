@@ -8,12 +8,45 @@
 
 use std::ptr;
 
-/// A contiguous buffer with a readable window and spare tail capacity.
+/// Low-level contiguous storage with a readable window and spare tail capacity.
 ///
 /// `Buffer` stores initialized values and tracks a readable window as
 /// `data[position..limit]`. Values before `position` are considered consumed,
 /// and values after `limit` are spare capacity that callers may fill before
 /// advancing the limit.
+///
+/// This type is intentionally a low-level, hot-path API. It exposes the full
+/// backing storage through [`Self::data`] and [`Self::data_mut`] so
+/// higher-level buffering code can avoid repeated slicing and bounds checks.
+/// Callers that mutate the backing storage directly must preserve the `position
+/// <= limit <= capacity` invariant and must only make initialized spare
+/// elements readable by calling [`Self::advance`] or
+/// [`Self::advance_unchecked`].
+///
+/// The unchecked methods are for code that has already validated ranges at a
+/// higher level. They keep debug assertions for development builds, but safe
+/// callers should use [`Self::consume`], [`Self::advance`], and checked slice
+/// operations instead.
+///
+/// # Window model
+///
+/// - `data[..position]` contains consumed elements.
+/// - `data[position..limit]` contains readable elements.
+/// - `data[limit..capacity]` is spare initialized storage.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_io::Buffer;
+///
+/// let mut buffer = Buffer::<u8>::with_capacity(4);
+/// buffer.data_mut()[0..2].copy_from_slice(b"ab");
+/// buffer.advance(2);
+///
+/// assert_eq!(b"ab", &buffer.data()[buffer.position()..buffer.limit()]);
+/// buffer.consume(1);
+/// assert_eq!(b"b", &buffer.data()[buffer.position()..buffer.limit()]);
+/// ```
 #[derive(Clone, Debug)]
 pub struct Buffer<T>
 where

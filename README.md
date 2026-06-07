@@ -7,12 +7,14 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Chinese Document](https://img.shields.io/badge/Document-Chinese-blue.svg)](README.zh_CN.md)
 
-Small `std::io` trait utilities for Rust.
+Byte-stream buffering and small `std::io` trait utilities for Rust.
 
 ## Overview
 
 `qubit-io` provides:
 
+- byte-oriented buffering primitives: `Buffer`, `BufferedByteInput`, and
+  `BufferedByteOutput`;
 - object-safe composition traits such as `ReadSeek`, `ReadWrite`, and
   `ReadWriteSeek`;
 - extension traits for recurring `Read`, `BufRead`, `Seek`, `Read + Seek`,
@@ -31,6 +33,10 @@ reference documentation is available on [docs.rs](https://docs.rs/qubit-io).
 ## Design Goals
 
 - **Generic I/O Only**: keep this crate focused on reusable `std::io` helpers.
+- **Byte-Level Buffering**: provide efficient byte buffers without embedding
+  binary codec, text codec, or record-format knowledge.
+- **Explicit Low-Level Contracts**: expose hot-path APIs such as `Buffer` and
+  unchecked range helpers with clear caller responsibilities.
 - **Object-Safe Composition**: make common trait combinations easy to name and
   pass around.
 - **Predictable Extension Traits**: provide recurring read, write, seek, and
@@ -41,6 +47,19 @@ reference documentation is available on [docs.rs](https://docs.rs/qubit-io).
   dependencies.
 
 ## Features
+
+### Buffered Byte I/O
+
+- **`Buffer<T>`**: low-level position/limit storage with a readable window and
+  spare tail capacity.
+- **`BufferedByteInput`**: buffered byte input over `Read`, with unread-window
+  inspection, count-aware refilling, logical seeking, and indexed unchecked
+  reads for validated output ranges.
+- **`BufferedByteOutput`**: buffered byte output over `Write`, with spare-window
+  access, checked and unchecked advancing, flushing, seeking, and large-write
+  bypass paths.
+- **`DEFAULT_BUFFER_CAPACITY`**: shared default capacity for byte input and
+  output buffering.
 
 ### Composition Traits
 
@@ -90,6 +109,8 @@ qubit-io = "0.6"
 use std::io::Cursor;
 
 use qubit_io::{
+    BufferedByteInput,
+    BufferedByteOutput,
     ReadExt,
     Streams,
 };
@@ -107,6 +128,26 @@ let copied = Streams::copy_at_most(&mut source, &mut output, 4)?;
 
 assert_eq!(4, copied);
 assert_eq!(b"payl", output.as_slice());
+
+let mut buffered_input = BufferedByteInput::with_capacity(
+    Cursor::new(b"abcdef".to_vec()),
+    3,
+);
+buffered_input.ensure_available(3)?;
+assert_eq!(b"abc", buffered_input.unread_slice());
+unsafe {
+    buffered_input.consume_unchecked(3);
+}
+
+let mut buffered_output =
+    BufferedByteOutput::with_capacity(Cursor::new(Vec::<u8>::new()), 4);
+buffered_output.ensure_spare_capacity(3)?;
+buffered_output.spare_buffer_mut()[0..3].copy_from_slice(b"xyz");
+unsafe {
+    buffered_output.advance_unchecked(3);
+}
+let cursor = buffered_output.into_inner()?;
+assert_eq!(b"xyz", cursor.into_inner().as_slice());
 # Ok::<(), std::io::Error>(())
 ```
 
@@ -126,12 +167,21 @@ assert_eq!(b"payl", output.as_slice());
 
 | Type | Purpose |
 |------|---------|
+| `Buffer` | Low-level position/limit storage for hot-path buffering |
+| `BufferedByteInput` | Buffered byte input over a `Read` source |
+| `BufferedByteOutput` | Buffered byte output over a `Write` sink |
 | `Streams` | Static helpers for copying and comparing streams |
 | `CountingReader` / `CountingWriter` | Count successful bytes read or written |
 | `LimitReader` / `LimitWriter` | Cap bytes read or written through a wrapper |
 | `TeeReader` / `TeeWriter` | Mirror bytes into a secondary sink |
 | `ChecksumReader` / `ChecksumWriter` | Feed successful bytes into a caller-provided hasher |
 | `PositionGuard` | Restore a seek position unless explicitly dismissed |
+
+### Constants
+
+| Constant | Purpose |
+|----------|---------|
+| `DEFAULT_BUFFER_CAPACITY` | Shared default capacity for buffered byte input and output |
 
 ## Crate Split
 
@@ -148,6 +198,11 @@ The codec and stream stack is intentionally split:
 Most helpers operate directly on caller-provided buffers and delegate to the
 underlying `Read`, `Write`, or `Seek` implementation. Wrapper types avoid hidden
 allocation; any buffering policy remains explicit at the call site.
+
+`Buffer<T>` and the indexed unchecked read/write helpers are low-level APIs for
+callers that have already validated ranges. They are intended for hot paths such
+as binary and text stream adapters where avoiding repeated slicing and bounds
+checks matters. Safe wrapper methods remain available for general-purpose use.
 
 ## Testing & Code Coverage
 
