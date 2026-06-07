@@ -49,9 +49,11 @@ binary scalar、LEB128 和 ZigZag 能力已经不在本 crate 中。缓冲区级
 - **`Buffer<T>`**：低层 position/limit 存储，维护 readable window 与 spare
   tail capacity。
 - **`BufferedByteInput`**：包装 `Read` 的缓冲字节输入，支持查看 unread window、
-  按数量 refill、逻辑 seek，以及针对已验证输出 range 的 indexed unchecked read。
+  `BufRead`、按数量 refill、逻辑 seek、`into_parts`，以及针对已验证输出
+  range 的 indexed unchecked read。
 - **`BufferedByteOutput`**：包装 `Write` 的缓冲字节输出，支持 spare window 访问、
-  checked / unchecked advance、flush、seek，以及大块写入绕过缓冲区。
+  checked / unchecked advance、可恢复 finish、不执行 I/O 的 `into_parts`、seek，
+  以及大块写入绕过缓冲区。
 - **`DEFAULT_BUFFER_CAPACITY`**：byte input 与 byte output 共用的默认缓冲容量。
 
 ### 组合 Trait
@@ -138,9 +140,9 @@ buffered_output.spare_buffer_mut()[0..3].copy_from_slice(b"xyz");
 unsafe {
     buffered_output.advance_unchecked(3);
 }
-let cursor = buffered_output.into_inner()?;
+let cursor = buffered_output.finish_into_inner()?;
 assert_eq!(b"xyz", cursor.into_inner().as_slice());
-# Ok::<(), std::io::Error>(())
+# Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 ## API 参考
@@ -162,6 +164,7 @@ assert_eq!(b"xyz", cursor.into_inner().as_slice());
 | `Buffer` | 面向 hot path buffering 的低层 position/limit 存储 |
 | `BufferedByteInput` | 包装 `Read` 的缓冲字节输入 |
 | `BufferedByteOutput` | 包装 `Write` 的缓冲字节输出 |
+| `BufferedByteOutputFinishError` | `BufferedByteOutput::finish_into_inner` 返回的可恢复错误 |
 | `Streams` | 用于复制和比较 stream 的静态 helper |
 | `CountingReader` / `CountingWriter` | 统计成功读取或写入的字节数 |
 | `LimitReader` / `LimitWriter` | 限制 wrapper 可读取或写入的字节数 |
@@ -190,9 +193,10 @@ assert_eq!(b"xyz", cursor.into_inner().as_slice());
 大多数 helper 直接操作调用方提供的缓冲区，并委托到底层 `Read`、`Write`
 或 `Seek` 实现。Wrapper 类型不做隐藏分配；是否缓冲以及如何缓冲由调用点显式决定。
 
-`Buffer<T>` 与 indexed unchecked read/write helper 是低层 API，面向已经完成
-range 校验的调用方。它们主要用于 binary/text stream adapter 这类 hot path，在这些
-场景中避免重复 slicing 和 bounds check 有明确价值。通用调用仍应优先使用安全方法。
+`Buffer<T>`、`BufferedByteInput::unread_raw_parts` 与
+`BufferedByteOutput::spare_raw_parts_mut` 是低层 API，面向已经完成 range 校验的
+调用方。它们主要用于 binary/text stream adapter 这类 hot path，在这些场景中避免
+重复 slicing 和 bounds check 有明确价值。通用调用仍应优先使用安全方法。
 
 ## 测试与代码覆盖率
 

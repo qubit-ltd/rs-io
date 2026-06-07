@@ -7,6 +7,7 @@
 
 | 领域 | API | 适用场景 |
 | --- | --- | --- |
+| Buffered byte I/O | `Buffer`、`BufferedByteInput`、`BufferedByteOutput` | 上层 adapter 需要 format-agnostic 的 byte window |
 | 组合 trait | `ReadSeek`、`ReadWrite`、`ReadWriteSeek`、`BufReadSeek`、`WriteSeek` | API 需要组合 I/O 能力的 trait object |
 | Read helper | `ReadExt` | exact-or-EOF 读取、有界读取和复制 helper |
 | BufRead helper | `BufReadExt` | 有界 delimiter / line 读取 |
@@ -20,6 +21,61 @@
 [dependencies]
 qubit-io = "0.6"
 ```
+
+## Buffered Byte I/O
+
+`BufferedByteInput` 和 `BufferedByteOutput` 是面向字节的缓冲原语。它们不解码
+binary value、不解码文本，也不解析 record；这些能力应该由兄弟 crate 基于 byte
+window 组合出来。
+
+```rust
+use std::io::{
+    BufRead,
+    Cursor,
+};
+
+use qubit_io::BufferedByteInput;
+
+let mut input = BufferedByteInput::with_capacity(
+    Cursor::new(b"abcdef".to_vec()),
+    4,
+);
+
+assert_eq!(b"abcd", input.fill_buf()?);
+input.consume(2);
+
+let (inner, unread) = input.into_parts();
+assert_eq!(4, inner.position());
+assert_eq!(b"cd", unread.as_slice());
+# Ok::<(), std::io::Error>(())
+```
+
+`BufferedByteOutput::finish_into_inner` 会 flush pending bytes 并返回被包装的
+writer。如果 finish 失败，返回的 `BufferedByteOutputFinishError` 会保留
+buffered output，调用方可以重试或拆解。`into_parts` 不执行 I/O，而是直接返回
+pending bytes。
+
+```rust
+use std::io::Cursor;
+
+use qubit_io::BufferedByteOutput;
+
+let mut output =
+    BufferedByteOutput::with_capacity(Cursor::new(Vec::<u8>::new()), 4);
+output.ensure_spare_capacity(3)?;
+output.spare_buffer_mut()[0..3].copy_from_slice(b"xyz");
+unsafe {
+    output.advance_unchecked(3);
+}
+
+let cursor = output.finish_into_inner()?;
+assert_eq!(b"xyz", cursor.into_inner().as_slice());
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+hot path adapter 可以使用 `unread_raw_parts` 和 `spare_raw_parts_mut`，把完整
+backing buffer 和 index 传给 unchecked codec API。通用调用应优先使用
+`unread_slice`、`spare_buffer_mut`、`consume` 和 `advance`。
 
 ## Extension Trait
 

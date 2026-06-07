@@ -7,6 +7,7 @@ binary or text encoding format. The crate stays at the generic I/O layer.
 
 | Area | API | Use when |
 | --- | --- | --- |
+| Buffered byte I/O | `Buffer`, `BufferedByteInput`, `BufferedByteOutput` | higher-level adapters need format-agnostic byte windows |
 | Composition traits | `ReadSeek`, `ReadWrite`, `ReadWriteSeek`, `BufReadSeek`, `WriteSeek` | an API needs a trait object for combined I/O capabilities |
 | Read helpers | `ReadExt` | exact-or-EOF reads, bounded reads, and copy helpers |
 | Buffered helpers | `BufReadExt` | bounded delimiter and line reads |
@@ -20,6 +21,63 @@ binary or text encoding format. The crate stays at the generic I/O layer.
 [dependencies]
 qubit-io = "0.6"
 ```
+
+## Buffered Byte I/O
+
+`BufferedByteInput` and `BufferedByteOutput` are byte-oriented buffering
+primitives. They do not decode binary values, decode text, or parse records.
+Those layers should be built in sibling crates on top of the byte windows.
+
+```rust
+use std::io::{
+    BufRead,
+    Cursor,
+};
+
+use qubit_io::BufferedByteInput;
+
+let mut input = BufferedByteInput::with_capacity(
+    Cursor::new(b"abcdef".to_vec()),
+    4,
+);
+
+assert_eq!(b"abcd", input.fill_buf()?);
+input.consume(2);
+
+let (inner, unread) = input.into_parts();
+assert_eq!(4, inner.position());
+assert_eq!(b"cd", unread.as_slice());
+# Ok::<(), std::io::Error>(())
+```
+
+`BufferedByteOutput::finish_into_inner` flushes pending bytes and returns the
+wrapped writer. If finishing fails, the returned
+`BufferedByteOutputFinishError` preserves the buffered output so callers can
+retry or dismantle it. `into_parts` performs no I/O and returns pending bytes
+instead.
+
+```rust
+use std::io::Cursor;
+
+use qubit_io::BufferedByteOutput;
+
+let mut output =
+    BufferedByteOutput::with_capacity(Cursor::new(Vec::<u8>::new()), 4);
+output.ensure_spare_capacity(3)?;
+output.spare_buffer_mut()[0..3].copy_from_slice(b"xyz");
+unsafe {
+    output.advance_unchecked(3);
+}
+
+let cursor = output.finish_into_inner()?;
+assert_eq!(b"xyz", cursor.into_inner().as_slice());
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+Hot-path adapters can use `unread_raw_parts` and `spare_raw_parts_mut` to pass
+the full backing buffer plus an index to unchecked codec APIs. General-purpose
+callers should prefer `unread_slice`, `spare_buffer_mut`, `consume`, and
+`advance`.
 
 ## Extension Traits
 
