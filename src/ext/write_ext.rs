@@ -41,6 +41,7 @@ pub trait WriteExt: Write {
     /// The caller must guarantee that `start_index..start_index + count` is a
     /// valid range within `buffer` and that `start_index + count` does not
     /// overflow `usize`.
+    #[inline(always)]
     unsafe fn write_unchecked(
         &mut self,
         buffer: &[u8],
@@ -81,6 +82,7 @@ pub trait WriteExt: Write {
     /// The caller must guarantee that `start_index..start_index + count` is a
     /// valid range within `buffer` and that `start_index + count` does not
     /// overflow `usize`.
+    #[inline(always)]
     unsafe fn write_all_unchecked(
         &mut self,
         buffer: &[u8],
