@@ -50,14 +50,16 @@ assert_eq!(b"cd", unread.as_slice());
 # Ok::<(), std::io::Error>(())
 ```
 
-`BufferedByteOutput::finish_into_inner` flushes pending bytes and returns the
-wrapped writer. If finishing fails, the returned
-`BufferedByteOutputFinishError` preserves the buffered output so callers can
-retry or dismantle it. `into_parts` performs no I/O and returns pending bytes
-instead.
+`BufferedByteOutput::into_parts` performs no I/O and returns the wrapped writer
+plus any pending bytes. To finish successfully, call `flush` first and then
+verify that `into_parts` returns an empty pending byte vector. If flushing
+fails, the caller still owns the buffered output and can retry or dismantle it.
 
 ```rust
-use std::io::Cursor;
+use std::io::{
+    Cursor,
+    Write,
+};
 
 use qubit_io::BufferedByteOutput;
 
@@ -69,9 +71,11 @@ unsafe {
     output.advance_unchecked(3);
 }
 
-let cursor = output.finish_into_inner()?;
+output.flush()?;
+let (cursor, pending) = output.into_parts();
+assert!(pending.is_empty());
 assert_eq!(b"xyz", cursor.into_inner().as_slice());
-# Ok::<(), Box<dyn std::error::Error>>(())
+# Ok::<(), std::io::Error>(())
 ```
 
 Hot-path adapters can use `unread_raw_parts` and `spare_raw_parts_mut` to pass

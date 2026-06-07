@@ -15,7 +15,6 @@ use std::io::{
     Write,
 };
 
-use super::buffered_byte_output_finish_error::BufferedByteOutputFinishError;
 use crate::Buffer;
 use crate::WriteExt;
 use crate::buffered::DEFAULT_BUFFER_CAPACITY;
@@ -32,8 +31,8 @@ use crate::buffered::DEFAULT_BUFFER_CAPACITY;
 /// use the standard [`Write`] implementation or write directly into
 /// [`Self::spare_buffer_mut`] or [`Self::spare_raw_parts_mut`] and then call
 /// [`Self::advance`] or [`Self::advance_unchecked`] after validating the range
-/// they initialized. Finishing uses [`Self::finish_into_inner`] so flush errors
-/// can preserve the wrapper and pending bytes.
+/// they initialized. Callers that need to recover the wrapped writer should
+/// call [`Write::flush`] first, then use [`Self::into_parts`].
 #[derive(Debug)]
 pub struct BufferedByteOutput<W> {
     inner: W,
@@ -237,31 +236,6 @@ impl<W> BufferedByteOutput<W>
 where
     W: Write,
 {
-    /// Finishes this buffered output and returns the wrapped writer.
-    ///
-    /// This method flushes pending buffered bytes and then flushes the wrapped
-    /// writer. On success, all bytes accepted by this wrapper have reached the
-    /// wrapped writer and the writer's own flush operation has succeeded.
-    ///
-    /// # Returns
-    ///
-    /// The wrapped writer after finishing succeeds.
-    ///
-    /// # Errors
-    ///
-    /// Returns a recoverable error containing this buffered output if flushing
-    /// buffered bytes, making write progress, or flushing the wrapped writer
-    /// fails.
-    #[inline(always)]
-    pub fn finish_into_inner(
-        mut self,
-    ) -> std::result::Result<W, BufferedByteOutputFinishError<W>> {
-        match self.flush_all() {
-            Ok(()) => Ok(self.inner),
-            Err(error) => Err(BufferedByteOutputFinishError::new(error, self)),
-        }
-    }
-
     /// Consumes this buffered output without flushing pending bytes.
     ///
     /// This method performs no I/O. Pending bytes that have been accepted into

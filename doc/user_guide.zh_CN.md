@@ -50,13 +50,15 @@ assert_eq!(b"cd", unread.as_slice());
 # Ok::<(), std::io::Error>(())
 ```
 
-`BufferedByteOutput::finish_into_inner` 会 flush pending bytes 并返回被包装的
-writer。如果 finish 失败，返回的 `BufferedByteOutputFinishError` 会保留
-buffered output，调用方可以重试或拆解。`into_parts` 不执行 I/O，而是直接返回
-pending bytes。
+`BufferedByteOutput::into_parts` 不执行 I/O，会返回被包装的 writer 和 pending
+bytes。成功结束时，先调用 `flush`，再用 `into_parts` 验证 pending bytes 为空。
+如果 flush 失败，调用方仍然持有 buffered output，可以自行重试或拆解。
 
 ```rust
-use std::io::Cursor;
+use std::io::{
+    Cursor,
+    Write,
+};
 
 use qubit_io::BufferedByteOutput;
 
@@ -68,9 +70,11 @@ unsafe {
     output.advance_unchecked(3);
 }
 
-let cursor = output.finish_into_inner()?;
+output.flush()?;
+let (cursor, pending) = output.into_parts();
+assert!(pending.is_empty());
 assert_eq!(b"xyz", cursor.into_inner().as_slice());
-# Ok::<(), Box<dyn std::error::Error>>(())
+# Ok::<(), std::io::Error>(())
 ```
 
 hot path adapter 可以使用 `unread_raw_parts` 和 `spare_raw_parts_mut`，把完整

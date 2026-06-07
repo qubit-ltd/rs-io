@@ -63,18 +63,6 @@ impl Write for OverreportingWriter {
     }
 }
 
-struct NonDebugFlushErrorWriter;
-
-impl Write for NonDebugFlushErrorWriter {
-    fn write(&mut self, input: &[u8]) -> std::io::Result<usize> {
-        Ok(input.len())
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        Err(Error::other("flush failed"))
-    }
-}
-
 impl Write for ScriptedWriter {
     fn write(&mut self, input: &[u8]) -> std::io::Result<usize> {
         match self
@@ -104,6 +92,19 @@ impl Write for ScriptedWriter {
     }
 }
 
+fn flush_into_inner<W>(mut output: BufferedByteOutput<W>) -> W
+where
+    W: Write,
+{
+    output.flush().expect("flush should succeed");
+    let (inner, pending) = output.into_parts();
+    assert!(
+        pending.is_empty(),
+        "successful flush should leave no pending bytes"
+    );
+    inner
+}
+
 #[test]
 fn test_new_and_inner_mut_expose_writer() {
     let mut output = BufferedByteOutput::new(Cursor::new(Vec::new()));
@@ -112,9 +113,7 @@ fn test_new_and_inner_mut_expose_writer() {
         .inner_mut()
         .write_all(b"raw")
         .expect("inner writer should be mutable");
-    let cursor = output
-        .finish_into_inner()
-        .expect("empty finish should succeed");
+    let cursor = flush_into_inner(output);
 
     assert_eq!(b"raw", cursor.into_inner().as_slice());
 }
@@ -150,9 +149,7 @@ fn test_spare_buffer_mut_and_advance_append_to_buffer() {
     }
     output.advance(2);
 
-    let cursor = output
-        .finish_into_inner()
-        .expect("finish should flush pending bytes");
+    let cursor = flush_into_inner(output);
     assert_eq!(b"abcd", cursor.into_inner().as_slice());
 }
 
@@ -168,9 +165,7 @@ fn test_advance_unchecked_marks_spare_bytes_as_written() {
         output.advance_unchecked(2);
     }
 
-    let cursor = output
-        .finish_into_inner()
-        .expect("finish should flush pending bytes");
+    let cursor = flush_into_inner(output);
     assert_eq!(b"ab", cursor.into_inner().as_slice());
 }
 
@@ -192,9 +187,7 @@ fn test_spare_raw_parts_mut_exposes_backing_buffer_index_and_count() {
         output.advance_unchecked(count);
     }
 
-    let cursor = output
-        .finish_into_inner()
-        .expect("finish should flush pending bytes");
+    let cursor = flush_into_inner(output);
     assert_eq!(b"abcd", cursor.into_inner().as_slice());
 }
 
@@ -265,9 +258,7 @@ fn test_write_all_delegates_large_empty_buffer_write() {
     output
         .write_all(b"abcd")
         .expect("large write should be delegated");
-    let cursor = output
-        .finish_into_inner()
-        .expect("empty finish should succeed");
+    let cursor = flush_into_inner(output);
 
     assert_eq!(b"abcd", cursor.into_inner().as_slice());
 }
@@ -326,9 +317,7 @@ fn test_write_all_flushes_then_buffers_smaller_input() {
         .expect("small write should flush prefix and then buffer");
     assert_eq!(b"abc", output.inner().get_ref().as_slice());
 
-    let cursor = output
-        .finish_into_inner()
-        .expect("finish should flush pending bytes");
+    let cursor = flush_into_inner(output);
     assert_eq!(b"abcxy", cursor.into_inner().as_slice());
 }
 
@@ -360,9 +349,7 @@ fn test_write_flushes_then_buffers_smaller_input() {
     assert_eq!(2, count);
     assert_eq!(b"abc", output.inner().get_ref().as_slice());
 
-    let cursor = output
-        .finish_into_inner()
-        .expect("finish should flush pending bytes");
+    let cursor = flush_into_inner(output);
     assert_eq!(b"abcxy", cursor.into_inner().as_slice());
 }
 
@@ -454,9 +441,7 @@ fn test_write_trait_write_all_uses_buffered_write_all() {
 
     Write::write_all(&mut output, b"abcd")
         .expect("write_all trait method should delegate");
-    let cursor = output
-        .finish_into_inner()
-        .expect("finish should flush pending bytes");
+    let cursor = flush_into_inner(output);
 
     assert_eq!(b"abcd", cursor.into_inner().as_slice());
 }
@@ -475,9 +460,7 @@ fn test_seek_flushes_pending_bytes_before_seeking() {
     output
         .write_all(b"xy")
         .expect("second write should be buffered");
-    let cursor = output
-        .finish_into_inner()
-        .expect("finish should flush pending bytes");
+    let cursor = flush_into_inner(output);
 
     assert_eq!(0, position);
     assert_eq!(b"xy\0\0", cursor.into_inner().as_slice());
@@ -510,7 +493,7 @@ fn test_into_parts_returns_inner_and_pending_bytes_without_flushing() {
 }
 
 #[test]
-fn test_finish_into_inner_preserves_output_after_flush_error() {
+fn test_flush_error_keeps_output_owned_by_caller() {
     let writer = ScriptedWriter::new(vec![WriteStep::Zero]);
     let mut output = BufferedByteOutput::with_capacity(writer, 4);
     output
@@ -518,20 +501,23 @@ fn test_finish_into_inner_preserves_output_after_flush_error() {
         .expect("buffered write should succeed");
 
     let error = output
-        .finish_into_inner()
-        .expect_err("write-zero finish should preserve output");
-    assert_eq!(ErrorKind::WriteZero, error.error().kind());
-    let mut output = error.into_output();
+        .flush()
+        .expect_err("write-zero flush should leave output owned by caller");
+
+    assert_eq!(ErrorKind::WriteZero, error.kind());
     output.inner_mut().steps.push_back(WriteStep::Accept(3));
 
-    let writer = output
-        .finish_into_inner()
-        .expect("retrying finish should flush preserved bytes");
+    output
+        .flush()
+        .expect("retrying flush should write preserved bytes");
+    let (writer, pending) = output.into_parts();
+
+    assert!(pending.is_empty());
     assert_eq!(b"abc", writer.output.as_slice());
 }
 
 #[test]
-fn test_finish_into_inner_preserves_output_after_inner_flush_error() {
+fn test_inner_flush_error_keeps_output_owned_by_caller() {
     let writer = ScriptedWriter::with_flush_error();
     let mut output = BufferedByteOutput::with_capacity(writer, 4);
     output
@@ -539,33 +525,15 @@ fn test_finish_into_inner_preserves_output_after_inner_flush_error() {
         .expect("buffered write should succeed");
 
     let error = output
-        .finish_into_inner()
-        .expect_err("inner flush error should preserve output");
+        .flush()
+        .expect_err("inner flush error should leave output owned by caller");
 
-    assert_eq!(ErrorKind::Other, error.error().kind());
-    let (error, output) = error.into_parts();
+    assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("flush failed", error.to_string());
-    assert_eq!(b"abc", output.inner().output.as_slice());
-}
+    let (writer, pending) = output.into_parts();
 
-#[test]
-fn test_finish_error_is_standard_error_without_debug_writer() {
-    let output = BufferedByteOutput::with_capacity(NonDebugFlushErrorWriter, 4);
-
-    let error = match output.finish_into_inner() {
-        Ok(_) => panic!("finish should fail when wrapped writer flush fails"),
-        Err(error) => error,
-    };
-
-    fn assert_standard_error<E: std::error::Error>(_error: &E) {}
-
-    assert_standard_error(&error);
-    assert_eq!(ErrorKind::Other, error.error().kind());
-    assert_eq!("flush failed", error.to_string());
-    assert!(
-        format!("{error:?}").contains("BufferedByteOutputFinishError"),
-        "debug output should identify the finish error type",
-    );
+    assert!(pending.is_empty());
+    assert_eq!(b"abc", writer.output.as_slice());
 }
 
 #[test]
