@@ -56,7 +56,7 @@ reference documentation is available on [docs.rs](https://docs.rs/qubit-io).
   inspection, `BufRead` support, count-aware refilling, logical seeking,
   `into_parts`, and indexed unchecked reads for validated output ranges.
 - **`BufferedByteOutput`**: buffered byte output over `Write`, with spare-window
-  access, checked and unchecked advancing, recoverable finishing, non-flushing
+  access, checked and unchecked advancing, explicit flushing, non-flushing
   `into_parts`, seeking, and large-write bypass paths.
 - **`DEFAULT_BUFFER_CAPACITY`**: shared default capacity for byte input and
   output buffering.
@@ -106,7 +106,10 @@ qubit-io = "0.6"
 ## Quick Start
 
 ```rust
-use std::io::Cursor;
+use std::io::{
+    Cursor,
+    Write,
+};
 
 use qubit_io::{
     BufferedByteInput,
@@ -146,9 +149,11 @@ buffered_output.spare_buffer_mut()[0..3].copy_from_slice(b"xyz");
 unsafe {
     buffered_output.advance_unchecked(3);
 }
-let cursor = buffered_output.finish_into_inner()?;
+buffered_output.flush()?;
+let (cursor, pending) = buffered_output.into_parts();
+assert!(pending.is_empty());
 assert_eq!(b"xyz", cursor.into_inner().as_slice());
-# Ok::<(), Box<dyn std::error::Error>>(())
+# Ok::<(), std::io::Error>(())
 ```
 
 ## API Reference
@@ -170,7 +175,6 @@ assert_eq!(b"xyz", cursor.into_inner().as_slice());
 | `Buffer` | Low-level position/limit storage for hot-path buffering |
 | `BufferedByteInput` | Buffered byte input over a `Read` source |
 | `BufferedByteOutput` | Buffered byte output over a `Write` sink |
-| `BufferedByteOutputFinishError` | Recoverable error returned by `BufferedByteOutput::finish_into_inner` |
 | `Streams` | Static helpers for copying and comparing streams |
 | `CountingReader` / `CountingWriter` | Count successful bytes read or written |
 | `LimitReader` / `LimitWriter` | Cap bytes read or written through a wrapper |

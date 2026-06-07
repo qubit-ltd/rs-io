@@ -25,11 +25,9 @@
 mod buffer;
 mod buffered_byte_input;
 mod buffered_byte_output;
-mod buffered_byte_output_finish_error;
 mod capacity;
 
 pub use buffer::Buffer;
 pub use buffered_byte_input::BufferedByteInput;
 pub use buffered_byte_output::BufferedByteOutput;
-pub use buffered_byte_output_finish_error::BufferedByteOutputFinishError;
 pub use capacity::DEFAULT_BUFFER_CAPACITY;

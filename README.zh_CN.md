@@ -52,7 +52,7 @@ binary scalar、LEB128 和 ZigZag 能力已经不在本 crate 中。缓冲区级
   `BufRead`、按数量 refill、逻辑 seek、`into_parts`，以及针对已验证输出
   range 的 indexed unchecked read。
 - **`BufferedByteOutput`**：包装 `Write` 的缓冲字节输出，支持 spare window 访问、
-  checked / unchecked advance、可恢复 finish、不执行 I/O 的 `into_parts`、seek，
+  checked / unchecked advance、显式 flush、不执行 I/O 的 `into_parts`、seek，
   以及大块写入绕过缓冲区。
 - **`DEFAULT_BUFFER_CAPACITY`**：byte input 与 byte output 共用的默认缓冲容量。
 
@@ -100,7 +100,10 @@ qubit-io = "0.6"
 ## 快速开始
 
 ```rust
-use std::io::Cursor;
+use std::io::{
+    Cursor,
+    Write,
+};
 
 use qubit_io::{
     BufferedByteInput,
@@ -140,9 +143,11 @@ buffered_output.spare_buffer_mut()[0..3].copy_from_slice(b"xyz");
 unsafe {
     buffered_output.advance_unchecked(3);
 }
-let cursor = buffered_output.finish_into_inner()?;
+buffered_output.flush()?;
+let (cursor, pending) = buffered_output.into_parts();
+assert!(pending.is_empty());
 assert_eq!(b"xyz", cursor.into_inner().as_slice());
-# Ok::<(), Box<dyn std::error::Error>>(())
+# Ok::<(), std::io::Error>(())
 ```
 
 ## API 参考
@@ -164,7 +169,6 @@ assert_eq!(b"xyz", cursor.into_inner().as_slice());
 | `Buffer` | 面向 hot path buffering 的低层 position/limit 存储 |
 | `BufferedByteInput` | 包装 `Read` 的缓冲字节输入 |
 | `BufferedByteOutput` | 包装 `Write` 的缓冲字节输出 |
-| `BufferedByteOutputFinishError` | `BufferedByteOutput::finish_into_inner` 返回的可恢复错误 |
 | `Streams` | 用于复制和比较 stream 的静态 helper |
 | `CountingReader` / `CountingWriter` | 统计成功读取或写入的字节数 |
 | `LimitReader` / `LimitWriter` | 限制 wrapper 可读取或写入的字节数 |
