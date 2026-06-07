@@ -443,6 +443,26 @@ fn test_write_all_flushes_then_buffers_smaller_input() {
 }
 
 #[test]
+fn test_write_all_unchecked_flushes_then_buffers_smaller_input() {
+    let cursor = Cursor::new(Vec::new());
+    let mut output = BufferedOutput::with_capacity(cursor, 4);
+
+    // SAFETY: Both full input slices are valid source ranges.
+    unsafe {
+        output
+            .write_all_unchecked(b"abc", 0, 3)
+            .expect("buffered prefix should be accepted");
+        output
+            .write_all_unchecked(b"xy", 0, 2)
+            .expect("small write should flush prefix and then buffer");
+    }
+    assert_eq!(b"abc", output.inner().get_ref().as_slice());
+
+    let cursor = flush_into_inner(output);
+    assert_eq!(b"abcxy", cursor.into_inner().as_slice());
+}
+
+#[test]
 fn test_write_delegates_large_empty_buffer_write() {
     let cursor = Cursor::new(Vec::new());
     let mut output = BufferedOutput::with_capacity(cursor, 4);
@@ -467,6 +487,32 @@ fn test_write_flushes_then_buffers_smaller_input() {
     let count = output
         .write(b"xy")
         .expect("small raw write should flush prefix and then buffer");
+    assert_eq!(2, count);
+    assert_eq!(b"abc", output.inner().get_ref().as_slice());
+
+    let cursor = flush_into_inner(output);
+    assert_eq!(b"abcxy", cursor.into_inner().as_slice());
+}
+
+#[test]
+fn test_write_from_unchecked_flushes_then_buffers_smaller_input() {
+    let cursor = Cursor::new(Vec::new());
+    let mut output = BufferedOutput::with_capacity(cursor, 4);
+
+    // SAFETY: Both full input slices are valid source ranges.
+    let prefix_count = unsafe {
+        output
+            .write_from_unchecked(b"abc", 0, 3)
+            .expect("buffered prefix should be accepted")
+    };
+    assert_eq!(3, prefix_count);
+
+    // SAFETY: The full input slice is a valid source range.
+    let count = unsafe {
+        output
+            .write_from_unchecked(b"xy", 0, 2)
+            .expect("small raw write should flush prefix and then buffer")
+    };
     assert_eq!(2, count);
     assert_eq!(b"abc", output.inner().get_ref().as_slice());
 
@@ -565,6 +611,19 @@ fn test_write_trait_write_all_uses_buffered_write_all() {
     let cursor = flush_into_inner(output);
 
     assert_eq!(b"abcd", cursor.into_inner().as_slice());
+}
+
+#[test]
+fn test_write_trait_flush_delegates_to_buffered_flush() {
+    let cursor = Cursor::new(Vec::new());
+    let mut output = BufferedOutput::with_capacity(cursor, 4);
+
+    output
+        .write_all(b"abc")
+        .expect("buffered write should succeed");
+    Write::flush(&mut output).expect("write trait flush should drain buffer");
+
+    assert_eq!(b"abc", output.inner().get_ref().as_slice());
 }
 
 #[test]
