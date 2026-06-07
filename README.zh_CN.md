@@ -94,7 +94,7 @@ binary scalar、LEB128 和 ZigZag 能力已经不在本 crate 中。缓冲区级
 
 ```toml
 [dependencies]
-qubit-io = "0.6"
+qubit-io = "0.7"
 ```
 
 ## 快速开始
