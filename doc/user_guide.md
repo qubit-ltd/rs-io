@@ -19,7 +19,7 @@ binary or text encoding format. The crate stays at the generic I/O layer.
 
 ```toml
 [dependencies]
-qubit-io = "0.7"
+qubit-io = "0.8"
 ```
 
 ## Buffered Byte I/O

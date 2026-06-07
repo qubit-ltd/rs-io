@@ -19,7 +19,7 @@
 
 ```toml
 [dependencies]
-qubit-io = "0.7"
+qubit-io = "0.8"
 ```
 
 ## Buffered Byte I/O
