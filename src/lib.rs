@@ -15,12 +15,18 @@
 //! standard-library I/O patterns. The concrete trait definitions live in
 //! dedicated modules and are re-exported from the crate root for ergonomic use.
 
+pub mod buffered;
 mod ext;
 pub mod prelude;
 mod traits;
 mod util;
 mod wrappers;
 
+pub use buffered::{
+    Buffer,
+    BufferedByteInput,
+    BufferedByteOutput,
+};
 pub use ext::{
     BufReadExt,
     ReadExt,
