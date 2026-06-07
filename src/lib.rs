@@ -34,6 +34,7 @@ pub use buffered::{
     Buffer,
     BufferedByteInput,
     BufferedByteOutput,
+    BufferedByteOutputFinishError,
     DEFAULT_BUFFER_CAPACITY,
 };
 pub use ext::{

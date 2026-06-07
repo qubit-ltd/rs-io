@@ -8,6 +8,7 @@
 
 use std::collections::VecDeque;
 use std::io::{
+    BufRead,
     Cursor,
     Error,
     ErrorKind,
@@ -66,6 +67,14 @@ impl Read for PanicOnRead {
     }
 }
 
+struct OverreportingReader;
+
+impl Read for OverreportingReader {
+    fn read(&mut self, output: &mut [u8]) -> std::io::Result<usize> {
+        Ok(output.len() + 1)
+    }
+}
+
 struct FailingSeekReader;
 
 impl Read for FailingSeekReader {
@@ -88,9 +97,10 @@ fn test_new_and_accessors_expose_inner_reader() {
     assert_eq!(0, input.inner().position());
 
     input.inner_mut().set_position(2);
-    let cursor = input.into_inner();
+    let (cursor, unread) = input.into_parts();
 
     assert_eq!(2, cursor.position());
+    assert!(unread.is_empty());
 }
 
 #[test]
@@ -122,6 +132,60 @@ fn test_consume_unchecked_advances_without_bounds_check() {
     }
 
     assert_eq!(b"cd", input.unread_slice());
+}
+
+#[test]
+fn test_into_parts_returns_inner_and_unread_bytes() {
+    let cursor = Cursor::new(b"abcdef".to_vec());
+    let mut input = BufferedByteInput::with_capacity(cursor, 4);
+    assert!(input.fill_more().expect("initial refill should succeed"));
+    input.consume(1);
+
+    let (cursor, unread) = input.into_parts();
+
+    assert_eq!(4, cursor.position());
+    assert_eq!(b"bcd", unread.as_slice());
+}
+
+#[test]
+fn test_unread_raw_parts_exposes_backing_buffer_index_and_count() {
+    let cursor = Cursor::new(b"abcdef".to_vec());
+    let mut input = BufferedByteInput::with_capacity(cursor, 4);
+    assert!(input.fill_more().expect("initial refill should succeed"));
+    input.consume(1);
+
+    let (buffer, index, count) = input.unread_raw_parts();
+
+    assert_eq!(1, index);
+    assert_eq!(3, count);
+    assert_eq!(b"bcd", &buffer[index..index + count]);
+}
+
+#[test]
+fn test_buf_read_fill_buf_exposes_unread_bytes() {
+    let cursor = Cursor::new(b"abcdef".to_vec());
+    let mut input = BufferedByteInput::with_capacity(cursor, 4);
+
+    assert_eq!(
+        b"abcd",
+        input
+            .fill_buf()
+            .expect("fill_buf should refill from wrapped reader")
+    );
+    BufRead::consume(&mut input, 2);
+    assert_eq!(
+        b"cd",
+        input
+            .fill_buf()
+            .expect("fill_buf should reuse buffered bytes")
+    );
+    BufRead::consume(&mut input, 2);
+    assert_eq!(
+        b"ef",
+        input
+            .fill_buf()
+            .expect("fill_buf should refill after consumption")
+    );
 }
 
 #[test]
@@ -204,12 +268,35 @@ fn test_ensure_available_returns_unexpected_eof_and_consumes_partial_bytes() {
 }
 
 #[test]
+fn test_ensure_available_succeeds_when_requested_bytes_are_buffered() {
+    let cursor = Cursor::new(b"abcd".to_vec());
+    let mut input = BufferedByteInput::with_capacity(cursor, 4);
+
+    input
+        .ensure_available(3)
+        .expect("ensure_available should succeed with enough bytes");
+
+    assert_eq!(b"abcd", input.unread_slice());
+}
+
+#[test]
 fn test_fill_more_returns_false_at_eof() {
     let cursor = Cursor::new(Vec::new());
     let mut input = BufferedByteInput::with_capacity(cursor, 4);
 
     assert!(!input.fill_more().expect("EOF refill should succeed"));
     assert_eq!(0, input.available());
+}
+
+#[test]
+fn test_buf_read_fill_buf_returns_empty_slice_at_eof() {
+    let cursor = Cursor::new(Vec::new());
+    let mut input = BufferedByteInput::with_capacity(cursor, 4);
+
+    assert_eq!(
+        b"",
+        input.fill_buf().expect("fill_buf at EOF should succeed")
+    );
 }
 
 #[test]
@@ -322,6 +409,20 @@ fn test_read_delegates_large_empty_buffer_read() {
 }
 
 #[test]
+fn test_read_delegated_large_empty_buffer_returns_zero_at_eof() {
+    let cursor = Cursor::new(Vec::new());
+    let mut input = BufferedByteInput::with_capacity(cursor, 4);
+    let mut output = [1_u8; 4];
+
+    let count = input
+        .read(output.as_mut_slice())
+        .expect("delegated EOF read should succeed");
+
+    assert_eq!(0, count);
+    assert_eq!([1, 1, 1, 1], output);
+}
+
+#[test]
 fn test_read_refills_small_empty_buffer_read() {
     let cursor = Cursor::new(b"abcdef".to_vec());
     let mut input = BufferedByteInput::with_capacity(cursor, 4);
@@ -364,6 +465,29 @@ fn test_read_returns_refill_error() {
 
     assert_eq!(ErrorKind::PermissionDenied, error.kind());
     assert_eq!("refill failed", error.to_string());
+}
+
+#[test]
+fn test_fill_more_rejects_invalid_read_count() {
+    let mut input = BufferedByteInput::with_capacity(OverreportingReader, 4);
+
+    let error = input
+        .fill_more()
+        .expect_err("overreported read count should be rejected");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+}
+
+#[test]
+fn test_read_rejects_invalid_delegated_read_count() {
+    let mut input = BufferedByteInput::with_capacity(OverreportingReader, 4);
+    let mut output = [0_u8; 4];
+
+    let error = input
+        .read(output.as_mut_slice())
+        .expect_err("overreported delegated read count should be rejected");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
 }
 
 #[test]

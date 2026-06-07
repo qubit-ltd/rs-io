@@ -7,6 +7,7 @@
 // =============================================================================
 
 use std::io::{
+    BufRead,
     Error,
     ErrorKind,
     Read,
@@ -28,7 +29,9 @@ use crate::buffered::DEFAULT_BUFFER_CAPACITY;
 /// `BufferedByteInput` is deliberately byte-oriented. It performs no binary
 /// decoding, text decoding, or record parsing; higher-level stream adapters can
 /// build those concerns on top of [`Self::unread_slice`],
-/// [`Self::ensure_available`], and [`Self::read_into_unchecked`].
+/// [`Self::unread_raw_parts`], [`Self::ensure_available`], and
+/// [`Self::read_into_unchecked`]. The type also implements [`BufRead`] for
+/// callers that want the standard buffered-read interface.
 #[derive(Debug)]
 pub struct BufferedByteInput<R> {
     inner: R,
@@ -97,17 +100,22 @@ impl<R> BufferedByteInput<R> {
         &mut self.inner
     }
 
-    /// Consumes this buffered input and returns the wrapped input object.
+    /// Consumes this buffered input and returns the wrapped input object plus
+    /// unread bytes.
     ///
-    /// Any unread bytes currently held in the internal buffer are discarded.
+    /// This method performs no I/O. Bytes that have already been read from the
+    /// wrapped input but not consumed by this buffered input are returned as
+    /// the second tuple item.
     ///
     /// # Returns
     ///
-    /// The wrapped input object.
+    /// The wrapped input object and a vector containing the unread buffered
+    /// bytes in logical read order.
     #[inline(always)]
     #[must_use]
-    pub fn into_inner(self) -> R {
-        self.inner
+    pub fn into_parts(self) -> (R, Vec<u8>) {
+        let unread = self.unread_slice().to_vec();
+        (self.inner, unread)
     }
 
     /// Returns the internal buffer capacity.
@@ -141,6 +149,27 @@ impl<R> BufferedByteInput<R> {
     #[must_use]
     pub fn unread_slice(&self) -> &[u8] {
         &self.buffer.data()[self.buffer.position()..self.buffer.limit()]
+    }
+
+    /// Returns raw unread-buffer parts for hot-path callers.
+    ///
+    /// The returned slice is the full internal backing storage. `index` is the
+    /// start of the unread byte window, and `count` is the number of unread
+    /// bytes. Callers that need a slice can use `&buffer[index..index +
+    /// count]`; callers that already validated bounds can pass `buffer` and
+    /// `index` directly to indexed unchecked codecs.
+    ///
+    /// # Returns
+    ///
+    /// The backing storage, the unread start index, and the unread byte count.
+    #[inline(always)]
+    #[must_use]
+    pub fn unread_raw_parts(&self) -> (&[u8], usize, usize) {
+        (
+            self.buffer.data(),
+            self.buffer.position(),
+            self.buffer.available(),
+        )
     }
 
     /// Advances the unread cursor by `count` bytes.
@@ -230,6 +259,8 @@ where
     /// # Errors
     ///
     /// Returns any non-interrupted I/O error produced by the wrapped reader.
+    /// Returns [`ErrorKind::InvalidData`] if the wrapped reader reports more
+    /// bytes than the spare buffer range could hold.
     fn read_more(&mut self) -> Result<bool> {
         let count = self.tail_capacity();
         debug_assert!(count > 0, "buffer has no tail capacity");
@@ -243,6 +274,7 @@ where
             } {
                 Ok(0) => return Ok(false),
                 Ok(read) => {
+                    validate_read_count(read, count)?;
                     // SAFETY: `read_unchecked` returns a count in
                     // `0..=count`, and `count` was the spare capacity.
                     unsafe {
@@ -297,8 +329,10 @@ where
     /// # Errors
     ///
     /// Returns [`ErrorKind::InvalidInput`] when `count` exceeds the internal
-    /// buffer capacity. Returns any non-interrupted I/O error produced by the
-    /// wrapped reader while refilling the buffer.
+    /// buffer capacity. Returns [`ErrorKind::InvalidData`] if the wrapped
+    /// reader reports more bytes than the spare buffer range could hold.
+    /// Returns any non-interrupted I/O error produced by the wrapped reader
+    /// while refilling the buffer.
     #[inline]
     pub fn fill_until(&mut self, count: usize) -> Result<bool> {
         if count > self.capacity() {
@@ -339,8 +373,10 @@ where
     ///
     /// Returns [`ErrorKind::UnexpectedEof`] if EOF is reached before `count`
     /// bytes are available. Returns [`ErrorKind::InvalidInput`] when `count`
-    /// exceeds the internal buffer capacity. Returns any non-interrupted I/O
-    /// error produced by the wrapped reader while refilling the buffer.
+    /// exceeds the internal buffer capacity. Returns [`ErrorKind::InvalidData`]
+    /// if the wrapped reader reports more bytes than the spare buffer range
+    /// could hold. Returns any non-interrupted I/O error produced by the
+    /// wrapped reader while refilling the buffer.
     #[inline]
     pub fn ensure_available(&mut self, count: usize) -> Result<()> {
         if self.fill_until(count)? {
@@ -378,10 +414,12 @@ where
     ///
     /// # Errors
     ///
-    /// Returns any I/O error produced by the wrapped reader. Interrupted reads
-    /// are retried when the method refills the internal buffer through
-    /// `read_more`; direct delegated reads follow the wrapped reader's
-    /// own [`Read::read`] behavior.
+    /// Returns any I/O error produced by the wrapped reader. Returns
+    /// [`ErrorKind::InvalidData`] if the wrapped reader reports more bytes
+    /// than the requested destination range could hold. Interrupted reads are
+    /// retried when the method refills the internal buffer through
+    /// `read_more`; direct delegated reads follow the wrapped reader's own
+    /// [`Read::read`] behavior.
     ///
     /// # Safety
     ///
@@ -407,9 +445,11 @@ where
             self.discard_buffer();
             if count >= self.buffer.capacity() {
                 // SAFETY: The caller guarantees that the target range is valid.
-                return unsafe {
+                let read = unsafe {
                     self.inner.read_unchecked(output, output_index, count)
-                };
+                }?;
+                validate_read_count(read, count)?;
+                return Ok(read);
             }
             if !self.read_more()? {
                 return Ok(0);
@@ -492,6 +532,29 @@ where
     }
 }
 
+impl<R> BufRead for BufferedByteInput<R>
+where
+    R: Read,
+{
+    /// Returns the currently buffered unread bytes, refilling when empty.
+    #[inline]
+    fn fill_buf(&mut self) -> Result<&[u8]> {
+        if self.available() == 0 {
+            self.discard_buffer();
+            if !self.read_more()? {
+                return Ok(&[]);
+            }
+        }
+        Ok(self.unread_slice())
+    }
+
+    /// Consumes `amount` bytes from the unread byte window.
+    #[inline(always)]
+    fn consume(&mut self, amount: usize) {
+        BufferedByteInput::consume(self, amount);
+    }
+}
+
 impl<R> Seek for BufferedByteInput<R>
 where
     R: Read + Seek,
@@ -501,4 +564,28 @@ where
     fn seek(&mut self, position: SeekFrom) -> Result<u64> {
         self.seek_logical(position)
     }
+}
+
+/// Validates a byte count returned by a wrapped reader.
+///
+/// # Parameters
+///
+/// * `read` - Byte count reported by the wrapped reader.
+/// * `requested` - Maximum byte count requested from the wrapped reader.
+///
+/// # Errors
+///
+/// Returns [`ErrorKind::InvalidData`] when the wrapped reader reports more
+/// bytes than the destination range could hold.
+#[inline(always)]
+fn validate_read_count(read: usize, requested: usize) -> Result<()> {
+    if read > requested {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            format!(
+                "reader reported {read} bytes for a {requested}-byte buffer"
+            ),
+        ));
+    }
+    Ok(())
 }

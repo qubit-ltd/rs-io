@@ -12,11 +12,12 @@
 //! record formats; callers compose those concerns on top of the byte windows
 //! exposed here.
 //!
-//! [`BufferedByteInput`] buffers bytes in front of a [`std::io::Read`] value
-//! and exposes the currently unread byte window. [`BufferedByteOutput`] buffers
-//! bytes before a [`std::io::Write`] value and exposes spare writable capacity
-//! for hot-path encoders. [`Buffer`] is the low-level position/limit storage
-//! object shared by both implementations.
+//! [`BufferedByteInput`] buffers bytes in front of a [`std::io::Read`] value,
+//! implements [`std::io::BufRead`], and exposes the currently unread byte
+//! window. [`BufferedByteOutput`] buffers bytes before a [`std::io::Write`]
+//! value and exposes spare writable capacity for hot-path encoders. [`Buffer`]
+//! is the low-level position/limit storage object shared by both
+//! implementations.
 //!
 //! The default capacity used by buffered byte input and output is
 //! [`DEFAULT_BUFFER_CAPACITY`].
@@ -24,9 +25,11 @@
 mod buffer;
 mod buffered_byte_input;
 mod buffered_byte_output;
+mod buffered_byte_output_finish_error;
 mod capacity;
 
 pub use buffer::Buffer;
 pub use buffered_byte_input::BufferedByteInput;
 pub use buffered_byte_output::BufferedByteOutput;
+pub use buffered_byte_output_finish_error::BufferedByteOutputFinishError;
 pub use capacity::DEFAULT_BUFFER_CAPACITY;
