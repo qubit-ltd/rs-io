@@ -17,15 +17,18 @@ use std::io::{
 
 use crate::Buffer;
 use crate::ReadExt;
-
-/// Default capacity used by buffered byte input and output buffers.
-pub const DEFAULT_BUFFER_CAPACITY: usize = 8 * 1024;
+use crate::buffered::DEFAULT_BUFFER_CAPACITY;
 
 /// Buffered byte input over a wrapped reader.
 ///
 /// This type owns a wrapped input object and an internal byte buffer. It keeps
 /// unread bytes in `buffer[position..limit]` so callers can inspect or consume
 /// the current byte window before refilling it.
+///
+/// `BufferedByteInput` is deliberately byte-oriented. It performs no binary
+/// decoding, text decoding, or record parsing; higher-level stream adapters can
+/// build those concerns on top of [`Self::unread_slice`],
+/// [`Self::ensure_available`], and [`Self::read_into_unchecked`].
 #[derive(Debug)]
 pub struct BufferedByteInput<R> {
     inner: R,
@@ -44,6 +47,7 @@ impl<R> BufferedByteInput<R> {
     /// A new buffered byte input whose internal buffer has at least
     /// `DEFAULT_BUFFER_CAPACITY` bytes.
     #[inline(always)]
+    #[must_use]
     pub fn new(inner: R) -> Self {
         Self::with_capacity(inner, DEFAULT_BUFFER_CAPACITY)
     }
@@ -62,6 +66,7 @@ impl<R> BufferedByteInput<R> {
     /// A new buffered byte input whose internal buffer capacity is
     /// `capacity.max(1)`.
     #[inline]
+    #[must_use]
     pub fn with_capacity(inner: R, capacity: usize) -> Self {
         Self {
             inner,
@@ -100,6 +105,7 @@ impl<R> BufferedByteInput<R> {
     ///
     /// The wrapped input object.
     #[inline(always)]
+    #[must_use]
     pub fn into_inner(self) -> R {
         self.inner
     }
@@ -121,6 +127,7 @@ impl<R> BufferedByteInput<R> {
     ///
     /// The length of `buffer[position..limit]`, in bytes.
     #[inline(always)]
+    #[must_use]
     pub fn available(&self) -> usize {
         self.buffer.available()
     }
