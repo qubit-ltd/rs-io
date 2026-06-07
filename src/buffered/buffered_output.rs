@@ -6,10 +6,20 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{Error, ErrorKind, Result, Seek, SeekFrom, Write};
+use std::io::{
+    Error,
+    ErrorKind,
+    Result,
+    Seek,
+    SeekFrom,
+    Write,
+};
 
 use crate::buffered::DEFAULT_BUFFER_CAPACITY;
-use crate::{Buffer, Output};
+use crate::{
+    Buffer,
+    Output,
+};
 
 /// Buffered unit output over a wrapped output sink.
 ///
@@ -444,8 +454,11 @@ where
             // SAFETY: `position..position + available` is the current readable
             // range maintained by `Buffer`.
             match unsafe {
-                self.inner
-                    .write_unchecked(self.buffer.data(), position, available)
+                self.inner.write_unchecked(
+                    self.buffer.data(),
+                    position,
+                    available,
+                )
             } {
                 Ok(0) => {
                     self.buffer.compact();
@@ -455,7 +468,8 @@ where
                     ));
                 }
                 Ok(written) => {
-                    if let Err(error) = validate_write_count(written, available) {
+                    if let Err(error) = validate_write_count(written, available)
+                    {
                         self.buffer.compact();
                         return Err(error);
                     }
@@ -629,7 +643,8 @@ where
         count: usize,
     ) -> Result<usize> {
         // SAFETY: The caller guarantees the source range is valid.
-        let written = unsafe { self.inner.write_unchecked(input, input_index, count) }?;
+        let written =
+            unsafe { self.inner.write_unchecked(input, input_index, count) }?;
         validate_write_count(written, count)?;
         Ok(written)
     }
@@ -663,7 +678,13 @@ where
             let remaining = count - written;
             // SAFETY: `written < count`, so this suffix remains inside the
             // caller-validated source range.
-            match unsafe { self.write_inner_unchecked(input, input_index + written, remaining) } {
+            match unsafe {
+                self.write_inner_unchecked(
+                    input,
+                    input_index + written,
+                    remaining,
+                )
+            } {
                 Ok(0) => {
                     return Err(Error::new(
                         ErrorKind::WriteZero,
@@ -731,7 +752,9 @@ fn validate_write_count(written: usize, requested: usize) -> Result<()> {
     if written > requested {
         return Err(Error::new(
             ErrorKind::InvalidData,
-            format!("writer reported {written} bytes for a {requested}-byte buffer"),
+            format!(
+                "writer reported {written} bytes for a {requested}-byte buffer"
+            ),
         ));
     }
     Ok(())

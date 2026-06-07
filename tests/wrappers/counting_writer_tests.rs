@@ -6,7 +6,11 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{Error, ErrorKind, Write};
+use std::io::{
+    Error,
+    ErrorKind,
+    Write,
+};
 
 use qubit_io::CountingWriter;
 
@@ -78,7 +82,11 @@ fn test_counting_writer_flush_delegates_to_inner_writer() {
 
 #[test]
 fn test_counting_writer_forwards_seek_without_counting() {
-    use std::io::{Cursor, Seek, SeekFrom};
+    use std::io::{
+        Cursor,
+        Seek,
+        SeekFrom,
+    };
 
     let mut writer = CountingWriter::new(Cursor::new(Vec::new()));
 
