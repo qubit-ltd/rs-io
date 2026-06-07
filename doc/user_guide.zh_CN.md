@@ -7,7 +7,7 @@
 
 | 领域 | API | 适用场景 |
 | --- | --- | --- |
-| Buffered byte I/O | `Buffer`、`BufferedByteInput`、`BufferedByteOutput` | 上层 adapter 需要 format-agnostic 的 byte window |
+| Buffered byte I/O | `Buffer`、`BufferedInput`、`BufferedOutput` | 上层 adapter 需要 format-agnostic 的 byte window |
 | 组合 trait | `ReadSeek`、`ReadWrite`、`ReadWriteSeek`、`BufReadSeek`、`WriteSeek` | API 需要组合 I/O 能力的 trait object |
 | Read helper | `ReadExt` | exact-or-EOF 读取、有界读取和复制 helper |
 | BufRead helper | `BufReadExt` | 有界 delimiter / line 读取 |
@@ -24,7 +24,7 @@ qubit-io = "0.7"
 
 ## Buffered Byte I/O
 
-`BufferedByteInput` 和 `BufferedByteOutput` 是面向字节的缓冲原语。它们不解码
+`BufferedInput` 和 `BufferedOutput` 是面向字节的缓冲原语。它们不解码
 binary value、不解码文本，也不解析 record；这些能力应该由兄弟 crate 基于 byte
 window 组合出来。
 
@@ -34,9 +34,9 @@ use std::io::{
     Cursor,
 };
 
-use qubit_io::BufferedByteInput;
+use qubit_io::BufferedInput;
 
-let mut input = BufferedByteInput::with_capacity(
+let mut input = BufferedInput::with_capacity(
     Cursor::new(b"abcdef".to_vec()),
     4,
 );
@@ -50,7 +50,7 @@ assert_eq!(b"cd", unread.as_slice());
 # Ok::<(), std::io::Error>(())
 ```
 
-`BufferedByteOutput::into_parts` 不执行 I/O，会返回被包装的 writer 和 pending
+`BufferedOutput::into_parts` 不执行 I/O，会返回被包装的 writer 和 pending
 bytes。成功结束时，先调用 `flush`，再用 `into_parts` 验证 pending bytes 为空。
 如果 flush 失败，调用方仍然持有 buffered output，可以自行重试或拆解。
 
@@ -60,10 +60,10 @@ use std::io::{
     Write,
 };
 
-use qubit_io::BufferedByteOutput;
+use qubit_io::BufferedOutput;
 
 let mut output =
-    BufferedByteOutput::with_capacity(Cursor::new(Vec::<u8>::new()), 4);
+    BufferedOutput::with_capacity(Cursor::new(Vec::<u8>::new()), 4);
 output.ensure_spare_capacity(3)?;
 output.spare_buffer_mut()[0..3].copy_from_slice(b"xyz");
 unsafe {

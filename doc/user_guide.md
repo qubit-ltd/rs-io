@@ -7,7 +7,7 @@ binary or text encoding format. The crate stays at the generic I/O layer.
 
 | Area | API | Use when |
 | --- | --- | --- |
-| Buffered byte I/O | `Buffer`, `BufferedByteInput`, `BufferedByteOutput` | higher-level adapters need format-agnostic byte windows |
+| Buffered byte I/O | `Buffer`, `BufferedInput`, `BufferedOutput` | higher-level adapters need format-agnostic byte windows |
 | Composition traits | `ReadSeek`, `ReadWrite`, `ReadWriteSeek`, `BufReadSeek`, `WriteSeek` | an API needs a trait object for combined I/O capabilities |
 | Read helpers | `ReadExt` | exact-or-EOF reads, bounded reads, and copy helpers |
 | Buffered helpers | `BufReadExt` | bounded delimiter and line reads |
@@ -24,7 +24,7 @@ qubit-io = "0.7"
 
 ## Buffered Byte I/O
 
-`BufferedByteInput` and `BufferedByteOutput` are byte-oriented buffering
+`BufferedInput` and `BufferedOutput` are byte-oriented buffering
 primitives. They do not decode binary values, decode text, or parse records.
 Those layers should be built in sibling crates on top of the byte windows.
 
@@ -34,9 +34,9 @@ use std::io::{
     Cursor,
 };
 
-use qubit_io::BufferedByteInput;
+use qubit_io::BufferedInput;
 
-let mut input = BufferedByteInput::with_capacity(
+let mut input = BufferedInput::with_capacity(
     Cursor::new(b"abcdef".to_vec()),
     4,
 );
@@ -50,7 +50,7 @@ assert_eq!(b"cd", unread.as_slice());
 # Ok::<(), std::io::Error>(())
 ```
 
-`BufferedByteOutput::into_parts` performs no I/O and returns the wrapped writer
+`BufferedOutput::into_parts` performs no I/O and returns the wrapped writer
 plus any pending bytes. To finish successfully, call `flush` first and then
 verify that `into_parts` returns an empty pending byte vector. If flushing
 fails, the caller still owns the buffered output and can retry or dismantle it.
@@ -61,10 +61,10 @@ use std::io::{
     Write,
 };
 
-use qubit_io::BufferedByteOutput;
+use qubit_io::BufferedOutput;
 
 let mut output =
-    BufferedByteOutput::with_capacity(Cursor::new(Vec::<u8>::new()), 4);
+    BufferedOutput::with_capacity(Cursor::new(Vec::<u8>::new()), 4);
 output.ensure_spare_capacity(3)?;
 output.spare_buffer_mut()[0..3].copy_from_slice(b"xyz");
 unsafe {
