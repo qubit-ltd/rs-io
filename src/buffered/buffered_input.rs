@@ -6,40 +6,39 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    BufRead,
-    Error,
-    ErrorKind,
-    Read,
-    Result,
-    Seek,
-    SeekFrom,
-};
+use std::io::{BufRead, Error, ErrorKind, Read, Result, Seek, SeekFrom};
 
-use crate::Buffer;
-use crate::ReadExt;
 use crate::buffered::DEFAULT_BUFFER_CAPACITY;
+use crate::{Buffer, Input};
 
-/// Buffered byte input over a wrapped reader.
+/// Buffered unit input over a wrapped input source.
 ///
-/// This type owns a wrapped input object and an internal byte buffer. It keeps
-/// unread bytes in `buffer[position..limit]` so callers can inspect or consume
-/// the current byte window before refilling it.
+/// This type owns a wrapped input object and an internal unit buffer. It keeps
+/// unread units in `buffer[position..limit]` so callers can inspect or consume
+/// the current unit window before refilling it.
 ///
-/// `BufferedByteInput` is deliberately byte-oriented. It performs no binary
+/// `BufferedInput` is deliberately unit-oriented. It performs no binary
 /// decoding, text decoding, or record parsing; higher-level stream adapters can
 /// build those concerns on top of [`Self::unread_slice`],
 /// [`Self::unread_raw_parts`], [`Self::ensure_available`], and
 /// [`Self::read_into_unchecked`]. The type also implements [`BufRead`] for
 /// callers that want the standard buffered-read interface.
 #[derive(Debug)]
-pub struct BufferedByteInput<R> {
-    inner: R,
-    buffer: Buffer<u8>,
+pub struct BufferedInput<I>
+where
+    I: Input,
+    I::Item: Copy + Default,
+{
+    inner: I,
+    buffer: Buffer<I::Item>,
 }
 
-impl<R> BufferedByteInput<R> {
-    /// Creates a buffered byte input with the default capacity.
+impl<I> BufferedInput<I>
+where
+    I: Input,
+    I::Item: Copy + Default,
+{
+    /// Creates a buffered unit input with the default capacity.
     ///
     /// # Arguments
     ///
@@ -47,30 +46,30 @@ impl<R> BufferedByteInput<R> {
     ///
     /// # Returns
     ///
-    /// A new buffered byte input whose internal buffer has at least
-    /// `DEFAULT_BUFFER_CAPACITY` bytes.
+    /// A new buffered unit input whose internal buffer has at least
+    /// `DEFAULT_BUFFER_CAPACITY` units.
     #[inline(always)]
     #[must_use]
-    pub fn new(inner: R) -> Self {
+    pub fn new(inner: I) -> Self {
         Self::with_capacity(inner, DEFAULT_BUFFER_CAPACITY)
     }
 
-    /// Creates a buffered byte input with at least the requested capacity.
+    /// Creates a buffered unit input with at least the requested capacity.
     ///
     /// The actual capacity is raised to `1` when the requested value is `0`.
     ///
     /// # Arguments
     ///
     /// * `inner` - The input object wrapped by this buffer.
-    /// * `capacity` - The requested internal buffer capacity, in bytes.
+    /// * `capacity` - The requested internal buffer capacity, in units.
     ///
     /// # Returns
     ///
-    /// A new buffered byte input whose internal buffer capacity is
+    /// A new buffered unit input whose internal buffer capacity is
     /// `capacity.max(1)`.
     #[inline]
     #[must_use]
-    pub fn with_capacity(inner: R, capacity: usize) -> Self {
+    pub fn with_capacity(inner: I, capacity: usize) -> Self {
         Self {
             inner,
             buffer: Buffer::with_capacity(capacity),
@@ -83,37 +82,37 @@ impl<R> BufferedByteInput<R> {
     ///
     /// A shared reference to the inner input object.
     #[inline(always)]
-    pub const fn inner(&self) -> &R {
+    pub const fn inner(&self) -> &I {
         &self.inner
     }
 
     /// Returns an exclusive reference to the wrapped input object.
     ///
     /// Mutating the wrapped object directly may invalidate assumptions about
-    /// bytes already buffered by this value.
+    /// units already buffered by this value.
     ///
     /// # Returns
     ///
     /// An exclusive reference to the wrapped input object.
     #[inline(always)]
-    pub fn inner_mut(&mut self) -> &mut R {
+    pub fn inner_mut(&mut self) -> &mut I {
         &mut self.inner
     }
 
     /// Consumes this buffered input and returns the wrapped input object plus
     /// unread bytes.
     ///
-    /// This method performs no I/O. Bytes that have already been read from the
+    /// This method performs no I/O. Units that have already been read from the
     /// wrapped input but not consumed by this buffered input are returned as
     /// the second tuple item.
     ///
     /// # Returns
     ///
     /// The wrapped input object and a vector containing the unread buffered
-    /// bytes in logical read order.
+    /// units in logical read order.
     #[inline(always)]
     #[must_use]
-    pub fn into_parts(self) -> (R, Vec<u8>) {
+    pub fn into_parts(self) -> (I, Vec<I::Item>) {
         let unread = self.unread_slice().to_vec();
         (self.inner, unread)
     }
@@ -122,49 +121,49 @@ impl<R> BufferedByteInput<R> {
     ///
     /// # Returns
     ///
-    /// The total number of bytes that can be held by the internal buffer.
+    /// The total number of units that can be held by the internal buffer.
     #[inline(always)]
     #[must_use]
     pub fn capacity(&self) -> usize {
         self.buffer.capacity()
     }
 
-    /// Returns the number of unread bytes currently buffered.
+    /// Returns the number of unread units currently buffered.
     ///
     /// # Returns
     ///
-    /// The length of `buffer[position..limit]`, in bytes.
+    /// The length of `buffer[position..limit]`, in units.
     #[inline(always)]
     #[must_use]
     pub fn available(&self) -> usize {
         self.buffer.available()
     }
 
-    /// Returns the currently buffered unread bytes.
+    /// Returns the currently buffered unread units.
     ///
     /// # Returns
     ///
     /// The unread range `buffer[position..limit]`.
     #[inline(always)]
     #[must_use]
-    pub fn unread_slice(&self) -> &[u8] {
+    pub fn unread_slice(&self) -> &[I::Item] {
         &self.buffer.data()[self.buffer.position()..self.buffer.limit()]
     }
 
     /// Returns raw unread-buffer parts for hot-path callers.
     ///
     /// The returned slice is the full internal backing storage. `index` is the
-    /// start of the unread byte window, and `count` is the number of unread
-    /// bytes. Callers that need a slice can use `&buffer[index..index +
+    /// start of the unread unit window, and `count` is the number of unread
+    /// units. Callers that need a slice can use `&buffer[index..index +
     /// count]`; callers that already validated bounds can pass `buffer` and
     /// `index` directly to indexed unchecked codecs.
     ///
     /// # Returns
     ///
-    /// The backing storage, the unread start index, and the unread byte count.
+    /// The backing storage, the unread start index, and the unread unit count.
     #[inline(always)]
     #[must_use]
-    pub fn unread_raw_parts(&self) -> (&[u8], usize, usize) {
+    pub fn unread_raw_parts(&self) -> (&[I::Item], usize, usize) {
         (
             self.buffer.data(),
             self.buffer.position(),
@@ -172,11 +171,11 @@ impl<R> BufferedByteInput<R> {
         )
     }
 
-    /// Advances the unread cursor by `count` bytes.
+    /// Advances the unread cursor by `count` units.
     ///
     /// # Parameters
     ///
-    /// * `count` - Number of currently unread bytes to consume.
+    /// * `count` - Number of currently unread units to consume.
     ///
     /// # Panics
     ///
@@ -222,16 +221,16 @@ impl<R> BufferedByteInput<R> {
         self.buffer.spare_capacity()
     }
 
-    /// Invalidates all buffered bytes.
+    /// Invalidates all buffered units.
     ///
     /// After this call, the buffer is considered empty and subsequent reads
-    /// will refill it from the wrapped reader.
+    /// will refill it from the wrapped input.
     #[inline(always)]
     fn discard_buffer(&mut self) {
         self.buffer.clear();
     }
 
-    /// Moves unread bytes to the front of the buffer.
+    /// Moves unread units to the front of the buffer.
     ///
     /// This preserves the unread range while reclaiming tail capacity for
     /// future reads. If there are no unread bytes, the buffer is discarded.
@@ -241,9 +240,10 @@ impl<R> BufferedByteInput<R> {
     }
 }
 
-impl<R> BufferedByteInput<R>
+impl<I> BufferedInput<I>
 where
-    R: Read,
+    I: Input,
+    I::Item: Copy + Default,
 {
     /// Appends one more chunk from the wrapped reader to the internal buffer.
     ///
@@ -428,7 +428,7 @@ where
     #[inline(always)]
     pub unsafe fn read_into_unchecked(
         &mut self,
-        output: &mut [u8],
+        output: &mut [I::Item],
         output_index: usize,
         count: usize,
     ) -> Result<usize> {
@@ -445,9 +445,7 @@ where
             self.discard_buffer();
             if count >= self.buffer.capacity() {
                 // SAFETY: The caller guarantees that the target range is valid.
-                let read = unsafe {
-                    self.inner.read_unchecked(output, output_index, count)
-                }?;
+                let read = unsafe { self.inner.read_unchecked(output, output_index, count) }?;
                 validate_read_count(read, count)?;
                 return Ok(read);
             }
@@ -464,7 +462,12 @@ where
         }
         Ok(read_count)
     }
+}
 
+impl<I> BufferedInput<I>
+where
+    I: Input<Item = u8>,
+{
     /// Seeks the wrapped reader and discards buffered bytes after success.
     ///
     /// For [`SeekFrom::Current`], the offset is adjusted by the number of
@@ -486,7 +489,7 @@ where
     /// error produced by the wrapped reader.
     fn seek_logical(&mut self, position: SeekFrom) -> Result<u64>
     where
-        R: Seek,
+        I: Seek,
     {
         let position = match position {
             SeekFrom::Current(offset) => {
@@ -508,9 +511,9 @@ where
     }
 }
 
-impl<R> Read for BufferedByteInput<R>
+impl<I> Read for BufferedInput<I>
 where
-    R: Read,
+    I: Input<Item = u8>,
 {
     /// Reads bytes through the internal buffer.
     ///
@@ -532,9 +535,9 @@ where
     }
 }
 
-impl<R> BufRead for BufferedByteInput<R>
+impl<I> BufRead for BufferedInput<I>
 where
-    R: Read,
+    I: Input<Item = u8>,
 {
     /// Returns the currently buffered unread bytes, refilling when empty.
     #[inline]
@@ -551,13 +554,13 @@ where
     /// Consumes `amount` bytes from the unread byte window.
     #[inline(always)]
     fn consume(&mut self, amount: usize) {
-        BufferedByteInput::consume(self, amount);
+        BufferedInput::consume(self, amount);
     }
 }
 
-impl<R> Seek for BufferedByteInput<R>
+impl<I> Seek for BufferedInput<I>
 where
-    R: Read + Seek,
+    I: Input<Item = u8> + Seek,
 {
     /// Seeks the wrapped reader and discards buffered bytes after success.
     #[inline(always)]
@@ -582,9 +585,7 @@ fn validate_read_count(read: usize, requested: usize) -> Result<()> {
     if read > requested {
         return Err(Error::new(
             ErrorKind::InvalidData,
-            format!(
-                "reader reported {read} bytes for a {requested}-byte buffer"
-            ),
+            format!("reader reported {read} bytes for a {requested}-byte buffer"),
         ));
     }
     Ok(())

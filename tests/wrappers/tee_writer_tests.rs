@@ -6,11 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Error,
-    ErrorKind,
-    Write,
-};
+use std::io::{Error, ErrorKind, Write};
 
 use qubit_io::TeeWriter;
 
@@ -213,11 +209,7 @@ fn test_tee_writer_returns_primary_flush_error() {
 
 #[test]
 fn test_tee_writer_forwards_seek_to_both_writers() {
-    use std::io::{
-        Cursor,
-        Seek,
-        SeekFrom,
-    };
+    use std::io::{Cursor, Seek, SeekFrom};
 
     let primary = Cursor::new(Vec::new());
     let branch = Cursor::new(Vec::new());

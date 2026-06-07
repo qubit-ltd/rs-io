@@ -12,9 +12,9 @@
 //! record formats; callers compose those concerns on top of the byte windows
 //! exposed here.
 //!
-//! [`BufferedByteInput`] buffers bytes in front of a [`std::io::Read`] value,
+//! [`BufferedInput`] buffers bytes in front of a [`std::io::Read`] value,
 //! implements [`std::io::BufRead`], and exposes the currently unread byte
-//! window. [`BufferedByteOutput`] buffers bytes before a [`std::io::Write`]
+//! window. [`BufferedOutput`] buffers bytes before a [`std::io::Write`]
 //! value and exposes spare writable capacity for hot-path encoders. [`Buffer`]
 //! is the low-level position/limit storage object shared by both
 //! implementations.
@@ -23,11 +23,11 @@
 //! [`DEFAULT_BUFFER_CAPACITY`].
 
 mod buffer;
-mod buffered_byte_input;
-mod buffered_byte_output;
+mod buffered_input;
+mod buffered_output;
 mod capacity;
 
 pub use buffer::Buffer;
-pub use buffered_byte_input::BufferedByteInput;
-pub use buffered_byte_output::BufferedByteOutput;
+pub use buffered_input::BufferedInput;
+pub use buffered_output::BufferedOutput;
 pub use capacity::DEFAULT_BUFFER_CAPACITY;

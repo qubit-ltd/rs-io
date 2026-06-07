@@ -6,10 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Result,
-    Write,
-};
+use std::io::{Result, Write};
 
 /// Extension methods for [`Write`] values.
 ///
@@ -56,9 +53,8 @@ pub trait WriteExt: Write {
         );
         // SAFETY: The caller guarantees that the computed pointer and length
         // form a valid subslice of `buffer`.
-        let source = unsafe {
-            core::slice::from_raw_parts(buffer.as_ptr().add(start_index), count)
-        };
+        let source =
+            unsafe { core::slice::from_raw_parts(buffer.as_ptr().add(start_index), count) };
         self.write(source)
     }
 
@@ -97,9 +93,8 @@ pub trait WriteExt: Write {
         );
         // SAFETY: The caller guarantees that the computed pointer and length
         // form a valid subslice of `buffer`.
-        let source = unsafe {
-            core::slice::from_raw_parts(buffer.as_ptr().add(start_index), count)
-        };
+        let source =
+            unsafe { core::slice::from_raw_parts(buffer.as_ptr().add(start_index), count) };
         self.write_all(source)
     }
 }
