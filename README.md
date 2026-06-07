@@ -53,11 +53,11 @@ reference documentation is available on [docs.rs](https://docs.rs/qubit-io).
 - **`Buffer<T>`**: low-level position/limit storage with a readable window and
   spare tail capacity.
 - **`BufferedByteInput`**: buffered byte input over `Read`, with unread-window
-  inspection, count-aware refilling, logical seeking, and indexed unchecked
-  reads for validated output ranges.
+  inspection, `BufRead` support, count-aware refilling, logical seeking,
+  `into_parts`, and indexed unchecked reads for validated output ranges.
 - **`BufferedByteOutput`**: buffered byte output over `Write`, with spare-window
-  access, checked and unchecked advancing, flushing, seeking, and large-write
-  bypass paths.
+  access, checked and unchecked advancing, recoverable finishing, non-flushing
+  `into_parts`, seeking, and large-write bypass paths.
 - **`DEFAULT_BUFFER_CAPACITY`**: shared default capacity for byte input and
   output buffering.
 
@@ -146,9 +146,9 @@ buffered_output.spare_buffer_mut()[0..3].copy_from_slice(b"xyz");
 unsafe {
     buffered_output.advance_unchecked(3);
 }
-let cursor = buffered_output.into_inner()?;
+let cursor = buffered_output.finish_into_inner()?;
 assert_eq!(b"xyz", cursor.into_inner().as_slice());
-# Ok::<(), std::io::Error>(())
+# Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 ## API Reference
@@ -170,6 +170,7 @@ assert_eq!(b"xyz", cursor.into_inner().as_slice());
 | `Buffer` | Low-level position/limit storage for hot-path buffering |
 | `BufferedByteInput` | Buffered byte input over a `Read` source |
 | `BufferedByteOutput` | Buffered byte output over a `Write` sink |
+| `BufferedByteOutputFinishError` | Recoverable error returned by `BufferedByteOutput::finish_into_inner` |
 | `Streams` | Static helpers for copying and comparing streams |
 | `CountingReader` / `CountingWriter` | Count successful bytes read or written |
 | `LimitReader` / `LimitWriter` | Cap bytes read or written through a wrapper |
@@ -199,10 +200,11 @@ Most helpers operate directly on caller-provided buffers and delegate to the
 underlying `Read`, `Write`, or `Seek` implementation. Wrapper types avoid hidden
 allocation; any buffering policy remains explicit at the call site.
 
-`Buffer<T>` and the indexed unchecked read/write helpers are low-level APIs for
-callers that have already validated ranges. They are intended for hot paths such
-as binary and text stream adapters where avoiding repeated slicing and bounds
-checks matters. Safe wrapper methods remain available for general-purpose use.
+`Buffer<T>`, `BufferedByteInput::unread_raw_parts`, and
+`BufferedByteOutput::spare_raw_parts_mut` are low-level APIs for callers that
+have already validated ranges. They are intended for hot paths such as binary
+and text stream adapters where avoiding repeated slicing and bounds checks
+matters. Safe wrapper methods remain available for general-purpose use.
 
 ## Testing & Code Coverage
 
