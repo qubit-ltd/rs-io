@@ -123,6 +123,44 @@ fn test_unread_raw_parts_exposes_backing_buffer_index_and_count() {
 }
 
 #[test]
+fn test_spare_slice_mut_returns_spare_tail() {
+    let mut buffer = Buffer::<u8>::with_capacity(6);
+
+    // SAFETY: The input range and spare range are valid for two bytes.
+    unsafe {
+        buffer.copy_from_unchecked(b"ab", 0, 2);
+    }
+
+    buffer.spare_slice_mut()[..2].copy_from_slice(b"cd");
+    buffer.advance(2);
+
+    assert_eq!(0, buffer.position());
+    assert_eq!(4, buffer.limit());
+    assert_eq!(b"abcd", &buffer.data()[0..4]);
+}
+
+#[test]
+fn test_spare_raw_parts_mut_exposes_backing_buffer_index_and_count() {
+    let mut buffer = Buffer::<u8>::with_capacity(6);
+
+    // SAFETY: The input range and spare range are valid for two bytes.
+    unsafe {
+        buffer.copy_from_unchecked(b"ab", 0, 2);
+    }
+
+    {
+        let (data, index, count) = buffer.spare_raw_parts_mut();
+
+        assert_eq!(2, index);
+        assert_eq!(4, count);
+        data[index..index + 2].copy_from_slice(b"cd");
+    }
+    buffer.advance(2);
+
+    assert_eq!(b"abcd", &buffer.data()[0..4]);
+}
+
+#[test]
 fn test_compact_clears_empty_readable_window() {
     let mut buffer = Buffer::<u8>::with_capacity(4);
 

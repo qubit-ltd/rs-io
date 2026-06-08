@@ -163,7 +163,7 @@ unsafe {
 let mut buffered_output =
     BufferedOutput::with_capacity(Cursor::new(Vec::<u8>::new()), 4);
 buffered_output.ensure_spare_capacity(3)?;
-buffered_output.spare_buffer_mut()[0..3].copy_from_slice(b"xyz");
+buffered_output.spare_slice_mut()[0..3].copy_from_slice(b"xyz");
 unsafe {
     buffered_output.advance_unchecked(3);
 }

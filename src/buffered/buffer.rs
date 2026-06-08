@@ -213,6 +213,36 @@ where
         (&self.data[..self.limit], self.position, self.available())
     }
 
+    /// Returns the spare tail that callers may fill before advancing the limit.
+    ///
+    /// # Returns
+    ///
+    /// The spare range `data[limit..]`.
+    #[inline(always)]
+    #[must_use]
+    pub fn spare_slice_mut(&mut self) -> &mut [T] {
+        &mut self.data[self.limit..]
+    }
+
+    /// Returns raw spare-tail parts for hot-path callers.
+    ///
+    /// The returned slice is the full backing storage. `index` is the start of
+    /// the spare window, and `count` is the number of spare elements. Callers
+    /// that need a slice can use `&mut buffer[index..index + count]`; callers
+    /// that already validated bounds can pass `buffer` and `index` directly to
+    /// indexed unchecked operations that write from `index`.
+    ///
+    /// # Returns
+    ///
+    /// The backing storage, the spare start index, and the spare element count.
+    #[inline(always)]
+    #[must_use]
+    pub fn spare_raw_parts_mut(&mut self) -> (&mut [T], usize, usize) {
+        let index = self.limit;
+        let count = self.spare_capacity();
+        (self.data_mut(), index, count)
+    }
+
     /// Clears all buffered contents.
     ///
     /// This resets both cursors to zero without modifying stored values.

@@ -31,7 +31,7 @@ use crate::{
 /// `BufferedOutput` is deliberately unit-oriented. It performs no binary
 /// encoding, text encoding, or record framing. Higher-level writers can either
 /// use the standard [`Write`] implementation or write directly into
-/// [`Self::spare_buffer_mut`] or [`Self::spare_raw_parts_mut`] and then call
+/// [`Self::spare_slice_mut`] or [`Self::spare_raw_parts_mut`] and then call
 /// [`Self::advance`] or [`Self::advance_unchecked`] after validating the range
 /// they initialized. Callers that need to recover the wrapped writer should
 /// call [`Write::flush`] first, then use [`Self::into_parts`].
@@ -145,9 +145,8 @@ where
     /// A mutable slice over the spare buffer capacity.
     #[inline(always)]
     #[must_use]
-    pub fn spare_buffer_mut(&mut self) -> &mut [O::Item] {
-        let limit = self.buffer.limit();
-        &mut self.buffer.data_mut()[limit..]
+    pub fn spare_slice_mut(&mut self) -> &mut [O::Item] {
+        self.buffer.spare_slice_mut()
     }
 
     /// Returns raw spare-buffer parts for hot-path callers.
@@ -167,12 +166,10 @@ where
     #[inline(always)]
     #[must_use]
     pub fn spare_raw_parts_mut(&mut self) -> (&mut [O::Item], usize, usize) {
-        let index = self.buffer.limit();
-        let count = self.buffer.spare_capacity();
-        (self.buffer.data_mut(), index, count)
+        self.buffer.spare_raw_parts_mut()
     }
 
-    /// Marks `count` bytes from [`Self::spare_buffer_mut`] as written.
+    /// Marks `count` bytes from [`Self::spare_slice_mut`] as written.
     ///
     /// # Parameters
     ///
@@ -203,7 +200,7 @@ where
     /// # Safety
     ///
     /// The caller must guarantee that `count <= self.spare_capacity()` and
-    /// that the corresponding bytes returned by [`Self::spare_buffer_mut`]
+    /// that the corresponding bytes returned by [`Self::spare_slice_mut`]
     /// have been initialized.
     #[inline(always)]
     pub unsafe fn advance_unchecked(&mut self, count: usize) {
@@ -240,13 +237,7 @@ where
             self.buffer.copy_from_unchecked(input, input_index, count);
         }
     }
-}
 
-impl<O> BufferedOutput<O>
-where
-    O: Output,
-    O::Item: Copy + Default,
-{
     /// Consumes this buffered output without flushing pending bytes.
     ///
     /// This method performs no I/O. Pending bytes that have been accepted into
@@ -489,26 +480,6 @@ where
         Ok(())
     }
 
-    /// Flushes buffered bytes and then flushes the wrapped writer.
-    ///
-    /// # Returns
-    ///
-    /// `Ok(())` once pending buffered bytes have been written and the wrapped
-    /// writer's own flush operation succeeds.
-    ///
-    /// # Errors
-    ///
-    /// Returns any non-interrupted I/O error produced while flushing buffered
-    /// bytes, [`ErrorKind::WriteZero`] if the wrapped writer cannot make
-    /// progress while draining the buffer, [`ErrorKind::InvalidData`] if the
-    /// writer reports an impossible byte count, or any error returned by
-    /// [`Write::flush`] on the wrapped writer.
-    #[inline(always)]
-    fn flush_all(&mut self) -> Result<()> {
-        self.flush_buffer()
-            .and_then(|()| Output::flush(&mut self.inner))
-    }
-
     /// Flushes buffered units and then flushes the wrapped output.
     ///
     /// # Returns
@@ -518,11 +489,15 @@ where
     ///
     /// # Errors
     ///
-    /// Returns any error produced while draining buffered units or flushing
-    /// the wrapped output.
+    /// Returns any non-interrupted I/O error produced while flushing buffered
+    /// bytes, [`ErrorKind::WriteZero`] if the wrapped writer cannot make
+    /// progress while draining the buffer, [`ErrorKind::InvalidData`] if the
+    /// writer reports an impossible byte count, or any error returned by
+    /// [`Write::flush`] on the wrapped writer.
     #[inline(always)]
     pub fn flush(&mut self) -> Result<()> {
-        self.flush_all()
+        self.flush_buffer()
+            .and_then(|()| Output::flush(&mut self.inner))
     }
 
     /// Writes bytes from the input slice and reports the accepted byte count.
@@ -721,7 +696,7 @@ where
     /// Flushes the internal buffer and then the wrapped writer.
     #[inline(always)]
     fn flush(&mut self) -> Result<()> {
-        self.flush_all()
+        BufferedOutput::flush(self)
     }
 }
 
