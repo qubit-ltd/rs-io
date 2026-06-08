@@ -93,7 +93,7 @@ fn test_compact_moves_unread_tail_to_front() {
 }
 
 #[test]
-fn test_unread_slice_returns_readable_window() {
+fn test_available_slice_returns_readable_window() {
     let mut buffer = Buffer::<u8>::with_capacity(6);
 
     // SAFETY: The input range and spare range are valid for five bytes.
@@ -102,11 +102,11 @@ fn test_unread_slice_returns_readable_window() {
     }
     buffer.consume(2);
 
-    assert_eq!(b"cde", buffer.unread_slice());
+    assert_eq!(b"cde", buffer.available_slice());
 }
 
 #[test]
-fn test_unread_raw_parts_exposes_backing_buffer_index_and_count() {
+fn test_available_raw_parts_exposes_backing_buffer_index_and_count() {
     let mut buffer = Buffer::<u8>::with_capacity(6);
 
     // SAFETY: The input range and spare range are valid for five bytes.
@@ -115,7 +115,7 @@ fn test_unread_raw_parts_exposes_backing_buffer_index_and_count() {
     }
     buffer.consume(2);
 
-    let (data, index, count) = buffer.unread_raw_parts();
+    let (data, index, count) = buffer.available_raw_parts();
 
     assert_eq!(2, index);
     assert_eq!(3, count);

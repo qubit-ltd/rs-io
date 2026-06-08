@@ -6,11 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Result,
-    Seek,
-    SeekFrom,
-};
+use std::io::{Result, Seek, SeekFrom};
 
 /// Minimal seek interface measured in stream units.
 ///
@@ -21,6 +17,45 @@ use std::io::{
 ///
 /// The return value of [`Seekable::seek`] is the new absolute position from
 /// the start of the stream, in units.
+///
+/// # Coherence note
+///
+/// The blanket impl below maps [`std::io::Seek`] to `Item = u8` for binary
+/// compatibility. If a concrete type already implements `Seek`, it already has
+/// an implicit `Seekable<Item = u8>` impl from this blanket, so another
+/// `Seekable` impl with the same `(Self, Item)` pair would be a coherence
+/// conflict.
+///
+/// For example, this is rejected by the compiler:
+///
+/// ```rust,compile_fail
+/// use std::io::{Result, Seek, SeekFrom};
+///
+/// struct LegacyStream;
+///
+/// impl Seek for LegacyStream {
+///     fn seek(&mut self, _pos: SeekFrom) -> Result<u64> {
+///         Ok(0)
+///     }
+/// }
+///
+/// impl crate::Seekable for LegacyStream {
+///     type Item = u8;
+///     fn seek(&mut self, _pos: SeekFrom) -> Result<u64> {
+///         Ok(0)
+///     }
+/// }
+/// ```
+///
+/// ```text
+/// error[E0119]: conflicting implementations of trait `crate::Seekable`
+/// for type `LegacyStream`
+/// ```
+///
+/// The stable workaround is to keep byte-positioned seeking on the original type
+/// and introduce a wrapper/newtype when another unit interpretation is needed:
+/// implement `Seekable` for the wrapper with a different `Item`, and keep
+/// `std::io::Seek`/byte semantics on the original type.
 pub trait Seekable {
     /// The unit type used to measure seek positions and offsets.
     type Item;

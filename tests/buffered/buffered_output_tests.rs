@@ -7,19 +7,105 @@
 // =============================================================================
 
 use std::collections::VecDeque;
-use std::io::{
-    Cursor,
-    Error,
-    ErrorKind,
-    Seek,
-    SeekFrom,
-    Write,
-};
+use std::io::{Cursor, Error, ErrorKind, SeekFrom, Write};
 
-use qubit_io::{
-    BufferedOutput,
-    Output,
-};
+use qubit_io::{BufferedOutput, Output};
+
+#[derive(Default)]
+struct U16SeekOutput {
+    values: Vec<u16>,
+    position: usize,
+}
+
+impl U16SeekOutput {
+    fn new(values: Vec<u16>) -> Self {
+        Self {
+            values,
+            position: 0,
+        }
+    }
+}
+
+impl Output for U16SeekOutput {
+    type Item = u16;
+
+    unsafe fn write_unchecked(
+        &mut self,
+        input: &[u16],
+        index: usize,
+        count: usize,
+    ) -> std::io::Result<usize> {
+        let end = index
+            .checked_add(count)
+            .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "write range overflow"))?;
+        if end > input.len() {
+            return Err(Error::new(
+                ErrorKind::InvalidInput,
+                "write range exceeds source buffer",
+            ));
+        }
+        let limit = self
+            .position
+            .checked_add(count)
+            .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "position overflow"))?;
+        if limit > self.values.len() {
+            self.values.resize(limit, 0);
+        }
+        self.values[self.position..limit].copy_from_slice(&input[index..end]);
+        self.position = limit;
+        Ok(count)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl qubit_io::Seekable for U16SeekOutput {
+    type Item = u16;
+
+    fn seek(&mut self, position: SeekFrom) -> std::io::Result<u64> {
+        let current = i64::try_from(self.position)
+            .expect("position always fits into i64 on current platforms");
+        let target = match position {
+            SeekFrom::Start(offset) => i64::try_from(offset)
+                .map_err(|_| Error::new(ErrorKind::InvalidInput, "seek start offset overflow"))?,
+            SeekFrom::Current(offset) => current
+                .checked_add(offset)
+                .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "seek position overflows i64"))?,
+            SeekFrom::End(offset) => {
+                let end = i64::try_from(self.values.len())
+                    .map_err(|_| {
+                        Error::new(
+                            ErrorKind::InvalidInput,
+                            "seek position overflow during end-based seek",
+                        )
+                    })?;
+                end.checked_add(offset).ok_or_else(|| {
+                    Error::new(
+                        ErrorKind::InvalidInput,
+                        "seek position underflow or overflow",
+                    )
+                })?
+            }
+        };
+
+        if target < 0 {
+            return Err(Error::new(
+                ErrorKind::InvalidInput,
+                "seek position cannot be negative for unit stream",
+            ));
+        }
+
+        let target = usize::try_from(target)
+            .map_err(|_| Error::new(ErrorKind::InvalidInput, "seek position overflow"))?;
+        if target > self.values.len() {
+            self.values.resize(target, 0);
+        }
+        self.position = target;
+        Ok(target as u64)
+    }
+}
 
 #[derive(Default)]
 struct U16Output {
@@ -73,7 +159,7 @@ fn test_buffered_output_writes_generic_units() {
     // SAFETY: The full input range is valid.
     let written = unsafe {
         output
-            .write_from_unchecked(&[1, 2, 3], 0, 3)
+            .write_unchecked(&[1, 2, 3], 0, 3)
             .expect("small write should be buffered")
     };
     assert_eq!(3, written);
@@ -134,8 +220,7 @@ fn test_output_u8_blanket_impl_propagates_std_flush_errors() {
 
     let mut writer = FailingWriter;
 
-    let error = Output::flush(&mut writer)
-        .expect_err("std flush error should be propagated");
+    let error = Output::flush(&mut writer).expect_err("std flush error should be propagated");
 
     assert_eq!(ErrorKind::Other, error.kind());
 }
@@ -196,9 +281,7 @@ impl Write for ScriptedWriter {
                 self.output.extend_from_slice(&input[..count]);
                 Ok(count)
             }
-            WriteStep::Interrupted => {
-                Err(Error::new(ErrorKind::Interrupted, "interrupted"))
-            }
+            WriteStep::Interrupted => Err(Error::new(ErrorKind::Interrupted, "interrupted")),
             WriteStep::Error(kind, message) => Err(Error::new(kind, message)),
             WriteStep::Zero => Ok(0),
         }
@@ -241,8 +324,7 @@ fn test_new_and_inner_mut_expose_writer() {
 
 #[test]
 fn test_capacity_returns_internal_buffer_capacity() {
-    let output =
-        BufferedOutput::with_capacity(Cursor::new(Vec::<u8>::new()), 4);
+    let output = BufferedOutput::with_capacity(Cursor::new(Vec::<u8>::new()), 4);
 
     assert_eq!(4, output.capacity());
 }
@@ -386,8 +468,7 @@ fn test_write_all_delegates_large_empty_buffer_write() {
 
 #[test]
 fn test_write_all_delegated_large_write_retries_interrupted_writer() {
-    let writer =
-        ScriptedWriter::new(vec![WriteStep::Interrupted, WriteStep::Accept(4)]);
+    let writer = ScriptedWriter::new(vec![WriteStep::Interrupted, WriteStep::Accept(4)]);
     let mut output = BufferedOutput::with_capacity(writer, 4);
 
     output
@@ -495,14 +576,14 @@ fn test_write_flushes_then_buffers_smaller_input() {
 }
 
 #[test]
-fn test_write_from_unchecked_flushes_then_buffers_smaller_input() {
+fn test_write_unchecked_flushes_then_buffers_smaller_input() {
     let cursor = Cursor::new(Vec::new());
     let mut output = BufferedOutput::with_capacity(cursor, 4);
 
     // SAFETY: Both full input slices are valid source ranges.
     let prefix_count = unsafe {
         output
-            .write_from_unchecked(b"abc", 0, 3)
+            .write_unchecked(b"abc", 0, 3)
             .expect("buffered prefix should be accepted")
     };
     assert_eq!(3, prefix_count);
@@ -510,7 +591,7 @@ fn test_write_from_unchecked_flushes_then_buffers_smaller_input() {
     // SAFETY: The full input slice is a valid source range.
     let count = unsafe {
         output
-            .write_from_unchecked(b"xy", 0, 2)
+            .write_unchecked(b"xy", 0, 2)
             .expect("small raw write should flush prefix and then buffer")
     };
     assert_eq!(2, count);
@@ -534,8 +615,7 @@ fn test_flush_buffer_accepts_empty_buffer() {
 
 #[test]
 fn test_flush_buffer_retries_interrupted_writes() {
-    let writer =
-        ScriptedWriter::new(vec![WriteStep::Interrupted, WriteStep::Accept(4)]);
+    let writer = ScriptedWriter::new(vec![WriteStep::Interrupted, WriteStep::Accept(4)]);
     let mut output = BufferedOutput::with_capacity(writer, 4);
     output
         .write_all(b"abc")
@@ -606,8 +686,7 @@ fn test_write_trait_write_all_uses_buffered_write_all() {
     let cursor = Cursor::new(Vec::new());
     let mut output = BufferedOutput::with_capacity(cursor, 4);
 
-    Write::write_all(&mut output, b"abcd")
-        .expect("write_all trait method should delegate");
+    Write::write_all(&mut output, b"abcd").expect("write_all trait method should delegate");
     let cursor = flush_into_inner(output);
 
     assert_eq!(b"abcd", cursor.into_inner().as_slice());
@@ -634,8 +713,7 @@ fn test_seek_flushes_pending_bytes_before_seeking() {
         .write_all(b"ab")
         .expect("buffered write should succeed");
 
-    let position = output
-        .seek(SeekFrom::Start(0))
+    let position = std::io::Seek::seek(&mut output, SeekFrom::Start(0))
         .expect("seek should flush pending bytes first");
     output
         .write_all(b"xy")
@@ -644,6 +722,51 @@ fn test_seek_flushes_pending_bytes_before_seeking() {
 
     assert_eq!(0, position);
     assert_eq!(b"xy\0\0", cursor.into_inner().as_slice());
+}
+
+#[test]
+fn test_seekable_units_flushes_pending_units_before_seeking() {
+    let inner = U16SeekOutput::new(Vec::new());
+    let mut output = BufferedOutput::with_capacity(inner, 4);
+
+    // SAFETY: The source range is valid for u16 units.
+    unsafe {
+        output
+            .write_all_unchecked(&[10, 20, 30], 0, 3)
+            .expect("buffered write should keep units until flush")
+    };
+
+    let position = output
+        .seek(SeekFrom::Start(3))
+        .expect("unit seek should flush pending units before seeking");
+    let (inner, pending) = output.into_parts();
+
+    assert_eq!(3, position);
+    assert_eq!(vec![10, 20, 30], inner.values);
+    assert_eq!(3, inner.position);
+    assert!(pending.is_empty(), "seek should flush all pending units");
+}
+
+#[test]
+fn test_seekable_units_supports_current_offset() {
+    let mut output = BufferedOutput::with_capacity(U16SeekOutput::new(Vec::new()), 4);
+
+    // SAFETY: The source range is valid for u16 units.
+    unsafe {
+        output
+            .write_all_unchecked(&[11, 12], 0, 2)
+            .expect("buffered write should keep units")
+    };
+
+    let position = output
+        .seek(SeekFrom::Current(1))
+        .expect("current seek should be interpreted in u16 units");
+    let (inner, pending) = output.into_parts();
+
+    assert_eq!(3, position);
+    assert_eq!(3, inner.position);
+    assert_eq!(vec![11, 12, 0], inner.values);
+    assert!(pending.is_empty(), "seek should flush all pending units");
 }
 
 #[test]

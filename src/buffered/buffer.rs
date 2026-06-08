@@ -43,9 +43,9 @@ use std::ptr;
 /// buffer.data_mut()[0..2].copy_from_slice(b"ab");
 /// buffer.advance(2);
 ///
-/// assert_eq!(b"ab", &buffer.data()[buffer.position()..buffer.limit()]);
+/// assert_eq!(b"ab", buffer.available_slice());
 /// buffer.consume(1);
-/// assert_eq!(b"b", &buffer.data()[buffer.position()..buffer.limit()]);
+/// assert_eq!(b"b", buffer.available_slice());
 /// ```
 #[derive(Clone, Debug)]
 pub struct Buffer<T>
@@ -185,14 +185,15 @@ where
         self.limit == self.data.len()
     }
 
-    /// Returns the currently readable elements.
+    /// Returns the elements currently held in the readable window.
     ///
     /// # Returns
     ///
-    /// The readable range `data[position..limit]`.
+    /// The active range `data[position..limit]`. For input buffers this is the
+    /// unread tail; for output buffers this is the pending tail awaiting flush.
     #[inline(always)]
     #[must_use]
-    pub fn unread_slice(&self) -> &[T] {
+    pub fn available_slice(&self) -> &[T] {
         &self.data[self.position..self.limit]
     }
 
@@ -209,7 +210,7 @@ where
     /// count.
     #[inline(always)]
     #[must_use]
-    pub fn unread_raw_parts(&self) -> (&[T], usize, usize) {
+    pub fn available_raw_parts(&self) -> (&[T], usize, usize) {
         (&self.data[..self.limit], self.position, self.available())
     }
 
@@ -374,12 +375,7 @@ where
     /// `count <= self.spare_capacity()`, and that the source range does not
     /// overlap with this buffer's destination range.
     #[inline(always)]
-    pub unsafe fn copy_from_unchecked(
-        &mut self,
-        input: &[T],
-        input_index: usize,
-        count: usize,
-    ) {
+    pub unsafe fn copy_from_unchecked(&mut self, input: &[T], input_index: usize, count: usize) {
         debug_assert!(
             input_index
                 .checked_add(count)

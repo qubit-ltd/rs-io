@@ -66,9 +66,20 @@ binary scalar、LEB128 和 ZigZag 能力已经不在本 crate 中。缓冲区级
   支持 `Seek` 时，还实现逻辑 `Seek`。
 - **`BufferedOutput<O>`**：包装 `Output` 的缓冲 unit 输出，支持
   spare window 访问、checked / unchecked advance、显式 flush、不执行 I/O 的
-  `into_parts`，以及大块写入绕过缓冲区。当 `O::Item = u8` 时，它实现
-  `Write`；当被包装输出支持 `Seek` 时，还实现会先 flush 的 `Seek`。
+  `into_parts`，以及大块写入绕过缓冲区。它还支持当被包装输出实现
+  `Seekable<Item = O::Item>` 时的 unit seek；当 `O::Item = u8` 时实现
+  `Write`，且当被包装输出同时支持 `Seek` 时，还会实现会先 flush 的 `Seek`。
 - **`DEFAULT_BUFFER_CAPACITY`**：input 与 output 共用的默认缓冲容量。
+
+### Seek 一致性
+
+`Seekable` 是按单位（unit）语义定义的，稳定策略是「每个 `(类型, unit)` 只
+有一份实现」。一个实现了 `std::io::Seek` 的类型会通过 blanket impl 自动具备
+`Seekable<Item = u8>`，如果再次为同一类型再写 `Item = u8` 的 `Seekable`
+实现，会触发一致性冲突。
+
+对于自定义单位（例如 `u16`），应保留原类型的字节语义 `Seek`，并通过独立适配
+器/新类型实现目标单位的 `Seekable`，避免在同一类型上混用多套 unit 语义。
 
 ### 组合 Trait
 

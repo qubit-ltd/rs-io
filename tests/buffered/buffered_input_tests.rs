@@ -7,20 +7,9 @@
 // =============================================================================
 
 use std::collections::VecDeque;
-use std::io::{
-    BufRead,
-    Cursor,
-    Error,
-    ErrorKind,
-    Read,
-    Seek,
-    SeekFrom,
-};
+use std::io::{BufRead, Cursor, Error, ErrorKind, Read, Seek, SeekFrom};
 
-use qubit_io::{
-    BufferedInput,
-    Input,
-};
+use qubit_io::{BufferedInput, Input};
 
 struct U16Input {
     chunks: VecDeque<Vec<u16>>,
@@ -137,9 +126,8 @@ fn test_input_u8_blanket_impl_reuses_std_read_errors() {
     let mut output = [0_u8; 1];
 
     // SAFETY: The full output range is valid.
-    let error =
-        unsafe { Input::read_unchecked(&mut reader, &mut output, 0, 1) }
-            .expect_err("std read error should be propagated");
+    let error = unsafe { Input::read_unchecked(&mut reader, &mut output, 0, 1) }
+        .expect_err("std read error should be propagated");
 
     assert_eq!(ErrorKind::Other, error.kind());
 }
@@ -174,9 +162,7 @@ impl Read for ScriptedReader {
                 }
                 Ok(count)
             }
-            ReadStep::Interrupted => {
-                Err(Error::new(ErrorKind::Interrupted, "interrupted"))
-            }
+            ReadStep::Interrupted => Err(Error::new(ErrorKind::Interrupted, "interrupted")),
             ReadStep::Error(kind, message) => Err(Error::new(kind, message)),
             ReadStep::Eof => Ok(0),
         }
@@ -338,9 +324,9 @@ fn test_fill_until_buffers_requested_available_bytes() {
     input.consume(1);
 
     assert!(
-        input.fill_until(4).expect(
-            "fill_until should read until requested bytes are buffered"
-        )
+        input
+            .fill_until(4)
+            .expect("fill_until should read until requested bytes are buffered")
     );
 
     assert_eq!(b"bcde", input.unread_slice());
@@ -348,10 +334,7 @@ fn test_fill_until_buffers_requested_available_bytes() {
 
 #[test]
 fn test_fill_until_returns_false_when_eof_prevents_requested_bytes() {
-    let reader = ScriptedReader::new(vec![
-        ReadStep::Data(b"ab".to_vec()),
-        ReadStep::Eof,
-    ]);
+    let reader = ScriptedReader::new(vec![ReadStep::Data(b"ab".to_vec()), ReadStep::Eof]);
     let mut input = BufferedInput::with_capacity(reader, 4);
 
     assert!(
@@ -377,10 +360,7 @@ fn test_fill_until_rejects_count_exceeding_capacity() {
 
 #[test]
 fn test_ensure_available_returns_unexpected_eof_and_consumes_partial_bytes() {
-    let reader = ScriptedReader::new(vec![
-        ReadStep::Data(b"ab".to_vec()),
-        ReadStep::Eof,
-    ]);
+    let reader = ScriptedReader::new(vec![ReadStep::Data(b"ab".to_vec()), ReadStep::Eof]);
     let mut input = BufferedInput::with_capacity(reader, 4);
 
     let error = input
@@ -425,10 +405,7 @@ fn test_buf_read_fill_buf_returns_empty_slice_at_eof() {
 
 #[test]
 fn test_fill_more_retries_interrupted_reads() {
-    let reader = ScriptedReader::new(vec![
-        ReadStep::Interrupted,
-        ReadStep::Data(b"ab".to_vec()),
-    ]);
+    let reader = ScriptedReader::new(vec![ReadStep::Interrupted, ReadStep::Data(b"ab".to_vec())]);
     let mut input = BufferedInput::with_capacity(reader, 4);
 
     assert!(
