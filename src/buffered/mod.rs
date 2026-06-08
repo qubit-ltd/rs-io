@@ -14,8 +14,8 @@
 //!
 //! [`BufferedInput`] buffers units in front of an [`crate::Input`] value,
 //! implements [`std::io::BufRead`], and exposes the currently unread unit
-//! window. [`BufferedOutput`] buffers units before an [`crate::Output`] value and
-//! exposes spare writable capacity for hot-path encoders. [`Buffer`]
+//! window. [`BufferedOutput`] buffers units before an [`crate::Output`] value
+//! and exposes spare writable capacity for hot-path encoders. [`Buffer`]
 //! is the low-level position/limit storage object shared by both
 //! implementations.
 //!

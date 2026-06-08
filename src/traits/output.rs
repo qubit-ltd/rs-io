@@ -6,7 +6,10 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{Result, Write};
+use std::io::{
+    Result,
+    Write,
+};
 
 /// Minimal indexed output interface over units.
 ///
@@ -77,7 +80,9 @@ where
         );
         // SAFETY: The caller guarantees that the range is valid inside
         // `input`.
-        let source = unsafe { core::slice::from_raw_parts(input.as_ptr().add(index), count) };
+        let source = unsafe {
+            core::slice::from_raw_parts(input.as_ptr().add(index), count)
+        };
         self.write(source)
     }
 
