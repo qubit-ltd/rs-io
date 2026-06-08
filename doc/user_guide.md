@@ -66,7 +66,7 @@ use qubit_io::BufferedOutput;
 let mut output =
     BufferedOutput::with_capacity(Cursor::new(Vec::<u8>::new()), 4);
 output.ensure_spare_capacity(3)?;
-output.spare_buffer_mut()[0..3].copy_from_slice(b"xyz");
+output.spare_slice_mut()[0..3].copy_from_slice(b"xyz");
 unsafe {
     output.advance_unchecked(3);
 }
@@ -80,7 +80,7 @@ assert_eq!(b"xyz", cursor.into_inner().as_slice());
 
 Hot-path adapters can use `unread_raw_parts` and `spare_raw_parts_mut` to pass
 the full backing buffer plus an index to unchecked codec APIs. General-purpose
-callers should prefer `unread_slice`, `spare_buffer_mut`, `consume`, and
+callers should prefer `unread_slice`, `spare_slice_mut`, `consume`, and
 `advance`.
 
 ## Extension Traits
