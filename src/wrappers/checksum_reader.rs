@@ -6,7 +6,12 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 use std::hash::Hasher;
-use std::io::{Read, Result, Seek, SeekFrom};
+use std::io::{
+    Read,
+    Result,
+    Seek,
+    SeekFrom,
+};
 
 /// Reader wrapper that updates a checksum hasher with bytes read.
 ///

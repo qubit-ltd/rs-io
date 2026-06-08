@@ -1,6 +1,13 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::Hasher;
-use std::io::{Cursor, Error, ErrorKind, Read, Seek, SeekFrom};
+use std::io::{
+    Cursor,
+    Error,
+    ErrorKind,
+    Read,
+    Seek,
+    SeekFrom,
+};
 
 use qubit_io::ChecksumReader;
 

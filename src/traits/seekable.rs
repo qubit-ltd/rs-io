@@ -6,7 +6,11 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{Result, Seek, SeekFrom};
+use std::io::{
+    Result,
+    Seek,
+    SeekFrom,
+};
 
 /// Minimal seek interface measured in stream units.
 ///
@@ -52,10 +56,10 @@ use std::io::{Result, Seek, SeekFrom};
 /// for type `LegacyStream`
 /// ```
 ///
-/// The stable workaround is to keep byte-positioned seeking on the original type
-/// and introduce a wrapper/newtype when another unit interpretation is needed:
-/// implement `Seekable` for the wrapper with a different `Item`, and keep
-/// `std::io::Seek`/byte semantics on the original type.
+/// The stable workaround is to keep byte-positioned seeking on the original
+/// type and introduce a wrapper/newtype when another unit interpretation is
+/// needed: implement `Seekable` for the wrapper with a different `Item`, and
+/// keep `std::io::Seek`/byte semantics on the original type.
 pub trait Seekable {
     /// The unit type used to measure seek positions and offsets.
     type Item;

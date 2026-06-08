@@ -6,9 +6,17 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{Cursor, Seek, SeekFrom};
+use std::io::{
+    Cursor,
+    Seek,
+    SeekFrom,
+};
 
-use qubit_io::prelude::{ReadExt, ReadSeek, SeekExt};
+use qubit_io::prelude::{
+    ReadExt,
+    ReadSeek,
+    SeekExt,
+};
 
 fn takes_read_seek(_stream: &mut dyn ReadSeek) {}
 
