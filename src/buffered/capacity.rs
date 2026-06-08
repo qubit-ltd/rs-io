@@ -9,7 +9,7 @@
 /// Default capacity used by [`BufferedInput`] and [`BufferedOutput`].
 ///
 /// The value is intentionally shared by input and output buffering so callers
-/// can rely on the same default behavior when they construct buffered byte
+/// can rely on the same default behavior when they construct buffered unit
 /// wrappers with `new`.
 ///
 /// [`BufferedInput`]: crate::buffered::BufferedInput

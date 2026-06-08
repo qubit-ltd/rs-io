@@ -36,7 +36,7 @@ binary scalar、LEB128 和 ZigZag 能力已经不在本 crate 中。缓冲区级
 - **只做通用 I/O**：保持本 crate 聚焦可复用的 `std::io` helper。
 - **Unit-Oriented Core**：为已经完成 range 校验的 hot path 提供低层 indexed
   input / output 契约。
-- **Format-Agnostic Buffering**：提供高效 unit 与 byte buffer，但不嵌入 binary
+- **Format-Agnostic Buffering**：提供高效 unit 缓冲，但不嵌入 binary
   codec、text codec 或 record format 逻辑。
 - **低层契约显式化**：`Buffer` 与 unchecked range helper 面向 hot path，调用方
   责任必须清楚。

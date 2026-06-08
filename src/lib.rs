@@ -8,16 +8,16 @@
 
 //! # Qubit IO
 //!
-//! Byte-stream buffering and small I/O trait utilities for Rust.
+//! Unit-oriented buffering and small I/O trait utilities for Rust.
 //!
 //! This crate provides named, object-safe composition traits for common
 //! [`std::io`] capability combinations and small extension traits for recurring
 //! standard-library I/O patterns.
 //!
-//! It also provides byte-oriented buffering primitives in [`buffered`]:
+//! It also provides unit-oriented buffering primitives in [`buffered`]:
 //! [`Buffer`], [`BufferedInput`], and [`BufferedOutput`]. These types
 //! are intentionally format-agnostic. Binary and text stream adapters live in
-//! sibling crates and build their codec-specific behavior on top of these byte
+//! sibling crates and build their codec-specific behavior on top of these unit
 //! windows.
 //!
 //! The concrete trait definitions and wrapper types live in dedicated modules

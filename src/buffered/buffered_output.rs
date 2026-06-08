@@ -96,7 +96,7 @@ where
     ///
     /// # Returns
     ///
-    /// An immutable reference to the underlying writer.  Pending bytes may
+    /// An immutable reference to the underlying writer. Pending units may
     /// still be present in the internal buffer and are not flushed by this
     /// method.
     #[inline(always)]
@@ -106,7 +106,7 @@ where
 
     /// Returns an exclusive reference to the wrapped writer.
     ///
-    /// Pending bytes may still be present in the internal buffer and are not
+    /// Pending units may still be present in the internal buffer and are not
     /// flushed by this method.
     ///
     /// # Returns
@@ -117,15 +117,15 @@ where
         &mut self.inner
     }
 
-    /// Consumes this buffered output without flushing pending bytes.
+    /// Consumes this buffered output without flushing pending units.
     ///
-    /// This method performs no I/O. Pending bytes that have been accepted into
+    /// This method performs no I/O. Pending units that have been accepted into
     /// the internal buffer but not written to the wrapped writer are returned
     /// as the second tuple item.
     ///
     /// # Returns
     ///
-    /// The wrapped writer and pending bytes in logical write order.
+    /// The wrapped writer and pending units in logical write order.
     #[inline(always)]
     #[must_use]
     pub fn into_parts(self) -> (O, Vec<O::Item>) {
@@ -179,7 +179,7 @@ where
     /// `index` directly to indexed unchecked codecs.
     ///
     /// Mutating units outside `index..index + count` changes pending output
-    /// bytes and may corrupt the logical stream.
+    /// units and may corrupt the logical stream.
     ///
     /// # Returns
     ///
@@ -211,7 +211,7 @@ where
         }
     }
 
-    /// Marks spare bytes as written without checking bounds.
+    /// Marks spare units as written without checking bounds.
     ///
     /// # Parameters
     ///
@@ -221,7 +221,7 @@ where
     /// # Safety
     ///
     /// The caller must guarantee that `count <= self.spare_capacity()` and
-    /// that the corresponding bytes returned by [`Self::spare_slice_mut`]
+    /// that the corresponding units returned by [`Self::spare_slice_mut`]
     /// have been initialized.
     #[inline(always)]
     pub unsafe fn advance_unchecked(&mut self, count: usize) {
@@ -231,18 +231,18 @@ where
         }
     }
 
-    /// Ensures that at least `count` bytes are available in the spare buffer.
+    /// Ensures that at least `count` units are available in the spare buffer.
     ///
     /// # Parameters
     ///
-    /// * `count` - Number of spare bytes required.
+    /// * `count` - Number of spare units required.
     ///
     /// # Errors
     ///
     /// Returns any non-interrupted I/O error produced while flushing buffered
-    /// bytes. Returns [`ErrorKind::InvalidInput`] if `count` exceeds the buffer
+    /// units. Returns [`ErrorKind::InvalidInput`] if `count` exceeds the buffer
     /// capacity. Returns [`ErrorKind::InvalidData`] if the wrapped writer
-    /// reports more bytes than the pending buffer range contained.
+    /// reports more units than the pending buffer range contained.
     pub fn ensure_spare_capacity(&mut self, count: usize) -> Result<()> {
         if count > self.buffer.capacity() {
             return Err(Error::new(
@@ -256,29 +256,29 @@ where
         Ok(())
     }
 
-    /// Writes bytes from the input slice and reports the accepted byte count.
+    /// Writes units from the input slice and reports the accepted unit count.
     ///
     /// This is the buffered implementation for [`Write::write`]-style callers.
     /// Small inputs are appended to the buffer and reported as fully accepted;
-    /// large inputs may be delegated to the wrapped writer after pending bytes
+    /// large inputs may be delegated to the wrapped writer after pending units
     /// are flushed.
     ///
     /// # Parameters
     ///
-    /// * `input` - The bytes to write.
+    /// * `input` - The units to write.
     ///
     /// # Returns
     ///
-    /// The number of bytes accepted.  Buffered writes return `input.len()`;
-    /// direct writes return the byte count reported by the wrapped writer.
+    /// The number of units accepted. Buffered writes return `input.len()`;
+    /// direct writes return the unit count reported by the wrapped writer.
     ///
     /// # Errors
     ///
-    /// Returns any I/O error produced while flushing pending bytes or writing a
+    /// Returns any I/O error produced while flushing pending units or writing a
     /// large input directly to the wrapped writer. Flush failures include
-    /// [`ErrorKind::WriteZero`] if the writer reports that zero bytes were
+    /// [`ErrorKind::WriteZero`] if the writer reports that zero units were
     /// written before the buffer is drained, and [`ErrorKind::InvalidData`] if
-    /// it reports more bytes than the requested range contained.
+    /// it reports more units than the requested range contained.
     ///
     /// # Safety
     ///
@@ -309,7 +309,7 @@ where
         }
     }
 
-    /// Writes all bytes through the internal buffer.
+    /// Writes all units through the internal buffer.
     ///
     /// Small inputs are appended to the internal buffer.  Inputs that do not
     /// fit may flush the buffer first, and inputs at least as large as the
@@ -317,19 +317,19 @@ where
     ///
     /// # Parameters
     ///
-    /// * `input` - The bytes to write.
+    /// * `input` - The units to write.
     ///
     /// # Returns
     ///
-    /// `Ok(())` after all bytes from `input` have been accepted.
+    /// `Ok(())` after all units from `input` have been accepted.
     ///
     /// # Errors
     ///
-    /// Returns any I/O error produced while flushing pending bytes or writing a
+    /// Returns any I/O error produced while flushing pending units or writing a
     /// large input directly to the wrapped writer. Flush failures include
-    /// [`ErrorKind::WriteZero`] if the writer reports that zero bytes were
+    /// [`ErrorKind::WriteZero`] if the writer reports that zero units were
     /// written before the buffer is drained, and [`ErrorKind::InvalidData`] if
-    /// it reports more bytes than the requested range contained.
+    /// it reports more units than the requested range contained.
     ///
     /// # Safety
     ///
@@ -360,23 +360,23 @@ where
         }
     }
 
-    /// Flushes buffered bytes to the wrapped writer.
+    /// Flushes buffered units to the wrapped writer.
     ///
     /// The method retries interrupted writes.  If an error occurs after some
-    /// bytes have been written, the already-written bytes are removed from the
+    /// units have been written, the already-written units are removed from the
     /// front of the buffer and the unwritten suffix is kept for a later retry.
     ///
     /// # Returns
     ///
-    /// `Ok(())` once all currently buffered bytes have been written to the
+    /// `Ok(())` once all currently buffered units have been written to the
     /// wrapped writer.
     ///
     /// # Errors
     ///
     /// Returns any non-interrupted I/O error produced by the wrapped writer.
     /// Returns [`ErrorKind::WriteZero`] if the writer reports a zero-length
-    /// write before all buffered bytes are drained. Returns
-    /// [`ErrorKind::InvalidData`] if the writer reports more bytes than the
+    /// write before all buffered units are drained. Returns
+    /// [`ErrorKind::InvalidData`] if the writer reports more units than the
     /// pending buffer range contained.
     pub fn flush_buffer(&mut self) -> Result<()> {
         while !self.buffer.is_empty() {
@@ -430,9 +430,9 @@ where
     /// # Errors
     ///
     /// Returns any non-interrupted I/O error produced while flushing buffered
-    /// bytes, [`ErrorKind::WriteZero`] if the wrapped writer cannot make
+    /// units, [`ErrorKind::WriteZero`] if the wrapped writer cannot make
     /// progress while draining the buffer, [`ErrorKind::InvalidData`] if the
-    /// writer reports an impossible byte count, or any error returned by
+    /// writer reports an impossible unit count, or any error returned by
     /// [`Write::flush`] on the wrapped writer.
     #[inline(always)]
     pub fn flush(&mut self) -> Result<()> {
@@ -470,13 +470,13 @@ where
             .and_then(|()| Seekable::seek(&mut self.inner, position))
     }
 
-    /// Writes bytes into the internal buffer without checking spare capacity.
+    /// Writes units into the internal buffer without checking spare capacity.
     ///
     /// # Parameters
     ///
-    /// * `input` - The source bytes.
+    /// * `input` - The source units.
     /// * `input_index` - The starting index in `input`.
-    /// * `count` - The number of bytes to copy.
+    /// * `count` - The number of units to copy.
     ///
     /// # Safety
     ///
@@ -498,22 +498,22 @@ where
         }
     }
 
-    /// Writes bytes to the wrapped writer and validates the reported count.
+    /// Writes units to the wrapped writer and validates the reported count.
     ///
     /// # Parameters
     ///
     /// * `input` - Source storage.
     /// * `input_index` - Start index inside `input`.
-    /// * `count` - Maximum number of bytes to write.
+    /// * `count` - Maximum number of units to write.
     ///
     /// # Returns
     ///
-    /// The number of bytes accepted by the wrapped writer.
+    /// The number of units accepted by the wrapped writer.
     ///
     /// # Errors
     ///
     /// Returns the wrapped writer's I/O error, or [`ErrorKind::InvalidData`]
-    /// if it reports a byte count larger than `count`.
+    /// if it reports a unit count larger than `count`.
     ///
     /// # Safety
     ///
@@ -533,19 +533,19 @@ where
         Ok(written)
     }
 
-    /// Writes all bytes in an indexed source range to the wrapped writer.
+    /// Writes all units in an indexed source range to the wrapped writer.
     ///
     /// # Parameters
     ///
     /// * `input` - Source storage.
     /// * `input_index` - Start index inside `input`.
-    /// * `count` - Number of bytes to write.
+    /// * `count` - Number of units to write.
     ///
     /// # Errors
     ///
     /// Returns the wrapped writer's I/O error, [`ErrorKind::WriteZero`] if the
     /// writer cannot make progress, or [`ErrorKind::InvalidData`] if it
-    /// reports an impossible byte count.
+    /// reports an impossible unit count.
     ///
     /// # Safety
     ///
@@ -587,21 +587,21 @@ where
     ///
     /// # Parameters
     ///
-    /// * `input` - The bytes to write after the fast path determined that they
+    /// * `input` - The units to write after the fast path determined that they
     ///   do not fit comfortably in the current spare buffer capacity.
     ///
     /// # Returns
     ///
-    /// `Ok(())` after all bytes from `input` have been accepted either by the
+    /// `Ok(())` after all units from `input` have been accepted either by the
     /// buffer or by the wrapped writer.
     ///
     /// # Errors
     ///
-    /// Returns any I/O error produced while flushing pending bytes or writing a
+    /// Returns any I/O error produced while flushing pending units or writing a
     /// large input directly to the wrapped writer. Flush failures include
-    /// [`ErrorKind::WriteZero`] if the writer reports that zero bytes were
+    /// [`ErrorKind::WriteZero`] if the writer reports that zero units were
     /// written before the buffer is drained, and [`ErrorKind::InvalidData`] if
-    /// it reports more bytes than the requested range contained.
+    /// it reports more units than the requested range contained.
     #[cold]
     #[inline(never)]
     unsafe fn write_all_cold(
@@ -639,16 +639,16 @@ where
     ///
     /// # Returns
     ///
-    /// The number of bytes accepted.  Buffered writes return `input.len()`;
-    /// direct writes return the byte count reported by the wrapped writer.
+    /// The number of units accepted. Buffered writes return `input.len()`;
+    /// direct writes return the unit count reported by the wrapped writer.
     ///
     /// # Errors
     ///
-    /// Returns any I/O error produced while flushing pending bytes or writing a
+    /// Returns any I/O error produced while flushing pending units or writing a
     /// large input directly to the wrapped writer. Flush failures include
-    /// [`ErrorKind::WriteZero`] if the writer reports that zero bytes were
+    /// [`ErrorKind::WriteZero`] if the writer reports that zero units were
     /// written before the buffer is drained, and [`ErrorKind::InvalidData`] if
-    /// it reports more bytes than the requested range contained.
+    /// it reports more units than the requested range contained.
     #[cold]
     #[inline(never)]
     unsafe fn write_cold(

@@ -113,7 +113,7 @@ where
     }
 
     /// Consumes this buffered input and returns the wrapped input object plus
-    /// unread bytes.
+    /// unread units.
     ///
     /// This method performs no I/O. Units that have already been read from the
     /// wrapped input but not consumed by this buffered input are returned as
@@ -205,7 +205,7 @@ where
     ///
     /// # Parameters
     ///
-    /// * `count` - Number of currently unread bytes to consume.
+    /// * `count` - Number of currently unread units to consume.
     ///
     /// # Safety
     ///
@@ -219,14 +219,14 @@ where
         }
     }
 
-    /// Refills the internal buffer after preserving unread bytes.
+    /// Refills the internal buffer after preserving unread units.
     ///
-    /// Consumed bytes may be discarded, and unread bytes may be moved to the
+    /// Consumed units may be discarded, and unread units may be moved to the
     /// front of the buffer before the wrapped reader is called.
     ///
     /// # Returns
     ///
-    /// `Ok(true)` if at least one byte was appended, or `Ok(false)` at EOF.
+    /// `Ok(true)` if at least one unit was appended, or `Ok(false)` at EOF.
     ///
     /// # Errors
     ///
@@ -240,26 +240,26 @@ where
         self.read_more()
     }
 
-    /// Refills the buffer until at least `count` unread bytes are available.
+    /// Refills the buffer until at least `count` unread units are available.
     ///
-    /// This method may discard consumed bytes or move unread bytes to the front
+    /// This method may discard consumed units or move unread units to the front
     /// of the buffer before reading more data. It stops as soon as the unread
-    /// window reaches `count` bytes or the wrapped reader reaches EOF.
+    /// window reaches `count` units or the wrapped reader reaches EOF.
     ///
     /// # Parameters
     ///
-    /// * `count` - Minimum number of unread bytes required.
+    /// * `count` - Minimum number of unread units required.
     ///
     /// # Returns
     ///
-    /// `Ok(true)` if at least `count` unread bytes are buffered. `Ok(false)`
-    /// means EOF was reached before the requested byte count became available.
+    /// `Ok(true)` if at least `count` unread units are buffered. `Ok(false)`
+    /// means EOF was reached before the requested unit count became available.
     ///
     /// # Errors
     ///
     /// Returns [`ErrorKind::InvalidInput`] when `count` exceeds the internal
     /// buffer capacity. Returns [`ErrorKind::InvalidData`] if the wrapped
-    /// reader reports more bytes than the spare buffer range could hold.
+    /// reader reports more units than the spare buffer range could hold.
     /// Returns any non-interrupted I/O error produced by the wrapped reader
     /// while refilling the buffer.
     #[inline]
@@ -287,23 +287,23 @@ where
         Ok(true)
     }
 
-    /// Ensures that at least `count` unread bytes are available.
+    /// Ensures that at least `count` unread units are available.
     ///
     /// Unlike [`Self::fill_until`], this method treats EOF before the requested
-    /// byte count as [`ErrorKind::UnexpectedEof`]. Any partial bytes buffered
+    /// unit count as [`ErrorKind::UnexpectedEof`]. Any partial units buffered
     /// before EOF are consumed so callers observe the same logical position as
     /// a failed exact read.
     ///
     /// # Parameters
     ///
-    /// * `count` - Minimum number of unread bytes required.
+    /// * `count` - Minimum number of unread units required.
     ///
     /// # Errors
     ///
     /// Returns [`ErrorKind::UnexpectedEof`] if EOF is reached before `count`
-    /// bytes are available. Returns [`ErrorKind::InvalidInput`] when `count`
+    /// units are available. Returns [`ErrorKind::InvalidInput`] when `count`
     /// exceeds the internal buffer capacity. Returns [`ErrorKind::InvalidData`]
-    /// if the wrapped reader reports more bytes than the spare buffer range
+    /// if the wrapped reader reports more units than the spare buffer range
     /// could hold. Returns any non-interrupted I/O error produced by the
     /// wrapped reader while refilling the buffer.
     #[inline]
@@ -312,7 +312,7 @@ where
             return Ok(());
         }
         let available = self.available();
-        // SAFETY: `available` is the current readable byte count.
+        // SAFETY: `available` is the current readable unit count.
         unsafe {
             self.consume_unchecked(available);
         }
@@ -322,29 +322,29 @@ where
         ))
     }
 
-    /// Reads bytes through the internal buffer into an indexed output range.
+    /// Reads units through the internal buffer into an indexed output range.
     ///
     /// If the internal buffer is empty and `count` is at least as large as the
     /// internal buffer capacity, the read is delegated directly to the wrapped
-    /// reader to avoid an unnecessary copy. Otherwise, bytes are served from
+    /// reader to avoid an unnecessary copy. Otherwise, units are served from
     /// the internal buffer.
     ///
     /// # Arguments
     ///
-    /// * `output` - Destination storage that receives bytes.
+    /// * `output` - Destination storage that receives units.
     /// * `output_index` - Start index inside `output`.
-    /// * `count` - Maximum number of bytes to read.
+    /// * `count` - Maximum number of units to read.
     ///
     /// # Returns
     ///
-    /// The number of bytes written into `output[output_index..output_index +
+    /// The number of units written into `output[output_index..output_index +
     /// count]`. A return value of `0` means that `count` was zero or EOF was
-    /// reached before any bytes were read.
+    /// reached before any units were read.
     ///
     /// # Errors
     ///
     /// Returns any I/O error produced by the wrapped reader. Returns
-    /// [`ErrorKind::InvalidData`] if the wrapped reader reports more bytes
+    /// [`ErrorKind::InvalidData`] if the wrapped reader reports more units
     /// than the requested destination range could hold. Interrupted reads are
     /// retried when the method refills the internal buffer through
     /// `read_more`; direct delegated reads follow the wrapped reader's own
@@ -441,7 +441,7 @@ where
     ///
     /// # Returns
     ///
-    /// The number of writable bytes in `buffer[limit..]`.
+    /// The number of writable units in `buffer[limit..]`.
     #[inline(always)]
     fn tail_capacity(&self) -> usize {
         self.buffer.spare_capacity()
@@ -459,7 +459,7 @@ where
     /// Moves unread units to the front of the buffer.
     ///
     /// This preserves the unread range while reclaiming tail capacity for
-    /// future reads. If there are no unread bytes, the buffer is discarded.
+    /// future reads. If there are no unread units, the buffer is discarded.
     #[inline(always)]
     fn backshift(&mut self) {
         self.buffer.compact();
@@ -468,19 +468,19 @@ where
     /// Appends one more chunk from the wrapped reader to the internal buffer.
     ///
     /// This method reads into `buffer[limit..]` and advances `limit` by the
-    /// number of bytes read. It retries automatically when the wrapped reader
+    /// number of units read. It retries automatically when the wrapped reader
     /// returns [`ErrorKind::Interrupted`].
     ///
     /// # Returns
     ///
-    /// `Ok(true)` if at least one byte was appended, or `Ok(false)` if the
+    /// `Ok(true)` if at least one unit was appended, or `Ok(false)` if the
     /// wrapped reader reached EOF.
     ///
     /// # Errors
     ///
     /// Returns any non-interrupted I/O error produced by the wrapped reader.
     /// Returns [`ErrorKind::InvalidData`] if the wrapped reader reports more
-    /// bytes than the spare buffer range could hold.
+    /// units than the spare buffer range could hold.
     fn read_more(&mut self) -> Result<bool> {
         let count = self.tail_capacity();
         debug_assert!(count > 0, "buffer has no tail capacity");
