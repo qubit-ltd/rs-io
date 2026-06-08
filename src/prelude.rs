@@ -23,6 +23,8 @@ pub use crate::{
     ReadWrite,
     ReadWriteSeek,
     SeekExt,
+    Seekable,
+    SeekableInput,
     WriteExt,
     WriteSeek,
     WriteSeekExt,
