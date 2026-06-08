@@ -13,6 +13,7 @@ mod read_write;
 mod read_write_seek;
 mod seekable;
 mod seekable_input;
+mod seekable_output;
 mod write_seek;
 
 pub use buf_read_seek::BufReadSeek;
@@ -23,4 +24,5 @@ pub use read_write::ReadWrite;
 pub use read_write_seek::ReadWriteSeek;
 pub use seekable::Seekable;
 pub use seekable_input::SeekableInput;
+pub use seekable_output::SeekableOutput;
 pub use write_seek::WriteSeek;

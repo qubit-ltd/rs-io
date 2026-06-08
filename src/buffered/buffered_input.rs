@@ -6,23 +6,10 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    BufRead,
-    Error,
-    ErrorKind,
-    Read,
-    Result,
-    Seek,
-    SeekFrom,
-};
+use std::io::{BufRead, Error, ErrorKind, Read, Result, Seek, SeekFrom};
 
 use crate::buffered::DEFAULT_BUFFER_CAPACITY;
-use crate::{
-    Buffer,
-    Input,
-    Seekable,
-    SeekableInput,
-};
+use crate::{Buffer, Input, Seekable, SeekableInput};
 
 /// Buffered unit input over a wrapped input source.
 ///
@@ -160,7 +147,7 @@ where
     #[inline(always)]
     #[must_use]
     pub fn unread_slice(&self) -> &[I::Item] {
-        self.buffer.unread_slice()
+        self.buffer.available_slice()
     }
 
     /// Returns raw unread-buffer parts for hot-path callers.
@@ -176,7 +163,7 @@ where
     #[inline(always)]
     #[must_use]
     pub fn unread_raw_parts(&self) -> (&[I::Item], usize, usize) {
-        self.buffer.unread_raw_parts()
+        self.buffer.available_raw_parts()
     }
 
     /// Advances the unread cursor by `count` units.
@@ -216,79 +203,6 @@ where
         // input window.
         unsafe {
             self.buffer.consume_unchecked(count);
-        }
-    }
-
-    /// Returns the unused capacity at the end of the buffer.
-    ///
-    /// # Returns
-    ///
-    /// The number of writable bytes in `buffer[limit..]`.
-    #[inline(always)]
-    fn tail_capacity(&self) -> usize {
-        self.buffer.spare_capacity()
-    }
-
-    /// Invalidates all buffered units.
-    ///
-    /// After this call, the buffer is considered empty and subsequent reads
-    /// will refill it from the wrapped input.
-    #[inline(always)]
-    fn discard_buffer(&mut self) {
-        self.buffer.clear();
-    }
-
-    /// Moves unread units to the front of the buffer.
-    ///
-    /// This preserves the unread range while reclaiming tail capacity for
-    /// future reads. If there are no unread bytes, the buffer is discarded.
-    #[inline(always)]
-    fn backshift(&mut self) {
-        self.buffer.compact();
-    }
-
-    /// Appends one more chunk from the wrapped reader to the internal buffer.
-    ///
-    /// This method reads into `buffer[limit..]` and advances `limit` by the
-    /// number of bytes read. It retries automatically when the wrapped reader
-    /// returns [`ErrorKind::Interrupted`].
-    ///
-    /// # Returns
-    ///
-    /// `Ok(true)` if at least one byte was appended, or `Ok(false)` if the
-    /// wrapped reader reached EOF.
-    ///
-    /// # Errors
-    ///
-    /// Returns any non-interrupted I/O error produced by the wrapped reader.
-    /// Returns [`ErrorKind::InvalidData`] if the wrapped reader reports more
-    /// bytes than the spare buffer range could hold.
-    fn read_more(&mut self) -> Result<bool> {
-        let count = self.tail_capacity();
-        debug_assert!(count > 0, "buffer has no tail capacity");
-        loop {
-            let limit = self.buffer.limit();
-            // SAFETY: `limit` is always within `buffer`, and `count` is the
-            // remaining capacity from `limit` to the end of `buffer`.
-            match unsafe {
-                self.inner
-                    .read_unchecked(self.buffer.data_mut(), limit, count)
-            } {
-                Ok(0) => return Ok(false),
-                Ok(read) => {
-                    validate_read_count(read, count)?;
-                    // SAFETY: `read_unchecked` returns a count in
-                    // `0..=count`, and `count` was the spare capacity.
-                    unsafe {
-                        self.buffer.advance_unchecked(read);
-                    }
-                    return Ok(true);
-                }
-                Err(error) if error.kind() == ErrorKind::Interrupted => {
-                    continue;
-                }
-                Err(error) => return Err(error),
-            }
         }
     }
 
@@ -447,9 +361,7 @@ where
             self.discard_buffer();
             if count >= self.buffer.capacity() {
                 // SAFETY: The caller guarantees that the target range is valid.
-                let read = unsafe {
-                    self.inner.read_unchecked(output, output_index, count)
-                }?;
+                let read = unsafe { self.inner.read_unchecked(output, output_index, count) }?;
                 validate_read_count(read, count)?;
                 return Ok(read);
             }
@@ -508,6 +420,79 @@ where
         }?;
         self.discard_buffer();
         Ok(position)
+    }
+
+    /// Returns the unused capacity at the end of the buffer.
+    ///
+    /// # Returns
+    ///
+    /// The number of writable bytes in `buffer[limit..]`.
+    #[inline(always)]
+    fn tail_capacity(&self) -> usize {
+        self.buffer.spare_capacity()
+    }
+
+    /// Invalidates all buffered units.
+    ///
+    /// After this call, the buffer is considered empty and subsequent reads
+    /// will refill it from the wrapped input.
+    #[inline(always)]
+    fn discard_buffer(&mut self) {
+        self.buffer.clear();
+    }
+
+    /// Moves unread units to the front of the buffer.
+    ///
+    /// This preserves the unread range while reclaiming tail capacity for
+    /// future reads. If there are no unread bytes, the buffer is discarded.
+    #[inline(always)]
+    fn backshift(&mut self) {
+        self.buffer.compact();
+    }
+
+    /// Appends one more chunk from the wrapped reader to the internal buffer.
+    ///
+    /// This method reads into `buffer[limit..]` and advances `limit` by the
+    /// number of bytes read. It retries automatically when the wrapped reader
+    /// returns [`ErrorKind::Interrupted`].
+    ///
+    /// # Returns
+    ///
+    /// `Ok(true)` if at least one byte was appended, or `Ok(false)` if the
+    /// wrapped reader reached EOF.
+    ///
+    /// # Errors
+    ///
+    /// Returns any non-interrupted I/O error produced by the wrapped reader.
+    /// Returns [`ErrorKind::InvalidData`] if the wrapped reader reports more
+    /// bytes than the spare buffer range could hold.
+    fn read_more(&mut self) -> Result<bool> {
+        let count = self.tail_capacity();
+        debug_assert!(count > 0, "buffer has no tail capacity");
+        loop {
+            let limit = self.buffer.limit();
+            // SAFETY: `limit` is always within `buffer`, and `count` is the
+            // remaining capacity from `limit` to the end of `buffer`.
+            match unsafe {
+                self.inner
+                    .read_unchecked(self.buffer.data_mut(), limit, count)
+            } {
+                Ok(0) => return Ok(false),
+                Ok(read) => {
+                    validate_read_count(read, count)?;
+                    // SAFETY: `read_unchecked` returns a count in
+                    // `0..=count`, and `count` was the spare capacity.
+                    unsafe {
+                        self.buffer.advance_unchecked(read);
+                    }
+                    return Ok(true);
+                }
+                Err(error) if error.kind() == ErrorKind::Interrupted => {
+                    continue;
+                }
+                Err(error) => return Err(error),
+            }
+        }
     }
 }
 
@@ -585,9 +570,7 @@ fn validate_read_count(read: usize, requested: usize) -> Result<()> {
     if read > requested {
         return Err(Error::new(
             ErrorKind::InvalidData,
-            format!(
-                "reader reported {read} bytes for a {requested}-byte buffer"
-            ),
+            format!("reader reported {read} bytes for a {requested}-byte buffer"),
         ));
     }
     Ok(())

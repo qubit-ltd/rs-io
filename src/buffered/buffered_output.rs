@@ -6,20 +6,10 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Error,
-    ErrorKind,
-    Result,
-    Seek,
-    SeekFrom,
-    Write,
-};
+use std::io::{Error, ErrorKind, Result, Seek, SeekFrom, Write};
 
 use crate::buffered::DEFAULT_BUFFER_CAPACITY;
-use crate::{
-    Buffer,
-    Output,
-};
+use crate::{Buffer, Output, Seekable, SeekableOutput};
 
 /// Buffered unit output over a wrapped output sink.
 ///
@@ -34,7 +24,10 @@ use crate::{
 /// [`Self::spare_slice_mut`] or [`Self::spare_raw_parts_mut`] and then call
 /// [`Self::advance`] or [`Self::advance_unchecked`] after validating the range
 /// they initialized. Callers that need to recover the wrapped writer should
-/// call [`Write::flush`] first, then use [`Self::into_parts`].
+/// call [`Write::flush`] first, then use [`Self::into_parts`]. For arbitrary
+/// unit types, `BufferedOutput` also supports [`Seekable`]-based seeking in unit
+/// offsets; when `Item = u8` and the wrapped output is also
+/// [`std::io::Seek`], it additionally implements [`std::io::Seek`].
 #[derive(Debug)]
 pub struct BufferedOutput<O>
 where
@@ -112,6 +105,22 @@ where
         &mut self.inner
     }
 
+    /// Consumes this buffered output without flushing pending bytes.
+    ///
+    /// This method performs no I/O. Pending bytes that have been accepted into
+    /// the internal buffer but not written to the wrapped writer are returned
+    /// as the second tuple item.
+    ///
+    /// # Returns
+    ///
+    /// The wrapped writer and pending bytes in logical write order.
+    #[inline(always)]
+    #[must_use]
+    pub fn into_parts(self) -> (O, Vec<O::Item>) {
+        let pending = self.buffer.available_slice().to_vec();
+        (self.inner, pending)
+    }
+
     /// Returns the internal buffer capacity.
     ///
     /// # Returns
@@ -127,7 +136,7 @@ where
     ///
     /// # Returns
     ///
-    /// The number of bytes that can still be appended to the internal buffer
+    /// The number of units that can still be appended to the internal buffer
     /// before it must be flushed.
     #[inline(always)]
     #[must_use]
@@ -137,8 +146,8 @@ where
 
     /// Returns the unused portion of the internal buffer.
     ///
-    /// Callers may write initialized bytes into the returned slice and then
-    /// call [`Self::advance`] with the number of bytes written.
+    /// Callers may write initialized units into the returned slice and then
+    /// call [`Self::advance`] with the number of units written.
     ///
     /// # Returns
     ///
@@ -152,28 +161,28 @@ where
     /// Returns raw spare-buffer parts for hot-path callers.
     ///
     /// The returned slice is the full internal backing storage. `index` is the
-    /// start of the spare byte window, and `count` is the number of spare
-    /// bytes. Callers that need a slice can use `&mut buffer[index..index +
+    /// start of the spare unit window, and `count` is the number of spare
+    /// units. Callers that need a slice can use `&mut buffer[index..index +
     /// count]`; callers that already validated bounds can pass `buffer` and
     /// `index` directly to indexed unchecked codecs.
     ///
-    /// Mutating bytes outside `index..index + count` changes pending output
+    /// Mutating units outside `index..index + count` changes pending output
     /// bytes and may corrupt the logical stream.
     ///
     /// # Returns
     ///
-    /// The backing storage, the spare start index, and the spare byte count.
+    /// The backing storage, the spare start index, and the spare unit count.
     #[inline(always)]
     #[must_use]
     pub fn spare_raw_parts_mut(&mut self) -> (&mut [O::Item], usize, usize) {
         self.buffer.spare_raw_parts_mut()
     }
 
-    /// Marks `count` bytes from [`Self::spare_slice_mut`] as written.
+    /// Marks `count` units from [`Self::spare_slice_mut`] as written.
     ///
     /// # Parameters
     ///
-    /// * `count` - Number of bytes initialized by the caller.
+    /// * `count` - Number of units initialized by the caller.
     ///
     /// # Panics
     ///
@@ -194,7 +203,7 @@ where
     ///
     /// # Parameters
     ///
-    /// * `count` - Number of initialized spare bytes to make pending for
+    /// * `count` - Number of initialized spare units to make pending for
     ///   output.
     ///
     /// # Safety
@@ -208,50 +217,6 @@ where
         unsafe {
             self.buffer.advance_unchecked(count);
         }
-    }
-
-    /// Writes bytes into the internal buffer without checking spare capacity.
-    ///
-    /// # Parameters
-    ///
-    /// * `input` - The source bytes.
-    /// * `input_index` - The starting index in `input`.
-    /// * `count` - The number of bytes to copy.
-    ///
-    /// # Safety
-    ///
-    /// The caller must ensure that `input_index..input_index + count` is valid
-    /// in `input`, that `count <= self.spare_capacity()`, and that the copied
-    /// source range does not overlap with the destination range in the internal
-    /// buffer.
-    #[inline(always)]
-    unsafe fn write_to_buffer_unchecked(
-        &mut self,
-        input: &[O::Item],
-        input_index: usize,
-        count: usize,
-    ) {
-        // SAFETY: The caller upholds `Buffer::copy_from_unchecked` range and
-        // non-overlap requirements.
-        unsafe {
-            self.buffer.copy_from_unchecked(input, input_index, count);
-        }
-    }
-
-    /// Consumes this buffered output without flushing pending bytes.
-    ///
-    /// This method performs no I/O. Pending bytes that have been accepted into
-    /// the internal buffer but not written to the wrapped writer are returned
-    /// as the second tuple item.
-    ///
-    /// # Returns
-    ///
-    /// The wrapped writer and pending bytes in logical write order.
-    #[inline(always)]
-    #[must_use]
-    pub fn into_parts(self) -> (O, Vec<O::Item>) {
-        let pending = self.pending_slice().to_vec();
-        (self.inner, pending)
     }
 
     /// Ensures that at least `count` bytes are available in the spare buffer.
@@ -277,6 +242,59 @@ where
             self.flush_buffer()?;
         }
         Ok(())
+    }
+
+    /// Writes bytes from the input slice and reports the accepted byte count.
+    ///
+    /// This is the buffered implementation for [`Write::write`]-style callers.
+    /// Small inputs are appended to the buffer and reported as fully accepted;
+    /// large inputs may be delegated to the wrapped writer after pending bytes
+    /// are flushed.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` - The bytes to write.
+    ///
+    /// # Returns
+    ///
+    /// The number of bytes accepted.  Buffered writes return `input.len()`;
+    /// direct writes return the byte count reported by the wrapped writer.
+    ///
+    /// # Errors
+    ///
+    /// Returns any I/O error produced while flushing pending bytes or writing a
+    /// large input directly to the wrapped writer. Flush failures include
+    /// [`ErrorKind::WriteZero`] if the writer reports that zero bytes were
+    /// written before the buffer is drained, and [`ErrorKind::InvalidData`] if
+    /// it reports more bytes than the requested range contained.
+    ///
+    /// # Safety
+    ///
+    /// The caller must guarantee that `input_index..input_index + count` is a
+    /// valid range inside `input` and that the addition does not overflow.
+    #[inline]
+    pub unsafe fn write_unchecked(
+        &mut self,
+        input: &[O::Item],
+        input_index: usize,
+        count: usize,
+    ) -> Result<usize> {
+        debug_assert!(
+            input_index
+                .checked_add(count)
+                .is_some_and(|end| end <= input.len()),
+            "unchecked write range exceeds input buffer"
+        );
+        if count < self.spare_capacity() {
+            // SAFETY: The branch proves that the input fits in spare capacity.
+            unsafe {
+                self.write_to_buffer_unchecked(input, input_index, count);
+            }
+            Ok(count)
+        } else {
+            // SAFETY: The caller guarantees the source range is valid.
+            unsafe { self.write_cold(input, input_index, count) }
+        }
     }
 
     /// Writes all bytes through the internal buffer.
@@ -328,6 +346,218 @@ where
             // SAFETY: The caller guarantees the source range is valid.
             unsafe { self.write_all_cold(input, input_index, count) }
         }
+    }
+
+    /// Flushes buffered bytes to the wrapped writer.
+    ///
+    /// The method retries interrupted writes.  If an error occurs after some
+    /// bytes have been written, the already-written bytes are removed from the
+    /// front of the buffer and the unwritten suffix is kept for a later retry.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` once all currently buffered bytes have been written to the
+    /// wrapped writer.
+    ///
+    /// # Errors
+    ///
+    /// Returns any non-interrupted I/O error produced by the wrapped writer.
+    /// Returns [`ErrorKind::WriteZero`] if the writer reports a zero-length
+    /// write before all buffered bytes are drained. Returns
+    /// [`ErrorKind::InvalidData`] if the writer reports more bytes than the
+    /// pending buffer range contained.
+    pub fn flush_buffer(&mut self) -> Result<()> {
+        while !self.buffer.is_empty() {
+            let position = self.buffer.position();
+            let available = self.buffer.available();
+            // SAFETY: `position..position + available` is the current readable
+            // range maintained by `Buffer`.
+            match unsafe {
+                self.inner
+                    .write_unchecked(self.buffer.data(), position, available)
+            } {
+                Ok(0) => {
+                    self.buffer.compact();
+                    return Err(Error::new(
+                        ErrorKind::WriteZero,
+                        "failed to write buffered data",
+                    ));
+                }
+                Ok(written) => {
+                    if let Err(error) = validate_write_count(written, available) {
+                        self.buffer.compact();
+                        return Err(error);
+                    }
+                    // SAFETY: The validated count is in `0..=available`.
+                    unsafe {
+                        self.buffer.consume_unchecked(written);
+                    }
+                }
+                Err(error) if error.kind() == ErrorKind::Interrupted => {}
+                Err(error) => {
+                    self.buffer.compact();
+                    return Err(error);
+                }
+            }
+        }
+        self.buffer.clear();
+        Ok(())
+    }
+
+    /// Flushes buffered units and then flushes the wrapped output.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` once pending buffered units and the wrapped output are
+    /// flushed.
+    ///
+    /// # Errors
+    ///
+    /// Returns any non-interrupted I/O error produced while flushing buffered
+    /// bytes, [`ErrorKind::WriteZero`] if the wrapped writer cannot make
+    /// progress while draining the buffer, [`ErrorKind::InvalidData`] if the
+    /// writer reports an impossible byte count, or any error returned by
+    /// [`Write::flush`] on the wrapped writer.
+    #[inline(always)]
+    pub fn flush(&mut self) -> Result<()> {
+        self.flush_buffer()
+            .and_then(|()| Output::flush(&mut self.inner))
+    }
+
+    /// Seeks the wrapped output in units, flushing buffered units first.
+    ///
+    /// Pending units accepted into the internal buffer are written to the
+    /// wrapped output before [`Seekable::seek`] is invoked, so the seek
+    /// position is relative to data already committed to the underlying sink.
+    ///
+    /// # Parameters
+    ///
+    /// * `position` - The target seek position in output units.
+    ///
+    /// # Returns
+    ///
+    /// The new stream position in units.
+    ///
+    /// # Errors
+    ///
+    /// Returns any non-interrupted I/O error produced while flushing buffered
+    /// units, [`ErrorKind::WriteZero`] if the wrapped output cannot make
+    /// progress while draining the buffer, [`ErrorKind::InvalidData`] if the
+    /// writer reports an impossible unit count, or any error returned by
+    /// [`Seekable::seek`] on the wrapped output.
+    #[inline(always)]
+    pub fn seek(&mut self, position: SeekFrom) -> Result<u64>
+    where
+        O: SeekableOutput,
+    {
+        self.flush_buffer()
+            .and_then(|()| Seekable::seek(&mut self.inner, position))
+    }
+
+    /// Writes bytes into the internal buffer without checking spare capacity.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` - The source bytes.
+    /// * `input_index` - The starting index in `input`.
+    /// * `count` - The number of bytes to copy.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that `input_index..input_index + count` is valid
+    /// in `input`, that `count <= self.spare_capacity()`, and that the copied
+    /// source range does not overlap with the destination range in the internal
+    /// buffer.
+    #[inline(always)]
+    unsafe fn write_to_buffer_unchecked(
+        &mut self,
+        input: &[O::Item],
+        input_index: usize,
+        count: usize,
+    ) {
+        // SAFETY: The caller upholds `Buffer::copy_from_unchecked` range and
+        // non-overlap requirements.
+        unsafe {
+            self.buffer.copy_from_unchecked(input, input_index, count);
+        }
+    }
+
+    /// Writes bytes to the wrapped writer and validates the reported count.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` - Source storage.
+    /// * `input_index` - Start index inside `input`.
+    /// * `count` - Maximum number of bytes to write.
+    ///
+    /// # Returns
+    ///
+    /// The number of bytes accepted by the wrapped writer.
+    ///
+    /// # Errors
+    ///
+    /// Returns the wrapped writer's I/O error, or [`ErrorKind::InvalidData`]
+    /// if it reports a byte count larger than `count`.
+    ///
+    /// # Safety
+    ///
+    /// The caller must guarantee that `input_index..input_index + count` is a
+    /// valid range inside `input` and that the addition does not overflow.
+    #[inline(always)]
+    unsafe fn write_inner_unchecked(
+        &mut self,
+        input: &[O::Item],
+        input_index: usize,
+        count: usize,
+    ) -> Result<usize> {
+        // SAFETY: The caller guarantees the source range is valid.
+        let written = unsafe { self.inner.write_unchecked(input, input_index, count) }?;
+        validate_write_count(written, count)?;
+        Ok(written)
+    }
+
+    /// Writes all bytes in an indexed source range to the wrapped writer.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` - Source storage.
+    /// * `input_index` - Start index inside `input`.
+    /// * `count` - Number of bytes to write.
+    ///
+    /// # Errors
+    ///
+    /// Returns the wrapped writer's I/O error, [`ErrorKind::WriteZero`] if the
+    /// writer cannot make progress, or [`ErrorKind::InvalidData`] if it
+    /// reports an impossible byte count.
+    ///
+    /// # Safety
+    ///
+    /// The caller must guarantee that `input_index..input_index + count` is a
+    /// valid range inside `input` and that the addition does not overflow.
+    unsafe fn write_all_inner_unchecked(
+        &mut self,
+        input: &[O::Item],
+        input_index: usize,
+        count: usize,
+    ) -> Result<()> {
+        let mut written = 0;
+        while written < count {
+            let remaining = count - written;
+            // SAFETY: `written < count`, so this suffix remains inside the
+            // caller-validated source range.
+            match unsafe { self.write_inner_unchecked(input, input_index + written, remaining) } {
+                Ok(0) => {
+                    return Err(Error::new(
+                        ErrorKind::WriteZero,
+                        "failed to write whole buffer",
+                    ));
+                }
+                Ok(count) => written += count,
+                Err(error) if error.kind() == ErrorKind::Interrupted => {}
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(())
     }
 
     /// Handles slow-path raw writes that must flush or bypass the buffer.
@@ -419,260 +649,6 @@ where
             Ok(count)
         }
     }
-
-    /// Flushes buffered bytes to the wrapped writer.
-    ///
-    /// The method retries interrupted writes.  If an error occurs after some
-    /// bytes have been written, the already-written bytes are removed from the
-    /// front of the buffer and the unwritten suffix is kept for a later retry.
-    ///
-    /// # Returns
-    ///
-    /// `Ok(())` once all currently buffered bytes have been written to the
-    /// wrapped writer.
-    ///
-    /// # Errors
-    ///
-    /// Returns any non-interrupted I/O error produced by the wrapped writer.
-    /// Returns [`ErrorKind::WriteZero`] if the writer reports a zero-length
-    /// write before all buffered bytes are drained. Returns
-    /// [`ErrorKind::InvalidData`] if the writer reports more bytes than the
-    /// pending buffer range contained.
-    pub fn flush_buffer(&mut self) -> Result<()> {
-        while !self.buffer.is_empty() {
-            let position = self.buffer.position();
-            let available = self.buffer.available();
-            // SAFETY: `position..position + available` is the current readable
-            // range maintained by `Buffer`.
-            match unsafe {
-                self.inner.write_unchecked(
-                    self.buffer.data(),
-                    position,
-                    available,
-                )
-            } {
-                Ok(0) => {
-                    self.buffer.compact();
-                    return Err(Error::new(
-                        ErrorKind::WriteZero,
-                        "failed to write buffered data",
-                    ));
-                }
-                Ok(written) => {
-                    if let Err(error) = validate_write_count(written, available)
-                    {
-                        self.buffer.compact();
-                        return Err(error);
-                    }
-                    // SAFETY: The validated count is in `0..=available`.
-                    unsafe {
-                        self.buffer.consume_unchecked(written);
-                    }
-                }
-                Err(error) if error.kind() == ErrorKind::Interrupted => {}
-                Err(error) => {
-                    self.buffer.compact();
-                    return Err(error);
-                }
-            }
-        }
-        self.buffer.clear();
-        Ok(())
-    }
-
-    /// Flushes buffered units and then flushes the wrapped output.
-    ///
-    /// # Returns
-    ///
-    /// `Ok(())` once pending buffered units and the wrapped output are
-    /// flushed.
-    ///
-    /// # Errors
-    ///
-    /// Returns any non-interrupted I/O error produced while flushing buffered
-    /// bytes, [`ErrorKind::WriteZero`] if the wrapped writer cannot make
-    /// progress while draining the buffer, [`ErrorKind::InvalidData`] if the
-    /// writer reports an impossible byte count, or any error returned by
-    /// [`Write::flush`] on the wrapped writer.
-    #[inline(always)]
-    pub fn flush(&mut self) -> Result<()> {
-        self.flush_buffer()
-            .and_then(|()| Output::flush(&mut self.inner))
-    }
-
-    /// Writes bytes from the input slice and reports the accepted byte count.
-    ///
-    /// This is the buffered implementation for [`Write::write`]-style callers.
-    /// Small inputs are appended to the buffer and reported as fully accepted;
-    /// large inputs may be delegated to the wrapped writer after pending bytes
-    /// are flushed.
-    ///
-    /// # Parameters
-    ///
-    /// * `input` - The bytes to write.
-    ///
-    /// # Returns
-    ///
-    /// The number of bytes accepted.  Buffered writes return `input.len()`;
-    /// direct writes return the byte count reported by the wrapped writer.
-    ///
-    /// # Errors
-    ///
-    /// Returns any I/O error produced while flushing pending bytes or writing a
-    /// large input directly to the wrapped writer. Flush failures include
-    /// [`ErrorKind::WriteZero`] if the writer reports that zero bytes were
-    /// written before the buffer is drained, and [`ErrorKind::InvalidData`] if
-    /// it reports more bytes than the requested range contained.
-    ///
-    /// # Safety
-    ///
-    /// The caller must guarantee that `input_index..input_index + count` is a
-    /// valid range inside `input` and that the addition does not overflow.
-    #[inline]
-    pub unsafe fn write_from_unchecked(
-        &mut self,
-        input: &[O::Item],
-        input_index: usize,
-        count: usize,
-    ) -> Result<usize> {
-        debug_assert!(
-            input_index
-                .checked_add(count)
-                .is_some_and(|end| end <= input.len()),
-            "unchecked write range exceeds input buffer"
-        );
-        if count < self.spare_capacity() {
-            // SAFETY: The branch proves that the input fits in spare capacity.
-            unsafe {
-                self.write_to_buffer_unchecked(input, input_index, count);
-            }
-            Ok(count)
-        } else {
-            // SAFETY: The caller guarantees the source range is valid.
-            unsafe { self.write_cold(input, input_index, count) }
-        }
-    }
-
-    /// Flushes pending bytes before seeking the wrapped writer.
-    ///
-    /// # Parameters
-    ///
-    /// * `position` - The target seek position passed to the wrapped writer.
-    ///
-    /// # Returns
-    ///
-    /// The new stream position reported by the wrapped writer.
-    ///
-    /// # Errors
-    ///
-    /// Returns any non-interrupted I/O error produced while flushing buffered
-    /// bytes, [`ErrorKind::WriteZero`] if the wrapped writer cannot make
-    /// progress while draining the buffer, [`ErrorKind::InvalidData`] if the
-    /// writer reports an impossible byte count, or any error returned by
-    /// [`Seek::seek`] on the wrapped writer.
-    #[inline(always)]
-    fn flush_then_seek(&mut self, position: SeekFrom) -> Result<u64>
-    where
-        O: Seek,
-    {
-        self.flush_buffer().and_then(|()| self.inner.seek(position))
-    }
-
-    /// Returns pending bytes currently stored in the internal buffer.
-    ///
-    /// # Returns
-    ///
-    /// A slice over bytes accepted by this output but not yet written to the
-    /// wrapped writer.
-    #[inline(always)]
-    fn pending_slice(&self) -> &[O::Item] {
-        &self.buffer.data()[self.buffer.position()..self.buffer.limit()]
-    }
-
-    /// Writes bytes to the wrapped writer and validates the reported count.
-    ///
-    /// # Parameters
-    ///
-    /// * `input` - Source storage.
-    /// * `input_index` - Start index inside `input`.
-    /// * `count` - Maximum number of bytes to write.
-    ///
-    /// # Returns
-    ///
-    /// The number of bytes accepted by the wrapped writer.
-    ///
-    /// # Errors
-    ///
-    /// Returns the wrapped writer's I/O error, or [`ErrorKind::InvalidData`]
-    /// if it reports a byte count larger than `count`.
-    ///
-    /// # Safety
-    ///
-    /// The caller must guarantee that `input_index..input_index + count` is a
-    /// valid range inside `input` and that the addition does not overflow.
-    #[inline(always)]
-    unsafe fn write_inner_unchecked(
-        &mut self,
-        input: &[O::Item],
-        input_index: usize,
-        count: usize,
-    ) -> Result<usize> {
-        // SAFETY: The caller guarantees the source range is valid.
-        let written =
-            unsafe { self.inner.write_unchecked(input, input_index, count) }?;
-        validate_write_count(written, count)?;
-        Ok(written)
-    }
-
-    /// Writes all bytes in an indexed source range to the wrapped writer.
-    ///
-    /// # Parameters
-    ///
-    /// * `input` - Source storage.
-    /// * `input_index` - Start index inside `input`.
-    /// * `count` - Number of bytes to write.
-    ///
-    /// # Errors
-    ///
-    /// Returns the wrapped writer's I/O error, [`ErrorKind::WriteZero`] if the
-    /// writer cannot make progress, or [`ErrorKind::InvalidData`] if it
-    /// reports an impossible byte count.
-    ///
-    /// # Safety
-    ///
-    /// The caller must guarantee that `input_index..input_index + count` is a
-    /// valid range inside `input` and that the addition does not overflow.
-    unsafe fn write_all_inner_unchecked(
-        &mut self,
-        input: &[O::Item],
-        input_index: usize,
-        count: usize,
-    ) -> Result<()> {
-        let mut written = 0;
-        while written < count {
-            let remaining = count - written;
-            // SAFETY: `written < count`, so this suffix remains inside the
-            // caller-validated source range.
-            match unsafe {
-                self.write_inner_unchecked(
-                    input,
-                    input_index + written,
-                    remaining,
-                )
-            } {
-                Ok(0) => {
-                    return Err(Error::new(
-                        ErrorKind::WriteZero,
-                        "failed to write whole buffer",
-                    ));
-                }
-                Ok(count) => written += count,
-                Err(error) if error.kind() == ErrorKind::Interrupted => {}
-                Err(error) => return Err(error),
-            }
-        }
-        Ok(())
-    }
 }
 
 impl<O> Write for BufferedOutput<O>
@@ -683,7 +659,7 @@ where
     #[inline(always)]
     fn write(&mut self, buffer: &[u8]) -> Result<usize> {
         // SAFETY: The full input slice is a valid source range.
-        unsafe { self.write_from_unchecked(buffer, 0, buffer.len()) }
+        unsafe { self.write_unchecked(buffer, 0, buffer.len()) }
     }
 
     /// Writes all bytes through the internal buffer.
@@ -702,12 +678,12 @@ where
 
 impl<O> Seek for BufferedOutput<O>
 where
-    O: Output<Item = u8> + Seek,
+    O: Output<Item = u8> + Seekable<Item = u8>,
 {
     /// Flushes pending bytes before seeking the wrapped writer.
     #[inline(always)]
     fn seek(&mut self, position: SeekFrom) -> Result<u64> {
-        self.flush_then_seek(position)
+        BufferedOutput::seek(self, position)
     }
 }
 
@@ -727,9 +703,7 @@ fn validate_write_count(written: usize, requested: usize) -> Result<()> {
     if written > requested {
         return Err(Error::new(
             ErrorKind::InvalidData,
-            format!(
-                "writer reported {written} bytes for a {requested}-byte buffer"
-            ),
+            format!("writer reported {written} bytes for a {requested}-byte buffer"),
         ));
     }
     Ok(())

@@ -5,21 +5,21 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Shared byte-stream buffering primitives.
+//! Shared unit-oriented buffering primitives.
 //!
-//! This module contains byte-oriented buffering types used by higher-level
+//! This module contains unit-oriented buffering types used by higher-level
 //! stream adapters. It does not know about binary codecs, text encodings, or
-//! record formats; callers compose those concerns on top of the byte windows
+//! record formats; callers compose those concerns on top of the unit windows
 //! exposed here.
 //!
-//! [`BufferedInput`] buffers bytes in front of a [`std::io::Read`] value,
-//! implements [`std::io::BufRead`], and exposes the currently unread byte
-//! window. [`BufferedOutput`] buffers bytes before a [`std::io::Write`]
-//! value and exposes spare writable capacity for hot-path encoders. [`Buffer`]
+//! [`BufferedInput`] buffers units in front of an [`crate::Input`] value,
+//! implements [`std::io::BufRead`], and exposes the currently unread unit
+//! window. [`BufferedOutput`] buffers units before an [`crate::Output`] value and
+//! exposes spare writable capacity for hot-path encoders. [`Buffer`]
 //! is the low-level position/limit storage object shared by both
 //! implementations.
 //!
-//! The default capacity used by buffered byte input and output is
+//! The default capacity used by buffered input and output is
 //! [`DEFAULT_BUFFER_CAPACITY`].
 
 mod buffer;

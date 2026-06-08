@@ -5,13 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use std::io::{
-    ErrorKind,
-    Read,
-    Result,
-    Seek,
-    SeekFrom,
-};
+use std::io::{ErrorKind, Read, Result, Seek, SeekFrom};
 
 use crate::ReadSeek;
 
@@ -57,11 +51,7 @@ pub trait ReadSeekExt: Read + Seek {
     /// Returns an error when reading the current position, seeking to `offset`,
     /// reading bytes, or restoring the original position fails. If restoration
     /// fails, the restoration error is returned.
-    fn read_exact_or_eof_at(
-        &mut self,
-        offset: u64,
-        buffer: &mut [u8],
-    ) -> Result<usize>;
+    fn read_exact_or_eof_at(&mut self, offset: u64, buffer: &mut [u8]) -> Result<usize>;
 }
 
 impl<T> ReadSeekExt for T
@@ -75,11 +65,7 @@ where
     }
 
     #[inline]
-    fn read_exact_or_eof_at(
-        &mut self,
-        offset: u64,
-        buffer: &mut [u8],
-    ) -> Result<usize> {
+    fn read_exact_or_eof_at(&mut self, offset: u64, buffer: &mut [u8]) -> Result<usize> {
         let mut reader = self;
         read_exact_or_eof_at_impl(&mut reader, offset, buffer)
     }
@@ -97,10 +83,7 @@ where
 /// # Errors
 /// Returns an error when position lookup, reading, or position restoration
 /// fails.
-fn peek_exact_or_eof_impl(
-    reader: &mut dyn ReadSeek,
-    buffer: &mut [u8],
-) -> Result<usize> {
+fn peek_exact_or_eof_impl(reader: &mut dyn ReadSeek, buffer: &mut [u8]) -> Result<usize> {
     let position = reader.stream_position()?;
     let read_result = read_exact_or_eof(reader, buffer);
     let restore_result = reader.seek(SeekFrom::Start(position));
@@ -153,10 +136,7 @@ fn read_exact_or_eof_at_impl(
 ///
 /// # Errors
 /// Returns the first non-interrupted read error reported by `reader`.
-fn read_exact_or_eof(
-    reader: &mut dyn ReadSeek,
-    buffer: &mut [u8],
-) -> Result<usize> {
+fn read_exact_or_eof(reader: &mut dyn ReadSeek, buffer: &mut [u8]) -> Result<usize> {
     let mut total = 0;
     while total < buffer.len() {
         match reader.read(&mut buffer[total..]) {

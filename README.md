@@ -73,11 +73,23 @@ reference documentation is available on [docs.rs](https://docs.rs/qubit-io).
   supports `Seek`.
 - **`BufferedOutput<O>`**: buffered unit output over `Output`,
   with spare-window access, checked and unchecked advancing, explicit
-  flushing, non-flushing `into_parts`, and large-write bypass paths. When
-  `O::Item = u8`, it implements `Write`, plus flushing `Seek` when the wrapped
-  output supports `Seek`.
+  flushing, non-flushing `into_parts`, and large-write bypass paths. It also
+  supports unit-space seeking when the wrapped output implements
+  `Seekable<Item = O::Item>`. When `O::Item = u8`, it implements `Write`,
+  and when the wrapped output also supports `Seek`, it also implements `Seek`.
 - **`DEFAULT_BUFFER_CAPACITY`**: shared default capacity for input and output
   buffering.
+
+### Seekability Coherency
+
+`Seekable` is unit-oriented, and the stable rule is one implementation per
+`(type, unit)` pair. If a type implements `std::io::Seek`, the blanket impl
+already gives `Seekable<Item = u8>`, so another `Seekable` impl for the same
+type with `Item = u8` will trigger a coherence conflict.
+
+For custom units (for example `u16`), keep byte-sized seeking on the original
+type and expose unit-space seeking via a dedicated adapter/newtype that implements
+`Seekable` for that unit type.
 
 ### Composition Traits
 
