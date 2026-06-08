@@ -7,7 +7,7 @@ binary or text encoding format. The crate stays at the generic I/O layer.
 
 | Area | API | Use when |
 | --- | --- | --- |
-| Buffered byte I/O | `Buffer`, `BufferedInput`, `BufferedOutput` | higher-level adapters need format-agnostic byte windows |
+| Buffered unit I/O | `Buffer`, `BufferedInput`, `BufferedOutput` | higher-level adapters need format-agnostic unit windows |
 | Composition traits | `ReadSeek`, `ReadWrite`, `ReadWriteSeek`, `BufReadSeek`, `WriteSeek` | an API needs a trait object for combined I/O capabilities |
 | Read helpers | `ReadExt` | exact-or-EOF reads, bounded reads, and copy helpers |
 | Buffered helpers | `BufReadExt` | bounded delimiter and line reads |
@@ -22,11 +22,11 @@ binary or text encoding format. The crate stays at the generic I/O layer.
 qubit-io = "0.8"
 ```
 
-## Buffered Byte I/O
+## Buffered Unit I/O
 
-`BufferedInput` and `BufferedOutput` are byte-oriented buffering
+`BufferedInput` and `BufferedOutput` are unit-oriented buffering
 primitives. They do not decode binary values, decode text, or parse records.
-Those layers should be built in sibling crates on top of the byte windows.
+Those layers should be built in sibling crates on top of these unit windows.
 
 ```rust
 use std::io::{
@@ -51,8 +51,8 @@ assert_eq!(b"cd", unread.as_slice());
 ```
 
 `BufferedOutput::into_parts` performs no I/O and returns the wrapped writer
-plus any pending bytes. To finish successfully, call `flush` first and then
-verify that `into_parts` returns an empty pending byte vector. If flushing
+plus any pending units. To finish successfully, call `flush` first and then
+verify that `into_parts` returns an empty pending unit vector. If flushing
 fails, the caller still owns the buffered output and can retry or dismantle it.
 
 ```rust

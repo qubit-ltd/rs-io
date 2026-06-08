@@ -38,8 +38,8 @@ reference documentation is available on [docs.rs](https://docs.rs/qubit-io).
 - **Generic I/O Only**: keep this crate focused on reusable `std::io` helpers.
 - **Unit-Oriented Core**: provide low-level indexed input and output contracts
   for hot paths that have already validated ranges.
-- **Format-Agnostic Buffering**: provide efficient unit and byte buffers
-  without embedding binary codec, text codec, or record-format knowledge.
+- **Format-Agnostic Buffering**: provide efficient unit buffering without
+  embedding binary codec, text codec, or record-format knowledge.
 - **Explicit Low-Level Contracts**: expose hot-path APIs such as `Buffer` and
   unchecked range helpers with clear caller responsibilities.
 - **Object-Safe Composition**: make common trait combinations easy to name and

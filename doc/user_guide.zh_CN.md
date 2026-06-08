@@ -7,7 +7,7 @@
 
 | 领域 | API | 适用场景 |
 | --- | --- | --- |
-| Buffered byte I/O | `Buffer`、`BufferedInput`、`BufferedOutput` | 上层 adapter 需要 format-agnostic 的 byte window |
+| Buffered unit I/O | `Buffer`、`BufferedInput`、`BufferedOutput` | 上层 adapter 需要 format-agnostic 的 unit window |
 | 组合 trait | `ReadSeek`、`ReadWrite`、`ReadWriteSeek`、`BufReadSeek`、`WriteSeek` | API 需要组合 I/O 能力的 trait object |
 | Read helper | `ReadExt` | exact-or-EOF 读取、有界读取和复制 helper |
 | BufRead helper | `BufReadExt` | 有界 delimiter / line 读取 |
@@ -22,11 +22,11 @@
 qubit-io = "0.8"
 ```
 
-## Buffered Byte I/O
+## Buffered Unit I/O
 
-`BufferedInput` 和 `BufferedOutput` 是面向字节的缓冲原语。它们不解码
-binary value、不解码文本，也不解析 record；这些能力应该由兄弟 crate 基于 byte
-window 组合出来。
+`BufferedInput` 和 `BufferedOutput` 是面向 unit 的缓冲原语。它们不解码
+binary value、不解码文本，也不解析 record；这些能力应该由兄弟 crate 基于这些
+unit window 组合出来。
 
 ```rust
 use std::io::{
@@ -51,7 +51,7 @@ assert_eq!(b"cd", unread.as_slice());
 ```
 
 `BufferedOutput::into_parts` 不执行 I/O，会返回被包装的 writer 和 pending
-bytes。成功结束时，先调用 `flush`，再用 `into_parts` 验证 pending bytes 为空。
+unit。成功结束时，先调用 `flush`，再用 `into_parts` 验证 pending unit 为空。
 如果 flush 失败，调用方仍然持有 buffered output，可以自行重试或拆解。
 
 ```rust
