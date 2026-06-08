@@ -6,21 +6,10 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    BufRead,
-    Error,
-    ErrorKind,
-    Read,
-    Result,
-    Seek,
-    SeekFrom,
-};
+use std::io::{BufRead, Error, ErrorKind, Read, Result, Seek, SeekFrom};
 
 use crate::buffered::DEFAULT_BUFFER_CAPACITY;
-use crate::{
-    Buffer,
-    Input,
-};
+use crate::{Buffer, Input};
 
 /// Buffered unit input over a wrapped input source.
 ///
@@ -163,11 +152,10 @@ where
 
     /// Returns raw unread-buffer parts for hot-path callers.
     ///
-    /// The returned slice is the full internal backing storage. `index` is the
-    /// start of the unread unit window, and `count` is the number of unread
-    /// units. Callers that need a slice can use `&buffer[index..index +
-    /// count]`; callers that already validated bounds can pass `buffer` and
-    /// `index` directly to indexed unchecked codecs.
+    /// The returned slice is the internal backing storage up to the unread tail.
+    /// `index` is the start of the unread window, and `count` is the number of
+    /// unread units. The returned range is valid for direct use with indexed
+    /// unchecked codec operations that read from `index`.
     ///
     /// # Returns
     ///
@@ -175,8 +163,9 @@ where
     #[inline(always)]
     #[must_use]
     pub fn unread_raw_parts(&self) -> (&[I::Item], usize, usize) {
+        let unread_end = self.buffer.limit();
         (
-            self.buffer.data(),
+            &self.buffer.data()[..unread_end],
             self.buffer.position(),
             self.buffer.available(),
         )
@@ -456,9 +445,7 @@ where
             self.discard_buffer();
             if count >= self.buffer.capacity() {
                 // SAFETY: The caller guarantees that the target range is valid.
-                let read = unsafe {
-                    self.inner.read_unchecked(output, output_index, count)
-                }?;
+                let read = unsafe { self.inner.read_unchecked(output, output_index, count) }?;
                 validate_read_count(read, count)?;
                 return Ok(read);
             }
@@ -598,9 +585,7 @@ fn validate_read_count(read: usize, requested: usize) -> Result<()> {
     if read > requested {
         return Err(Error::new(
             ErrorKind::InvalidData,
-            format!(
-                "reader reported {read} bytes for a {requested}-byte buffer"
-            ),
+            format!("reader reported {read} bytes for a {requested}-byte buffer"),
         ));
     }
     Ok(())
