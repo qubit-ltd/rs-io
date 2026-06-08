@@ -51,6 +51,8 @@ pub use traits::{
     ReadSeek,
     ReadWrite,
     ReadWriteSeek,
+    Seekable,
+    SeekableInput,
     WriteSeek,
 };
 pub use util::Streams;

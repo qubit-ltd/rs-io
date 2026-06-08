@@ -185,6 +185,34 @@ where
         self.limit == self.data.len()
     }
 
+    /// Returns the currently readable elements.
+    ///
+    /// # Returns
+    ///
+    /// The readable range `data[position..limit]`.
+    #[inline(always)]
+    #[must_use]
+    pub fn unread_slice(&self) -> &[T] {
+        &self.data[self.position..self.limit]
+    }
+
+    /// Returns raw readable-window parts for hot-path callers.
+    ///
+    /// The returned slice is the internal backing storage up to the readable
+    /// limit. `index` is the start of the readable window, and `count` is the
+    /// number of readable elements. The returned range is valid for direct use
+    /// with indexed unchecked operations that read from `index`.
+    ///
+    /// # Returns
+    ///
+    /// The backing storage, the readable start index, and the readable element
+    /// count.
+    #[inline(always)]
+    #[must_use]
+    pub fn unread_raw_parts(&self) -> (&[T], usize, usize) {
+        (&self.data[..self.limit], self.position, self.available())
+    }
+
     /// Clears all buffered contents.
     ///
     /// This resets both cursors to zero without modifying stored values.
