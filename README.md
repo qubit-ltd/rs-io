@@ -167,7 +167,11 @@ let mut buffered_input = BufferedInput::with_capacity(
     3,
 );
 buffered_input.ensure_available(3)?;
-assert_eq!(b"abc", buffered_input.unread_slice());
+let mut unread = [0_u8; 3];
+unsafe {
+    buffered_input.copy_unread_to_unchecked(&mut unread, 0, 3);
+}
+assert_eq!(b"abc", &unread);
 unsafe {
     buffered_input.consume_unchecked(3);
 }
@@ -175,7 +179,11 @@ unsafe {
 let mut buffered_output =
     BufferedOutput::with_capacity(Cursor::new(Vec::<u8>::new()), 4);
 buffered_output.ensure_spare_capacity(3)?;
-buffered_output.spare_slice_mut()[0..3].copy_from_slice(b"xyz");
+{
+    let (buffer, index, count) = buffered_output.spare_raw_parts_mut();
+    assert!(count >= 3);
+    buffer[index..index + 3].copy_from_slice(b"xyz");
+}
 unsafe {
     buffered_output.advance_unchecked(3);
 }

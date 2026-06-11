@@ -65,7 +65,11 @@ use qubit_io::BufferedOutput;
 let mut output =
     BufferedOutput::with_capacity(Cursor::new(Vec::<u8>::new()), 4);
 output.ensure_spare_capacity(3)?;
-output.spare_slice_mut()[0..3].copy_from_slice(b"xyz");
+{
+    let (buffer, index, count) = output.spare_raw_parts_mut();
+    assert!(count >= 3);
+    buffer[index..index + 3].copy_from_slice(b"xyz");
+}
 unsafe {
     output.advance_unchecked(3);
 }
@@ -77,9 +81,9 @@ assert_eq!(b"xyz", cursor.into_inner().as_slice());
 # Ok::<(), std::io::Error>(())
 ```
 
-hot path adapter 可以使用 `unread_raw_parts` 和 `spare_raw_parts_mut`，把完整
-backing buffer 和 index 传给 unchecked codec API。通用调用应优先使用
-`unread_slice`、`spare_slice_mut`、`consume` 和 `advance`。
+hot path adapter 可以使用 `copy_unread_to_unchecked` 和
+`spare_raw_parts_mut`，在不暴露逻辑窗口 slice 的前提下检查或填充 buffered
+unit。通用调用应优先使用 `read`、`fill_buf`、`consume` 和 `advance`。
 
 ## Extension Trait
 

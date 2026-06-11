@@ -6,22 +6,10 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Error,
-    ErrorKind,
-    Result,
-    Seek,
-    SeekFrom,
-    Write,
-};
+use std::io::{Error, ErrorKind, Result, Seek, SeekFrom, Write};
 
 use crate::buffered::DEFAULT_BUFFER_CAPACITY;
-use crate::{
-    Buffer,
-    Output,
-    Seekable,
-    SeekableOutput,
-};
+use crate::{Buffer, Output, Seekable, SeekableOutput};
 
 /// Buffered unit output over a wrapped output sink.
 ///
@@ -33,12 +21,12 @@ use crate::{
 /// `BufferedOutput` is deliberately unit-oriented. It performs no binary
 /// encoding, text encoding, or record framing. Higher-level writers can either
 /// use the standard [`Write`] implementation or write directly into
-/// [`Self::spare_slice_mut`] or [`Self::spare_raw_parts_mut`] and then call
-/// [`Self::advance`] or [`Self::advance_unchecked`] after validating the range
-/// they initialized. Callers that need to recover the wrapped writer should
-/// call [`Write::flush`] first, then use [`Self::into_parts`]. For arbitrary
-/// unit types, `BufferedOutput` also supports [`Seekable`]-based seeking in
-/// unit offsets; when `Item = u8` and the wrapped output is also
+/// [`Self::spare_raw_parts_mut`] and then call [`Self::advance`] or
+/// [`Self::advance_unchecked`] after validating the range they initialized.
+/// Callers that need to recover the wrapped writer should call
+/// [`Write::flush`] first, then use [`Self::into_parts`]. For arbitrary unit
+/// types, `BufferedOutput` also supports [`Seekable`]-based seeking in unit
+/// offsets; when `Item = u8` and the wrapped output is also
 /// [`std::io::Seek`], it additionally implements [`std::io::Seek`].
 #[derive(Debug)]
 pub struct BufferedOutput<O>
@@ -129,7 +117,7 @@ where
     #[inline(always)]
     #[must_use]
     pub fn into_parts(self) -> (O, Vec<O::Item>) {
-        let pending = self.buffer.available_slice().to_vec();
+        let pending = self.buffer.data()[self.buffer.position()..self.buffer.limit()].to_vec();
         (self.inner, pending)
     }
 
@@ -156,20 +144,6 @@ where
         self.buffer.spare_capacity()
     }
 
-    /// Returns the unused portion of the internal buffer.
-    ///
-    /// Callers may write initialized units into the returned slice and then
-    /// call [`Self::advance`] with the number of units written.
-    ///
-    /// # Returns
-    ///
-    /// A mutable slice over the spare buffer capacity.
-    #[inline(always)]
-    #[must_use]
-    pub fn spare_slice_mut(&mut self) -> &mut [O::Item] {
-        self.buffer.spare_slice_mut()
-    }
-
     /// Returns raw spare-buffer parts for hot-path callers.
     ///
     /// The returned slice is the full internal backing storage. `index` is the
@@ -190,7 +164,7 @@ where
         self.buffer.spare_raw_parts_mut()
     }
 
-    /// Marks `count` units from [`Self::spare_slice_mut`] as written.
+    /// Marks `count` units from [`Self::spare_raw_parts_mut`] as written.
     ///
     /// # Parameters
     ///
@@ -221,8 +195,8 @@ where
     /// # Safety
     ///
     /// The caller must guarantee that `count <= self.spare_capacity()` and
-    /// that the corresponding units returned by [`Self::spare_slice_mut`]
-    /// have been initialized.
+    /// that the corresponding units in the spare range reported by
+    /// [`Self::spare_raw_parts_mut`] have been initialized.
     #[inline(always)]
     pub unsafe fn advance_unchecked(&mut self, count: usize) {
         // SAFETY: The caller guarantees that `count` is within spare capacity.
@@ -385,11 +359,8 @@ where
             // SAFETY: `position..position + available` is the current readable
             // range maintained by `Buffer`.
             match unsafe {
-                self.inner.write_unchecked(
-                    self.buffer.data(),
-                    position,
-                    available,
-                )
+                self.inner
+                    .write_unchecked(self.buffer.data(), position, available)
             } {
                 Ok(0) => {
                     self.buffer.compact();
@@ -399,8 +370,7 @@ where
                     ));
                 }
                 Ok(written) => {
-                    if let Err(error) = validate_write_count(written, available)
-                    {
+                    if let Err(error) = validate_write_count(written, available) {
                         self.buffer.compact();
                         return Err(error);
                     }
@@ -527,8 +497,7 @@ where
         count: usize,
     ) -> Result<usize> {
         // SAFETY: The caller guarantees the source range is valid.
-        let written =
-            unsafe { self.inner.write_unchecked(input, input_index, count) }?;
+        let written = unsafe { self.inner.write_unchecked(input, input_index, count) }?;
         validate_write_count(written, count)?;
         Ok(written)
     }
@@ -562,13 +531,7 @@ where
             let remaining = count - written;
             // SAFETY: `written < count`, so this suffix remains inside the
             // caller-validated source range.
-            match unsafe {
-                self.write_inner_unchecked(
-                    input,
-                    input_index + written,
-                    remaining,
-                )
-            } {
+            match unsafe { self.write_inner_unchecked(input, input_index + written, remaining) } {
                 Ok(0) => {
                     return Err(Error::new(
                         ErrorKind::WriteZero,
@@ -726,9 +689,7 @@ fn validate_write_count(written: usize, requested: usize) -> Result<()> {
     if written > requested {
         return Err(Error::new(
             ErrorKind::InvalidData,
-            format!(
-                "writer reported {written} bytes for a {requested}-byte buffer"
-            ),
+            format!("writer reported {written} bytes for a {requested}-byte buffer"),
         ));
     }
     Ok(())

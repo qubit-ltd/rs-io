@@ -93,7 +93,7 @@ fn test_compact_moves_unread_tail_to_front() {
 }
 
 #[test]
-fn test_available_slice_returns_readable_window() {
+fn test_position_limit_and_available_describe_readable_window() {
     let mut buffer = Buffer::<u8>::with_capacity(6);
 
     // SAFETY: The input range and spare range are valid for five bytes.
@@ -102,41 +102,13 @@ fn test_available_slice_returns_readable_window() {
     }
     buffer.consume(2);
 
-    assert_eq!(b"cde", buffer.available_slice());
-}
+    let start = buffer.position();
+    let end = buffer.limit();
 
-#[test]
-fn test_available_raw_parts_exposes_backing_buffer_index_and_count() {
-    let mut buffer = Buffer::<u8>::with_capacity(6);
-
-    // SAFETY: The input range and spare range are valid for five bytes.
-    unsafe {
-        buffer.copy_from_unchecked(b"abcde", 0, 5);
-    }
-    buffer.consume(2);
-
-    let (data, index, count) = buffer.available_raw_parts();
-
-    assert_eq!(2, index);
-    assert_eq!(3, count);
-    assert_eq!(b"cde", &data[index..index + count]);
-}
-
-#[test]
-fn test_spare_slice_mut_returns_spare_tail() {
-    let mut buffer = Buffer::<u8>::with_capacity(6);
-
-    // SAFETY: The input range and spare range are valid for two bytes.
-    unsafe {
-        buffer.copy_from_unchecked(b"ab", 0, 2);
-    }
-
-    buffer.spare_slice_mut()[..2].copy_from_slice(b"cd");
-    buffer.advance(2);
-
-    assert_eq!(0, buffer.position());
-    assert_eq!(4, buffer.limit());
-    assert_eq!(b"abcd", &buffer.data()[0..4]);
+    assert_eq!(2, start);
+    assert_eq!(5, end);
+    assert_eq!(3, buffer.available());
+    assert_eq!(b"cde", &buffer.data()[start..end]);
 }
 
 #[test]
