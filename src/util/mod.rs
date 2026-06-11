@@ -8,8 +8,5 @@
 mod allocation;
 mod streams;
 
-pub(crate) use allocation::{
-    try_reserve_string,
-    try_reserve_vec,
-};
+pub(crate) use allocation::{try_reserve_string, try_reserve_vec};
 pub use streams::Streams;

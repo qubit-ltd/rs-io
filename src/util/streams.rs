@@ -6,14 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 use std::cmp::Ordering;
-use std::io::{
-    Error,
-    ErrorKind,
-    Read,
-    Result,
-    Write,
-    copy,
-};
+use std::io::{Error, ErrorKind, Read, Result, Write, copy};
 
 use crate::ReadExt;
 
@@ -90,11 +83,7 @@ impl Streams {
     /// Returns the first non-interrupted read error or write error reported by
     /// the underlying streams. Interrupted reads are retried.
     #[inline]
-    pub fn copy_at_most<R, W>(
-        reader: &mut R,
-        writer: &mut W,
-        max_bytes: u64,
-    ) -> Result<u64>
+    pub fn copy_at_most<R, W>(reader: &mut R, writer: &mut W, max_bytes: u64) -> Result<u64>
     where
         R: Read + ?Sized,
         W: Write + ?Sized,
@@ -126,11 +115,7 @@ impl Streams {
     /// write error reported by the underlying streams. Interrupted reads are
     /// retried.
     #[inline]
-    pub fn copy_to_end_limited<R, W>(
-        reader: &mut R,
-        writer: &mut W,
-        max_bytes: u64,
-    ) -> Result<u64>
+    pub fn copy_to_end_limited<R, W>(reader: &mut R, writer: &mut W, max_bytes: u64) -> Result<u64>
     where
         R: Read + ?Sized,
         W: Write + ?Sized,
@@ -157,10 +142,7 @@ impl Streams {
     /// # Errors
     /// Returns the first read error reported by either stream.
     #[inline]
-    pub fn content_eq(
-        left: &mut dyn Read,
-        right: &mut dyn Read,
-    ) -> Result<bool> {
+    pub fn content_eq(left: &mut dyn Read, right: &mut dyn Read) -> Result<bool> {
         Ok(Self::compare_content(left, right)? == Ordering::Equal)
     }
 
@@ -181,10 +163,7 @@ impl Streams {
     ///
     /// # Errors
     /// Returns the first read error reported by either stream.
-    pub fn compare_content(
-        left: &mut dyn Read,
-        right: &mut dyn Read,
-    ) -> Result<Ordering> {
+    pub fn compare_content(left: &mut dyn Read, right: &mut dyn Read) -> Result<Ordering> {
         let mut left_buffer = [0; COMPARE_BUFFER_SIZE];
         let mut right_buffer = [0; COMPARE_BUFFER_SIZE];
         loop {
@@ -221,11 +200,7 @@ impl Streams {
 /// # Errors
 /// Returns the first non-interrupted read error or write error reported by the
 /// underlying streams. Interrupted reads are retried.
-fn copy_at_most_impl(
-    reader: &mut dyn Read,
-    writer: &mut dyn Write,
-    max_bytes: u64,
-) -> Result<u64> {
+fn copy_at_most_impl(reader: &mut dyn Read, writer: &mut dyn Write, max_bytes: u64) -> Result<u64> {
     let mut buffer = [0; COPY_BUFFER_SIZE];
     let mut remaining = max_bytes;
     let mut copied = 0;

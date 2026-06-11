@@ -5,18 +5,10 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use std::io::{
-    BufRead,
-    Error,
-    ErrorKind,
-    Result,
-};
+use std::io::{BufRead, Error, ErrorKind, Result};
 use std::string::FromUtf8Error;
 
-use crate::util::{
-    try_reserve_string,
-    try_reserve_vec,
-};
+use crate::util::{try_reserve_string, try_reserve_vec};
 
 /// Extension methods for [`BufRead`] values.
 ///
@@ -42,11 +34,7 @@ pub trait BufReadExt: BufRead {
     /// Returns [`ErrorKind::InvalidData`] when more than `max_len` bytes are
     /// required before reaching `delimiter` or EOF. Returns the first I/O error
     /// reported by the underlying reader.
-    fn read_until_limited(
-        &mut self,
-        delimiter: u8,
-        max_len: usize,
-    ) -> Result<Vec<u8>>;
+    fn read_until_limited(&mut self, delimiter: u8, max_len: usize) -> Result<Vec<u8>>;
 
     /// Reads bytes through `delimiter` into `output` while enforcing `max_len`.
     ///
@@ -110,11 +98,7 @@ pub trait BufReadExt: BufRead {
     /// Returns [`ErrorKind::InvalidData`] when the line exceeds `max_len` or is
     /// not valid UTF-8. Returns the first I/O error reported by the underlying
     /// reader.
-    fn read_line_limited_into(
-        &mut self,
-        output: &mut String,
-        max_len: usize,
-    ) -> Result<usize>;
+    fn read_line_limited_into(&mut self, output: &mut String, max_len: usize) -> Result<usize>;
 
     /// Discards bytes through `delimiter` while enforcing `max_len`.
     ///
@@ -133,11 +117,7 @@ pub trait BufReadExt: BufRead {
     /// Returns [`ErrorKind::InvalidData`] when more than `max_len` bytes are
     /// required before reaching `delimiter` or EOF. Returns the first I/O error
     /// reported by the underlying reader.
-    fn discard_until_limited(
-        &mut self,
-        delimiter: u8,
-        max_len: usize,
-    ) -> Result<usize>;
+    fn discard_until_limited(&mut self, delimiter: u8, max_len: usize) -> Result<usize>;
 }
 
 impl<T> BufReadExt for T
@@ -145,11 +125,7 @@ where
     T: BufRead + ?Sized,
 {
     #[inline]
-    fn read_until_limited(
-        &mut self,
-        delimiter: u8,
-        max_len: usize,
-    ) -> Result<Vec<u8>> {
+    fn read_until_limited(&mut self, delimiter: u8, max_len: usize) -> Result<Vec<u8>> {
         read_until_limited_impl(self, delimiter, max_len)
     }
 
@@ -169,20 +145,12 @@ where
     }
 
     #[inline]
-    fn read_line_limited_into(
-        &mut self,
-        output: &mut String,
-        max_len: usize,
-    ) -> Result<usize> {
+    fn read_line_limited_into(&mut self, output: &mut String, max_len: usize) -> Result<usize> {
         read_line_limited_into_impl(self, output, max_len)
     }
 
     #[inline]
-    fn discard_until_limited(
-        &mut self,
-        delimiter: u8,
-        max_len: usize,
-    ) -> Result<usize> {
+    fn discard_until_limited(&mut self, delimiter: u8, max_len: usize) -> Result<usize> {
         discard_until_limited_impl(self, delimiter, max_len)
     }
 }
@@ -200,11 +168,7 @@ where
 /// # Errors
 /// Returns an invalid-data error when the limit is exceeded, or an I/O error
 /// from `reader`.
-fn read_until_limited_impl<T>(
-    reader: &mut T,
-    delimiter: u8,
-    max_len: usize,
-) -> Result<Vec<u8>>
+fn read_until_limited_impl<T>(reader: &mut T, delimiter: u8, max_len: usize) -> Result<Vec<u8>>
 where
     T: BufRead + ?Sized,
 {
@@ -244,10 +208,8 @@ where
             return Ok(appended);
         }
 
-        let delimiter_position =
-            available.iter().position(|byte| *byte == delimiter);
-        let requested =
-            delimiter_position.map_or(available.len(), |position| position + 1);
+        let delimiter_position = available.iter().position(|byte| *byte == delimiter);
+        let requested = delimiter_position.map_or(available.len(), |position| position + 1);
         let remaining = max_len.saturating_sub(appended);
         if requested > remaining {
             if remaining > 0 {
@@ -312,8 +274,7 @@ where
 {
     let mut bytes = Vec::new();
     try_reserve_vec(&mut bytes, max_len.min(8192))?;
-    let count =
-        read_until_limited_into_impl(reader, b'\n', &mut bytes, max_len)?;
+    let count = read_until_limited_into_impl(reader, b'\n', &mut bytes, max_len)?;
     let line = String::from_utf8(bytes).map_err(invalid_utf8_error)?;
     try_reserve_string(output, line.len())?;
     output.push_str(&line);
@@ -333,11 +294,7 @@ where
 /// # Errors
 /// Returns an invalid-data error when the limit is exceeded, or an I/O error
 /// from `reader`.
-fn discard_until_limited_impl<T>(
-    reader: &mut T,
-    delimiter: u8,
-    max_len: usize,
-) -> Result<usize>
+fn discard_until_limited_impl<T>(reader: &mut T, delimiter: u8, max_len: usize) -> Result<usize>
 where
     T: BufRead + ?Sized,
 {
@@ -348,10 +305,8 @@ where
             return Ok(discarded);
         }
 
-        let delimiter_position =
-            available.iter().position(|byte| *byte == delimiter);
-        let requested =
-            delimiter_position.map_or(available.len(), |position| position + 1);
+        let delimiter_position = available.iter().position(|byte| *byte == delimiter);
+        let requested = delimiter_position.map_or(available.len(), |position| position + 1);
         let remaining = max_len.saturating_sub(discarded);
         if requested > remaining {
             if remaining > 0 {
@@ -379,9 +334,7 @@ where
 fn limit_exceeded_error(max_len: usize, delimiter: u8) -> Error {
     Error::new(
         ErrorKind::InvalidData,
-        format!(
-            "input exceeds maximum length of {max_len} bytes before delimiter {delimiter}"
-        ),
+        format!("input exceeds maximum length of {max_len} bytes before delimiter {delimiter}"),
     )
 }
 

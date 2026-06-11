@@ -6,23 +6,10 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    BufRead,
-    Error,
-    ErrorKind,
-    Read,
-    Result,
-    Seek,
-    SeekFrom,
-};
+use std::io::{BufRead, Error, ErrorKind, Read, Result, Seek, SeekFrom};
 
 use crate::buffered::DEFAULT_BUFFER_CAPACITY;
-use crate::{
-    Buffer,
-    Input,
-    Seekable,
-    SeekableInput,
-};
+use crate::{Buffer, Input, Seekable, SeekableInput};
 
 /// Buffered unit input over a wrapped input source.
 ///
@@ -32,10 +19,10 @@ use crate::{
 ///
 /// `BufferedInput` is deliberately unit-oriented. It performs no binary
 /// decoding, text decoding, or record parsing; higher-level stream adapters can
-/// build those concerns on top of [`Self::unread_slice`],
-/// [`Self::unread_raw_parts`], [`Self::ensure_available`], and
-/// [`Self::read_into_unchecked`]. The type also implements [`BufRead`] for
-/// callers that want the standard buffered-read interface.
+/// build those concerns on top of [`Self::ensure_available`],
+/// [`Self::copy_unread_to_unchecked`], and [`Self::read_into_unchecked`]. The
+/// type also implements [`BufRead`] for callers that want the standard
+/// buffered-read interface.
 #[derive(Debug)]
 pub struct BufferedInput<I>
 where
@@ -126,7 +113,7 @@ where
     #[inline(always)]
     #[must_use]
     pub fn into_parts(self) -> (I, Vec<I::Item>) {
-        let unread = self.unread_slice().to_vec();
+        let unread = self.buffer.data()[self.buffer.position()..self.buffer.limit()].to_vec();
         (self.inner, unread)
     }
 
@@ -156,27 +143,12 @@ where
     ///
     /// # Returns
     ///
-    /// The unread range `buffer[position..limit]`.
+    /// The `buffer[position..limit]` unread unit window. The slice may be empty
+    /// when no units are currently buffered.
     #[inline(always)]
     #[must_use]
-    pub fn unread_slice(&self) -> &[I::Item] {
-        self.buffer.available_slice()
-    }
-
-    /// Returns raw unread-buffer parts for hot-path callers.
-    ///
-    /// The returned slice is the internal backing storage up to the unread
-    /// tail. `index` is the start of the unread window, and `count` is the
-    /// number of unread units. The returned range is valid for direct use
-    /// with indexed unchecked codec operations that read from `index`.
-    ///
-    /// # Returns
-    ///
-    /// The backing storage, the unread start index, and the unread unit count.
-    #[inline(always)]
-    #[must_use]
-    pub fn unread_raw_parts(&self) -> (&[I::Item], usize, usize) {
-        self.buffer.available_raw_parts()
+    pub fn unread(&self) -> &[I::Item] {
+        &self.buffer.data()[self.buffer.position()..self.buffer.limit()]
     }
 
     /// Advances the unread cursor by `count` units.
@@ -216,6 +188,47 @@ where
         // input window.
         unsafe {
             self.buffer.consume_unchecked(count);
+        }
+    }
+
+    /// Copies unread units into an indexed output range without consuming them.
+    ///
+    /// # Parameters
+    ///
+    /// * `output` - Destination storage that receives a copy of unread units.
+    /// * `output_index` - Start index inside `output`.
+    /// * `count` - Number of unread units to copy.
+    ///
+    /// # Safety
+    ///
+    /// The caller must guarantee that `output_index..output_index + count` is
+    /// a valid range inside `output`, that the addition does not overflow, that
+    /// `count <= self.available()`, and that the destination range does not
+    /// overlap with the unread range stored inside this buffer.
+    #[inline(always)]
+    pub unsafe fn copy_unread_to_unchecked(
+        &self,
+        output: &mut [I::Item],
+        output_index: usize,
+        count: usize,
+    ) {
+        debug_assert!(
+            output_index
+                .checked_add(count)
+                .is_some_and(|end| end <= output.len()),
+            "unchecked unread copy output range exceeds destination buffer",
+        );
+        debug_assert!(
+            count <= self.available(),
+            "unchecked unread copy exceeds available input buffer",
+        );
+        // SAFETY: The caller guarantees that the destination range is valid,
+        // non-overlapping, and that `count` unread units are currently
+        // available.
+        unsafe {
+            let source = self.buffer.data().as_ptr().add(self.buffer.position());
+            let destination = output.as_mut_ptr().add(output_index);
+            std::ptr::copy_nonoverlapping(source, destination, count);
         }
     }
 
@@ -374,9 +387,7 @@ where
             self.discard_buffer();
             if count >= self.buffer.capacity() {
                 // SAFETY: The caller guarantees that the target range is valid.
-                let read = unsafe {
-                    self.inner.read_unchecked(output, output_index, count)
-                }?;
+                let read = unsafe { self.inner.read_unchecked(output, output_index, count) }?;
                 validate_read_count(read, count)?;
                 return Ok(read);
             }
@@ -548,7 +559,7 @@ where
                 return Ok(&[]);
             }
         }
-        Ok(self.unread_slice())
+        Ok(&self.buffer.data()[self.buffer.position()..self.buffer.limit()])
     }
 
     /// Consumes `amount` bytes from the unread byte window.
@@ -585,9 +596,7 @@ fn validate_read_count(read: usize, requested: usize) -> Result<()> {
     if read > requested {
         return Err(Error::new(
             ErrorKind::InvalidData,
-            format!(
-                "reader reported {read} bytes for a {requested}-byte buffer"
-            ),
+            format!("reader reported {read} bytes for a {requested}-byte buffer"),
         ));
     }
     Ok(())

@@ -43,9 +43,9 @@ use std::ptr;
 /// buffer.data_mut()[0..2].copy_from_slice(b"ab");
 /// buffer.advance(2);
 ///
-/// assert_eq!(b"ab", buffer.available_slice());
+/// assert_eq!(b"ab", &buffer.data()[buffer.position()..buffer.limit()]);
 /// buffer.consume(1);
-/// assert_eq!(b"b", buffer.available_slice());
+/// assert_eq!(b"b", &buffer.data()[buffer.position()..buffer.limit()]);
 /// ```
 #[derive(Clone, Debug)]
 pub struct Buffer<T>
@@ -183,46 +183,6 @@ where
     #[must_use]
     pub fn is_full(&self) -> bool {
         self.limit == self.data.len()
-    }
-
-    /// Returns the elements currently held in the readable window.
-    ///
-    /// # Returns
-    ///
-    /// The active range `data[position..limit]`. For input buffers this is the
-    /// unread tail; for output buffers this is the pending tail awaiting flush.
-    #[inline(always)]
-    #[must_use]
-    pub fn available_slice(&self) -> &[T] {
-        &self.data[self.position..self.limit]
-    }
-
-    /// Returns raw readable-window parts for hot-path callers.
-    ///
-    /// The returned slice is the internal backing storage up to the readable
-    /// limit. `index` is the start of the readable window, and `count` is the
-    /// number of readable elements. The returned range is valid for direct use
-    /// with indexed unchecked operations that read from `index`.
-    ///
-    /// # Returns
-    ///
-    /// The backing storage, the readable start index, and the readable element
-    /// count.
-    #[inline(always)]
-    #[must_use]
-    pub fn available_raw_parts(&self) -> (&[T], usize, usize) {
-        (&self.data[..self.limit], self.position, self.available())
-    }
-
-    /// Returns the spare tail that callers may fill before advancing the limit.
-    ///
-    /// # Returns
-    ///
-    /// The spare range `data[limit..]`.
-    #[inline(always)]
-    #[must_use]
-    pub fn spare_slice_mut(&mut self) -> &mut [T] {
-        &mut self.data[self.limit..]
     }
 
     /// Returns raw spare-tail parts for hot-path callers.
@@ -375,12 +335,7 @@ where
     /// `count <= self.spare_capacity()`, and that the source range does not
     /// overlap with this buffer's destination range.
     #[inline(always)]
-    pub unsafe fn copy_from_unchecked(
-        &mut self,
-        input: &[T],
-        input_index: usize,
-        count: usize,
-    ) {
+    pub unsafe fn copy_from_unchecked(&mut self, input: &[T], input_index: usize, count: usize) {
         debug_assert!(
             input_index
                 .checked_add(count)
