@@ -6,10 +6,23 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{BufRead, Error, ErrorKind, Read, Result, Seek, SeekFrom};
+use std::io::{
+    BufRead,
+    Error,
+    ErrorKind,
+    Read,
+    Result,
+    Seek,
+    SeekFrom,
+};
 
 use crate::buffered::DEFAULT_BUFFER_CAPACITY;
-use crate::{Buffer, Input, Seekable, SeekableInput};
+use crate::{
+    Buffer,
+    Input,
+    Seekable,
+    SeekableInput,
+};
 
 /// Buffered unit input over a wrapped input source.
 ///
@@ -113,7 +126,9 @@ where
     #[inline(always)]
     #[must_use]
     pub fn into_parts(self) -> (I, Vec<I::Item>) {
-        let unread = self.buffer.data()[self.buffer.position()..self.buffer.limit()].to_vec();
+        let unread = self.buffer.data()
+            [self.buffer.position()..self.buffer.limit()]
+            .to_vec();
         (self.inner, unread)
     }
 
@@ -226,7 +241,8 @@ where
         // non-overlapping, and that `count` unread units are currently
         // available.
         unsafe {
-            let source = self.buffer.data().as_ptr().add(self.buffer.position());
+            let source =
+                self.buffer.data().as_ptr().add(self.buffer.position());
             let destination = output.as_mut_ptr().add(output_index);
             std::ptr::copy_nonoverlapping(source, destination, count);
         }
@@ -387,7 +403,9 @@ where
             self.discard_buffer();
             if count >= self.buffer.capacity() {
                 // SAFETY: The caller guarantees that the target range is valid.
-                let read = unsafe { self.inner.read_unchecked(output, output_index, count) }?;
+                let read = unsafe {
+                    self.inner.read_unchecked(output, output_index, count)
+                }?;
                 validate_read_count(read, count)?;
                 return Ok(read);
             }
@@ -596,7 +614,9 @@ fn validate_read_count(read: usize, requested: usize) -> Result<()> {
     if read > requested {
         return Err(Error::new(
             ErrorKind::InvalidData,
-            format!("reader reported {read} bytes for a {requested}-byte buffer"),
+            format!(
+                "reader reported {read} bytes for a {requested}-byte buffer"
+            ),
         ));
     }
     Ok(())
