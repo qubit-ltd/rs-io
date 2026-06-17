@@ -6,11 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Result,
-    Seek,
-    SeekFrom,
-};
+use std::io::{Result, Seek, SeekFrom};
 
 /// Minimal seek interface measured in stream units.
 ///
@@ -21,6 +17,36 @@ use std::io::{
 ///
 /// The return value of [`Seekable::seek`] is the new absolute position from
 /// the start of the stream, in units.
+///
+/// # Method name overlap
+///
+/// `Seekable::seek` has the same method name as [`Seek::seek`]. In generic code
+/// where both traits are in scope for the same value, use fully qualified syntax
+/// to choose unit-oriented seeking or byte-oriented seeking explicitly:
+///
+/// ```
+/// use std::io::{
+///     Result,
+///     Seek,
+///     SeekFrom,
+/// };
+///
+/// use qubit_io::Seekable;
+///
+/// fn seek_units<T>(stream: &mut T, position: SeekFrom) -> Result<u64>
+/// where
+///     T: Seekable + Seek,
+/// {
+///     <T as Seekable>::seek(stream, position)
+/// }
+///
+/// fn seek_bytes<T>(stream: &mut T, position: SeekFrom) -> Result<u64>
+/// where
+///     T: Seekable + Seek,
+/// {
+///     Seek::seek(stream, position)
+/// }
+/// ```
 ///
 /// # Coherence note
 ///

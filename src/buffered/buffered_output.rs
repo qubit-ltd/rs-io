@@ -6,22 +6,10 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Error,
-    ErrorKind,
-    Result,
-    Seek,
-    SeekFrom,
-    Write,
-};
+use std::io::{Error, ErrorKind, Result, Seek, SeekFrom, Write};
 
 use crate::buffered::DEFAULT_BUFFER_CAPACITY;
-use crate::{
-    Buffer,
-    Output,
-    Seekable,
-    SeekableOutput,
-};
+use crate::{Buffer, Output, Seekable, SeekableOutput};
 
 /// Buffered unit output over a wrapped output sink.
 ///
@@ -129,9 +117,7 @@ where
     #[inline(always)]
     #[must_use]
     pub fn into_parts(self) -> (O, Vec<O::Item>) {
-        let pending = self.buffer.data()
-            [self.buffer.position()..self.buffer.limit()]
-            .to_vec();
+        let pending = self.buffer.data()[self.buffer.position()..self.buffer.limit()].to_vec();
         (self.inner, pending)
     }
 
@@ -373,11 +359,8 @@ where
             // SAFETY: `position..position + available` is the current readable
             // range maintained by `Buffer`.
             match unsafe {
-                self.inner.write_unchecked(
-                    self.buffer.data(),
-                    position,
-                    available,
-                )
+                self.inner
+                    .write_unchecked(self.buffer.data(), position, available)
             } {
                 Ok(0) => {
                     self.buffer.compact();
@@ -387,8 +370,7 @@ where
                     ));
                 }
                 Ok(written) => {
-                    if let Err(error) = validate_write_count(written, available)
-                    {
+                    if let Err(error) = validate_write_count(written, available) {
                         self.buffer.compact();
                         return Err(error);
                     }
@@ -515,8 +497,7 @@ where
         count: usize,
     ) -> Result<usize> {
         // SAFETY: The caller guarantees the source range is valid.
-        let written =
-            unsafe { self.inner.write_unchecked(input, input_index, count) }?;
+        let written = unsafe { self.inner.write_unchecked(input, input_index, count) }?;
         validate_write_count(written, count)?;
         Ok(written)
     }
@@ -550,13 +531,7 @@ where
             let remaining = count - written;
             // SAFETY: `written < count`, so this suffix remains inside the
             // caller-validated source range.
-            match unsafe {
-                self.write_inner_unchecked(
-                    input,
-                    input_index + written,
-                    remaining,
-                )
-            } {
+            match unsafe { self.write_inner_unchecked(input, input_index + written, remaining) } {
                 Ok(0) => {
                     return Err(Error::new(
                         ErrorKind::WriteZero,
@@ -616,13 +591,13 @@ where
 
     /// Handles slow-path raw writes for [`Write::write`] semantics.
     ///
-    /// The method preserves `Write::write` behavior: it may accept fewer bytes
+    /// The method preserves `Write::write` behavior: it may accept fewer units
     /// than the input length when the write is delegated directly to the
     /// wrapped writer.
     ///
     /// # Parameters
     ///
-    /// * `input` - The bytes to write after the fast path determined that they
+    /// * `input` - The units to write after the fast path determined that they
     ///   do not fit comfortably in the current spare buffer capacity.
     ///
     /// # Returns
@@ -698,25 +673,23 @@ where
     }
 }
 
-/// Validates a byte count returned by a wrapped writer.
+/// Validates a unit count returned by a wrapped writer.
 ///
 /// # Parameters
 ///
-/// * `written` - Byte count reported by the wrapped writer.
-/// * `requested` - Maximum byte count requested from the wrapped writer.
+/// * `written` - Unit count reported by the wrapped writer.
+/// * `requested` - Maximum unit count requested from the wrapped writer.
 ///
 /// # Errors
 ///
 /// Returns [`ErrorKind::InvalidData`] when the wrapped writer reports more
-/// bytes than the source range contained.
+/// units than the source range contained.
 #[inline(always)]
 fn validate_write_count(written: usize, requested: usize) -> Result<()> {
     if written > requested {
         return Err(Error::new(
             ErrorKind::InvalidData,
-            format!(
-                "writer reported {written} bytes for a {requested}-byte buffer"
-            ),
+            format!("writer reported {written} units for a {requested}-unit buffer"),
         ));
     }
     Ok(())

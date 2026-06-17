@@ -237,11 +237,12 @@ assert_eq!(b"xyz", cursor.into_inner().as_slice());
 大多数 helper 直接操作调用方提供的缓冲区，并委托到底层 `Read`、`Write`
 或 `Seek` 实现。Wrapper 类型不做隐藏分配；是否缓冲以及如何缓冲由调用点显式决定。
 
-`Input::read_unchecked`、`Output::write_unchecked`、`Buffer<T>`、
-`BufferedInput::unread_raw_parts` 与 `BufferedOutput::spare_raw_parts_mut` 是低层
-API，面向已经完成 range 校验的调用方。它们主要用于 binary/text stream adapter
-这类 hot path，在这些场景中避免重复 slicing 和 bounds check 有明确价值。通用调用
-仍应优先使用安全方法。
+`Input::read_unchecked`、`Output::write_unchecked`、
+`Output::write_all_unchecked`、`Buffer<T>`、`BufferedInput::unread`、
+`BufferedInput::copy_unread_to_unchecked` 与
+`BufferedOutput::spare_raw_parts_mut` 是低层 API，面向已经完成 range 校验的调用方。
+它们主要用于 binary/text stream adapter 这类 hot path，在这些场景中避免重复
+slicing 和 bounds check 有明确价值。通用调用仍应优先使用安全方法。
 
 ## 测试与代码覆盖率
 
