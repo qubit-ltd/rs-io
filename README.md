@@ -24,7 +24,8 @@ utilities for Rust.
   `Write`, and `Write + Seek` patterns;
 - `Streams` utility functions for copy and content comparison operations;
 - lightweight reader and writer wrappers such as `CountingReader`,
-  `LimitReader`, `PositionGuard`, `TeeReader`, and checksum wrappers.
+  `LimitReader`, `PositionGuard`, `TeeReader`, `SyncSeekTeeReader`, and
+  checksum wrappers.
 
 Binary scalar, LEB128, and ZigZag codecs are no longer part of this crate. Use
 `qubit-codec-binary` for buffer-level binary codecs and `qubit-io-binary` for
@@ -72,7 +73,7 @@ reference documentation is available on [docs.rs](https://docs.rs/qubit-io).
   implements `Read` and `BufRead`, plus logical `Seek` when the wrapped input
   supports `Seek`.
 - **`BufferedOutput<O>`**: buffered unit output over `Output`,
-  with spare-window access, checked and unchecked advancing, explicit
+  with spare-window access, unsafe advancing for validated spare ranges, explicit
   flushing, non-flushing `into_parts`, and large-write bypass paths. It also
   supports unit-space seeking when the wrapped output implements
   `Seekable<Item = O::Item>`. When `O::Item = u8`, it implements `Write`,
@@ -113,7 +114,7 @@ type and expose unit-space seeking via a dedicated adapter/newtype that implemen
 - **`Streams`**: copy, bounded copy, equality, and lexicographic comparison.
 - **Counting wrappers**: `CountingReader` and `CountingWriter`.
 - **Limit wrappers**: `LimitReader` and `LimitWriter`.
-- **Tee wrappers**: `TeeReader` and `TeeWriter`.
+- **Tee wrappers**: `TeeReader`, `SyncSeekTeeReader`, and `TeeWriter`.
 - **Checksum wrappers**: `ChecksumReader` and `ChecksumWriter`.
 - **Position guard**: `PositionGuard` restores stream position on drop unless
   dismissed.
@@ -169,11 +170,11 @@ let mut buffered_input = BufferedInput::with_capacity(
 buffered_input.ensure_available(3)?;
 let mut unread = [0_u8; 3];
 unsafe {
-    buffered_input.copy_unread_to_unchecked(&mut unread, 0, 3);
+    buffered_input.copy_unread_to(&mut unread, 0, 3);
 }
 assert_eq!(b"abc", &unread);
 unsafe {
-    buffered_input.consume_unchecked(3);
+    buffered_input.consume(3);
 }
 
 let mut buffered_output =
@@ -185,7 +186,7 @@ buffered_output.ensure_spare_capacity(3)?;
     buffer[index..index + 3].copy_from_slice(b"xyz");
 }
 unsafe {
-    buffered_output.advance_unchecked(3);
+    buffered_output.advance(3);
 }
 buffered_output.flush()?;
 let (cursor, pending) = buffered_output.into_parts();
@@ -223,7 +224,7 @@ assert_eq!(b"xyz", cursor.into_inner().as_slice());
 | `Streams` | Static helpers for copying and comparing streams |
 | `CountingReader` / `CountingWriter` | Count successful bytes read or written |
 | `LimitReader` / `LimitWriter` | Cap bytes read or written through a wrapper |
-| `TeeReader` / `TeeWriter` | Mirror bytes into a secondary sink |
+| `TeeReader` / `SyncSeekTeeReader` / `TeeWriter` | Mirror bytes into a secondary sink |
 | `ChecksumReader` / `ChecksumWriter` | Feed successful bytes into a caller-provided hasher |
 | `PositionGuard` | Restore a seek position unless explicitly dismissed |
 
@@ -249,13 +250,14 @@ Most helpers operate directly on caller-provided buffers and delegate to the
 underlying `Read`, `Write`, or `Seek` implementation. Wrapper types avoid hidden
 allocation; any buffering policy remains explicit at the call site.
 
-`Input::read_unchecked`, `Output::write_unchecked`,
-`Output::write_all_unchecked`, `Buffer<T>`, `BufferedInput::unread`,
-`BufferedInput::copy_unread_to_unchecked`, and
+`Input::read`, `Output::write`, `Output::write_all`, `Buffer<T>`,
+`BufferedInput::unread`,
+`BufferedInput::copy_unread_to`, and
 `BufferedOutput::spare_raw_parts_mut` are low-level APIs for callers that have
 already validated ranges. They are intended for hot paths such as binary and
 text stream adapters where avoiding repeated slicing and bounds checks matters.
-Safe wrapper methods remain available for general-purpose use.
+General-purpose code should prefer standard `Read`, `BufRead`, and `Write`
+trait methods where possible.
 
 ## Testing & Code Coverage
 

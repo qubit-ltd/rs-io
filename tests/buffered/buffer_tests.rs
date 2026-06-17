@@ -22,14 +22,14 @@ fn test_with_capacity_initializes_empty_window() {
 }
 
 #[test]
-fn test_copy_from_unchecked_appends_to_spare_window() {
+fn test_copy_from_appends_to_spare_window() {
     let mut buffer = Buffer::<u8>::with_capacity(6);
     let input = b"abcdef";
 
     // SAFETY: `input[1..4]` is valid and the empty buffer has enough spare
     // capacity for three bytes.
     unsafe {
-        buffer.copy_from_unchecked(input, 1, 3);
+        buffer.copy_from(input, 1, 3);
     }
 
     assert_eq!(0, buffer.position());
@@ -43,7 +43,10 @@ fn test_advance_marks_spare_values_as_readable() {
     let mut buffer = Buffer::<u8>::with_capacity(4);
 
     buffer.data_mut()[0..2].copy_from_slice(b"ab");
-    buffer.advance(2);
+    // SAFETY: Two initialized bytes are available in the spare window.
+    unsafe {
+        buffer.advance(2);
+    }
 
     assert_eq!(0, buffer.position());
     assert_eq!(2, buffer.limit());
@@ -53,19 +56,22 @@ fn test_advance_marks_spare_values_as_readable() {
 }
 
 #[test]
-fn test_copy_to_unchecked_consumes_from_readable_window() {
+fn test_copy_to_consumes_from_readable_window() {
     let mut buffer = Buffer::<u8>::with_capacity(6);
     let input = b"abcdef";
     let mut output = [0_u8; 5];
 
     // SAFETY: The input range and spare range are valid for six bytes.
     unsafe {
-        buffer.copy_from_unchecked(input, 0, 6);
+        buffer.copy_from(input, 0, 6);
     }
-    buffer.consume(2);
+    // SAFETY: Six readable bytes were appended above.
+    unsafe {
+        buffer.consume(2);
+    }
     // SAFETY: Three bytes are available and `output[1..4]` is valid.
     unsafe {
-        buffer.copy_to_unchecked(&mut output, 1, 3);
+        buffer.copy_to(&mut output, 1, 3);
     }
 
     assert_eq!([0, b'c', b'd', b'e', 0], output);
@@ -80,9 +86,12 @@ fn test_compact_moves_unread_tail_to_front() {
 
     // SAFETY: The input range and spare range are valid for five bytes.
     unsafe {
-        buffer.copy_from_unchecked(b"abcde", 0, 5);
+        buffer.copy_from(b"abcde", 0, 5);
     }
-    buffer.consume(2);
+    // SAFETY: Five readable bytes were appended above.
+    unsafe {
+        buffer.consume(2);
+    }
     buffer.compact();
 
     assert_eq!(0, buffer.position());
@@ -98,9 +107,12 @@ fn test_position_limit_and_available_describe_readable_window() {
 
     // SAFETY: The input range and spare range are valid for five bytes.
     unsafe {
-        buffer.copy_from_unchecked(b"abcde", 0, 5);
+        buffer.copy_from(b"abcde", 0, 5);
     }
-    buffer.consume(2);
+    // SAFETY: Five readable bytes were appended above.
+    unsafe {
+        buffer.consume(2);
+    }
 
     let start = buffer.position();
     let end = buffer.limit();
@@ -117,7 +129,7 @@ fn test_spare_raw_parts_mut_exposes_backing_buffer_index_and_count() {
 
     // SAFETY: The input range and spare range are valid for two bytes.
     unsafe {
-        buffer.copy_from_unchecked(b"ab", 0, 2);
+        buffer.copy_from(b"ab", 0, 2);
     }
 
     {
@@ -127,7 +139,10 @@ fn test_spare_raw_parts_mut_exposes_backing_buffer_index_and_count() {
         assert_eq!(4, count);
         data[index..index + 2].copy_from_slice(b"cd");
     }
-    buffer.advance(2);
+    // SAFETY: Two bytes were initialized in the spare window above.
+    unsafe {
+        buffer.advance(2);
+    }
 
     assert_eq!(b"abcd", &buffer.data()[0..4]);
 }
@@ -136,8 +151,14 @@ fn test_spare_raw_parts_mut_exposes_backing_buffer_index_and_count() {
 fn test_compact_clears_empty_readable_window() {
     let mut buffer = Buffer::<u8>::with_capacity(4);
 
-    buffer.advance(3);
-    buffer.consume(3);
+    // SAFETY: Three default-initialized spare bytes fit in the buffer.
+    unsafe {
+        buffer.advance(3);
+    }
+    // SAFETY: Three readable bytes were made available above.
+    unsafe {
+        buffer.consume(3);
+    }
     buffer.compact();
 
     assert_eq!(0, buffer.position());

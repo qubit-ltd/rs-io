@@ -21,8 +21,8 @@ use crate::{Buffer, Output, Seekable, SeekableOutput};
 /// `BufferedOutput` is deliberately unit-oriented. It performs no binary
 /// encoding, text encoding, or record framing. Higher-level writers can either
 /// use the standard [`Write`] implementation or write directly into
-/// [`Self::spare_raw_parts_mut`] and then call [`Self::advance`] or
-/// [`Self::advance_unchecked`] after validating the range they initialized.
+/// [`Self::spare_raw_parts_mut`] and then call [`Self::advance`] after
+/// validating the range they initialized.
 /// Callers that need to recover the wrapped writer should call
 /// [`Write::flush`] first, then use [`Self::into_parts`]. For arbitrary unit
 /// types, `BufferedOutput` also supports [`Seekable`]-based seeking in unit
@@ -164,27 +164,6 @@ where
         self.buffer.spare_raw_parts_mut()
     }
 
-    /// Marks `count` units from [`Self::spare_raw_parts_mut`] as written.
-    ///
-    /// # Parameters
-    ///
-    /// * `count` - Number of units initialized by the caller.
-    ///
-    /// # Panics
-    ///
-    /// Panics when `count` exceeds [`Self::spare_capacity`].
-    #[inline(always)]
-    pub fn advance(&mut self, count: usize) {
-        assert!(
-            count <= self.spare_capacity(),
-            "cannot advance beyond spare output buffer"
-        );
-        // SAFETY: The assertion proves that `count` is within spare capacity.
-        unsafe {
-            self.buffer.advance_unchecked(count);
-        }
-    }
-
     /// Marks spare units as written without checking bounds.
     ///
     /// # Parameters
@@ -198,10 +177,10 @@ where
     /// that the corresponding units in the spare range reported by
     /// [`Self::spare_raw_parts_mut`] have been initialized.
     #[inline(always)]
-    pub unsafe fn advance_unchecked(&mut self, count: usize) {
+    pub unsafe fn advance(&mut self, count: usize) {
         // SAFETY: The caller guarantees that `count` is within spare capacity.
         unsafe {
-            self.buffer.advance_unchecked(count);
+            self.buffer.advance(count);
         }
     }
 
@@ -259,7 +238,7 @@ where
     /// The caller must guarantee that `input_index..input_index + count` is a
     /// valid range inside `input` and that the addition does not overflow.
     #[inline]
-    pub unsafe fn write_unchecked(
+    pub unsafe fn write(
         &mut self,
         input: &[O::Item],
         input_index: usize,
@@ -274,7 +253,7 @@ where
         if count < self.spare_capacity() {
             // SAFETY: The branch proves that the input fits in spare capacity.
             unsafe {
-                self.write_to_buffer_unchecked(input, input_index, count);
+                self.write_to_buffer(input, input_index, count);
             }
             Ok(count)
         } else {
@@ -310,7 +289,7 @@ where
     /// The caller must guarantee that `input_index..input_index + count` is a
     /// valid range inside `input` and that the addition does not overflow.
     #[inline]
-    pub unsafe fn write_all_unchecked(
+    pub unsafe fn write_all(
         &mut self,
         input: &[O::Item],
         input_index: usize,
@@ -325,7 +304,7 @@ where
         if count < self.spare_capacity() {
             // SAFETY: The branch proves that the input fits in spare capacity.
             unsafe {
-                self.write_to_buffer_unchecked(input, input_index, count);
+                self.write_to_buffer(input, input_index, count);
             }
             Ok(())
         } else {
@@ -358,10 +337,7 @@ where
             let available = self.buffer.available();
             // SAFETY: `position..position + available` is the current readable
             // range maintained by `Buffer`.
-            match unsafe {
-                self.inner
-                    .write_unchecked(self.buffer.data(), position, available)
-            } {
+            match unsafe { self.inner.write(self.buffer.data(), position, available) } {
                 Ok(0) => {
                     self.buffer.compact();
                     return Err(Error::new(
@@ -376,7 +352,7 @@ where
                     }
                     // SAFETY: The validated count is in `0..=available`.
                     unsafe {
-                        self.buffer.consume_unchecked(written);
+                        self.buffer.consume(written);
                     }
                 }
                 Err(error) if error.kind() == ErrorKind::Interrupted => {}
@@ -455,16 +431,11 @@ where
     /// source range does not overlap with the destination range in the internal
     /// buffer.
     #[inline(always)]
-    unsafe fn write_to_buffer_unchecked(
-        &mut self,
-        input: &[O::Item],
-        input_index: usize,
-        count: usize,
-    ) {
-        // SAFETY: The caller upholds `Buffer::copy_from_unchecked` range and
+    unsafe fn write_to_buffer(&mut self, input: &[O::Item], input_index: usize, count: usize) {
+        // SAFETY: The caller upholds `Buffer::copy_from` range and
         // non-overlap requirements.
         unsafe {
-            self.buffer.copy_from_unchecked(input, input_index, count);
+            self.buffer.copy_from(input, input_index, count);
         }
     }
 
@@ -490,14 +461,14 @@ where
     /// The caller must guarantee that `input_index..input_index + count` is a
     /// valid range inside `input` and that the addition does not overflow.
     #[inline(always)]
-    unsafe fn write_inner_unchecked(
+    unsafe fn write_inner(
         &mut self,
         input: &[O::Item],
         input_index: usize,
         count: usize,
     ) -> Result<usize> {
         // SAFETY: The caller guarantees the source range is valid.
-        let written = unsafe { self.inner.write_unchecked(input, input_index, count) }?;
+        let written = unsafe { self.inner.write(input, input_index, count) }?;
         validate_write_count(written, count)?;
         Ok(written)
     }
@@ -520,7 +491,7 @@ where
     ///
     /// The caller must guarantee that `input_index..input_index + count` is a
     /// valid range inside `input` and that the addition does not overflow.
-    unsafe fn write_all_inner_unchecked(
+    unsafe fn write_all_inner(
         &mut self,
         input: &[O::Item],
         input_index: usize,
@@ -531,7 +502,7 @@ where
             let remaining = count - written;
             // SAFETY: `written < count`, so this suffix remains inside the
             // caller-validated source range.
-            match unsafe { self.write_inner_unchecked(input, input_index + written, remaining) } {
+            match unsafe { self.write_inner(input, input_index + written, remaining) } {
                 Ok(0) => {
                     return Err(Error::new(
                         ErrorKind::WriteZero,
@@ -578,12 +549,12 @@ where
         }
         if count >= self.buffer.capacity() {
             // SAFETY: The range covers the full source slice.
-            unsafe { self.write_all_inner_unchecked(input, input_index, count) }
+            unsafe { self.write_all_inner(input, input_index, count) }
         } else {
             // SAFETY: After the optional flush, any input smaller than the
             // buffer capacity fits in the empty or sufficiently spare buffer.
             unsafe {
-                self.write_to_buffer_unchecked(input, input_index, count);
+                self.write_to_buffer(input, input_index, count);
             }
             Ok(())
         }
@@ -625,12 +596,12 @@ where
         }
         if count >= self.buffer.capacity() {
             // SAFETY: The range covers the full source slice.
-            unsafe { self.write_inner_unchecked(input, input_index, count) }
+            unsafe { self.write_inner(input, input_index, count) }
         } else {
             // SAFETY: After the optional flush, any input smaller than the
             // buffer capacity fits in the empty or sufficiently spare buffer.
             unsafe {
-                self.write_to_buffer_unchecked(input, input_index, count);
+                self.write_to_buffer(input, input_index, count);
             }
             Ok(count)
         }
@@ -645,14 +616,14 @@ where
     #[inline(always)]
     fn write(&mut self, buffer: &[u8]) -> Result<usize> {
         // SAFETY: The full input slice is a valid source range.
-        unsafe { self.write_unchecked(buffer, 0, buffer.len()) }
+        unsafe { BufferedOutput::write(self, buffer, 0, buffer.len()) }
     }
 
     /// Writes all bytes through the internal buffer.
     #[inline(always)]
     fn write_all(&mut self, buffer: &[u8]) -> Result<()> {
         // SAFETY: The full input slice is a valid source range.
-        unsafe { self.write_all_unchecked(buffer, 0, buffer.len()) }
+        unsafe { BufferedOutput::write_all(self, buffer, 0, buffer.len()) }
     }
 
     /// Flushes the internal buffer and then the wrapped writer.

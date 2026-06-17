@@ -6,9 +6,9 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{Error, ErrorKind, Read, Write};
+use std::io::{Error, ErrorKind, Read, Seek, SeekFrom, Write};
 
-use qubit_io::TeeReader;
+use qubit_io::{SyncSeekTeeReader, TeeReader};
 
 enum ReadAction {
     Bytes(Vec<u8>),
@@ -102,6 +102,52 @@ impl Write for ScriptedBranch {
 
     fn flush(&mut self) -> std::io::Result<()> {
         Ok(())
+    }
+}
+
+struct ScriptedSeek {
+    position: u64,
+    seek_calls: usize,
+    error: Option<&'static str>,
+}
+
+impl ScriptedSeek {
+    fn new(position: u64) -> Self {
+        Self {
+            position,
+            seek_calls: 0,
+            error: None,
+        }
+    }
+
+    fn failing(position: u64, message: &'static str) -> Self {
+        Self {
+            position,
+            seek_calls: 0,
+            error: Some(message),
+        }
+    }
+}
+
+impl Seek for ScriptedSeek {
+    fn seek(&mut self, position: SeekFrom) -> std::io::Result<u64> {
+        self.seek_calls += 1;
+        if let Some(message) = self.error {
+            return Err(Error::other(message));
+        }
+        match position {
+            SeekFrom::Start(position) => {
+                self.position = position;
+                Ok(self.position)
+            }
+            SeekFrom::Current(offset) => {
+                let target = i128::from(self.position) + i128::from(offset);
+                self.position = u64::try_from(target)
+                    .map_err(|_| Error::new(ErrorKind::InvalidInput, "negative seek target"))?;
+                Ok(self.position)
+            }
+            SeekFrom::End(_) => Err(Error::new(ErrorKind::Unsupported, "unsupported seek")),
+        }
     }
 }
 
@@ -212,7 +258,7 @@ fn test_tee_reader_returns_branch_write_error() {
 
 #[test]
 fn test_tee_reader_forwards_seek_to_source_reader() {
-    use std::io::{Cursor, Seek, SeekFrom};
+    use std::io::Cursor;
 
     let source = Cursor::new(b"abcdef".to_vec());
     let branch = Vec::new();
@@ -228,4 +274,78 @@ fn test_tee_reader_forwards_seek_to_source_reader() {
 
     assert_eq!(b"cd", &buffer);
     assert_eq!(b"cd", reader.branch_ref().as_slice());
+}
+
+#[test]
+fn test_sync_seek_tee_reader_seeks_source_and_branch() {
+    use std::io::Cursor;
+
+    let source = Cursor::new(b"abcdef".to_vec());
+    let branch = Cursor::new(vec![0; 6]);
+    let mut reader = TeeReader::with_sync_branch_seek(source, branch);
+
+    let position = reader
+        .seek(SeekFrom::Start(2))
+        .expect("sync tee seek should move both sides");
+    let mut buffer = [0; 2];
+    reader
+        .read_exact(&mut buffer)
+        .expect("read after sync seek should succeed");
+
+    assert_eq!(2, position);
+    assert_eq!(b"cd", &buffer);
+    assert_eq!(4, reader.reader_ref().position());
+    assert_eq!(4, reader.branch_ref().position());
+    assert_eq!(
+        &[0, 0, b'c', b'd', 0, 0],
+        reader.branch_ref().get_ref().as_slice()
+    );
+}
+
+#[test]
+fn test_sync_seek_tee_reader_source_seek_error_does_not_seek_branch() {
+    let source = ScriptedSeek::failing(3, "source seek failed");
+    let branch = ScriptedSeek::new(5);
+    let mut reader = TeeReader::with_sync_branch_seek(source, branch);
+
+    let error = reader
+        .seek(SeekFrom::Start(7))
+        .expect_err("source seek error should be returned");
+
+    assert_eq!(ErrorKind::Other, error.kind());
+    assert_eq!("source seek failed", error.to_string());
+    assert_eq!(1, reader.reader_ref().seek_calls);
+    assert_eq!(3, reader.reader_ref().position);
+    assert_eq!(0, reader.branch_ref().seek_calls);
+    assert_eq!(5, reader.branch_ref().position);
+}
+
+#[test]
+fn test_sync_seek_tee_reader_branch_seek_error_leaves_source_moved() {
+    let source = ScriptedSeek::new(3);
+    let branch = ScriptedSeek::failing(5, "branch seek failed");
+    let mut reader = TeeReader::with_sync_branch_seek(source, branch);
+
+    let error = reader
+        .seek(SeekFrom::Start(7))
+        .expect_err("branch seek error should be returned");
+
+    assert_eq!(ErrorKind::Other, error.kind());
+    assert_eq!("branch seek failed", error.to_string());
+    assert_eq!(1, reader.reader_ref().seek_calls);
+    assert_eq!(7, reader.reader_ref().position);
+    assert_eq!(1, reader.branch_ref().seek_calls);
+    assert_eq!(5, reader.branch_ref().position);
+}
+
+#[test]
+fn test_sync_seek_tee_reader_new_exposes_wrapped_streams() {
+    use std::io::Cursor;
+
+    let source = Cursor::new(b"abc".to_vec());
+    let branch = Cursor::new(Vec::<u8>::new());
+    let reader = SyncSeekTeeReader::new(source, branch);
+
+    assert_eq!(b"abc", reader.reader_ref().get_ref().as_slice());
+    assert!(reader.branch_ref().get_ref().is_empty());
 }

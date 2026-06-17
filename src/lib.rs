@@ -38,5 +38,5 @@ pub use traits::{
 pub use util::Streams;
 pub use wrappers::{
     ChecksumReader, ChecksumWriter, CountingReader, CountingWriter, LimitReader, LimitWriter,
-    PositionGuard, TeeReader, TeeWriter,
+    PositionGuard, SyncSeekTeeReader, TeeReader, TeeWriter,
 };

@@ -7,70 +7,47 @@
 // =============================================================================
 use std::io::{Read, Result, Seek, SeekFrom, Write};
 
-use super::SyncSeekTeeReader;
-
-/// Reader wrapper that mirrors read bytes into a branch writer.
+/// Reader wrapper that mirrors read bytes and keeps the branch seek position in sync.
 ///
-/// `TeeReader` forwards reads to the source reader and writes every
-/// successfully read byte into the branch writer while the stream is consumed.
-/// If the branch writer fails, the source bytes have already been read from the
-/// inner reader and the branch error is returned.
+/// `SyncSeekTeeReader` has the same read behavior as [`crate::TeeReader`]:
+/// bytes returned by the source reader are written to the branch writer. The
+/// difference is seek behavior. Seeking moves the source reader first, then
+/// seeks the branch writer to the source reader's resulting absolute position.
 ///
-/// Seeking a `TeeReader` seeks only the source reader. It does not seek or
-/// otherwise modify the branch writer; bytes mirrored after the seek are simply
-/// appended or written according to the branch writer's own state.
-///
-/// `TeeReader` intentionally does not implement [`std::io::BufRead`]. Mirroring
-/// from `fill_buf` would copy bytes before the caller commits to consuming them,
-/// while mirroring from `consume` could not report branch write failures because
-/// `BufRead::consume` has no error return.
+/// If the branch seek fails, the source reader may already have moved. If a
+/// branch write fails during reading, the source bytes have already been read
+/// and the branch error is returned.
 ///
 /// # Examples
 /// ```
 /// use std::io::{
 ///     Cursor,
 ///     Read,
+///     Seek,
+///     SeekFrom,
 /// };
 ///
 /// use qubit_io::TeeReader;
 ///
-/// let source = Cursor::new(b"abc".to_vec());
-/// let branch = Vec::new();
-/// let mut reader = TeeReader::new(source, branch);
+/// let source = Cursor::new(b"abcdef".to_vec());
+/// let branch = Cursor::new(vec![0; 6]);
+/// let mut reader = TeeReader::with_sync_branch_seek(source, branch);
 ///
-/// let mut data = Vec::new();
-/// reader.read_to_end(&mut data)?;
-/// let (_source, branch) = reader.into_inner();
+/// reader.seek(SeekFrom::Start(2))?;
+/// let mut data = [0; 2];
+/// reader.read_exact(&mut data)?;
 ///
-/// assert_eq!(b"abc", data.as_slice());
-/// assert_eq!(b"abc", branch.as_slice());
+/// assert_eq!(b"cd", &data);
+/// assert_eq!(&[0, 0, b'c', b'd', 0, 0], reader.branch_ref().get_ref().as_slice());
 /// # Ok::<(), std::io::Error>(())
 /// ```
-pub struct TeeReader<R, W> {
+pub struct SyncSeekTeeReader<R, W> {
     reader: R,
     branch: W,
 }
 
-impl<R, W> TeeReader<R, W> {
-    /// Creates a tee reader.
-    ///
-    /// # Parameters
-    /// - `reader`: Source reader.
-    /// - `branch`: Writer that receives the bytes successfully read.
-    ///
-    /// # Returns
-    /// A new tee reader.
-    #[inline]
-    pub fn new(reader: R, branch: W) -> Self {
-        Self { reader, branch }
-    }
-
-    /// Creates a tee reader that synchronizes branch seeks with source seeks.
-    ///
-    /// The returned wrapper mirrors read bytes like [`TeeReader`], but its
-    /// [`Seek`] implementation also seeks the branch writer to the source
-    /// reader's resulting absolute position. If the branch seek fails, the source
-    /// reader may already have moved.
+impl<R, W> SyncSeekTeeReader<R, W> {
+    /// Creates a tee reader that synchronizes branch seeks.
     ///
     /// # Parameters
     /// - `reader`: Source reader.
@@ -78,10 +55,10 @@ impl<R, W> TeeReader<R, W> {
     ///   the same absolute position as the source reader.
     ///
     /// # Returns
-    /// A sync-seek tee reader.
+    /// A new sync-seek tee reader.
     #[inline]
-    pub fn with_sync_branch_seek(reader: R, branch: W) -> SyncSeekTeeReader<R, W> {
-        SyncSeekTeeReader::new(reader, branch)
+    pub fn new(reader: R, branch: W) -> Self {
+        Self { reader, branch }
     }
 
     /// Returns an immutable reference to the source reader.
@@ -130,7 +107,7 @@ impl<R, W> TeeReader<R, W> {
     }
 }
 
-impl<R, W> Read for TeeReader<R, W>
+impl<R, W> Read for SyncSeekTeeReader<R, W>
 where
     R: Read,
     W: Write,
@@ -142,11 +119,12 @@ where
     }
 }
 
-impl<R, W> Seek for TeeReader<R, W>
+impl<R, W> Seek for SyncSeekTeeReader<R, W>
 where
     R: Seek,
+    W: Seek,
 {
-    /// Seeks the source reader without touching the branch writer.
+    /// Seeks the source reader, then seeks the branch writer to the same position.
     ///
     /// # Parameters
     /// - `position`: Target position for the source reader.
@@ -155,9 +133,12 @@ where
     /// The new source reader position.
     ///
     /// # Errors
-    /// Returns the seek error reported by the source reader.
+    /// Returns the source seek error, or the branch seek error after the source
+    /// reader has already moved.
     #[inline]
     fn seek(&mut self, position: SeekFrom) -> Result<u64> {
-        self.reader.seek(position)
+        let reader_position = self.reader.seek(position)?;
+        self.branch.seek(SeekFrom::Start(reader_position))?;
+        Ok(reader_position)
     }
 }

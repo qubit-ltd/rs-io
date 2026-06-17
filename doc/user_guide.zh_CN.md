@@ -13,7 +13,7 @@
 | BufRead helper | `BufReadExt` | 有界 delimiter / line 读取 |
 | Seek helper | `SeekExt`、`ReadSeekExt`、`WriteSeekExt` | 查询 stream 大小、保留位置的读写 |
 | Stream 工具 | `Streams` | 命名空间式复制和内容比较 |
-| Wrapper | `CountingReader`、`LimitReader`、`TeeReader`、checksum wrapper、`PositionGuard` | 为现有 stream 组合小型行为 |
+| Wrapper | `CountingReader`、`LimitReader`、`TeeReader`、`SyncSeekTeeReader`、checksum wrapper、`PositionGuard` | 为现有 stream 组合小型行为 |
 
 ## 安装
 
@@ -71,7 +71,7 @@ output.ensure_spare_capacity(3)?;
     buffer[index..index + 3].copy_from_slice(b"xyz");
 }
 unsafe {
-    output.advance_unchecked(3);
+    output.advance(3);
 }
 
 output.flush()?;
@@ -81,9 +81,8 @@ assert_eq!(b"xyz", cursor.into_inner().as_slice());
 # Ok::<(), std::io::Error>(())
 ```
 
-hot path adapter 可以使用 `copy_unread_to_unchecked` 和
-`spare_raw_parts_mut`，在不暴露逻辑窗口 slice 的前提下检查或填充 buffered
-unit。通用调用应优先使用 `read`、`fill_buf`、`consume` 和 `advance`。
+hot path adapter 可以在校验 range 后使用 `copy_unread_to`、`advance` 等 unsafe
+方法。通用调用应优先使用标准 `Read`、`BufRead` 和 `Write` trait 方法。
 
 ## Extension Trait
 
@@ -187,7 +186,7 @@ assert_eq!(2, reader.bytes_read());
 | --- | --- |
 | `CountingReader`、`CountingWriter` | 统计成功读写的字节数 |
 | `LimitReader`、`LimitWriter` | 限制可通过的字节数 |
-| `TeeReader`、`TeeWriter` | 将成功读写的字节复制到分支 sink |
+| `TeeReader`、`SyncSeekTeeReader`、`TeeWriter` | 将成功读写的字节复制到分支 sink |
 | `ChecksumReader`、`ChecksumWriter` | 用调用方提供的 hasher 统计成功字节 |
 | `PositionGuard` | 除非 dismiss，否则恢复 seek 位置 |
 

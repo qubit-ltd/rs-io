@@ -14,6 +14,7 @@ keywords = ["io", "read", "write", "seek", "qubit"]
 categories = ["rust-patterns"]
 include = [
     "/Cargo.toml",
+    "/CHANGELOG.md",
     "/LICENSE",
     "/README.md",
     "/README.zh_CN.md",
