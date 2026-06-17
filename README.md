@@ -249,12 +249,13 @@ Most helpers operate directly on caller-provided buffers and delegate to the
 underlying `Read`, `Write`, or `Seek` implementation. Wrapper types avoid hidden
 allocation; any buffering policy remains explicit at the call site.
 
-`Input::read_unchecked`, `Output::write_unchecked`, `Buffer<T>`,
-`BufferedInput::unread_raw_parts`, and `BufferedOutput::spare_raw_parts_mut`
-are low-level APIs for callers that have already validated ranges. They are
-intended for hot paths such as binary and text stream adapters where avoiding
-repeated slicing and bounds checks matters. Safe wrapper methods remain
-available for general-purpose use.
+`Input::read_unchecked`, `Output::write_unchecked`,
+`Output::write_all_unchecked`, `Buffer<T>`, `BufferedInput::unread`,
+`BufferedInput::copy_unread_to_unchecked`, and
+`BufferedOutput::spare_raw_parts_mut` are low-level APIs for callers that have
+already validated ranges. They are intended for hot paths such as binary and
+text stream adapters where avoiding repeated slicing and bounds checks matters.
+Safe wrapper methods remain available for general-purpose use.
 
 ## Testing & Code Coverage
 

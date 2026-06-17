@@ -6,12 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 use std::hash::Hasher;
-use std::io::{
-    Read,
-    Result,
-    Seek,
-    SeekFrom,
-};
+use std::io::{Read, Result, Seek, SeekFrom};
 
 /// Reader wrapper that updates a checksum hasher with bytes read.
 ///
@@ -26,6 +21,12 @@ use std::io::{
 ///
 /// Seeking changes only the wrapped reader position. It does not rewind,
 /// subtract from, or otherwise adjust the hasher state.
+///
+/// `ChecksumReader` intentionally does not implement [`std::io::BufRead`].
+/// A buffered-read implementation would have to choose whether bytes are hashed
+/// when they are exposed by `fill_buf` or when the caller later consumes them;
+/// that timing is easy to misread and differs from this type's `Read`
+/// semantics, where only bytes returned by a successful read update the hasher.
 ///
 /// # Examples
 /// ```

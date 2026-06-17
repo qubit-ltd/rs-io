@@ -6,10 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use super::{
-    Output,
-    Seekable,
-};
+use super::{Output, Seekable};
 
 /// Object-safe capability trait for outputs that can be written and
 /// repositioned in the same unit space.
@@ -26,9 +23,7 @@ use super::{
 /// supertraits, and every type implementing both [`Output`] and [`Seekable`]
 /// with matching [`Output::Item`] and [`Seekable::Item`] automatically
 /// implements `SeekableOutput`.
-pub trait SeekableOutput:
-    Output + Seekable<Item = <Self as Output>::Item>
-{
+pub trait SeekableOutput: Output + Seekable<Item = <Self as Output>::Item> {
     /// The unit type shared by writing and seeking on this output.
     type Item;
 }

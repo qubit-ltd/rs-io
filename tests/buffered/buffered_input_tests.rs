@@ -7,20 +7,9 @@
 // =============================================================================
 
 use std::collections::VecDeque;
-use std::io::{
-    BufRead,
-    Cursor,
-    Error,
-    ErrorKind,
-    Read,
-    Seek,
-    SeekFrom,
-};
+use std::io::{BufRead, Cursor, Error, ErrorKind, Read, Seek, SeekFrom};
 
-use qubit_io::{
-    BufferedInput,
-    Input,
-};
+use qubit_io::{BufferedInput, Input};
 
 struct U16Input {
     chunks: VecDeque<Vec<u16>>,
@@ -121,6 +110,10 @@ fn test_buffered_input_rejects_overreported_unit_count() {
         .expect_err("overreported read count should fail");
 
     assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!(
+        "reader reported 5 units for a 4-unit buffer",
+        error.to_string()
+    );
 }
 
 #[test]
@@ -137,9 +130,8 @@ fn test_input_u8_blanket_impl_reuses_std_read_errors() {
     let mut output = [0_u8; 1];
 
     // SAFETY: The full output range is valid.
-    let error =
-        unsafe { Input::read_unchecked(&mut reader, &mut output, 0, 1) }
-            .expect_err("std read error should be propagated");
+    let error = unsafe { Input::read_unchecked(&mut reader, &mut output, 0, 1) }
+        .expect_err("std read error should be propagated");
 
     assert_eq!(ErrorKind::Other, error.kind());
 }
@@ -174,9 +166,7 @@ impl Read for ScriptedReader {
                 }
                 Ok(count)
             }
-            ReadStep::Interrupted => {
-                Err(Error::new(ErrorKind::Interrupted, "interrupted"))
-            }
+            ReadStep::Interrupted => Err(Error::new(ErrorKind::Interrupted, "interrupted")),
             ReadStep::Error(kind, message) => Err(Error::new(kind, message)),
             ReadStep::Eof => Ok(0),
         }
@@ -196,6 +186,54 @@ struct OverreportingReader;
 impl Read for OverreportingReader {
     fn read(&mut self, output: &mut [u8]) -> std::io::Result<usize> {
         Ok(output.len() + 1)
+    }
+}
+
+struct TrackingSeekReader {
+    data: Vec<u8>,
+    position: u64,
+    seek_calls: usize,
+}
+
+impl TrackingSeekReader {
+    fn new(data: &[u8]) -> Self {
+        Self {
+            data: data.to_vec(),
+            position: 0,
+            seek_calls: 0,
+        }
+    }
+}
+
+impl Read for TrackingSeekReader {
+    fn read(&mut self, output: &mut [u8]) -> std::io::Result<usize> {
+        let position = usize::try_from(self.position)
+            .map_err(|_| Error::new(ErrorKind::InvalidInput, "position exceeds usize"))?;
+        if position >= self.data.len() {
+            return Ok(0);
+        }
+        let count = (self.data.len() - position).min(output.len());
+        output[..count].copy_from_slice(&self.data[position..position + count]);
+        self.position += count as u64;
+        Ok(count)
+    }
+}
+
+impl Seek for TrackingSeekReader {
+    fn seek(&mut self, position: SeekFrom) -> std::io::Result<u64> {
+        self.seek_calls += 1;
+        let current = i128::from(self.position);
+        let end = i128::try_from(self.data.len())
+            .map_err(|_| Error::new(ErrorKind::InvalidInput, "stream length exceeds i128"))?;
+        let target = match position {
+            SeekFrom::Start(offset) => i128::from(offset),
+            SeekFrom::Current(offset) => current + i128::from(offset),
+            SeekFrom::End(offset) => end + i128::from(offset),
+        };
+        let position = u64::try_from(target)
+            .map_err(|_| Error::new(ErrorKind::InvalidInput, "seek target is negative"))?;
+        self.position = position;
+        Ok(self.position)
     }
 }
 
@@ -366,9 +404,9 @@ fn test_fill_until_buffers_requested_available_bytes() {
     input.consume(1);
 
     assert!(
-        input.fill_until(4).expect(
-            "fill_until should read until requested bytes are buffered"
-        )
+        input
+            .fill_until(4)
+            .expect("fill_until should read until requested bytes are buffered")
     );
 
     assert_eq!(b"bcde", unread_units(&input).as_slice());
@@ -376,10 +414,7 @@ fn test_fill_until_buffers_requested_available_bytes() {
 
 #[test]
 fn test_fill_until_returns_false_when_eof_prevents_requested_bytes() {
-    let reader = ScriptedReader::new(vec![
-        ReadStep::Data(b"ab".to_vec()),
-        ReadStep::Eof,
-    ]);
+    let reader = ScriptedReader::new(vec![ReadStep::Data(b"ab".to_vec()), ReadStep::Eof]);
     let mut input = BufferedInput::with_capacity(reader, 4);
 
     assert!(
@@ -421,10 +456,7 @@ fn test_fill_until_rejects_count_exceeding_capacity() {
 
 #[test]
 fn test_ensure_available_returns_unexpected_eof_and_consumes_partial_bytes() {
-    let reader = ScriptedReader::new(vec![
-        ReadStep::Data(b"ab".to_vec()),
-        ReadStep::Eof,
-    ]);
+    let reader = ScriptedReader::new(vec![ReadStep::Data(b"ab".to_vec()), ReadStep::Eof]);
     let mut input = BufferedInput::with_capacity(reader, 4);
 
     let error = input
@@ -485,10 +517,7 @@ fn test_buf_read_fill_buf_returns_refill_error() {
 
 #[test]
 fn test_fill_more_retries_interrupted_reads() {
-    let reader = ScriptedReader::new(vec![
-        ReadStep::Interrupted,
-        ReadStep::Data(b"ab".to_vec()),
-    ]);
+    let reader = ScriptedReader::new(vec![ReadStep::Interrupted, ReadStep::Data(b"ab".to_vec())]);
     let mut input = BufferedInput::with_capacity(reader, 4);
 
     assert!(
@@ -703,6 +732,53 @@ fn test_seek_current_accounts_for_prefetched_bytes() {
         .expect("seek should use logical position");
 
     assert_eq!(1, position);
+}
+
+#[test]
+fn test_seek_current_within_buffer_preserves_prefetched_bytes() {
+    let reader = TrackingSeekReader::new(b"abcdef");
+    let mut input = BufferedInput::with_capacity(reader, 4);
+    assert!(input.fill_more().expect("initial refill should succeed"));
+    input.consume(1);
+    assert_eq!(b"bcd", unread_units(&input).as_slice());
+
+    let position = input
+        .seek(SeekFrom::Current(2))
+        .expect("current seek within buffer should succeed");
+
+    assert_eq!(3, position);
+    assert_eq!(1, input.inner().seek_calls);
+    assert_eq!(b"d", unread_units(&input).as_slice());
+}
+
+#[test]
+fn test_seek_relative_within_buffer_avoids_underlying_seek() {
+    let reader = TrackingSeekReader::new(b"abcdef");
+    let mut input = BufferedInput::with_capacity(reader, 4);
+    assert!(input.fill_more().expect("initial refill should succeed"));
+    input.consume(1);
+    assert_eq!(b"bcd", unread_units(&input).as_slice());
+
+    Seek::seek_relative(&mut input, 2).expect("relative seek within buffer should succeed");
+
+    assert_eq!(0, input.inner().seek_calls);
+    assert_eq!(b"d", unread_units(&input).as_slice());
+}
+
+#[test]
+fn test_stream_position_preserves_prefetched_bytes() {
+    let reader = TrackingSeekReader::new(b"abcdef");
+    let mut input = BufferedInput::with_capacity(reader, 4);
+    assert!(input.fill_more().expect("initial refill should succeed"));
+    input.consume(1);
+
+    let position = input
+        .stream_position()
+        .expect("stream position should use logical position");
+
+    assert_eq!(1, position);
+    assert_eq!(1, input.inner().seek_calls);
+    assert_eq!(b"bcd", unread_units(&input).as_slice());
 }
 
 #[test]

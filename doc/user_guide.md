@@ -19,7 +19,7 @@ binary or text encoding format. The crate stays at the generic I/O layer.
 
 ```toml
 [dependencies]
-qubit-io = "0.8"
+qubit-io = "0.9"
 ```
 
 ## Buffered Unit I/O
@@ -183,7 +183,7 @@ let mut bytes = [0_u8; 2];
 
 reader.read_exact(&mut bytes)?;
 
-assert_eq!(2, reader.count());
+assert_eq!(2, reader.bytes_read());
 # Ok::<(), std::io::Error>(())
 ```
 

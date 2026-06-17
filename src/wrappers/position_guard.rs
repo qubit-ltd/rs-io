@@ -5,11 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use std::io::{
-    Result,
-    Seek,
-    SeekFrom,
-};
+use std::io::{Result, Seek, SeekFrom};
 
 /// Guard that restores a seekable stream to its original position.
 ///
@@ -18,7 +14,8 @@ use std::io::{
 /// [`PositionGuard::restore`] or [`PositionGuard::dismiss`] has already
 /// completed. Drop-time restoration errors are ignored because [`Drop::drop`]
 /// cannot return a [`Result`]; call [`PositionGuard::restore`] when the error
-/// must be observed.
+/// must be observed. A failed drop-time restore does not panic and is not
+/// logged by this type.
 ///
 /// # Examples
 /// ```

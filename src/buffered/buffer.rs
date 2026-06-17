@@ -253,6 +253,24 @@ where
         self.position += count;
     }
 
+    /// Moves the readable cursor backward without checking bounds.
+    ///
+    /// # Parameters
+    ///
+    /// * `count` - Number of already-consumed elements to make readable again.
+    ///
+    /// # Safety
+    ///
+    /// The caller must guarantee that `count <= self.position()`.
+    #[inline(always)]
+    pub(crate) unsafe fn rewind_unchecked(&mut self, count: usize) {
+        debug_assert!(
+            count <= self.position,
+            "unchecked rewind exceeds consumed buffer prefix"
+        );
+        self.position -= count;
+    }
+
     /// Advances the readable limit by `count` elements.
     ///
     /// # Parameters
@@ -335,12 +353,7 @@ where
     /// `count <= self.spare_capacity()`, and that the source range does not
     /// overlap with this buffer's destination range.
     #[inline(always)]
-    pub unsafe fn copy_from_unchecked(
-        &mut self,
-        input: &[T],
-        input_index: usize,
-        count: usize,
-    ) {
+    pub unsafe fn copy_from_unchecked(&mut self, input: &[T], input_index: usize, count: usize) {
         debug_assert!(
             input_index
                 .checked_add(count)

@@ -5,13 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use std::io::{
-    Read,
-    Result,
-    Seek,
-    SeekFrom,
-    Write,
-};
+use std::io::{Read, Result, Seek, SeekFrom, Write};
 
 /// Reader wrapper that mirrors read bytes into a branch writer.
 ///
@@ -23,6 +17,11 @@ use std::io::{
 /// Seeking a `TeeReader` seeks only the source reader. It does not seek or
 /// otherwise modify the branch writer; bytes mirrored after the seek are simply
 /// appended or written according to the branch writer's own state.
+///
+/// `TeeReader` intentionally does not implement [`std::io::BufRead`]. Mirroring
+/// from `fill_buf` would copy bytes before the caller commits to consuming them,
+/// while mirroring from `consume` could not report branch write failures because
+/// `BufRead::consume` has no error return.
 ///
 /// # Examples
 /// ```
