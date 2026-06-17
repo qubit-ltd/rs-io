@@ -13,7 +13,20 @@
 //! utility functions.
 
 pub use crate::{
-    BufReadExt, BufReadSeek, Input, Output, ReadExt, ReadSeek, ReadSeekExt, ReadWrite,
-    ReadWriteSeek, SeekExt, Seekable, SeekableInput, SeekableOutput, WriteExt, WriteSeek,
+    BufReadExt,
+    BufReadSeek,
+    Input,
+    Output,
+    ReadExt,
+    ReadSeek,
+    ReadSeekExt,
+    ReadWrite,
+    ReadWriteSeek,
+    SeekExt,
+    Seekable,
+    SeekableInput,
+    SeekableOutput,
+    WriteExt,
+    WriteSeek,
     WriteSeekExt,
 };

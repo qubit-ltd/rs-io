@@ -7,9 +7,20 @@
 // =============================================================================
 
 use std::collections::VecDeque;
-use std::io::{BufRead, Cursor, Error, ErrorKind, Read, Seek, SeekFrom};
+use std::io::{
+    BufRead,
+    Cursor,
+    Error,
+    ErrorKind,
+    Read,
+    Seek,
+    SeekFrom,
+};
 
-use qubit_io::{BufferedInput, Input};
+use qubit_io::{
+    BufferedInput,
+    Input,
+};
 
 struct U16Input {
     chunks: VecDeque<Vec<u16>>,
@@ -126,8 +137,9 @@ fn test_input_u8_blanket_impl_reuses_std_read_errors() {
     let mut output = [0_u8; 1];
 
     // SAFETY: The full output range is valid.
-    let error = unsafe { Input::read_unchecked(&mut reader, &mut output, 0, 1) }
-        .expect_err("std read error should be propagated");
+    let error =
+        unsafe { Input::read_unchecked(&mut reader, &mut output, 0, 1) }
+            .expect_err("std read error should be propagated");
 
     assert_eq!(ErrorKind::Other, error.kind());
 }
@@ -162,7 +174,9 @@ impl Read for ScriptedReader {
                 }
                 Ok(count)
             }
-            ReadStep::Interrupted => Err(Error::new(ErrorKind::Interrupted, "interrupted")),
+            ReadStep::Interrupted => {
+                Err(Error::new(ErrorKind::Interrupted, "interrupted"))
+            }
             ReadStep::Error(kind, message) => Err(Error::new(kind, message)),
             ReadStep::Eof => Ok(0),
         }
@@ -234,6 +248,16 @@ fn test_capacity_returns_internal_buffer_capacity() {
     let input = BufferedInput::with_capacity(cursor, 4);
 
     assert_eq!(4, input.capacity());
+}
+
+#[test]
+fn test_unread_returns_current_buffered_window() {
+    let cursor = Cursor::new(b"abcd".to_vec());
+    let mut input = BufferedInput::with_capacity(cursor, 4);
+    assert!(input.fill_more().expect("initial refill should succeed"));
+    input.consume(1);
+
+    assert_eq!(b"bcd", input.unread());
 }
 
 #[test]
@@ -342,9 +366,9 @@ fn test_fill_until_buffers_requested_available_bytes() {
     input.consume(1);
 
     assert!(
-        input
-            .fill_until(4)
-            .expect("fill_until should read until requested bytes are buffered")
+        input.fill_until(4).expect(
+            "fill_until should read until requested bytes are buffered"
+        )
     );
 
     assert_eq!(b"bcde", unread_units(&input).as_slice());
@@ -352,7 +376,10 @@ fn test_fill_until_buffers_requested_available_bytes() {
 
 #[test]
 fn test_fill_until_returns_false_when_eof_prevents_requested_bytes() {
-    let reader = ScriptedReader::new(vec![ReadStep::Data(b"ab".to_vec()), ReadStep::Eof]);
+    let reader = ScriptedReader::new(vec![
+        ReadStep::Data(b"ab".to_vec()),
+        ReadStep::Eof,
+    ]);
     let mut input = BufferedInput::with_capacity(reader, 4);
 
     assert!(
@@ -362,6 +389,22 @@ fn test_fill_until_returns_false_when_eof_prevents_requested_bytes() {
     );
 
     assert_eq!(b"ab", unread_units(&input).as_slice());
+}
+
+#[test]
+fn test_fill_until_returns_read_error() {
+    let reader = ScriptedReader::new(vec![ReadStep::Error(
+        ErrorKind::PermissionDenied,
+        "fill failed",
+    )]);
+    let mut input = BufferedInput::with_capacity(reader, 4);
+
+    let error = input
+        .fill_until(1)
+        .expect_err("fill_until should return reader errors");
+
+    assert_eq!(ErrorKind::PermissionDenied, error.kind());
+    assert_eq!("fill failed", error.to_string());
 }
 
 #[test]
@@ -378,7 +421,10 @@ fn test_fill_until_rejects_count_exceeding_capacity() {
 
 #[test]
 fn test_ensure_available_returns_unexpected_eof_and_consumes_partial_bytes() {
-    let reader = ScriptedReader::new(vec![ReadStep::Data(b"ab".to_vec()), ReadStep::Eof]);
+    let reader = ScriptedReader::new(vec![
+        ReadStep::Data(b"ab".to_vec()),
+        ReadStep::Eof,
+    ]);
     let mut input = BufferedInput::with_capacity(reader, 4);
 
     let error = input
@@ -422,8 +468,27 @@ fn test_buf_read_fill_buf_returns_empty_slice_at_eof() {
 }
 
 #[test]
+fn test_buf_read_fill_buf_returns_refill_error() {
+    let reader = ScriptedReader::new(vec![ReadStep::Error(
+        ErrorKind::PermissionDenied,
+        "fill_buf failed",
+    )]);
+    let mut input = BufferedInput::with_capacity(reader, 4);
+
+    let error = input
+        .fill_buf()
+        .expect_err("fill_buf should return refill errors");
+
+    assert_eq!(ErrorKind::PermissionDenied, error.kind());
+    assert_eq!("fill_buf failed", error.to_string());
+}
+
+#[test]
 fn test_fill_more_retries_interrupted_reads() {
-    let reader = ScriptedReader::new(vec![ReadStep::Interrupted, ReadStep::Data(b"ab".to_vec())]);
+    let reader = ScriptedReader::new(vec![
+        ReadStep::Interrupted,
+        ReadStep::Data(b"ab".to_vec()),
+    ]);
     let mut input = BufferedInput::with_capacity(reader, 4);
 
     assert!(
@@ -539,6 +604,23 @@ fn test_read_delegated_large_empty_buffer_returns_zero_at_eof() {
 
     assert_eq!(0, count);
     assert_eq!([1, 1, 1, 1], output);
+}
+
+#[test]
+fn test_read_delegated_large_empty_buffer_returns_reader_error() {
+    let reader = ScriptedReader::new(vec![ReadStep::Error(
+        ErrorKind::PermissionDenied,
+        "delegated read failed",
+    )]);
+    let mut input = BufferedInput::with_capacity(reader, 4);
+    let mut output = [0_u8; 4];
+
+    let error = input
+        .read(output.as_mut_slice())
+        .expect_err("delegated reader error should be returned");
+
+    assert_eq!(ErrorKind::PermissionDenied, error.kind());
+    assert_eq!("delegated read failed", error.to_string());
 }
 
 #[test]

@@ -335,7 +335,12 @@ where
     /// `count <= self.spare_capacity()`, and that the source range does not
     /// overlap with this buffer's destination range.
     #[inline(always)]
-    pub unsafe fn copy_from_unchecked(&mut self, input: &[T], input_index: usize, count: usize) {
+    pub unsafe fn copy_from_unchecked(
+        &mut self,
+        input: &[T],
+        input_index: usize,
+        count: usize,
+    ) {
         debug_assert!(
             input_index
                 .checked_add(count)

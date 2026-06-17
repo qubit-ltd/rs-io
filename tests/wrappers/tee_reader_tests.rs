@@ -6,7 +6,12 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{Error, ErrorKind, Read, Write};
+use std::io::{
+    Error,
+    ErrorKind,
+    Read,
+    Write,
+};
 
 use qubit_io::TeeReader;
 
@@ -144,7 +149,10 @@ fn test_tee_reader_mut_accessors_allow_inner_access() {
 
 #[test]
 fn test_tee_reader_returns_source_read_error() {
-    let mut reader = TeeReader::new(ScriptedReader::error("read failed"), ScriptedBranch::new());
+    let mut reader = TeeReader::new(
+        ScriptedReader::error("read failed"),
+        ScriptedBranch::new(),
+    );
     let mut buffer = [0; 2];
 
     let error = reader
@@ -190,7 +198,8 @@ fn test_tee_reader_copies_partial_buffer_at_eof() {
 #[test]
 #[should_panic]
 fn test_tee_reader_panics_when_source_returns_invalid_count() {
-    let mut reader = TeeReader::new(ScriptedReader::invalid_count(), ScriptedBranch::new());
+    let mut reader =
+        TeeReader::new(ScriptedReader::invalid_count(), ScriptedBranch::new());
     let mut buffer = [0; 2];
 
     let _ = reader.read(&mut buffer);
@@ -199,7 +208,8 @@ fn test_tee_reader_panics_when_source_returns_invalid_count() {
 #[test]
 fn test_tee_reader_returns_branch_write_error() {
     let source = ScriptedReader::bytes(b"abc");
-    let mut reader = TeeReader::new(source, ScriptedBranch::failing("branch write failed"));
+    let mut reader =
+        TeeReader::new(source, ScriptedBranch::failing("branch write failed"));
     let mut buffer = [0; 2];
 
     let error = reader
@@ -212,7 +222,11 @@ fn test_tee_reader_returns_branch_write_error() {
 
 #[test]
 fn test_tee_reader_forwards_seek_to_source_reader() {
-    use std::io::{Cursor, Seek, SeekFrom};
+    use std::io::{
+        Cursor,
+        Seek,
+        SeekFrom,
+    };
 
     let source = Cursor::new(b"abcdef".to_vec());
     let branch = Vec::new();
