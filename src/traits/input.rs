@@ -39,7 +39,7 @@ pub trait Input {
     ///
     /// The caller must guarantee that `index..index + count` is a valid range
     /// inside `output` and that the addition does not overflow.
-    unsafe fn read_unchecked(
+    unsafe fn read(
         &mut self,
         output: &mut [Self::Item],
         index: usize,
@@ -55,12 +55,7 @@ where
 
     /// Reads bytes from a standard [`Read`] value into an indexed range.
     #[inline(always)]
-    unsafe fn read_unchecked(
-        &mut self,
-        output: &mut [u8],
-        index: usize,
-        count: usize,
-    ) -> Result<usize> {
+    unsafe fn read(&mut self, output: &mut [u8], index: usize, count: usize) -> Result<usize> {
         debug_assert!(
             index
                 .checked_add(count)
@@ -71,6 +66,6 @@ where
         // `output`.
         let target =
             unsafe { core::slice::from_raw_parts_mut(output.as_mut_ptr().add(index), count) };
-        self.read(target)
+        Read::read(self, target)
     }
 }

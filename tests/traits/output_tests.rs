@@ -35,7 +35,7 @@ impl ScriptedOutput {
 impl Output for ScriptedOutput {
     type Item = u16;
 
-    unsafe fn write_unchecked(
+    unsafe fn write(
         &mut self,
         input: &[u16],
         index: usize,
@@ -64,7 +64,7 @@ struct OverreportingOutput;
 impl Output for OverreportingOutput {
     type Item = u16;
 
-    unsafe fn write_unchecked(
+    unsafe fn write(
         &mut self,
         _input: &[u16],
         _index: usize,
@@ -79,28 +79,28 @@ impl Output for OverreportingOutput {
 }
 
 #[test]
-fn test_output_write_all_unchecked_writes_until_range_is_complete() {
+fn test_output_write_all_writes_until_range_is_complete() {
     let mut output = ScriptedOutput::new(vec![WriteStep::Accept(2), WriteStep::Accept(2)]);
     let input = [10, 20, 30, 40, 50];
 
     // SAFETY: `input[1..5]` is a valid source range.
     unsafe {
         output
-            .write_all_unchecked(&input, 1, 4)
-            .expect("write_all_unchecked should finish after partial writes");
+            .write_all(&input, 1, 4)
+            .expect("write_all should finish after partial writes");
     }
 
     assert_eq!(&[20, 30, 40, 50], output.values.as_slice());
 }
 
 #[test]
-fn test_output_write_all_unchecked_retries_interrupted_writes() {
+fn test_output_write_all_retries_interrupted_writes() {
     let mut output = ScriptedOutput::new(vec![WriteStep::Interrupted, WriteStep::Accept(3)]);
 
     // SAFETY: The full input range is valid.
     unsafe {
         output
-            .write_all_unchecked(&[1, 2, 3], 0, 3)
+            .write_all(&[1, 2, 3], 0, 3)
             .expect("interrupted writes should be retried");
     }
 
@@ -108,13 +108,13 @@ fn test_output_write_all_unchecked_retries_interrupted_writes() {
 }
 
 #[test]
-fn test_output_write_all_unchecked_returns_write_zero() {
+fn test_output_write_all_returns_write_zero() {
     let mut output = ScriptedOutput::new(vec![WriteStep::Zero]);
 
     // SAFETY: The full input range is valid.
     let error = unsafe {
         output
-            .write_all_unchecked(&[1, 2, 3], 0, 3)
+            .write_all(&[1, 2, 3], 0, 3)
             .expect_err("zero progress should fail")
     };
 
@@ -122,7 +122,7 @@ fn test_output_write_all_unchecked_returns_write_zero() {
 }
 
 #[test]
-fn test_output_write_all_unchecked_returns_non_interrupted_error() {
+fn test_output_write_all_returns_non_interrupted_error() {
     let mut output = ScriptedOutput::new(vec![WriteStep::Error(
         ErrorKind::BrokenPipe,
         "write failed",
@@ -131,7 +131,7 @@ fn test_output_write_all_unchecked_returns_non_interrupted_error() {
     // SAFETY: The full input range is valid.
     let error = unsafe {
         output
-            .write_all_unchecked(&[1, 2, 3], 0, 3)
+            .write_all(&[1, 2, 3], 0, 3)
             .expect_err("non-interrupted errors should be returned")
     };
 
@@ -140,13 +140,13 @@ fn test_output_write_all_unchecked_returns_non_interrupted_error() {
 }
 
 #[test]
-fn test_output_write_all_unchecked_rejects_overreported_count() {
+fn test_output_write_all_rejects_overreported_count() {
     let mut output = OverreportingOutput;
 
     // SAFETY: The full input range is valid.
     let error = unsafe {
         output
-            .write_all_unchecked(&[1, 2, 3], 0, 3)
+            .write_all(&[1, 2, 3], 0, 3)
             .expect_err("overreported write count should be rejected")
     };
 

@@ -26,7 +26,7 @@ impl U16Input {
 impl Input for U16Input {
     type Item = u16;
 
-    unsafe fn read_unchecked(
+    unsafe fn read(
         &mut self,
         output: &mut [u16],
         index: usize,
@@ -49,7 +49,7 @@ struct OverreportingInput;
 impl Input for OverreportingInput {
     type Item = u16;
 
-    unsafe fn read_unchecked(
+    unsafe fn read(
         &mut self,
         _output: &mut [u16],
         _index: usize,
@@ -66,7 +66,10 @@ fn test_buffered_input_reads_generic_units() {
 
     assert!(input.fill_more().expect("initial refill should succeed"));
     assert_eq!(&[1, 2, 3], unread_units(&input).as_slice());
-    input.consume(1);
+    // SAFETY: The test has ensured the requested units are currently buffered.
+    unsafe {
+        input.consume(1);
+    }
 
     assert!(input.fill_until(4).expect("refill should append units"));
     assert_eq!(&[2, 3, 4, 5], unread_units(&input).as_slice());
@@ -75,7 +78,7 @@ fn test_buffered_input_reads_generic_units() {
     // SAFETY: `output[0..3]` is a valid destination range.
     let read = unsafe {
         input
-            .read_into_unchecked(&mut output, 0, 3)
+            .read_into(&mut output, 0, 3)
             .expect("buffered read should succeed")
     };
 
@@ -93,7 +96,7 @@ fn test_buffered_input_adapts_std_read_as_u8_input() {
     // SAFETY: `output[1..4]` is a valid destination range.
     let read = unsafe {
         input
-            .read_into_unchecked(&mut output, 1, 3)
+            .read_into(&mut output, 1, 3)
             .expect("std reader should be an Input<Item = u8>")
     };
 
@@ -130,7 +133,7 @@ fn test_input_u8_blanket_impl_reuses_std_read_errors() {
     let mut output = [0_u8; 1];
 
     // SAFETY: The full output range is valid.
-    let error = unsafe { Input::read_unchecked(&mut reader, &mut output, 0, 1) }
+    let error = unsafe { Input::read(&mut reader, &mut output, 0, 1) }
         .expect_err("std read error should be propagated");
 
     assert_eq!(ErrorKind::Other, error.kind());
@@ -261,7 +264,7 @@ where
     // SAFETY: `unread[..count]` is a valid destination range that does not
     // overlap with the buffered input storage.
     unsafe {
-        input.copy_unread_to_unchecked(&mut unread, 0, count);
+        input.copy_unread_to(&mut unread, 0, count);
     }
     unread
 }
@@ -293,29 +296,32 @@ fn test_unread_returns_current_buffered_window() {
     let cursor = Cursor::new(b"abcd".to_vec());
     let mut input = BufferedInput::with_capacity(cursor, 4);
     assert!(input.fill_more().expect("initial refill should succeed"));
-    input.consume(1);
+    // SAFETY: The test has ensured the requested units are currently buffered.
+    unsafe {
+        input.consume(1);
+    }
 
     assert_eq!(b"bcd", input.unread());
 }
 
 #[test]
 #[should_panic(expected = "cannot consume beyond buffered input")]
-fn test_consume_panics_when_count_exceeds_available() {
+fn test_buf_read_consume_panics_when_count_exceeds_available() {
     let cursor = Cursor::new(b"abc".to_vec());
     let mut input = BufferedInput::with_capacity(cursor, 4);
 
-    input.consume(1);
+    BufRead::consume(&mut input, 1);
 }
 
 #[test]
-fn test_consume_unchecked_advances_without_bounds_check() {
+fn test_consume_advances_without_bounds_check() {
     let cursor = Cursor::new(b"abcd".to_vec());
     let mut input = BufferedInput::with_capacity(cursor, 4);
     assert!(input.fill_more().expect("initial refill should succeed"));
 
     // SAFETY: The buffer has four readable bytes, so consuming two is valid.
     unsafe {
-        input.consume_unchecked(2);
+        input.consume(2);
     }
 
     assert_eq!(b"cd", unread_units(&input).as_slice());
@@ -326,7 +332,10 @@ fn test_into_parts_returns_inner_and_unread_bytes() {
     let cursor = Cursor::new(b"abcdef".to_vec());
     let mut input = BufferedInput::with_capacity(cursor, 4);
     assert!(input.fill_more().expect("initial refill should succeed"));
-    input.consume(1);
+    // SAFETY: The test has ensured the requested units are currently buffered.
+    unsafe {
+        input.consume(1);
+    }
 
     let (cursor, unread) = input.into_parts();
 
@@ -335,17 +344,20 @@ fn test_into_parts_returns_inner_and_unread_bytes() {
 }
 
 #[test]
-fn test_copy_unread_to_unchecked_copies_backing_buffer_window() {
+fn test_copy_unread_to_copies_backing_buffer_window() {
     let cursor = Cursor::new(b"abcdef".to_vec());
     let mut input = BufferedInput::with_capacity(cursor, 4);
     assert!(input.fill_more().expect("initial refill should succeed"));
-    input.consume(1);
+    // SAFETY: The test has ensured the requested units are currently buffered.
+    unsafe {
+        input.consume(1);
+    }
 
     let mut unread = [0_u8; 5];
     // SAFETY: `unread[1..4]` is a valid destination range that does not
     // overlap with the buffered input storage.
     unsafe {
-        input.copy_unread_to_unchecked(&mut unread, 1, 3);
+        input.copy_unread_to(&mut unread, 1, 3);
     }
 
     assert_eq!([0, b'b', b'c', b'd', 0], unread);
@@ -386,7 +398,10 @@ fn test_fill_more_preserves_unread_tail_and_appends_new_bytes() {
     assert!(input.fill_more().expect("initial refill should succeed"));
     assert_eq!(b"abcd", unread_units(&input).as_slice());
 
-    input.consume(2);
+    // SAFETY: The test has ensured the requested units are currently buffered.
+    unsafe {
+        input.consume(2);
+    }
     assert_eq!(b"cd", unread_units(&input).as_slice());
 
     assert!(input.fill_more().expect("second refill should succeed"));
@@ -401,7 +416,10 @@ fn test_fill_until_buffers_requested_available_bytes() {
     ]);
     let mut input = BufferedInput::with_capacity(reader, 4);
     assert!(input.fill_more().expect("initial refill should succeed"));
-    input.consume(1);
+    // SAFETY: The test has ensured the requested units are currently buffered.
+    unsafe {
+        input.consume(1);
+    }
 
     assert!(
         input
@@ -536,11 +554,33 @@ fn test_fill_more_appends_when_tail_capacity_remains() {
     ]);
     let mut input = BufferedInput::with_capacity(reader, 4);
     assert!(input.fill_more().expect("initial refill should succeed"));
-    input.consume(1);
+    // SAFETY: The test has ensured the requested units are currently buffered.
+    unsafe {
+        input.consume(1);
+    }
 
     assert!(input.fill_more().expect("second refill should append"));
 
     assert_eq!(b"bcd", unread_units(&input).as_slice());
+}
+
+#[test]
+fn test_fill_more_rejects_refill_when_buffer_is_full() {
+    let cursor = Cursor::new(b"abcdef".to_vec());
+    let mut input = BufferedInput::with_capacity(cursor, 4);
+    assert!(input.fill_more().expect("initial refill should succeed"));
+    assert_eq!(4, input.available());
+
+    let error = input
+        .fill_more()
+        .expect_err("full buffer should require consumption before refill");
+
+    assert_eq!(ErrorKind::InvalidInput, error.kind());
+    assert_eq!(
+        "buffered input is full; consume buffered units before refilling",
+        error.to_string()
+    );
+    assert_eq!(b"abcd", unread_units(&input).as_slice());
 }
 
 #[test]
@@ -564,29 +604,34 @@ fn test_read_forwards_through_buffered_input() {
     let cursor = Cursor::new(b"abcdef".to_vec());
     let mut input = BufferedInput::with_capacity(cursor, 4);
     assert!(input.fill_more().expect("initial refill should succeed"));
-    input.consume(1);
+    // SAFETY: The test has ensured the requested units are currently buffered.
+    unsafe {
+        input.consume(1);
+    }
 
     let mut output = [0_u8; 3];
-    let count = input
-        .read(output.as_mut_slice())
-        .expect("buffered read should succeed");
+    let count =
+        Read::read(&mut input, output.as_mut_slice()).expect("buffered read should succeed");
 
     assert_eq!(3, count);
     assert_eq!(b"bcd", &output);
 }
 
 #[test]
-fn test_read_into_unchecked_writes_at_output_index_and_count() {
+fn test_read_into_writes_at_output_index_and_count() {
     let cursor = Cursor::new(b"abcdef".to_vec());
     let mut input = BufferedInput::with_capacity(cursor, 4);
     assert!(input.fill_more().expect("initial refill should succeed"));
-    input.consume(1);
+    // SAFETY: The test has ensured the requested units are currently buffered.
+    unsafe {
+        input.consume(1);
+    }
     let mut output = [b'.'; 6];
 
     // SAFETY: `output[2..5]` is a valid writable range.
     let count = unsafe {
         input
-            .read_into_unchecked(output.as_mut_slice(), 2, 3)
+            .read_into(output.as_mut_slice(), 2, 3)
             .expect("indexed unchecked read should succeed")
     };
 
@@ -600,9 +645,8 @@ fn test_read_empty_output_does_not_read() {
     let mut input = BufferedInput::with_capacity(PanicOnRead, 4);
     let mut output = [];
 
-    let count = input
-        .read(output.as_mut_slice())
-        .expect("empty output should be accepted");
+    let count =
+        Read::read(&mut input, output.as_mut_slice()).expect("empty output should be accepted");
 
     assert_eq!(0, count);
 }
@@ -613,9 +657,8 @@ fn test_read_delegates_large_empty_buffer_read() {
     let mut input = BufferedInput::with_capacity(cursor, 4);
     let mut output = [0_u8; 6];
 
-    let count = input
-        .read(output.as_mut_slice())
-        .expect("large read should be delegated");
+    let count =
+        Read::read(&mut input, output.as_mut_slice()).expect("large read should be delegated");
 
     assert_eq!(6, count);
     assert_eq!(b"abcdef", &output);
@@ -627,9 +670,8 @@ fn test_read_delegated_large_empty_buffer_returns_zero_at_eof() {
     let mut input = BufferedInput::with_capacity(cursor, 4);
     let mut output = [1_u8; 4];
 
-    let count = input
-        .read(output.as_mut_slice())
-        .expect("delegated EOF read should succeed");
+    let count =
+        Read::read(&mut input, output.as_mut_slice()).expect("delegated EOF read should succeed");
 
     assert_eq!(0, count);
     assert_eq!([1, 1, 1, 1], output);
@@ -644,8 +686,7 @@ fn test_read_delegated_large_empty_buffer_returns_reader_error() {
     let mut input = BufferedInput::with_capacity(reader, 4);
     let mut output = [0_u8; 4];
 
-    let error = input
-        .read(output.as_mut_slice())
+    let error = Read::read(&mut input, output.as_mut_slice())
         .expect_err("delegated reader error should be returned");
 
     assert_eq!(ErrorKind::PermissionDenied, error.kind());
@@ -658,8 +699,7 @@ fn test_read_refills_small_empty_buffer_read() {
     let mut input = BufferedInput::with_capacity(cursor, 4);
     let mut output = [0_u8; 2];
 
-    let count = input
-        .read(output.as_mut_slice())
+    let count = Read::read(&mut input, output.as_mut_slice())
         .expect("small read should refill the internal buffer");
 
     assert_eq!(2, count);
@@ -673,8 +713,7 @@ fn test_read_returns_zero_when_small_read_reaches_eof() {
     let mut input = BufferedInput::with_capacity(cursor, 4);
     let mut output = [0_u8; 2];
 
-    let count = input
-        .read(output.as_mut_slice())
+    let count = Read::read(&mut input, output.as_mut_slice())
         .expect("EOF should be reported as zero bytes read");
 
     assert_eq!(0, count);
@@ -689,9 +728,8 @@ fn test_read_returns_refill_error() {
     let mut input = BufferedInput::with_capacity(reader, 4);
     let mut output = [0_u8; 2];
 
-    let error = input
-        .read(output.as_mut_slice())
-        .expect_err("refill error should be returned");
+    let error =
+        Read::read(&mut input, output.as_mut_slice()).expect_err("refill error should be returned");
 
     assert_eq!(ErrorKind::PermissionDenied, error.kind());
     assert_eq!("refill failed", error.to_string());
@@ -713,8 +751,7 @@ fn test_read_rejects_invalid_delegated_read_count() {
     let mut input = BufferedInput::with_capacity(OverreportingReader, 4);
     let mut output = [0_u8; 4];
 
-    let error = input
-        .read(output.as_mut_slice())
+    let error = Read::read(&mut input, output.as_mut_slice())
         .expect_err("overreported delegated read count should be rejected");
 
     assert_eq!(ErrorKind::InvalidData, error.kind());
@@ -725,7 +762,10 @@ fn test_seek_current_accounts_for_prefetched_bytes() {
     let cursor = Cursor::new(b"abcdef".to_vec());
     let mut input = BufferedInput::with_capacity(cursor, 4);
     assert!(input.fill_more().expect("initial refill should succeed"));
-    input.consume(1);
+    // SAFETY: The test has ensured the requested units are currently buffered.
+    unsafe {
+        input.consume(1);
+    }
 
     let position = input
         .stream_position()
@@ -739,7 +779,10 @@ fn test_seek_current_within_buffer_preserves_prefetched_bytes() {
     let reader = TrackingSeekReader::new(b"abcdef");
     let mut input = BufferedInput::with_capacity(reader, 4);
     assert!(input.fill_more().expect("initial refill should succeed"));
-    input.consume(1);
+    // SAFETY: The test has ensured the requested units are currently buffered.
+    unsafe {
+        input.consume(1);
+    }
     assert_eq!(b"bcd", unread_units(&input).as_slice());
 
     let position = input
@@ -752,11 +795,37 @@ fn test_seek_current_within_buffer_preserves_prefetched_bytes() {
 }
 
 #[test]
+fn test_seek_current_large_offset_outside_buffer_delegates_to_inner_seek() {
+    let reader = TrackingSeekReader::new(b"abcdef");
+    let mut input = BufferedInput::with_capacity(reader, 4);
+    assert!(input.fill_more().expect("initial refill should succeed"));
+    // SAFETY: The test has ensured the requested units are currently buffered.
+    unsafe {
+        input.consume(1);
+    }
+
+    let large_offset = i64::from(u32::MAX) + 1;
+    let position = input
+        .seek(SeekFrom::Current(large_offset))
+        .expect("large current seek outside buffer should delegate");
+
+    assert_eq!(
+        u64::try_from(large_offset).expect("offset is positive") + 1,
+        position
+    );
+    assert_eq!(1, input.inner().seek_calls);
+    assert_eq!(0, input.available());
+}
+
+#[test]
 fn test_seek_relative_within_buffer_avoids_underlying_seek() {
     let reader = TrackingSeekReader::new(b"abcdef");
     let mut input = BufferedInput::with_capacity(reader, 4);
     assert!(input.fill_more().expect("initial refill should succeed"));
-    input.consume(1);
+    // SAFETY: The test has ensured the requested units are currently buffered.
+    unsafe {
+        input.consume(1);
+    }
     assert_eq!(b"bcd", unread_units(&input).as_slice());
 
     Seek::seek_relative(&mut input, 2).expect("relative seek within buffer should succeed");
@@ -770,7 +839,10 @@ fn test_stream_position_preserves_prefetched_bytes() {
     let reader = TrackingSeekReader::new(b"abcdef");
     let mut input = BufferedInput::with_capacity(reader, 4);
     assert!(input.fill_more().expect("initial refill should succeed"));
-    input.consume(1);
+    // SAFETY: The test has ensured the requested units are currently buffered.
+    unsafe {
+        input.consume(1);
+    }
 
     let position = input
         .stream_position()
@@ -804,9 +876,8 @@ fn test_seek_accepts_absolute_position_and_discards_buffer() {
         .seek(SeekFrom::Start(3))
         .expect("absolute seek should succeed");
     let mut output = [0_u8; 2];
-    let count = input
-        .read(output.as_mut_slice())
-        .expect("read after seek should succeed");
+    let count =
+        Read::read(&mut input, output.as_mut_slice()).expect("read after seek should succeed");
 
     assert_eq!(3, position);
     assert_eq!(2, count);

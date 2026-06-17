@@ -20,8 +20,8 @@ use crate::{Buffer, Input, Seekable, SeekableInput};
 /// `BufferedInput` is deliberately unit-oriented. It performs no binary
 /// decoding, text decoding, or record parsing; higher-level stream adapters can
 /// build those concerns on top of [`Self::ensure_available`],
-/// [`Self::copy_unread_to_unchecked`], and [`Self::read_into_unchecked`]. The
-/// type also implements [`BufRead`] for callers that want the standard
+/// [`Self::copy_unread_to`], and [`Self::read_into`]. The type also implements
+/// [`BufRead`] for callers that want the standard
 /// buffered-read interface.
 #[derive(Debug)]
 pub struct BufferedInput<I>
@@ -151,28 +151,6 @@ where
         &self.buffer.data()[self.buffer.position()..self.buffer.limit()]
     }
 
-    /// Advances the unread cursor by `count` units.
-    ///
-    /// # Parameters
-    ///
-    /// * `count` - Number of currently unread units to consume.
-    ///
-    /// # Panics
-    ///
-    /// Panics when `count` exceeds [`Self::available`].
-    #[inline(always)]
-    pub fn consume(&mut self, count: usize) {
-        assert!(
-            count <= self.available(),
-            "cannot consume beyond buffered input"
-        );
-        // SAFETY: The assertion proves that `count` is within the readable
-        // input window.
-        unsafe {
-            self.buffer.consume_unchecked(count);
-        }
-    }
-
     /// Advances the unread cursor without checking bounds.
     ///
     /// # Parameters
@@ -183,11 +161,11 @@ where
     ///
     /// The caller must guarantee that `count <= self.available()`.
     #[inline(always)]
-    pub unsafe fn consume_unchecked(&mut self, count: usize) {
+    pub unsafe fn consume(&mut self, count: usize) {
         // SAFETY: The caller guarantees that `count` is within the readable
         // input window.
         unsafe {
-            self.buffer.consume_unchecked(count);
+            self.buffer.consume(count);
         }
     }
 
@@ -206,12 +184,7 @@ where
     /// `count <= self.available()`, and that the destination range does not
     /// overlap with the unread range stored inside this buffer.
     #[inline(always)]
-    pub unsafe fn copy_unread_to_unchecked(
-        &self,
-        output: &mut [I::Item],
-        output_index: usize,
-        count: usize,
-    ) {
+    pub unsafe fn copy_unread_to(&self, output: &mut [I::Item], output_index: usize, count: usize) {
         debug_assert!(
             output_index
                 .checked_add(count)
@@ -244,11 +217,20 @@ where
     /// # Errors
     ///
     /// Returns any non-interrupted I/O error produced by the wrapped reader.
+    /// Returns [`ErrorKind::InvalidInput`] when the buffer is already full and
+    /// no unread units have been consumed; callers must consume buffered units
+    /// before refilling in that state.
     pub fn fill_more(&mut self) -> Result<bool> {
         if self.available() == 0 {
             self.discard_buffer();
         } else if self.tail_capacity() == 0 {
             self.backshift();
+            if self.tail_capacity() == 0 {
+                return Err(Error::new(
+                    ErrorKind::InvalidInput,
+                    "buffered input is full; consume buffered units before refilling",
+                ));
+            }
         }
         self.read_more()
     }
@@ -327,7 +309,7 @@ where
         let available = self.available();
         // SAFETY: `available` is the current readable unit count.
         unsafe {
-            self.consume_unchecked(available);
+            self.consume(available);
         }
         Err(Error::new(
             ErrorKind::UnexpectedEof,
@@ -368,7 +350,7 @@ where
     /// The caller must guarantee that `output_index..output_index + count` is
     /// a valid range inside `output` and that the addition does not overflow.
     #[inline(always)]
-    pub unsafe fn read_into_unchecked(
+    pub unsafe fn read_into(
         &mut self,
         output: &mut [I::Item],
         output_index: usize,
@@ -387,7 +369,7 @@ where
             self.discard_buffer();
             if count >= self.buffer.capacity() {
                 // SAFETY: The caller guarantees that the target range is valid.
-                let read = unsafe { self.inner.read_unchecked(output, output_index, count) }?;
+                let read = unsafe { self.inner.read(output, output_index, count) }?;
                 validate_read_count(read, count)?;
                 return Ok(read);
             }
@@ -399,8 +381,7 @@ where
         // SAFETY: `read_count` is bounded by the caller-provided output range
         // and the available input range.
         unsafe {
-            self.buffer
-                .copy_to_unchecked(output, output_index, read_count);
+            self.buffer.copy_to(output, output_index, read_count);
         }
         Ok(read_count)
     }
@@ -431,7 +412,7 @@ where
     {
         match position {
             SeekFrom::Current(offset) => {
-                if self.seek_within_buffer(offset)? {
+                if self.seek_within_buffer(offset) {
                     return self.logical_stream_position();
                 }
                 let position = self.seek_relative_slow(offset)?;
@@ -465,7 +446,7 @@ where
     where
         I: SeekableInput,
     {
-        if self.seek_within_buffer(offset)? {
+        if self.seek_within_buffer(offset) {
             return Ok(());
         }
         self.seek_relative_slow(offset)?;
@@ -547,46 +528,33 @@ where
     ///
     /// # Returns
     ///
-    /// `Ok(true)` when the buffer cursor was moved. `Ok(false)` when the caller
-    /// must delegate the seek to the wrapped input.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ErrorKind::InvalidInput`] if the offset magnitude does not fit in
-    /// `usize` on this platform.
-    fn seek_within_buffer(&mut self, offset: i64) -> Result<bool> {
+    /// `true` when the buffer cursor was moved. `false` when the caller must
+    /// delegate the seek to the wrapped input.
+    fn seek_within_buffer(&mut self, offset: i64) -> bool {
         if offset >= 0 {
-            let count = usize::try_from(offset).map_err(|_| {
-                Error::new(
-                    ErrorKind::InvalidInput,
-                    "positive seek offset exceeds usize",
-                )
-            })?;
-            if count <= self.available() {
+            let count = offset as u64;
+            if count <= self.available() as u64 {
+                let count = count as usize;
                 // SAFETY: The branch proves that `count` is within the unread
                 // buffer window.
                 unsafe {
-                    self.buffer.consume_unchecked(count);
+                    self.buffer.consume(count);
                 }
-                return Ok(true);
+                return true;
             }
-            return Ok(false);
+            return false;
         }
-        let count = usize::try_from(offset.unsigned_abs()).map_err(|_| {
-            Error::new(
-                ErrorKind::InvalidInput,
-                "negative seek offset magnitude exceeds usize",
-            )
-        })?;
-        if count <= self.buffer.position() {
+        let count = offset.unsigned_abs();
+        if count <= self.buffer.position() as u64 {
+            let count = count as usize;
             // SAFETY: The branch proves that `count` is within the retained
             // consumed prefix.
             unsafe {
-                self.buffer.rewind_unchecked(count);
+                self.buffer.rewind(count);
             }
-            return Ok(true);
+            return true;
         }
-        Ok(false)
+        false
     }
 
     /// Returns the unused capacity at the end of the buffer.
@@ -640,17 +608,14 @@ where
             let limit = self.buffer.limit();
             // SAFETY: `limit` is always within `buffer`, and `count` is the
             // remaining capacity from `limit` to the end of `buffer`.
-            match unsafe {
-                self.inner
-                    .read_unchecked(self.buffer.data_mut(), limit, count)
-            } {
+            match unsafe { self.inner.read(self.buffer.data_mut(), limit, count) } {
                 Ok(0) => return Ok(false),
                 Ok(read) => {
                     validate_read_count(read, count)?;
-                    // SAFETY: `read_unchecked` returns a count in
+                    // SAFETY: `read` returns a count in
                     // `0..=count`, and `count` was the spare capacity.
                     unsafe {
-                        self.buffer.advance_unchecked(read);
+                        self.buffer.advance(read);
                     }
                     return Ok(true);
                 }
@@ -683,7 +648,7 @@ where
     #[inline(always)]
     fn read(&mut self, output: &mut [u8]) -> Result<usize> {
         // SAFETY: The full output slice is a valid writable range.
-        unsafe { self.read_into_unchecked(output, 0, output.len()) }
+        unsafe { self.read_into(output, 0, output.len()) }
     }
 }
 
@@ -706,7 +671,15 @@ where
     /// Consumes `amount` bytes from the unread byte window.
     #[inline(always)]
     fn consume(&mut self, amount: usize) {
-        BufferedInput::consume(self, amount);
+        assert!(
+            amount <= BufferedInput::available(self),
+            "cannot consume beyond buffered input"
+        );
+        // SAFETY: The assertion proves that `amount` is within the readable
+        // input window.
+        unsafe {
+            BufferedInput::consume(self, amount);
+        }
     }
 }
 

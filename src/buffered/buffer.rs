@@ -20,13 +20,11 @@ use std::ptr;
 /// higher-level buffering code can avoid repeated slicing and bounds checks.
 /// Callers that mutate the backing storage directly must preserve the `position
 /// <= limit <= capacity` invariant and must only make initialized spare
-/// elements readable by calling [`Self::advance`] or
-/// [`Self::advance_unchecked`].
+/// elements readable by calling [`Self::advance`].
 ///
-/// The unchecked methods are for code that has already validated ranges at a
-/// higher level. They keep debug assertions for development builds, but safe
-/// callers should use [`Self::consume`], [`Self::advance`], and checked slice
-/// operations instead.
+/// The unsafe methods are for code that has already validated ranges at a
+/// higher level. They keep debug assertions for development builds, but those
+/// assertions are not a substitute for the documented safety preconditions.
 ///
 /// # Window model
 ///
@@ -41,10 +39,16 @@ use std::ptr;
 ///
 /// let mut buffer = Buffer::<u8>::with_capacity(4);
 /// buffer.data_mut()[0..2].copy_from_slice(b"ab");
-/// buffer.advance(2);
+/// // SAFETY: Two initialized spare elements fit in this buffer.
+/// unsafe {
+///     buffer.advance(2);
+/// }
 ///
 /// assert_eq!(b"ab", &buffer.data()[buffer.position()..buffer.limit()]);
-/// buffer.consume(1);
+/// // SAFETY: One readable element is currently available.
+/// unsafe {
+///     buffer.consume(1);
+/// }
 /// assert_eq!(b"b", &buffer.data()[buffer.position()..buffer.limit()]);
 /// ```
 #[derive(Clone, Debug)]
@@ -213,28 +217,6 @@ where
         self.limit = 0;
     }
 
-    /// Advances the readable cursor by `count` elements.
-    ///
-    /// # Parameters
-    ///
-    /// * `count` - Number of readable elements to consume.
-    ///
-    /// # Panics
-    ///
-    /// Panics when `count` exceeds [`Self::available`].
-    #[inline(always)]
-    pub fn consume(&mut self, count: usize) {
-        assert!(
-            count <= self.available(),
-            "cannot consume beyond buffer limit"
-        );
-        // SAFETY: The assertion proves that the new position remains no
-        // greater than the current limit.
-        unsafe {
-            self.consume_unchecked(count);
-        }
-    }
-
     /// Advances the readable cursor without checking bounds.
     ///
     /// # Parameters
@@ -245,7 +227,7 @@ where
     ///
     /// The caller must guarantee that `count <= self.available()`.
     #[inline(always)]
-    pub unsafe fn consume_unchecked(&mut self, count: usize) {
+    pub unsafe fn consume(&mut self, count: usize) {
         debug_assert!(
             count <= self.available(),
             "unchecked consume exceeds available buffer"
@@ -263,34 +245,12 @@ where
     ///
     /// The caller must guarantee that `count <= self.position()`.
     #[inline(always)]
-    pub(crate) unsafe fn rewind_unchecked(&mut self, count: usize) {
+    pub(crate) unsafe fn rewind(&mut self, count: usize) {
         debug_assert!(
             count <= self.position,
             "unchecked rewind exceeds consumed buffer prefix"
         );
         self.position -= count;
-    }
-
-    /// Advances the readable limit by `count` elements.
-    ///
-    /// # Parameters
-    ///
-    /// * `count` - Number of initialized spare elements to make readable.
-    ///
-    /// # Panics
-    ///
-    /// Panics when `count` exceeds [`Self::spare_capacity`].
-    #[inline(always)]
-    pub fn advance(&mut self, count: usize) {
-        assert!(
-            count <= self.spare_capacity(),
-            "cannot advance beyond buffer capacity"
-        );
-        // SAFETY: The assertion proves that the new limit remains no greater
-        // than the backing storage length.
-        unsafe {
-            self.advance_unchecked(count);
-        }
     }
 
     /// Advances the readable limit without checking bounds.
@@ -303,7 +263,7 @@ where
     ///
     /// The caller must guarantee that `count <= self.spare_capacity()`.
     #[inline(always)]
-    pub unsafe fn advance_unchecked(&mut self, count: usize) {
+    pub unsafe fn advance(&mut self, count: usize) {
         debug_assert!(
             count <= self.spare_capacity(),
             "unchecked advance exceeds spare buffer capacity"
@@ -353,7 +313,7 @@ where
     /// `count <= self.spare_capacity()`, and that the source range does not
     /// overlap with this buffer's destination range.
     #[inline(always)]
-    pub unsafe fn copy_from_unchecked(&mut self, input: &[T], input_index: usize, count: usize) {
+    pub unsafe fn copy_from(&mut self, input: &[T], input_index: usize, count: usize) {
         debug_assert!(
             input_index
                 .checked_add(count)
@@ -370,7 +330,7 @@ where
             let source = input.as_ptr().add(input_index);
             let destination = self.data.as_mut_ptr().add(self.limit);
             ptr::copy_nonoverlapping(source, destination, count);
-            self.advance_unchecked(count);
+            self.advance(count);
         }
     }
 
@@ -391,12 +351,7 @@ where
     /// `count <= self.available()`, and that the source range does not overlap
     /// with the destination range.
     #[inline(always)]
-    pub unsafe fn copy_to_unchecked(
-        &mut self,
-        output: &mut [T],
-        output_index: usize,
-        count: usize,
-    ) {
+    pub unsafe fn copy_to(&mut self, output: &mut [T], output_index: usize, count: usize) {
         debug_assert!(
             output_index
                 .checked_add(count)
@@ -413,7 +368,7 @@ where
             let source = self.data.as_ptr().add(self.position);
             let destination = output.as_mut_ptr().add(output_index);
             ptr::copy_nonoverlapping(source, destination, count);
-            self.consume_unchecked(count);
+            self.consume(count);
         }
     }
 }

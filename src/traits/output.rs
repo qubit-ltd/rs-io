@@ -18,9 +18,10 @@ use std::io::{Error, ErrorKind, Result, Write};
 ///
 /// # Method name overlap
 ///
-/// `Output::flush` has the same method name as [`Write::flush`]. In generic
-/// code where both traits are in scope for the same value, use fully qualified
-/// syntax to choose the intended operation:
+/// `Output::write`, `Output::write_all`, and `Output::flush` have the same
+/// method names as [`Write`]. In generic code where both traits are in scope
+/// for the same value, use fully qualified syntax to choose the intended
+/// operation:
 ///
 /// ```
 /// use std::io::{
@@ -35,6 +36,13 @@ use std::io::{Error, ErrorKind, Result, Write};
 ///     T: Output + Write,
 /// {
 ///     <T as Output>::flush(output)
+/// }
+///
+/// fn write_units<T>(output: &mut T, input: &[u8]) -> Result<()>
+/// where
+///     T: Output<Item = u8> + Write,
+/// {
+///     unsafe { <T as Output>::write_all(output, input, 0, input.len()) }
 /// }
 ///
 /// fn flush_bytes<T>(output: &mut T) -> Result<()>
@@ -69,16 +77,11 @@ pub trait Output {
     ///
     /// The caller must guarantee that `index..index + count` is a valid range
     /// inside `input` and that the addition does not overflow.
-    unsafe fn write_unchecked(
-        &mut self,
-        input: &[Self::Item],
-        index: usize,
-        count: usize,
-    ) -> Result<usize>;
+    unsafe fn write(&mut self, input: &[Self::Item], index: usize, count: usize) -> Result<usize>;
 
     /// Writes all units from an indexed input range without checking the range.
     ///
-    /// This method repeatedly calls [`Output::write_unchecked`] until all
+    /// This method repeatedly calls [`Output::write`] until all
     /// `count` units are accepted. Interrupted writes are retried. A zero
     /// progress report before the range is complete is converted to
     /// [`ErrorKind::WriteZero`].
@@ -100,12 +103,7 @@ pub trait Output {
     ///
     /// The caller must guarantee that `index..index + count` is a valid range
     /// inside `input` and that the addition does not overflow.
-    unsafe fn write_all_unchecked(
-        &mut self,
-        input: &[Self::Item],
-        index: usize,
-        count: usize,
-    ) -> Result<()> {
+    unsafe fn write_all(&mut self, input: &[Self::Item], index: usize, count: usize) -> Result<()> {
         debug_assert!(
             index
                 .checked_add(count)
@@ -117,7 +115,7 @@ pub trait Output {
             let remaining = count - written;
             // SAFETY: The caller guarantees the original source range is
             // valid; `written < count`, so this suffix remains inside it.
-            match unsafe { self.write_unchecked(input, index + written, remaining) } {
+            match unsafe { self.write(input, index + written, remaining) } {
                 Ok(0) => {
                     return Err(Error::new(
                         ErrorKind::WriteZero,
@@ -158,12 +156,7 @@ where
 
     /// Writes bytes to a standard [`Write`] value from an indexed range.
     #[inline(always)]
-    unsafe fn write_unchecked(
-        &mut self,
-        input: &[u8],
-        index: usize,
-        count: usize,
-    ) -> Result<usize> {
+    unsafe fn write(&mut self, input: &[u8], index: usize, count: usize) -> Result<usize> {
         debug_assert!(
             index
                 .checked_add(count)
@@ -173,7 +166,7 @@ where
         // SAFETY: The caller guarantees that the range is valid inside
         // `input`.
         let source = unsafe { core::slice::from_raw_parts(input.as_ptr().add(index), count) };
-        self.write(source)
+        Write::write(self, source)
     }
 
     /// Flushes a standard [`Write`] value.

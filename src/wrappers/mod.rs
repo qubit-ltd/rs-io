@@ -12,6 +12,7 @@ mod counting_writer;
 mod limit_reader;
 mod limit_writer;
 mod position_guard;
+mod sync_seek_tee_reader;
 mod tee_reader;
 mod tee_writer;
 
@@ -22,5 +23,6 @@ pub use counting_writer::CountingWriter;
 pub use limit_reader::LimitReader;
 pub use limit_writer::LimitWriter;
 pub use position_guard::PositionGuard;
+pub use sync_seek_tee_reader::SyncSeekTeeReader;
 pub use tee_reader::TeeReader;
 pub use tee_writer::TeeWriter;

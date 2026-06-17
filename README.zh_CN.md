@@ -21,8 +21,8 @@
 - `Read`、`BufRead`、`Seek`、`Read + Seek`、`Write` 和 `Write + Seek` 的常用
   extension trait；
 - 用于复制和内容比较的 `Streams` 工具函数；
-- `CountingReader`、`LimitReader`、`PositionGuard`、`TeeReader` 和 checksum
-  wrapper 等轻量 reader / writer wrapper。
+- `CountingReader`、`LimitReader`、`PositionGuard`、`TeeReader`、
+  `SyncSeekTeeReader` 和 checksum wrapper 等轻量 reader / writer wrapper。
 
 binary scalar、LEB128 和 ZigZag 能力已经不在本 crate 中。缓冲区级二进制 codec
 请使用 `qubit-codec-binary`，二进制 stream reader、writer 和 extension trait 请使用
@@ -65,7 +65,7 @@ binary scalar、LEB128 和 ZigZag 能力已经不在本 crate 中。缓冲区级
   unchecked read。当 `I::Item = u8` 时，它实现 `Read` 和 `BufRead`；当被包装输入
   支持 `Seek` 时，还实现逻辑 `Seek`。
 - **`BufferedOutput<O>`**：包装 `Output` 的缓冲 unit 输出，支持
-  spare window 访问、checked / unchecked advance、显式 flush、不执行 I/O 的
+  spare window 访问、针对已验证 spare range 的 unsafe advance、显式 flush、不执行 I/O 的
   `into_parts`，以及大块写入绕过缓冲区。它还支持当被包装输出实现
   `Seekable<Item = O::Item>` 时的 unit seek；当 `O::Item = u8` 时实现
   `Write`，且当被包装输出同时支持 `Seek` 时，还会实现会先 flush 的 `Seek`。
@@ -103,7 +103,7 @@ binary scalar、LEB128 和 ZigZag 能力已经不在本 crate 中。缓冲区级
 - **`Streams`**：复制、有界复制、相等判断和字典序比较。
 - **计数 wrapper**：`CountingReader` 与 `CountingWriter`。
 - **限量 wrapper**：`LimitReader` 与 `LimitWriter`。
-- **Tee wrapper**：`TeeReader` 与 `TeeWriter`。
+- **Tee wrapper**：`TeeReader`、`SyncSeekTeeReader` 与 `TeeWriter`。
 - **Checksum wrapper**：`ChecksumReader` 与 `ChecksumWriter`。
 - **位置保护**：`PositionGuard` 在 drop 时恢复 stream 位置，除非显式 dismiss。
 
@@ -158,11 +158,11 @@ let mut buffered_input = BufferedInput::with_capacity(
 buffered_input.ensure_available(3)?;
 let mut unread = [0_u8; 3];
 unsafe {
-    buffered_input.copy_unread_to_unchecked(&mut unread, 0, 3);
+    buffered_input.copy_unread_to(&mut unread, 0, 3);
 }
 assert_eq!(b"abc", &unread);
 unsafe {
-    buffered_input.consume_unchecked(3);
+    buffered_input.consume(3);
 }
 
 let mut buffered_output =
@@ -174,7 +174,7 @@ buffered_output.ensure_spare_capacity(3)?;
     buffer[index..index + 3].copy_from_slice(b"xyz");
 }
 unsafe {
-    buffered_output.advance_unchecked(3);
+    buffered_output.advance(3);
 }
 buffered_output.flush()?;
 let (cursor, pending) = buffered_output.into_parts();
@@ -212,7 +212,7 @@ assert_eq!(b"xyz", cursor.into_inner().as_slice());
 | `Streams` | 用于复制和比较 stream 的静态 helper |
 | `CountingReader` / `CountingWriter` | 统计成功读取或写入的字节数 |
 | `LimitReader` / `LimitWriter` | 限制 wrapper 可读取或写入的字节数 |
-| `TeeReader` / `TeeWriter` | 把字节镜像到第二个 sink |
+| `TeeReader` / `SyncSeekTeeReader` / `TeeWriter` | 把字节镜像到第二个 sink |
 | `ChecksumReader` / `ChecksumWriter` | 把成功通过的字节送入调用方提供的 hasher |
 | `PositionGuard` | 除非显式 dismiss，否则恢复 seek 位置 |
 
@@ -237,12 +237,13 @@ assert_eq!(b"xyz", cursor.into_inner().as_slice());
 大多数 helper 直接操作调用方提供的缓冲区，并委托到底层 `Read`、`Write`
 或 `Seek` 实现。Wrapper 类型不做隐藏分配；是否缓冲以及如何缓冲由调用点显式决定。
 
-`Input::read_unchecked`、`Output::write_unchecked`、
-`Output::write_all_unchecked`、`Buffer<T>`、`BufferedInput::unread`、
-`BufferedInput::copy_unread_to_unchecked` 与
+`Input::read`、`Output::write`、`Output::write_all`、`Buffer<T>`、
+`BufferedInput::unread`、
+`BufferedInput::copy_unread_to` 与
 `BufferedOutput::spare_raw_parts_mut` 是低层 API，面向已经完成 range 校验的调用方。
 它们主要用于 binary/text stream adapter 这类 hot path，在这些场景中避免重复
-slicing 和 bounds check 有明确价值。通用调用仍应优先使用安全方法。
+slicing 和 bounds check 有明确价值。通用调用应优先使用标准 `Read`、`BufRead`
+和 `Write` trait 方法。
 
 ## 测试与代码覆盖率
 

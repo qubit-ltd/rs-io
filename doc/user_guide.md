@@ -13,7 +13,7 @@ binary or text encoding format. The crate stays at the generic I/O layer.
 | Buffered helpers | `BufReadExt` | bounded delimiter and line reads |
 | Seek helpers | `SeekExt`, `ReadSeekExt`, `WriteSeekExt` | stream-size queries and position-preserving reads or writes |
 | Stream utilities | `Streams` | namespaced copy and content comparison |
-| Wrappers | `CountingReader`, `LimitReader`, `TeeReader`, checksum wrappers, `PositionGuard` | small behavior adapters around existing streams |
+| Wrappers | `CountingReader`, `LimitReader`, `TeeReader`, `SyncSeekTeeReader`, checksum wrappers, `PositionGuard` | small behavior adapters around existing streams |
 
 ## Installation
 
@@ -72,7 +72,7 @@ output.ensure_spare_capacity(3)?;
     buffer[index..index + 3].copy_from_slice(b"xyz");
 }
 unsafe {
-    output.advance_unchecked(3);
+    output.advance(3);
 }
 
 output.flush()?;
@@ -82,10 +82,9 @@ assert_eq!(b"xyz", cursor.into_inner().as_slice());
 # Ok::<(), std::io::Error>(())
 ```
 
-Hot-path adapters can use `copy_unread_to_unchecked` and
-`spare_raw_parts_mut` to inspect or fill buffered units without exposing the
-logical buffer window as a slice. General-purpose callers should prefer
-`read`, `fill_buf`, `consume`, and `advance`.
+Hot-path adapters can use unsafe methods such as `copy_unread_to` and
+`advance` after validating their ranges. General-purpose callers should prefer
+standard `Read`, `BufRead`, and `Write` trait methods where possible.
 
 ## Extension Traits
 
@@ -193,7 +192,7 @@ Common wrappers include:
 | --- | --- |
 | `CountingReader`, `CountingWriter` | count successfully read or written bytes |
 | `LimitReader`, `LimitWriter` | cap how many bytes can pass through |
-| `TeeReader`, `TeeWriter` | copy successful reads or writes to a branch sink |
+| `TeeReader`, `SyncSeekTeeReader`, `TeeWriter` | copy successful reads or writes to a branch sink |
 | `ChecksumReader`, `ChecksumWriter` | hash successful bytes through a caller-supplied hasher |
 | `PositionGuard` | restore a seek position unless dismissed |
 
