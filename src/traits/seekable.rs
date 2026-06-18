@@ -6,11 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Result,
-    Seek,
-    SeekFrom,
-};
+use std::io::{Result, Seek, SeekFrom};
 
 /// Minimal seek interface measured in stream units.
 ///
@@ -41,7 +37,7 @@ use std::io::{
 /// where
 ///     T: Seekable + Seek,
 /// {
-    ///     <T as Seekable>::seek_to(stream, position)
+///     <T as Seekable>::seek_to(stream, position)
 /// }
 ///
 /// fn seek_bytes<T>(stream: &mut T, position: SeekFrom) -> Result<u64>

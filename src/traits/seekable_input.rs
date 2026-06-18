@@ -6,10 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use super::{
-    Input,
-    Seekable,
-};
+use super::{Input, Seekable};
 
 /// Object-safe capability trait for inputs that can be read and repositioned
 /// in the same unit space.
@@ -26,9 +23,7 @@ use super::{
 /// supertraits, and every type implementing both [`Input`] and [`Seekable`]
 /// with matching [`Input::Item`] and [`Seekable::Item`] automatically
 /// implements `SeekableInput`.
-pub trait SeekableInput:
-    Input + Seekable<Item = <Self as Input>::Item>
-{
+pub trait SeekableInput: Input + Seekable<Item = <Self as Input>::Item> {
     /// The unit type shared by reading and seeking on this input.
     type Item;
 }
