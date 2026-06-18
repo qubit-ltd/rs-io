@@ -57,10 +57,7 @@ buffer. If flushing fails, the caller still owns the buffered output and can
 retry or dismantle it.
 
 ```rust
-use std::io::{
-    Cursor,
-    Write,
-};
+use std::io::Cursor;
 
 use qubit_io::BufferedOutput;
 
@@ -76,7 +73,7 @@ unsafe {
     output.advance(3);
 }
 
-output.flush()?;
+output.flush_pending()?;
 let (cursor, pending) = output.into_parts();
 assert!(pending.is_empty());
 assert_eq!(b"xyz", cursor.into_inner().as_slice());
@@ -84,8 +81,10 @@ assert_eq!(b"xyz", cursor.into_inner().as_slice());
 ```
 
 Hot-path adapters can use unsafe methods such as `copy_unread_to` and
-`advance` after validating their ranges. General-purpose callers should prefer
-standard `Read`, `BufRead`, and `Write` trait methods where possible.
+`advance` after validating their ranges. General-purpose byte-stream code
+should prefer standard `Read`, `BufRead`, and `Write` trait methods where
+possible; unit-oriented code should prefer the safe helpers on `InputExt` and
+`OutputExt`.
 
 ## Extension Traits
 

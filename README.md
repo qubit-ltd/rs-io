@@ -20,8 +20,8 @@ utilities for Rust.
   `BufferedOutput`;
 - object-safe composition traits such as `ReadSeek`, `ReadWrite`, and
   `ReadWriteSeek`;
-- extension traits for recurring `Read`, `BufRead`, `Seek`, `Read + Seek`,
-  `Write`, and `Write + Seek` patterns;
+- extension traits for recurring `Input`, `Output`, `Read`, `BufRead`, `Seek`,
+  `Read + Seek`, `Write`, and `Write + Seek` patterns;
 - `Streams` utility functions for copy and content comparison operations;
 - lightweight reader and writer wrappers such as `CountingReader`,
   `LimitReader`, `PositionGuard`, `TeeReader`, `SyncSeekTeeReader`, and
@@ -69,17 +69,16 @@ reference documentation is available on [docs.rs](https://docs.rs/qubit-io).
   spare tail capacity.
 - **`BufferedInput<I>`**: buffered unit input over `Input`,
   with unread-window inspection, count-aware refilling, `into_parts`, and
-  indexed unchecked reads for validated output ranges. When `I::Item = u8`, it
-  implements `Read` and `BufRead`, plus logical `Seek` when the wrapped input
-  supports `Seek`.
+  indexed unchecked reads for validated output ranges. It implements `Input`
+  directly and supports logical unit-space seeking when the wrapped input
+  implements `Seekable<Item = I::Item>`.
 - **`BufferedOutput<O>`**: buffered unit output over `Output`,
   with spare-window access, unsafe advancing for validated spare ranges, explicit
   flushing, best-effort drop-time flushing, non-flushing `into_parts`, and
-  large-write bypass paths. It also supports unit-space seeking when the
+  large-write bypass paths. It implements `Output` directly and supports
+  unit-space seeking when the
   wrapped output implements `Seekable<Item = O::Item>`; position queries and
   `SeekFrom::Current(0)` preserve pending buffered units without flushing.
-  When `O::Item = u8`, it implements `Write`, and when the wrapped output also
-  supports `Seek`, it also implements `Seek`.
 - **`DEFAULT_BUFFER_CAPACITY`**: shared default capacity for input and output
   buffering.
 
@@ -104,6 +103,8 @@ type and expose unit-space seeking via a dedicated adapter/newtype that implemen
 
 ### Extension Traits
 
+- **`InputExt`**: safe full-slice reads, exact reads, and unit copy helpers.
+- **`OutputExt`**: safe full-slice writes and complete indexed writes.
 - **`ReadExt`**: exact reads, partial EOF reads, limited reads, and copy helpers.
 - **`BufReadExt`**: bounded line and delimiter reads.
 - **`SeekExt`**: stream size helpers that preserve position.
@@ -139,10 +140,7 @@ qubit-io = "0.9"
 ## Quick Start
 
 ```rust
-use std::io::{
-    Cursor,
-    Write,
-};
+use std::io::Cursor;
 
 use qubit_io::{
     BufferedInput,
@@ -190,7 +188,7 @@ buffered_output.ensure_spare_capacity(3)?;
 unsafe {
     buffered_output.advance(3);
 }
-buffered_output.flush()?;
+buffered_output.flush_pending()?;
 let (cursor, pending) = buffered_output.into_parts();
 assert!(pending.is_empty());
 assert_eq!(b"xyz", cursor.into_inner().as_slice());
@@ -252,14 +250,15 @@ Most helpers operate directly on caller-provided buffers and delegate to the
 underlying `Read`, `Write`, or `Seek` implementation. Wrapper types avoid hidden
 allocation; any buffering policy remains explicit at the call site.
 
-`Input::read_into`, `Output::write_from`, `Output::write_all_from`, `Buffer<T>`,
+`Input::read_into`, `Output::write_from`, `OutputExt::write_all_from`, `Buffer<T>`,
 `BufferedInput::unread`,
 `BufferedInput::copy_unread_to`, and
 `BufferedOutput::spare_raw_parts_mut` are low-level APIs for callers that have
 already validated ranges. They are intended for hot paths such as binary and
 text stream adapters where avoiding repeated slicing and bounds checks matters.
-General-purpose code should prefer standard `Read`, `BufRead`, and `Write`
-trait methods where possible.
+General-purpose byte-stream code should prefer standard `Read`, `BufRead`, and
+`Write` trait methods where possible; unit-oriented code should prefer the safe
+helpers on `InputExt` and `OutputExt`.
 
 ## Testing & Code Coverage
 
