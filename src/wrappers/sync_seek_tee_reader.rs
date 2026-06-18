@@ -5,13 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use std::io::{
-    Read,
-    Result,
-    Seek,
-    SeekFrom,
-    Write,
-};
+use std::io::{Read, Result, Seek, SeekFrom, Write};
 
 /// Reader wrapper that mirrors read bytes and keeps the branch seek position in
 /// sync.
@@ -45,11 +39,11 @@ use std::io::{
 /// reader.read_exact(&mut data)?;
 ///
 /// assert_eq!(b"cd", &data);
-/// assert_eq!(&[0, 0, b'c', b'd', 0, 0], reader.branch_ref().get_ref().as_slice());
+/// assert_eq!(&[0, 0, b'c', b'd', 0, 0], reader.branch().get_ref().as_slice());
 /// # Ok::<(), std::io::Error>(())
 /// ```
 pub struct SyncSeekTeeReader<R, W> {
-    reader: R,
+    inner: R,
     branch: W,
 }
 
@@ -65,7 +59,10 @@ impl<R, W> SyncSeekTeeReader<R, W> {
     /// A new sync-seek tee reader.
     #[inline]
     pub fn new(reader: R, branch: W) -> Self {
-        Self { reader, branch }
+        Self {
+            inner: reader,
+            branch,
+        }
     }
 
     /// Returns an immutable reference to the source reader.
@@ -73,8 +70,8 @@ impl<R, W> SyncSeekTeeReader<R, W> {
     /// # Returns
     /// The source reader reference.
     #[inline]
-    pub fn reader_ref(&self) -> &R {
-        &self.reader
+    pub fn inner(&self) -> &R {
+        &self.inner
     }
 
     /// Returns a mutable reference to the source reader.
@@ -82,8 +79,8 @@ impl<R, W> SyncSeekTeeReader<R, W> {
     /// # Returns
     /// The source reader reference.
     #[inline]
-    pub fn reader_mut(&mut self) -> &mut R {
-        &mut self.reader
+    pub fn inner_mut(&mut self) -> &mut R {
+        &mut self.inner
     }
 
     /// Returns an immutable reference to the branch writer.
@@ -91,7 +88,7 @@ impl<R, W> SyncSeekTeeReader<R, W> {
     /// # Returns
     /// The branch writer reference.
     #[inline]
-    pub fn branch_ref(&self) -> &W {
+    pub fn branch(&self) -> &W {
         &self.branch
     }
 
@@ -110,7 +107,7 @@ impl<R, W> SyncSeekTeeReader<R, W> {
     /// A tuple containing the source reader and branch writer.
     #[inline]
     pub fn into_inner(self) -> (R, W) {
-        (self.reader, self.branch)
+        (self.inner, self.branch)
     }
 }
 
@@ -120,7 +117,7 @@ where
     W: Write,
 {
     fn read(&mut self, buffer: &mut [u8]) -> Result<usize> {
-        let count = self.reader.read(buffer)?;
+        let count = self.inner.read(buffer)?;
         self.branch.write_all(&buffer[..count])?;
         Ok(count)
     }
@@ -145,7 +142,7 @@ where
     /// reader has already moved.
     #[inline]
     fn seek(&mut self, position: SeekFrom) -> Result<u64> {
-        let reader_position = self.reader.seek(position)?;
+        let reader_position = self.inner.seek(position)?;
         self.branch.seek(SeekFrom::Start(reader_position))?;
         Ok(reader_position)
     }

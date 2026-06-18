@@ -6,12 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 use std::hash::Hasher;
-use std::io::{
-    Read,
-    Result,
-    Seek,
-    SeekFrom,
-};
+use std::io::{Read, Result, Seek, SeekFrom};
 
 /// Reader wrapper that updates a checksum hasher with bytes read.
 ///
@@ -91,7 +86,7 @@ where
     /// # Returns
     /// The wrapped reader reference.
     #[inline]
-    pub fn get_ref(&self) -> &R {
+    pub fn inner(&self) -> &R {
         &self.inner
     }
 
@@ -100,7 +95,7 @@ where
     /// # Returns
     /// The wrapped reader reference.
     #[inline]
-    pub fn get_mut(&mut self) -> &mut R {
+    pub fn inner_mut(&mut self) -> &mut R {
         &mut self.inner
     }
 
@@ -109,7 +104,7 @@ where
     /// # Returns
     /// The wrapped hasher reference.
     #[inline]
-    pub fn hasher_ref(&self) -> &H {
+    pub fn hasher(&self) -> &H {
         &self.hasher
     }
 

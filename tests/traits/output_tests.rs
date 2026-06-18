@@ -38,7 +38,7 @@ impl ScriptedOutput {
 impl Output for ScriptedOutput {
     type Item = u16;
 
-    unsafe fn write(
+    unsafe fn write_from(
         &mut self,
         input: &[u16],
         index: usize,
@@ -59,7 +59,7 @@ impl Output for ScriptedOutput {
         }
     }
 
-    fn flush(&mut self) -> std::io::Result<()> {
+    fn flush_pending(&mut self) -> std::io::Result<()> {
         Ok(())
     }
 }
@@ -69,7 +69,7 @@ struct OverreportingOutput;
 impl Output for OverreportingOutput {
     type Item = u16;
 
-    unsafe fn write(
+    unsafe fn write_from(
         &mut self,
         _input: &[u16],
         _index: usize,
@@ -78,7 +78,7 @@ impl Output for OverreportingOutput {
         Ok(count + 1)
     }
 
-    fn flush(&mut self) -> std::io::Result<()> {
+    fn flush_pending(&mut self) -> std::io::Result<()> {
         Ok(())
     }
 }
@@ -92,7 +92,7 @@ fn test_output_write_all_writes_until_range_is_complete() {
     // SAFETY: `input[1..5]` is a valid source range.
     unsafe {
         output
-            .write_all(&input, 1, 4)
+            .write_all_from(&input, 1, 4)
             .expect("write_all should finish after partial writes");
     }
 
@@ -107,7 +107,7 @@ fn test_output_write_all_retries_interrupted_writes() {
     // SAFETY: The full input range is valid.
     unsafe {
         output
-            .write_all(&[1, 2, 3], 0, 3)
+            .write_all_from(&[1, 2, 3], 0, 3)
             .expect("interrupted writes should be retried");
     }
 
@@ -121,7 +121,7 @@ fn test_output_write_all_returns_write_zero() {
     // SAFETY: The full input range is valid.
     let error = unsafe {
         output
-            .write_all(&[1, 2, 3], 0, 3)
+            .write_all_from(&[1, 2, 3], 0, 3)
             .expect_err("zero progress should fail")
     };
 
@@ -138,7 +138,7 @@ fn test_output_write_all_returns_non_interrupted_error() {
     // SAFETY: The full input range is valid.
     let error = unsafe {
         output
-            .write_all(&[1, 2, 3], 0, 3)
+            .write_all_from(&[1, 2, 3], 0, 3)
             .expect_err("non-interrupted errors should be returned")
     };
 
@@ -153,7 +153,7 @@ fn test_output_write_all_rejects_overreported_count() {
     // SAFETY: The full input range is valid.
     let error = unsafe {
         output
-            .write_all(&[1, 2, 3], 0, 3)
+            .write_all_from(&[1, 2, 3], 0, 3)
             .expect_err("overreported write count should be rejected")
     };
 

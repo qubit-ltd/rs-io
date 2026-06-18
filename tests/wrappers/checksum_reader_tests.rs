@@ -1,13 +1,6 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::Hasher;
-use std::io::{
-    Cursor,
-    Error,
-    ErrorKind,
-    Read,
-    Seek,
-    SeekFrom,
-};
+use std::io::{Cursor, Error, ErrorKind, Read, Seek, SeekFrom};
 
 use qubit_io::ChecksumReader;
 
@@ -30,9 +23,9 @@ fn test_checksum_reader_hashes_successfully_read_bytes_and_exposes_accessors() {
     let source = Cursor::new(b"abcdef".to_vec());
     let mut reader = ChecksumReader::new(source, DefaultHasher::new());
     assert_eq!(expected_checksum(b""), reader.checksum());
-    assert_eq!(0, reader.get_ref().position());
+    assert_eq!(0, reader.inner().position());
 
-    reader.get_mut().set_position(1);
+    reader.inner_mut().set_position(1);
     reader.hasher_mut().write(b"x");
     let mut buffer = [0; 2];
     let count = reader
@@ -42,7 +35,7 @@ fn test_checksum_reader_hashes_successfully_read_bytes_and_exposes_accessors() {
     assert_eq!(2, count);
     assert_eq!(b"bc", &buffer);
     assert_eq!(expected_checksum(b"xbc"), reader.checksum());
-    assert_eq!(expected_checksum(b"xbc"), reader.hasher_ref().finish());
+    assert_eq!(expected_checksum(b"xbc"), reader.hasher().finish());
 
     let (source, hasher) = reader.into_inner();
     assert_eq!(3, source.position());

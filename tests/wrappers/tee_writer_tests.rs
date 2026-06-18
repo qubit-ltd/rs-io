@@ -6,11 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Error,
-    ErrorKind,
-    Write,
-};
+use std::io::{Error, ErrorKind, Write};
 
 use qubit_io::TeeWriter;
 
@@ -89,14 +85,14 @@ fn test_tee_writer_copies_written_bytes_to_branch_writer() {
     let primary = ScriptedWriter::short(3);
     let branch = ScriptedWriter::accepting();
     let mut writer = TeeWriter::new(primary, branch);
-    assert_eq!(0, writer.primary_ref().data.len());
-    assert!(writer.branch_ref().as_slice().is_empty());
+    assert_eq!(0, writer.inner().data.len());
+    assert!(writer.branch().as_slice().is_empty());
 
     let count = writer.write(b"abcdef").expect("tee write should succeed");
 
     assert_eq!(3, count);
-    assert_eq!(b"abc", writer.primary_ref().as_slice());
-    assert_eq!(b"abc", writer.branch_ref().as_slice());
+    assert_eq!(b"abc", writer.inner().as_slice());
+    assert_eq!(b"abc", writer.branch().as_slice());
 
     let (primary, branch) = writer.into_inner();
     assert_eq!(b"abc", primary.as_slice());
@@ -109,13 +105,13 @@ fn test_tee_writer_mut_accessors_allow_inner_access() {
     let branch = ScriptedWriter::accepting();
     let mut writer = TeeWriter::new(primary, branch);
 
-    writer.primary_mut().data.extend_from_slice(b"x");
+    writer.inner_mut().data.extend_from_slice(b"x");
     writer.branch_mut().data.extend_from_slice(b"y");
     let count = writer.write(b"ab").expect("tee write should succeed");
 
     assert_eq!(2, count);
-    assert_eq!(b"xab", writer.primary_ref().as_slice());
-    assert_eq!(b"yab", writer.branch_ref().as_slice());
+    assert_eq!(b"xab", writer.inner().as_slice());
+    assert_eq!(b"yab", writer.branch().as_slice());
 }
 
 #[test]
@@ -129,8 +125,8 @@ fn test_tee_writer_allows_primary_zero_length_write() {
         .expect("zero-length primary write should succeed");
 
     assert_eq!(0, count);
-    assert!(writer.primary_ref().as_slice().is_empty());
-    assert!(writer.branch_ref().as_slice().is_empty());
+    assert!(writer.inner().as_slice().is_empty());
+    assert!(writer.branch().as_slice().is_empty());
 }
 
 #[test]
@@ -145,7 +141,7 @@ fn test_tee_writer_returns_primary_write_error() {
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("primary write failed", error.to_string());
-    assert!(writer.branch_ref().as_slice().is_empty());
+    assert!(writer.branch().as_slice().is_empty());
 }
 
 #[test]
@@ -170,7 +166,7 @@ fn test_tee_writer_returns_branch_write_error() {
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("branch write failed", error.to_string());
-    assert_eq!(b"ab", writer.primary_ref().as_slice());
+    assert_eq!(b"ab", writer.inner().as_slice());
 }
 
 #[test]
@@ -208,16 +204,12 @@ fn test_tee_writer_returns_primary_flush_error() {
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("primary flush failed", error.to_string());
-    assert!(writer.branch_ref().as_slice().is_empty());
+    assert!(writer.branch().as_slice().is_empty());
 }
 
 #[test]
 fn test_tee_writer_forwards_seek_to_both_writers() {
-    use std::io::{
-        Cursor,
-        Seek,
-        SeekFrom,
-    };
+    use std::io::{Cursor, Seek, SeekFrom};
 
     let primary = Cursor::new(Vec::new());
     let branch = Cursor::new(Vec::new());

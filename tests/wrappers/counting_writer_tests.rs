@@ -6,11 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Error,
-    ErrorKind,
-    Write,
-};
+use std::io::{Error, ErrorKind, Write};
 
 use qubit_io::CountingWriter;
 
@@ -30,7 +26,7 @@ impl Write for FailingWriter {
 fn test_counting_writer_counts_successful_writes() {
     let mut writer = CountingWriter::new(Vec::new());
     assert_eq!(0, writer.bytes_written());
-    assert!(writer.get_ref().is_empty());
+    assert!(writer.inner().is_empty());
 
     let first = writer.write(b"abc").expect("first write should succeed");
     let second = writer.write(b"de").expect("second write should succeed");
@@ -47,12 +43,12 @@ fn test_counting_writer_counts_successful_writes() {
 fn test_counting_writer_get_mut_allows_inner_access() {
     let mut writer = CountingWriter::new(Vec::new());
 
-    writer.get_mut().extend_from_slice(b"x");
+    writer.inner_mut().extend_from_slice(b"x");
     let count = writer.write(b"ab").expect("write should succeed");
 
     assert_eq!(2, count);
     assert_eq!(2, writer.bytes_written());
-    assert_eq!(b"xab", writer.get_ref().as_slice());
+    assert_eq!(b"xab", writer.inner().as_slice());
 }
 
 #[test]
@@ -82,11 +78,7 @@ fn test_counting_writer_flush_delegates_to_inner_writer() {
 
 #[test]
 fn test_counting_writer_forwards_seek_without_counting() {
-    use std::io::{
-        Cursor,
-        Seek,
-        SeekFrom,
-    };
+    use std::io::{Cursor, Seek, SeekFrom};
 
     let mut writer = CountingWriter::new(Cursor::new(Vec::new()));
 

@@ -6,12 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 use std::hash::Hasher;
-use std::io::{
-    Result,
-    Seek,
-    SeekFrom,
-    Write,
-};
+use std::io::{Result, Seek, SeekFrom, Write};
 
 /// Writer wrapper that updates a checksum hasher with bytes written.
 ///
@@ -41,7 +36,7 @@ use std::io::{
 /// writer.write_all(b"payload")?;
 ///
 /// assert_eq!(expected.finish(), writer.checksum());
-/// assert_eq!(b"payload", writer.get_ref().as_slice());
+/// assert_eq!(b"payload", writer.inner().as_slice());
 /// # Ok::<(), std::io::Error>(())
 /// ```
 pub struct ChecksumWriter<W, H> {
@@ -80,7 +75,7 @@ where
     /// # Returns
     /// The wrapped writer reference.
     #[inline]
-    pub fn get_ref(&self) -> &W {
+    pub fn inner(&self) -> &W {
         &self.inner
     }
 
@@ -89,7 +84,7 @@ where
     /// # Returns
     /// The wrapped writer reference.
     #[inline]
-    pub fn get_mut(&mut self) -> &mut W {
+    pub fn inner_mut(&mut self) -> &mut W {
         &mut self.inner
     }
 
@@ -98,7 +93,7 @@ where
     /// # Returns
     /// The wrapped hasher reference.
     #[inline]
-    pub fn hasher_ref(&self) -> &H {
+    pub fn hasher(&self) -> &H {
         &self.hasher
     }
 

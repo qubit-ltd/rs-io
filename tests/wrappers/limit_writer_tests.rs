@@ -6,11 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Error,
-    ErrorKind,
-    Write,
-};
+use std::io::{Error, ErrorKind, Write};
 
 use qubit_io::LimitWriter;
 
@@ -42,7 +38,7 @@ impl Write for FailingWriter {
 fn test_limit_writer_writes_at_most_limit() {
     let mut writer = LimitWriter::new(Vec::new(), 4);
     assert_eq!(4, writer.remaining());
-    assert!(writer.get_ref().is_empty());
+    assert!(writer.inner().is_empty());
 
     let count = writer
         .write(b"abcdef")
@@ -64,11 +60,11 @@ fn test_limit_writer_writes_at_most_limit() {
 fn test_limit_writer_get_mut_allows_inner_access() {
     let mut writer = LimitWriter::new(Vec::new(), 2);
 
-    writer.get_mut().extend_from_slice(b"x");
+    writer.inner_mut().extend_from_slice(b"x");
     let count = writer.write(b"abc").expect("write should be limited");
 
     assert_eq!(2, count);
-    assert_eq!(b"xab", writer.get_ref().as_slice());
+    assert_eq!(b"xab", writer.inner().as_slice());
 }
 
 #[test]

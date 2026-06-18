@@ -65,10 +65,11 @@ binary scalar、LEB128 和 ZigZag 能力已经不在本 crate 中。缓冲区级
   unchecked read。当 `I::Item = u8` 时，它实现 `Read` 和 `BufRead`；当被包装输入
   支持 `Seek` 时，还实现逻辑 `Seek`。
 - **`BufferedOutput<O>`**：包装 `Output` 的缓冲 unit 输出，支持
-  spare window 访问、针对已验证 spare range 的 unsafe advance、显式 flush、不执行 I/O 的
-  `into_parts`，以及大块写入绕过缓冲区。它还支持当被包装输出实现
-  `Seekable<Item = O::Item>` 时的 unit seek；当 `O::Item = u8` 时实现
-  `Write`，且当被包装输出同时支持 `Seek` 时，还会实现会先 flush 的 `Seek`。
+  spare window 访问、针对已验证 spare range 的 unsafe advance、显式 flush、drop 时尽力
+  flush、不执行 I/O 的 `into_parts`，以及大块写入绕过缓冲区。它还支持当被包装输出实现
+  `Seekable<Item = O::Item>` 时的 unit seek；查询当前位置和 `SeekFrom::Current(0)` 会保留
+  pending buffer，不触发 flush。当 `O::Item = u8` 时实现 `Write`，且当被包装输出同时支持
+  `Seek` 时，还会实现 `Seek`。
 - **`DEFAULT_BUFFER_CAPACITY`**：input 与 output 共用的默认缓冲容量。
 
 ### Seek 一致性
@@ -237,7 +238,7 @@ assert_eq!(b"xyz", cursor.into_inner().as_slice());
 大多数 helper 直接操作调用方提供的缓冲区，并委托到底层 `Read`、`Write`
 或 `Seek` 实现。Wrapper 类型不做隐藏分配；是否缓冲以及如何缓冲由调用点显式决定。
 
-`Input::read`、`Output::write`、`Output::write_all`、`Buffer<T>`、
+`Input::read_into`、`Output::write_from`、`Output::write_all_from`、`Buffer<T>`、
 `BufferedInput::unread`、
 `BufferedInput::copy_unread_to` 与
 `BufferedOutput::spare_raw_parts_mut` 是低层 API，面向已经完成 range 校验的调用方。

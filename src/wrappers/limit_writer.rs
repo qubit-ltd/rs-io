@@ -5,10 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use std::io::{
-    Result,
-    Write,
-};
+use std::io::{Result, Write};
 
 /// Writer wrapper that accepts at most a fixed number of bytes.
 ///
@@ -27,7 +24,7 @@ use std::io::{
 /// assert_eq!(3, writer.write(b"abcdef")?);
 /// assert_eq!(0, writer.remaining());
 /// assert_eq!(0, writer.write(b"x")?);
-/// assert_eq!(b"abc", writer.get_ref().as_slice());
+/// assert_eq!(b"abc", writer.inner().as_slice());
 /// # Ok::<(), std::io::Error>(())
 /// ```
 pub struct LimitWriter<W> {
@@ -67,7 +64,7 @@ impl<W> LimitWriter<W> {
     /// # Returns
     /// The wrapped writer reference.
     #[inline]
-    pub fn get_ref(&self) -> &W {
+    pub fn inner(&self) -> &W {
         &self.inner
     }
 
@@ -76,7 +73,7 @@ impl<W> LimitWriter<W> {
     /// # Returns
     /// The wrapped writer reference.
     #[inline]
-    pub fn get_mut(&mut self) -> &mut W {
+    pub fn inner_mut(&mut self) -> &mut W {
         &mut self.inner
     }
 

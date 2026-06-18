@@ -6,12 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Cursor,
-    Error,
-    ErrorKind,
-    Read,
-};
+use std::io::{Cursor, Error, ErrorKind, Read};
 
 use qubit_io::CountingReader;
 
@@ -28,7 +23,7 @@ fn test_counting_reader_counts_successful_reads() {
     let cursor = Cursor::new(b"abcdef".to_vec());
     let mut reader = CountingReader::new(cursor);
     assert_eq!(0, reader.bytes_read());
-    assert_eq!(0, reader.get_ref().position());
+    assert_eq!(0, reader.inner().position());
 
     let mut buffer = [0; 4];
     let first = reader.read(&mut buffer).expect("first read should succeed");
@@ -53,7 +48,7 @@ fn test_counting_reader_get_mut_allows_inner_access() {
     let cursor = Cursor::new(b"abc".to_vec());
     let mut reader = CountingReader::new(cursor);
 
-    reader.get_mut().set_position(1);
+    reader.inner_mut().set_position(1);
     let mut buffer = [0; 4];
     let count = reader
         .read(&mut buffer)
@@ -80,10 +75,7 @@ fn test_counting_reader_does_not_count_failed_reads() {
 
 #[test]
 fn test_counting_reader_forwards_seek_without_counting() {
-    use std::io::{
-        Seek,
-        SeekFrom,
-    };
+    use std::io::{Seek, SeekFrom};
 
     let cursor = Cursor::new(b"abcdef".to_vec());
     let mut reader = CountingReader::new(cursor);
@@ -106,10 +98,7 @@ fn test_counting_reader_forwards_seek_without_counting() {
 
 #[test]
 fn test_counting_reader_forwards_buf_read_and_counts_consumed_bytes() {
-    use std::io::{
-        BufRead,
-        BufReader,
-    };
+    use std::io::{BufRead, BufReader};
 
     let cursor = Cursor::new(b"abcdef".to_vec());
     let mut reader = CountingReader::new(BufReader::new(cursor));

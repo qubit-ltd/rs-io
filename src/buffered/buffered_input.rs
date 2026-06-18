@@ -6,26 +6,11 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    BufRead,
-    Error,
-    ErrorKind,
-    Read,
-    Result,
-    Seek,
-    SeekFrom,
-};
+use std::io::{BufRead, Error, ErrorKind, Read, Result, Seek, SeekFrom};
 
 use crate::buffered::DEFAULT_BUFFER_CAPACITY;
-use crate::util::{
-    UncheckedSlice,
-};
-use crate::{
-    Buffer,
-    Input,
-    Seekable,
-    SeekableInput,
-};
+use crate::util::UncheckedSlice;
+use crate::{Buffer, Input, Seekable, SeekableInput};
 
 /// Buffered unit input over a wrapped input source.
 ///
@@ -115,22 +100,36 @@ where
         &mut self.inner
     }
 
-    /// Consumes this buffered input and returns the wrapped input object plus
-    /// unread units.
+    /// Consumes this buffered input and returns the wrapped input object.
     ///
     /// This method performs no I/O. Units that have already been read from the
-    /// wrapped input but not consumed by this buffered input are returned as
-    /// the second tuple item.
+    /// wrapped input but not consumed by this buffered input are discarded. Use
+    /// [`Self::into_parts`] when the unread buffer must be preserved.
     ///
     /// # Returns
     ///
-    /// The wrapped input object and a vector containing the unread buffered
-    /// units in logical read order.
+    /// The wrapped input object.
     #[inline(always)]
     #[must_use]
-    pub fn into_parts(self) -> (I, Vec<I::Item>) {
-        let unread = self.buffer.readable().to_vec();
-        (self.inner, unread)
+    pub fn into_inner(self) -> I {
+        self.inner
+    }
+
+    /// Consumes this buffered input and returns the wrapped input object plus
+    /// its buffer.
+    ///
+    /// This method performs no I/O. Units that have already been read from the
+    /// wrapped input but not consumed by this buffered input remain in the
+    /// readable window of the returned buffer.
+    ///
+    /// # Returns
+    ///
+    /// The wrapped input object and the buffer holding unread units in logical
+    /// read order.
+    #[inline(always)]
+    #[must_use]
+    pub fn into_parts(self) -> (I, Buffer<I::Item>) {
+        (self.inner, self.buffer)
     }
 
     /// Returns the internal buffer capacity.
@@ -200,12 +199,7 @@ where
     /// `count <= self.available()`, and that the destination range does not
     /// overlap with the unread range stored inside this buffer.
     #[inline(always)]
-    pub unsafe fn copy_unread_to(
-        &self,
-        output: &mut [I::Item],
-        output_index: usize,
-        count: usize,
-    ) {
+    pub unsafe fn copy_unread_to(&self, output: &mut [I::Item], output_index: usize, count: usize) {
         debug_assert!(
             UncheckedSlice::range_fits(output.len(), output_index, count),
             "unchecked unread copy output range exceeds destination buffer",
@@ -390,8 +384,7 @@ where
             self.discard_buffer();
             if count >= self.buffer.capacity() {
                 // SAFETY: The caller guarantees that the target range is valid.
-                let read =
-                    unsafe { self.inner.read(output, output_index, count) }?;
+                let read = unsafe { self.inner.read_into(output, output_index, count) }?;
                 validate_read_count(read, count)?;
                 return Ok(read);
             }
@@ -442,7 +435,7 @@ where
                 Ok(position)
             }
             other => {
-                let position = Seekable::seek(&mut self.inner, other)?;
+                let position = Seekable::seek_to(&mut self.inner, other)?;
                 self.discard_buffer();
                 Ok(position)
             }
@@ -491,7 +484,7 @@ where
     where
         I: SeekableInput,
     {
-        let position = Seekable::seek(&mut self.inner, SeekFrom::Current(0))?;
+        let position = Seekable::seek_to(&mut self.inner, SeekFrom::Current(0))?;
         let unread = self.available() as u64;
         position.checked_sub(unread).ok_or_else(|| {
             Error::new(
@@ -529,7 +522,7 @@ where
                 "current seek offset underflows after buffered adjustment",
             )
         })?;
-        Seekable::seek(&mut self.inner, SeekFrom::Current(adjusted))
+        Seekable::seek_to(&mut self.inner, SeekFrom::Current(adjusted))
     }
 
     /// Attempts to satisfy a relative seek inside the current buffer window.
@@ -625,9 +618,7 @@ where
             let limit = self.buffer.limit();
             // SAFETY: `limit` is always within `buffer`, and `count` is the
             // remaining capacity from `limit` to the end of `buffer`.
-            match unsafe {
-                self.inner.read(self.buffer.data_mut(), limit, count)
-            } {
+            match unsafe { self.inner.read_into(self.buffer.data_mut(), limit, count) } {
                 Ok(0) => return Ok(false),
                 Ok(read) => {
                     validate_read_count(read, count)?;
@@ -740,9 +731,7 @@ fn validate_read_count(read: usize, requested: usize) -> Result<()> {
     if read > requested {
         return Err(Error::new(
             ErrorKind::InvalidData,
-            format!(
-                "reader reported {read} units for a {requested}-unit buffer"
-            ),
+            format!("reader reported {read} units for a {requested}-unit buffer"),
         ));
     }
     Ok(())

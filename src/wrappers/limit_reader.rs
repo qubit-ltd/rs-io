@@ -5,11 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use std::io::{
-    BufRead,
-    Read,
-    Result,
-};
+use std::io::{BufRead, Read, Result};
 
 /// Reader wrapper that exposes at most a fixed number of bytes.
 ///
@@ -72,7 +68,7 @@ impl<R> LimitReader<R> {
     /// # Returns
     /// The wrapped reader reference.
     #[inline]
-    pub fn get_ref(&self) -> &R {
+    pub fn inner(&self) -> &R {
         &self.inner
     }
 
@@ -81,7 +77,7 @@ impl<R> LimitReader<R> {
     /// # Returns
     /// The wrapped reader reference.
     #[inline]
-    pub fn get_mut(&mut self) -> &mut R {
+    pub fn inner_mut(&mut self) -> &mut R {
         &mut self.inner
     }
 
