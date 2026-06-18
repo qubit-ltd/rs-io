@@ -30,3 +30,15 @@ fn nz_macro_in_const_position() {
     const VALUE: NonZeroUsize = nz_const(7);
     assert_eq!(VALUE.get(), 7);
 }
+
+#[test]
+fn nz_const_with_non_zero_value_uses_runtime_path() {
+    let value = nz_const(13);
+    assert_eq!(13, value.get());
+}
+
+#[test]
+#[should_panic(expected = "must be non-zero")]
+fn nz_const_zero_panics() {
+    let _ = nz_const(0);
+}
