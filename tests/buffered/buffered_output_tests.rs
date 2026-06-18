@@ -8,10 +8,10 @@
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
-use std::io::{Cursor, Error, ErrorKind, Seek, SeekFrom, Write};
+use std::io::{Cursor, Error, ErrorKind, SeekFrom, Write};
 use std::rc::Rc;
 
-use qubit_io::{BufferedOutput, Output};
+use qubit_io::{BufferedOutput, Output, OutputExt};
 
 #[derive(Default)]
 struct U16SeekOutput {
@@ -193,8 +193,29 @@ fn test_buffered_output_writes_generic_units() {
         .expect("spare request should flush pending units");
     assert_eq!(&[1, 2, 3], output.inner().values.as_slice());
 
-    output.flush().expect("flush should reach inner output");
+    output
+        .flush_pending()
+        .expect("flush should reach inner output");
     assert!(output.inner().flushed);
+}
+
+#[test]
+fn test_buffered_output_implements_output_for_generic_units() {
+    let inner = U16Output::default();
+    let mut output = BufferedOutput::with_capacity(inner, 4);
+    let output: &mut dyn Output<Item = u16> = &mut output;
+
+    // SAFETY: The full input range is valid.
+    let written = unsafe {
+        output
+            .write_from(&[1, 2, 3], 0, 3)
+            .expect("buffered output should implement Output")
+    };
+
+    assert_eq!(3, written);
+    output
+        .flush_pending()
+        .expect("buffered output should flush pending units");
 }
 
 #[test]
@@ -208,7 +229,7 @@ fn test_buffered_output_adapts_std_write_as_u8_output() {
             .write_all_from(b"abc", 0, 3)
             .expect("std writer should be an Output<Item = u8>");
     }
-    output.flush().expect("flush should succeed");
+    output.flush_pending().expect("flush should succeed");
 
     assert_eq!(b"abc", output.inner().get_ref().as_slice());
 }
@@ -247,7 +268,8 @@ fn test_output_u8_blanket_impl_propagates_std_flush_errors() {
 
     let mut writer = FailingWriter;
 
-    let error = Output::flush_pending(&mut writer).expect_err("std flush error should be propagated");
+    let error =
+        Output::flush_pending(&mut writer).expect_err("std flush error should be propagated");
 
     assert_eq!(ErrorKind::Other, error.kind());
 }
@@ -327,7 +349,7 @@ fn flush_into_inner<W>(mut output: BufferedOutput<W>) -> W
 where
     W: Write,
 {
-    output.flush().expect("flush should succeed");
+    output.flush_pending().expect("flush should succeed");
     let (inner, pending) = output.into_parts();
     assert!(
         pending.is_empty(),
@@ -370,7 +392,9 @@ fn test_spare_raw_parts_mut_and_advance_append_to_buffer() {
     let cursor = Cursor::new(Vec::new());
     let mut output = BufferedOutput::with_capacity(cursor, 4);
 
-    Write::write_all(&mut output, b"ab").expect("buffered write should succeed");
+    output
+        .write_all(b"ab")
+        .expect("buffered write should succeed");
     write_spare_bytes(&mut output, b"cd");
     // SAFETY: Two bytes were initialized in the spare range.
     unsafe {
@@ -401,7 +425,9 @@ fn test_advance_marks_spare_bytes_as_written() {
 fn test_spare_raw_parts_mut_exposes_backing_buffer_index_and_count() {
     let cursor = Cursor::new(Vec::new());
     let mut output = BufferedOutput::with_capacity(cursor, 4);
-    Write::write_all(&mut output, b"ab").expect("buffered write should succeed");
+    output
+        .write_all(b"ab")
+        .expect("buffered write should succeed");
 
     let (buffer, index, count) = output.spare_raw_parts_mut();
     assert_eq!(2, index);
@@ -433,7 +459,9 @@ fn test_ensure_spare_capacity_rejects_oversized_request() {
 fn test_ensure_spare_capacity_succeeds_without_flushing_when_space_remains() {
     let cursor = Cursor::new(Vec::new());
     let mut output = BufferedOutput::with_capacity(cursor, 4);
-    Write::write_all(&mut output, b"a").expect("buffered write should succeed");
+    output
+        .write_all(b"a")
+        .expect("buffered write should succeed");
 
     output
         .ensure_spare_capacity(2)
@@ -447,7 +475,9 @@ fn test_ensure_spare_capacity_succeeds_without_flushing_when_space_remains() {
 fn test_ensure_spare_capacity_flushes_when_spare_is_too_small() {
     let cursor = Cursor::new(Vec::new());
     let mut output = BufferedOutput::with_capacity(cursor, 4);
-    Write::write_all(&mut output, b"abc").expect("buffered write should succeed");
+    output
+        .write_all(b"abc")
+        .expect("buffered write should succeed");
 
     output
         .ensure_spare_capacity(2)
@@ -461,7 +491,9 @@ fn test_ensure_spare_capacity_flushes_when_spare_is_too_small() {
 fn test_ensure_spare_capacity_returns_flush_error() {
     let writer = ScriptedWriter::new(vec![WriteStep::Zero]);
     let mut output = BufferedOutput::with_capacity(writer, 4);
-    Write::write_all(&mut output, b"abc").expect("buffered write should succeed");
+    output
+        .write_all(b"abc")
+        .expect("buffered write should succeed");
 
     let error = output
         .ensure_spare_capacity(2)
@@ -475,7 +507,9 @@ fn test_write_all_delegates_large_empty_buffer_write() {
     let cursor = Cursor::new(Vec::new());
     let mut output = BufferedOutput::with_capacity(cursor, 4);
 
-    Write::write_all(&mut output, b"abcd").expect("large write should be delegated");
+    output
+        .write_all(b"abcd")
+        .expect("large write should be delegated");
     let cursor = flush_into_inner(output);
 
     assert_eq!(b"abcd", cursor.into_inner().as_slice());
@@ -486,7 +520,8 @@ fn test_write_all_delegated_large_write_retries_interrupted_writer() {
     let writer = ScriptedWriter::new(vec![WriteStep::Interrupted, WriteStep::Accept(4)]);
     let mut output = BufferedOutput::with_capacity(writer, 4);
 
-    Write::write_all(&mut output, b"abcd")
+    output
+        .write_all(b"abcd")
         .expect("interrupted delegated write_all should be retried");
 
     assert_eq!(b"abcd", output.inner().output.as_slice());
@@ -497,7 +532,8 @@ fn test_write_all_delegated_large_write_returns_write_zero() {
     let writer = ScriptedWriter::new(vec![WriteStep::Zero]);
     let mut output = BufferedOutput::with_capacity(writer, 4);
 
-    let error = Write::write_all(&mut output, b"abcd")
+    let error = output
+        .write_all(b"abcd")
         .expect_err("zero-length delegated write should fail");
 
     assert_eq!(ErrorKind::WriteZero, error.kind());
@@ -511,7 +547,8 @@ fn test_write_all_delegated_large_write_returns_writer_error() {
     )]);
     let mut output = BufferedOutput::with_capacity(writer, 4);
 
-    let error = Write::write_all(&mut output, b"abcd")
+    let error = output
+        .write_all(b"abcd")
         .expect_err("delegated writer error should be returned");
 
     assert_eq!(ErrorKind::BrokenPipe, error.kind());
@@ -522,9 +559,13 @@ fn test_write_all_delegated_large_write_returns_writer_error() {
 fn test_indexed_write_all_flushes_then_buffers_smaller_input() {
     let cursor = Cursor::new(Vec::new());
     let mut output = BufferedOutput::with_capacity(cursor, 4);
-    Write::write_all(&mut output, b"abc").expect("buffered prefix should be accepted");
+    output
+        .write_all(b"abc")
+        .expect("buffered prefix should be accepted");
 
-    Write::write_all(&mut output, b"xy").expect("small write should flush prefix and then buffer");
+    output
+        .write_all(b"xy")
+        .expect("small write should flush prefix and then buffer");
     assert_eq!(b"abc", output.inner().get_ref().as_slice());
 
     let cursor = flush_into_inner(output);
@@ -556,7 +597,9 @@ fn test_write_delegates_large_empty_buffer_write() {
     let cursor = Cursor::new(Vec::new());
     let mut output = BufferedOutput::with_capacity(cursor, 4);
 
-    let count = Write::write(&mut output, b"abcd").expect("large raw write should be delegated");
+    let count = output
+        .write(b"abcd")
+        .expect("large raw write should be delegated");
 
     assert_eq!(4, count);
     assert_eq!(b"abcd", output.inner().get_ref().as_slice());
@@ -566,11 +609,13 @@ fn test_write_delegates_large_empty_buffer_write() {
 fn test_indexed_write_flushes_then_buffers_smaller_input() {
     let cursor = Cursor::new(Vec::new());
     let mut output = BufferedOutput::with_capacity(cursor, 4);
-    let prefix_count =
-        Write::write(&mut output, b"abc").expect("buffered prefix should be accepted");
+    let prefix_count = output
+        .write(b"abc")
+        .expect("buffered prefix should be accepted");
     assert_eq!(3, prefix_count);
 
-    let count = Write::write(&mut output, b"xy")
+    let count = output
+        .write(b"xy")
         .expect("small raw write should flush prefix and then buffer");
     assert_eq!(2, count);
     assert_eq!(b"abc", output.inner().get_ref().as_slice());
@@ -621,7 +666,9 @@ fn test_flush_buffer_accepts_empty_buffer() {
 fn test_flush_buffer_retries_interrupted_writes() {
     let writer = ScriptedWriter::new(vec![WriteStep::Interrupted, WriteStep::Accept(4)]);
     let mut output = BufferedOutput::with_capacity(writer, 4);
-    Write::write_all(&mut output, b"abc").expect("buffered write should succeed");
+    output
+        .write_all(b"abc")
+        .expect("buffered write should succeed");
 
     output
         .flush_buffer()
@@ -634,7 +681,9 @@ fn test_flush_buffer_retries_interrupted_writes() {
 fn test_flush_buffer_returns_write_zero() {
     let writer = ScriptedWriter::new(vec![WriteStep::Zero]);
     let mut output = BufferedOutput::with_capacity(writer, 4);
-    Write::write_all(&mut output, b"abc").expect("buffered write should succeed");
+    output
+        .write_all(b"abc")
+        .expect("buffered write should succeed");
 
     let error = output
         .flush_buffer()
@@ -650,7 +699,9 @@ fn test_flush_buffer_preserves_unwritten_suffix_after_error() {
         WriteStep::Error(ErrorKind::BrokenPipe, "write failed"),
     ]);
     let mut output = BufferedOutput::with_capacity(writer, 8);
-    Write::write_all(&mut output, b"abcd").expect("buffered write should succeed");
+    output
+        .write_all(b"abcd")
+        .expect("buffered write should succeed");
 
     let error = output
         .flush_buffer()
@@ -672,7 +723,7 @@ fn test_flush_returns_inner_flush_error() {
     let mut output = BufferedOutput::with_capacity(writer, 4);
 
     let error = output
-        .flush()
+        .flush_pending()
         .expect_err("inner flush error should be returned");
 
     assert_eq!(ErrorKind::Other, error.kind());
@@ -680,23 +731,29 @@ fn test_flush_returns_inner_flush_error() {
 }
 
 #[test]
-fn test_write_trait_write_all_uses_buffered_write_all() {
+fn test_output_ext_write_all_uses_buffered_write_all() {
     let cursor = Cursor::new(Vec::new());
     let mut output = BufferedOutput::with_capacity(cursor, 4);
 
-    Write::write_all(&mut output, b"abcd").expect("write_all trait method should delegate");
+    output
+        .write_all(b"abcd")
+        .expect("write_all extension method should delegate");
     let cursor = flush_into_inner(output);
 
     assert_eq!(b"abcd", cursor.into_inner().as_slice());
 }
 
 #[test]
-fn test_write_trait_flush_delegates_to_buffered_flush() {
+fn test_output_flush_pending_delegates_to_buffered_flush() {
     let cursor = Cursor::new(Vec::new());
     let mut output = BufferedOutput::with_capacity(cursor, 4);
 
-    Write::write_all(&mut output, b"abc").expect("buffered write should succeed");
-    Write::flush(&mut output).expect("write trait flush should drain buffer");
+    output
+        .write_all(b"abc")
+        .expect("buffered write should succeed");
+    output
+        .flush_pending()
+        .expect("flush_pending should drain buffer");
 
     assert_eq!(b"abc", output.inner().get_ref().as_slice());
 }
@@ -705,10 +762,13 @@ fn test_write_trait_flush_delegates_to_buffered_flush() {
 fn test_stream_position_reports_logical_position_without_flushing() {
     let cursor = Cursor::new(Vec::new());
     let mut output = BufferedOutput::with_capacity(cursor, 4);
-    Write::write_all(&mut output, b"ab").expect("buffered write should succeed");
+    output
+        .write_all(b"ab")
+        .expect("buffered write should succeed");
 
-    let position =
-        Seek::stream_position(&mut output).expect("stream_position should report logical position");
+    let position = output
+        .stream_position()
+        .expect("stream_position should report logical position");
 
     assert_eq!(2, position);
     assert!(
@@ -721,9 +781,12 @@ fn test_stream_position_reports_logical_position_without_flushing() {
 fn test_seek_current_zero_reports_logical_position_without_flushing() {
     let cursor = Cursor::new(Vec::new());
     let mut output = BufferedOutput::with_capacity(cursor, 4);
-    Write::write_all(&mut output, b"ab").expect("buffered write should succeed");
+    output
+        .write_all(b"ab")
+        .expect("buffered write should succeed");
 
-    let position = Seek::seek(&mut output, SeekFrom::Current(0))
+    let position = output
+        .seek_to(SeekFrom::Current(0))
         .expect("current-zero seek should report logical position");
 
     assert_eq!(2, position);
@@ -737,11 +800,16 @@ fn test_seek_current_zero_reports_logical_position_without_flushing() {
 fn test_seek_flushes_pending_bytes_before_seeking() {
     let cursor = Cursor::new(vec![0; 4]);
     let mut output = BufferedOutput::with_capacity(cursor, 4);
-    Write::write_all(&mut output, b"ab").expect("buffered write should succeed");
+    output
+        .write_all(b"ab")
+        .expect("buffered write should succeed");
 
-    let position = std::io::Seek::seek(&mut output, SeekFrom::Start(0))
+    let position = output
+        .seek_to(SeekFrom::Start(0))
         .expect("seek should flush pending bytes first");
-    Write::write_all(&mut output, b"xy").expect("second write should be buffered");
+    output
+        .write_all(b"xy")
+        .expect("second write should be buffered");
     let cursor = flush_into_inner(output);
 
     assert_eq!(0, position);
@@ -755,7 +823,9 @@ fn test_drop_flushes_pending_bytes_best_effort() {
     {
         let writer = SharedWriter::new(Rc::clone(&captured));
         let mut output = BufferedOutput::with_capacity(writer, 4);
-        Write::write_all(&mut output, b"ab").expect("buffered write should succeed");
+        output
+            .write_all(b"ab")
+            .expect("buffered write should succeed");
     }
 
     assert_eq!(b"ab", captured.borrow().as_slice());
@@ -811,10 +881,10 @@ fn test_write_forwards_through_buffered_output() {
     let cursor = Cursor::new(Vec::new());
     let mut output = BufferedOutput::with_capacity(cursor, 4);
 
-    let accepted = Write::write(&mut output, b"abc").expect("write should succeed");
+    let accepted = output.write(b"abc").expect("write should succeed");
     assert_eq!(3, accepted);
 
-    output.flush().expect("flush should succeed");
+    output.flush_pending().expect("flush should succeed");
     assert_eq!(b"abc", output.inner().get_ref().as_slice());
 }
 
@@ -822,7 +892,9 @@ fn test_write_forwards_through_buffered_output() {
 fn test_into_parts_returns_inner_and_pending_bytes_without_flushing() {
     let cursor = Cursor::new(Vec::new());
     let mut output = BufferedOutput::with_capacity(cursor, 4);
-    Write::write_all(&mut output, b"ab").expect("buffered write should succeed");
+    output
+        .write_all(b"ab")
+        .expect("buffered write should succeed");
 
     let (cursor, pending) = output.into_parts();
 
@@ -834,7 +906,9 @@ fn test_into_parts_returns_inner_and_pending_bytes_without_flushing() {
 fn test_into_inner_flushes_pending_bytes_and_returns_inner() {
     let cursor = Cursor::new(Vec::new());
     let mut output = BufferedOutput::with_capacity(cursor, 4);
-    Write::write_all(&mut output, b"ab").expect("buffered write should succeed");
+    output
+        .write_all(b"ab")
+        .expect("buffered write should succeed");
 
     let cursor = output
         .into_inner()
@@ -847,17 +921,19 @@ fn test_into_inner_flushes_pending_bytes_and_returns_inner() {
 fn test_flush_error_keeps_output_owned_by_caller() {
     let writer = ScriptedWriter::new(vec![WriteStep::Zero]);
     let mut output = BufferedOutput::with_capacity(writer, 4);
-    Write::write_all(&mut output, b"abc").expect("buffered write should succeed");
+    output
+        .write_all(b"abc")
+        .expect("buffered write should succeed");
 
     let error = output
-        .flush()
+        .flush_pending()
         .expect_err("write-zero flush should leave output owned by caller");
 
     assert_eq!(ErrorKind::WriteZero, error.kind());
     output.inner_mut().steps.push_back(WriteStep::Accept(3));
 
     output
-        .flush()
+        .flush_pending()
         .expect("retrying flush should write preserved bytes");
     let (writer, pending) = output.into_parts();
 
@@ -869,10 +945,12 @@ fn test_flush_error_keeps_output_owned_by_caller() {
 fn test_inner_flush_error_keeps_output_owned_by_caller() {
     let writer = ScriptedWriter::with_flush_error();
     let mut output = BufferedOutput::with_capacity(writer, 4);
-    Write::write_all(&mut output, b"abc").expect("buffered write should succeed");
+    output
+        .write_all(b"abc")
+        .expect("buffered write should succeed");
 
     let error = output
-        .flush()
+        .flush_pending()
         .expect_err("inner flush error should leave output owned by caller");
 
     assert_eq!(ErrorKind::Other, error.kind());
@@ -886,7 +964,9 @@ fn test_inner_flush_error_keeps_output_owned_by_caller() {
 #[test]
 fn test_flush_buffer_rejects_invalid_write_count() {
     let mut output = BufferedOutput::with_capacity(OverreportingWriter, 4);
-    Write::write_all(&mut output, b"abc").expect("buffered write should succeed");
+    output
+        .write_all(b"abc")
+        .expect("buffered write should succeed");
 
     let error = output
         .flush_buffer()
@@ -899,7 +979,8 @@ fn test_flush_buffer_rejects_invalid_write_count() {
 fn test_write_rejects_invalid_delegated_write_count() {
     let mut output = BufferedOutput::with_capacity(OverreportingWriter, 4);
 
-    let error = Write::write(&mut output, b"abcd")
+    let error = output
+        .write(b"abcd")
         .expect_err("overreported delegated write count should be rejected");
 
     assert_eq!(ErrorKind::InvalidData, error.kind());

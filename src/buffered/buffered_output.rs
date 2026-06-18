@@ -6,7 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{Error, ErrorKind, Result, Seek, SeekFrom, Write};
+use std::io::{Error, ErrorKind, Result, SeekFrom};
 use std::mem::ManuallyDrop;
 use std::ptr;
 
@@ -23,17 +23,15 @@ use crate::{Buffer, Output, Seekable, SeekableOutput};
 ///
 /// `BufferedOutput` is deliberately unit-oriented. It performs no binary
 /// encoding, text encoding, or record framing. Higher-level writers can either
-/// use the standard [`Write`] implementation or write directly into
+/// use the [`Output`] implementation or write directly into
 /// [`Self::spare_raw_parts_mut`] and then call [`Self::advance`] after
 /// validating the range they initialized.
 /// Callers that need to recover the wrapped writer should call
-/// [`Write::flush`] first, then use [`Self::into_parts`], or call
+/// [`Self::flush_pending`] first, then use [`Self::into_parts`], or call
 /// [`Self::into_inner`] to flush and return the wrapped writer in one step.
 /// Dropping a `BufferedOutput` makes a best-effort attempt to write pending
 /// buffered units, but drop-time errors are ignored. For arbitrary unit types,
-/// `BufferedOutput` also supports [`Seekable`]-based seeking in unit offsets;
-/// when `Item = u8` and the wrapped output is also [`std::io::Seek`], it
-/// additionally implements [`std::io::Seek`].
+/// `BufferedOutput` also supports [`Seekable`]-based seeking in unit offsets.
 #[derive(Debug)]
 pub struct BufferedOutput<O>
 where
@@ -126,7 +124,7 @@ where
     /// remaining pending units are flushed only on a best-effort basis.
     #[inline]
     pub fn into_inner(mut self) -> Result<O> {
-        self.flush()?;
+        self.flush_pending()?;
         let (inner, _) = self.into_parts();
         Ok(inner)
     }
@@ -244,7 +242,7 @@ where
 
     /// Writes units from the input slice and reports the accepted unit count.
     ///
-    /// This is the buffered implementation for [`Write::write`]-style callers.
+    /// This is the buffered implementation for single-write callers.
     /// Small inputs are appended to the buffer and reported as fully accepted;
     /// large inputs may be delegated to the wrapped writer after pending units
     /// are flushed.
@@ -375,7 +373,10 @@ where
             // SAFETY: `position..position + available` is the current readable
             // range maintained by `Buffer`.
             self.panicked = true;
-            let result = unsafe { self.inner.write_from(self.buffer.data(), position, available) };
+            let result = unsafe {
+                self.inner
+                    .write_from(self.buffer.data(), position, available)
+            };
             self.panicked = false;
             match result {
                 Ok(0) => {
@@ -419,9 +420,9 @@ where
     /// units, [`ErrorKind::WriteZero`] if the wrapped writer cannot make
     /// progress while draining the buffer, [`ErrorKind::InvalidData`] if the
     /// writer reports an impossible unit count, or any error returned by
-    /// [`Write::flush`] on the wrapped writer.
+    /// [`Output::flush_pending`] on the wrapped output.
     #[inline(always)]
-    pub fn flush(&mut self) -> Result<()> {
+    pub fn flush_pending(&mut self) -> Result<()> {
         self.flush_buffer()
             .and_then(|()| Output::flush_pending(&mut self.inner))
     }
@@ -650,11 +651,10 @@ where
         }
     }
 
-    /// Handles slow-path raw writes for [`Write::write`] semantics.
+    /// Handles slow-path raw writes for single-write semantics.
     ///
-    /// The method preserves `Write::write` behavior: it may accept fewer units
-    /// than the input length when the write is delegated directly to the
-    /// wrapped writer.
+    /// The method may accept fewer units than the input length when the write
+    /// is delegated directly to the wrapped output.
     ///
     /// # Parameters
     ///
@@ -698,45 +698,43 @@ where
     }
 }
 
-impl<O> Write for BufferedOutput<O>
+impl<O> Output for BufferedOutput<O>
 where
-    O: Output<Item = u8>,
+    O: Output,
+    O::Item: Copy + Default,
 {
-    /// Writes bytes through the internal buffer.
+    type Item = O::Item;
+
+    /// Writes units through the internal buffer.
     #[inline(always)]
-    fn write(&mut self, buffer: &[u8]) -> Result<usize> {
-        // SAFETY: The full input slice is a valid source range.
-        unsafe { BufferedOutput::write_from(self, buffer, 0, buffer.len()) }
+    unsafe fn write_from(
+        &mut self,
+        input: &[O::Item],
+        input_index: usize,
+        count: usize,
+    ) -> Result<usize> {
+        // SAFETY: Forwarded from the trait caller.
+        unsafe { BufferedOutput::write_from(self, input, input_index, count) }
     }
 
-    /// Writes all bytes through the internal buffer.
+    /// Flushes pending units through the internal buffer.
     #[inline(always)]
-    fn write_all(&mut self, buffer: &[u8]) -> Result<()> {
-        // SAFETY: The full input slice is a valid source range.
-        unsafe { BufferedOutput::write_all_from(self, buffer, 0, buffer.len()) }
-    }
-
-    /// Flushes the internal buffer and then the wrapped writer.
-    #[inline(always)]
-    fn flush(&mut self) -> Result<()> {
-        BufferedOutput::flush(self)
+    fn flush_pending(&mut self) -> Result<()> {
+        BufferedOutput::flush_pending(self)
     }
 }
 
-impl<O> Seek for BufferedOutput<O>
+impl<O> Seekable for BufferedOutput<O>
 where
-    O: Output<Item = u8> + Seekable<Item = u8>,
+    O: SeekableOutput,
+    <O as Output>::Item: Copy + Default,
 {
-    /// Flushes pending bytes before seeking the wrapped writer.
-    #[inline(always)]
-    fn seek(&mut self, position: SeekFrom) -> Result<u64> {
-        BufferedOutput::seek_to(self, position)
-    }
+    type Item = <O as Output>::Item;
 
-    /// Returns the logical byte position without flushing pending bytes.
+    /// Seeks the buffered output in unit offsets.
     #[inline(always)]
-    fn stream_position(&mut self) -> Result<u64> {
-        BufferedOutput::stream_position(self)
+    fn seek_to(&mut self, position: SeekFrom) -> Result<u64> {
+        BufferedOutput::seek_to(self, position)
     }
 }
 
@@ -747,7 +745,7 @@ where
 {
     fn drop(&mut self) {
         if !self.panicked {
-            drop(self.flush());
+            drop(self.flush_pending());
         }
     }
 }
