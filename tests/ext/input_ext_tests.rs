@@ -1,0 +1,180 @@
+// =============================================================================
+//    Copyright (c) 2026 Haixing Hu.
+//
+//    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
+// =============================================================================
+
+use std::collections::VecDeque;
+use std::io::{Error, ErrorKind};
+
+use qubit_io::{Input, InputExt, Output};
+
+struct ChunkInput {
+    chunks: VecDeque<Vec<u16>>,
+}
+
+impl ChunkInput {
+    fn new(chunks: Vec<Vec<u16>>) -> Self {
+        Self {
+            chunks: VecDeque::from(chunks),
+        }
+    }
+}
+
+impl Input for ChunkInput {
+    type Item = u16;
+
+    unsafe fn read_into(
+        &mut self,
+        output: &mut [u16],
+        index: usize,
+        count: usize,
+    ) -> std::io::Result<usize> {
+        let Some(chunk) = self.chunks.pop_front() else {
+            return Ok(0);
+        };
+        let read = count.min(chunk.len());
+        output[index..index + read].copy_from_slice(&chunk[..read]);
+        if read < chunk.len() {
+            self.chunks.push_front(chunk[read..].to_vec());
+        }
+        Ok(read)
+    }
+}
+
+#[derive(Default)]
+struct CollectOutput {
+    values: Vec<u16>,
+}
+
+impl Output for CollectOutput {
+    type Item = u16;
+
+    unsafe fn write_from(
+        &mut self,
+        input: &[u16],
+        index: usize,
+        count: usize,
+    ) -> std::io::Result<usize> {
+        self.values.extend_from_slice(&input[index..index + count]);
+        Ok(count)
+    }
+
+    fn flush_pending(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+struct InterruptedInput {
+    interrupted: bool,
+    inner: ChunkInput,
+}
+
+impl InterruptedInput {
+    fn new(chunks: Vec<Vec<u16>>) -> Self {
+        Self {
+            interrupted: false,
+            inner: ChunkInput::new(chunks),
+        }
+    }
+}
+
+impl Input for InterruptedInput {
+    type Item = u16;
+
+    unsafe fn read_into(
+        &mut self,
+        output: &mut [u16],
+        index: usize,
+        count: usize,
+    ) -> std::io::Result<usize> {
+        if !self.interrupted {
+            self.interrupted = true;
+            return Err(Error::new(ErrorKind::Interrupted, "interrupted"));
+        }
+        // SAFETY: The caller supplied the same valid destination range.
+        unsafe { self.inner.read_into(output, index, count) }
+    }
+}
+
+#[test]
+fn test_input_ext_read_exact_or_eof_reads_until_eof() {
+    let mut input = ChunkInput::new(vec![vec![1, 2], vec![3]]);
+    let mut output = [0_u16; 5];
+
+    let read = input
+        .read_exact_or_eof(&mut output)
+        .expect("partial EOF should not be an error");
+
+    assert_eq!(3, read);
+    assert_eq!([1, 2, 3, 0, 0], output);
+}
+
+#[test]
+fn test_input_ext_read_exact_returns_unexpected_eof() {
+    let mut input = ChunkInput::new(vec![vec![1, 2]]);
+    let mut output = [0_u16; 3];
+
+    let error = input
+        .read_exact(&mut output)
+        .expect_err("short input should fail exact reads");
+
+    assert_eq!(ErrorKind::UnexpectedEof, error.kind());
+    assert_eq!([1, 2, 0], output);
+}
+
+#[test]
+fn test_input_ext_read_exact_retries_interrupted_reads() {
+    let mut input = InterruptedInput::new(vec![vec![1, 2, 3]]);
+    let mut output = [0_u16; 3];
+
+    input
+        .read_exact(&mut output)
+        .expect("interrupted reads should be retried");
+
+    assert_eq!([1, 2, 3], output);
+}
+
+#[test]
+fn test_input_ext_copy_to_at_most_copies_requested_units() {
+    let mut input = ChunkInput::new(vec![vec![1, 2], vec![3, 4]]);
+    let mut output = CollectOutput::default();
+
+    let copied = input
+        .copy_to_at_most(&mut output, 3)
+        .expect("bounded unit copy should succeed");
+
+    assert_eq!(3, copied);
+    assert_eq!(&[1, 2, 3], output.values.as_slice());
+}
+
+#[test]
+fn test_input_ext_copy_to_end_limited_rejects_oversized_input() {
+    let mut input = ChunkInput::new(vec![vec![1, 2], vec![3, 4]]);
+    let mut output = CollectOutput::default();
+
+    let error = input
+        .copy_to_end_limited(&mut output, 3)
+        .expect_err("oversized input should be rejected");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!("input exceeds maximum length of 3 units", error.to_string());
+    assert!(output.values.is_empty());
+}
+
+#[test]
+fn test_input_ext_copy_to_end_limited_rejects_oversized_input_after_prefix() {
+    let mut input = ChunkInput::new(vec![vec![1, 2, 3, 4]]);
+    let mut output = CollectOutput {
+        values: vec![9, 9],
+    };
+
+    let error = input
+        .copy_to_end_limited(&mut output, 3)
+        .expect_err("oversized input should be rejected");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!(&[9, 9], output.values.as_slice());
+}

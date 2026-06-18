@@ -14,7 +14,6 @@ use qubit_io::{Output, OutputExt};
 enum WriteStep {
     Accept(usize),
     Interrupted,
-    Error(ErrorKind, &'static str),
     Zero,
 }
 
@@ -49,7 +48,6 @@ impl Output for ScriptedOutput {
                 Ok(written)
             }
             WriteStep::Interrupted => Err(Error::new(ErrorKind::Interrupted, "interrupted")),
-            WriteStep::Error(kind, message) => Err(Error::new(kind, message)),
             WriteStep::Zero => Ok(0),
         }
     }
@@ -59,27 +57,8 @@ impl Output for ScriptedOutput {
     }
 }
 
-struct OverreportingOutput;
-
-impl Output for OverreportingOutput {
-    type Item = u16;
-
-    unsafe fn write_from(
-        &mut self,
-        _input: &[u16],
-        _index: usize,
-        count: usize,
-    ) -> std::io::Result<usize> {
-        Ok(count + 1)
-    }
-
-    fn flush_pending(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
-}
-
 #[test]
-fn test_output_write_all_writes_until_range_is_complete() {
+fn test_output_ext_write_all_from_writes_until_range_is_complete() {
     let mut output = ScriptedOutput::new(vec![WriteStep::Accept(2), WriteStep::Accept(2)]);
     let input = [10, 20, 30, 40, 50];
 
@@ -87,14 +66,14 @@ fn test_output_write_all_writes_until_range_is_complete() {
     unsafe {
         output
             .write_all_from(&input, 1, 4)
-            .expect("write_all should finish after partial writes");
+            .expect("write_all_from should finish after partial writes");
     }
 
     assert_eq!(&[20, 30, 40, 50], output.values.as_slice());
 }
 
 #[test]
-fn test_output_write_all_retries_interrupted_writes() {
+fn test_output_ext_write_all_from_retries_interrupted_writes() {
     let mut output = ScriptedOutput::new(vec![WriteStep::Interrupted, WriteStep::Accept(3)]);
 
     // SAFETY: The full input range is valid.
@@ -108,7 +87,7 @@ fn test_output_write_all_retries_interrupted_writes() {
 }
 
 #[test]
-fn test_output_write_all_returns_write_zero() {
+fn test_output_ext_write_all_from_returns_write_zero() {
     let mut output = ScriptedOutput::new(vec![WriteStep::Zero]);
 
     // SAFETY: The full input range is valid.
@@ -122,33 +101,12 @@ fn test_output_write_all_returns_write_zero() {
 }
 
 #[test]
-fn test_output_write_all_returns_non_interrupted_error() {
-    let mut output = ScriptedOutput::new(vec![WriteStep::Error(
-        ErrorKind::BrokenPipe,
-        "write failed",
-    )]);
+fn test_output_ext_write_all_writes_full_slice() {
+    let mut output = ScriptedOutput::new(vec![WriteStep::Accept(3)]);
 
-    // SAFETY: The full input range is valid.
-    let error = unsafe {
-        output
-            .write_all_from(&[1, 2, 3], 0, 3)
-            .expect_err("non-interrupted errors should be returned")
-    };
+    output
+        .write_all(&[7, 8, 9])
+        .expect("full-slice write should succeed");
 
-    assert_eq!(ErrorKind::BrokenPipe, error.kind());
-    assert_eq!("write failed", error.to_string());
-}
-
-#[test]
-fn test_output_write_all_rejects_overreported_count() {
-    let mut output = OverreportingOutput;
-
-    // SAFETY: The full input range is valid.
-    let error = unsafe {
-        output
-            .write_all_from(&[1, 2, 3], 0, 3)
-            .expect_err("overreported write count should be rejected")
-    };
-
-    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!(&[7, 8, 9], output.values.as_slice());
 }

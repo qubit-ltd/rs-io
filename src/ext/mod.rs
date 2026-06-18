@@ -6,6 +6,9 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 mod buf_read_ext;
+mod input_ext;
+mod output_ext;
+pub mod internal;
 mod read_ext;
 mod read_seek_ext;
 mod seek_ext;
@@ -13,6 +16,8 @@ mod write_ext;
 mod write_seek_ext;
 
 pub use buf_read_ext::BufReadExt;
+pub use input_ext::InputExt;
+pub use output_ext::OutputExt;
 pub use read_ext::ReadExt;
 pub use read_seek_ext::ReadSeekExt;
 pub use seek_ext::SeekExt;
