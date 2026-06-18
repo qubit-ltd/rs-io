@@ -5,11 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use std::io::{
-    Result,
-    Seek,
-    SeekFrom,
-};
+use std::io::{Result, Seek, SeekFrom};
 
 /// Extension methods for [`Seek`] values.
 ///
@@ -44,28 +40,13 @@ where
 {
     #[inline]
     fn stream_size(&mut self) -> Result<u64> {
-        let mut stream = self;
-        stream_size_impl(&mut stream)
-    }
-}
-
-/// Gets the size of `stream` and restores its original position.
-///
-/// # Parameters
-/// - `stream`: Seekable stream to inspect.
-///
-/// # Returns
-/// Stream size in bytes.
-///
-/// # Errors
-/// Returns an error when position lookup, end seeking, or restoration fails.
-fn stream_size_impl(stream: &mut dyn Seek) -> Result<u64> {
-    let position = stream.stream_position()?;
-    let size_result = stream.seek(SeekFrom::End(0));
-    let restore_result = stream.seek(SeekFrom::Start(position));
-    match (size_result, restore_result) {
-        (Ok(size), Ok(_)) => Ok(size),
-        (Err(error), Ok(_)) => Err(error),
-        (_, Err(error)) => Err(error),
+        let position = self.stream_position()?;
+        let size_result = self.seek(SeekFrom::End(0));
+        let restore_result = self.seek(SeekFrom::Start(position));
+        match (size_result, restore_result) {
+            (Ok(size), Ok(_)) => Ok(size),
+            (Err(error), Ok(_)) => Err(error),
+            (_, Err(error)) => Err(error),
+        }
     }
 }

@@ -6,14 +6,9 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Result,
-    Write,
-};
+use std::io::{Result, Write};
 
-use crate::util::{
-    UncheckedSlice,
-};
+use crate::util::UncheckedSlice;
 
 /// Extension methods for [`Write`] values.
 ///

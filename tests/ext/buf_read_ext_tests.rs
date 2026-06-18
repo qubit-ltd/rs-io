@@ -6,11 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    BufRead,
-    Cursor,
-    ErrorKind,
-};
+use std::io::{BufRead, Cursor, ErrorKind};
 
 use qubit_io::BufReadExt;
 
@@ -97,11 +93,37 @@ fn test_read_until_limited_into_rejects_input_beyond_limit_after_prefix() {
         .expect_err("input beyond the limit should be rejected");
 
     assert_eq!(ErrorKind::InvalidData, error.kind());
-    assert_eq!(b"prefix-abc", output.as_slice());
+    assert_eq!(b"prefix-", output.as_slice());
     assert_eq!(
         b"def\n",
         input.fill_buf().expect("remaining bytes should exist")
     );
+}
+
+#[test]
+fn test_read_until_limited_into_rejects_oversized_input_after_partial_reads() {
+    let mut input = Cursor::new(b"abcd\n".to_vec());
+    let mut output = Vec::new();
+
+    let error = input
+        .read_until_limited_into(b'\n', &mut output, 3)
+        .expect_err("input beyond the limit should be rejected");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert!(output.is_empty());
+}
+
+#[test]
+fn test_read_line_limited_into_rejects_oversized_input_after_prefix() {
+    let mut input = Cursor::new(b"abcdef\n".to_vec());
+    let mut output = String::from("prefix-");
+
+    let error = input
+        .read_line_limited_into(&mut output, 3)
+        .expect_err("oversized line should be rejected");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!("prefix-", output);
 }
 
 #[test]
@@ -236,9 +258,9 @@ fn test_discard_until_limited_accepts_eof_before_delimiter() {
 fn test_discard_until_limited_rejects_input_beyond_limit() {
     let mut input = Cursor::new(b"abcdef\n".to_vec());
 
-    let error = input.discard_until_limited(b'\n', 3).expect_err(
-        "input beyond the limit should be rejected while discarding",
-    );
+    let error = input
+        .discard_until_limited(b'\n', 3)
+        .expect_err("input beyond the limit should be rejected while discarding");
 
     assert_eq!(ErrorKind::InvalidData, error.kind());
     assert_eq!(
@@ -251,9 +273,9 @@ fn test_discard_until_limited_rejects_input_beyond_limit() {
 fn test_discard_until_limited_rejects_zero_limit_without_consuming() {
     let mut input = Cursor::new(b"abcdef\n".to_vec());
 
-    let error = input.discard_until_limited(b'\n', 0).expect_err(
-        "input beyond the zero limit should be rejected while discarding",
-    );
+    let error = input
+        .discard_until_limited(b'\n', 0)
+        .expect_err("input beyond the zero limit should be rejected while discarding");
 
     assert_eq!(ErrorKind::InvalidData, error.kind());
     assert_eq!(
