@@ -6,7 +6,10 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{Read, Result};
+use std::io::{
+    Read,
+    Result,
+};
 
 /// Minimal indexed input interface over units.
 ///
@@ -55,7 +58,12 @@ where
 
     /// Reads bytes from a standard [`Read`] value into an indexed range.
     #[inline(always)]
-    unsafe fn read(&mut self, output: &mut [u8], index: usize, count: usize) -> Result<usize> {
+    unsafe fn read(
+        &mut self,
+        output: &mut [u8],
+        index: usize,
+        count: usize,
+    ) -> Result<usize> {
         debug_assert!(
             index
                 .checked_add(count)
@@ -64,8 +72,12 @@ where
         );
         // SAFETY: The caller guarantees that the range is valid inside
         // `output`.
-        let target =
-            unsafe { core::slice::from_raw_parts_mut(output.as_mut_ptr().add(index), count) };
+        let target = unsafe {
+            core::slice::from_raw_parts_mut(
+                output.as_mut_ptr().add(index),
+                count,
+            )
+        };
         Read::read(self, target)
     }
 }

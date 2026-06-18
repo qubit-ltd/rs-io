@@ -5,7 +5,13 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use std::io::{Read, Result, Seek, SeekFrom, Write};
+use std::io::{
+    Read,
+    Result,
+    Seek,
+    SeekFrom,
+    Write,
+};
 
 use super::SyncSeekTeeReader;
 
@@ -21,9 +27,9 @@ use super::SyncSeekTeeReader;
 /// appended or written according to the branch writer's own state.
 ///
 /// `TeeReader` intentionally does not implement [`std::io::BufRead`]. Mirroring
-/// from `fill_buf` would copy bytes before the caller commits to consuming them,
-/// while mirroring from `consume` could not report branch write failures because
-/// `BufRead::consume` has no error return.
+/// from `fill_buf` would copy bytes before the caller commits to consuming
+/// them, while mirroring from `consume` could not report branch write failures
+/// because `BufRead::consume` has no error return.
 ///
 /// # Examples
 /// ```
@@ -69,18 +75,21 @@ impl<R, W> TeeReader<R, W> {
     ///
     /// The returned wrapper mirrors read bytes like [`TeeReader`], but its
     /// [`Seek`] implementation also seeks the branch writer to the source
-    /// reader's resulting absolute position. If the branch seek fails, the source
-    /// reader may already have moved.
+    /// reader's resulting absolute position. If the branch seek fails, the
+    /// source reader may already have moved.
     ///
     /// # Parameters
     /// - `reader`: Source reader.
-    /// - `branch`: Writer that receives bytes successfully read and is sought to
-    ///   the same absolute position as the source reader.
+    /// - `branch`: Writer that receives bytes successfully read and is sought
+    ///   to the same absolute position as the source reader.
     ///
     /// # Returns
     /// A sync-seek tee reader.
     #[inline]
-    pub fn with_sync_branch_seek(reader: R, branch: W) -> SyncSeekTeeReader<R, W> {
+    pub fn with_sync_branch_seek(
+        reader: R,
+        branch: W,
+    ) -> SyncSeekTeeReader<R, W> {
         SyncSeekTeeReader::new(reader, branch)
     }
 

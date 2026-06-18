@@ -9,6 +9,50 @@
 use qubit_io::Buffer;
 
 #[test]
+fn test_window_accessors_expose_consumed_readable_and_spare() {
+    let mut buffer = Buffer::<u8>::with_capacity(6);
+
+    assert!(buffer.consumed().is_empty());
+    assert!(buffer.readable().is_empty());
+    assert_eq!(6, buffer.spare().len());
+    let spare_snapshot = buffer.spare().to_vec();
+    let spare_mut = buffer.spare_mut();
+    assert_eq!(&spare_snapshot, &*spare_mut);
+
+    // SAFETY: The input range and spare range are valid for five bytes.
+    unsafe {
+        buffer.copy_from(b"abcde", 0, 5);
+    }
+    // SAFETY: Five readable bytes were appended above.
+    unsafe {
+        buffer.consume(2);
+    }
+
+    assert_eq!(b"ab", buffer.consumed());
+    assert_eq!(b"cde", buffer.readable());
+    assert_eq!(1, buffer.spare().len());
+    assert_eq!(buffer.spare(), &buffer.data()[buffer.limit()..]);
+}
+
+#[test]
+fn test_readable_returns_position_to_limit_window() {
+    let mut buffer = Buffer::<u8>::with_capacity(6);
+
+    // SAFETY: The input range and spare range are valid for five bytes.
+    unsafe {
+        buffer.copy_from(b"abcde", 0, 5);
+    }
+    // SAFETY: Five readable bytes were appended above.
+    unsafe {
+        buffer.consume(2);
+    }
+
+    assert_eq!(b"cde", buffer.readable());
+    assert_eq!(3, buffer.readable().len());
+    assert_eq!(buffer.available(), buffer.readable().len());
+}
+
+#[test]
 fn test_with_capacity_initializes_empty_window() {
     let buffer = Buffer::<u8>::with_capacity(4);
 
@@ -17,6 +61,7 @@ fn test_with_capacity_initializes_empty_window() {
     assert_eq!(0, buffer.limit());
     assert_eq!(0, buffer.available());
     assert_eq!(4, buffer.spare_capacity());
+    assert_eq!(4, buffer.spare().len());
     assert!(buffer.is_empty());
     assert!(!buffer.is_full());
 }
@@ -35,14 +80,14 @@ fn test_copy_from_appends_to_spare_window() {
     assert_eq!(0, buffer.position());
     assert_eq!(3, buffer.limit());
     assert_eq!(3, buffer.available());
-    assert_eq!(b"bcd", &buffer.data()[0..3]);
+    assert_eq!(b"bcd", buffer.readable());
 }
 
 #[test]
 fn test_advance_marks_spare_values_as_readable() {
     let mut buffer = Buffer::<u8>::with_capacity(4);
 
-    buffer.data_mut()[0..2].copy_from_slice(b"ab");
+    buffer.spare_mut()[0..2].copy_from_slice(b"ab");
     // SAFETY: Two initialized bytes are available in the spare window.
     unsafe {
         buffer.advance(2);
@@ -52,7 +97,7 @@ fn test_advance_marks_spare_values_as_readable() {
     assert_eq!(2, buffer.limit());
     assert_eq!(2, buffer.available());
     assert_eq!(2, buffer.spare_capacity());
-    assert_eq!(b"ab", &buffer.data()[0..2]);
+    assert_eq!(b"ab", buffer.readable());
 }
 
 #[test]
@@ -98,7 +143,7 @@ fn test_compact_moves_unread_tail_to_front() {
     assert_eq!(3, buffer.limit());
     assert_eq!(3, buffer.available());
     assert_eq!(3, buffer.spare_capacity());
-    assert_eq!(b"cde", &buffer.data()[0..3]);
+    assert_eq!(b"cde", buffer.readable());
 }
 
 #[test]
@@ -120,7 +165,7 @@ fn test_position_limit_and_available_describe_readable_window() {
     assert_eq!(2, start);
     assert_eq!(5, end);
     assert_eq!(3, buffer.available());
-    assert_eq!(b"cde", &buffer.data()[start..end]);
+    assert_eq!(b"cde", buffer.readable());
 }
 
 #[test]
@@ -139,12 +184,13 @@ fn test_spare_raw_parts_mut_exposes_backing_buffer_index_and_count() {
         assert_eq!(4, count);
         data[index..index + 2].copy_from_slice(b"cd");
     }
+    assert_eq!(b"cd", &buffer.spare()[0..2]);
     // SAFETY: Two bytes were initialized in the spare window above.
     unsafe {
         buffer.advance(2);
     }
 
-    assert_eq!(b"abcd", &buffer.data()[0..4]);
+    assert_eq!(b"abcd", buffer.readable());
 }
 
 #[test]
