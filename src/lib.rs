@@ -29,14 +29,59 @@ mod traits;
 mod util;
 mod wrappers;
 
-pub use buffered::{Buffer, BufferedInput, BufferedOutput, DEFAULT_BUFFER_CAPACITY};
-pub use ext::{BufReadExt, ReadExt, ReadSeekExt, SeekExt, WriteExt, WriteSeekExt};
+pub use buffered::{
+    Buffer,
+    BufferedInput,
+    BufferedOutput,
+    DEFAULT_BUFFER_CAPACITY,
+};
+pub use ext::{
+    BufReadExt,
+    ReadExt,
+    ReadSeekExt,
+    SeekExt,
+    WriteExt,
+    WriteSeekExt,
+};
 pub use traits::{
-    BufReadSeek, Input, Output, ReadSeek, ReadWrite, ReadWriteSeek, Seekable, SeekableInput,
-    SeekableOutput, WriteSeek,
+    BufReadSeek,
+    Input,
+    Output,
+    ReadSeek,
+    ReadWrite,
+    ReadWriteSeek,
+    Seekable,
+    SeekableInput,
+    SeekableOutput,
+    WriteSeek,
 };
 pub use util::Streams;
+#[allow(unused_imports)]
+pub use util::{
+    copy_nonoverlapping_unchecked,
+    copy_unchecked,
+    mut_unchecked,
+    range_fits,
+    read_ne_unaligned_unchecked,
+    read_unchecked,
+    ref_unchecked,
+    write_ne_unaligned_unchecked,
+    write_unchecked,
+};
+#[allow(unused_imports)]
+pub use util::{
+    nz,
+    nz_const,
+};
 pub use wrappers::{
-    ChecksumReader, ChecksumWriter, CountingReader, CountingWriter, LimitReader, LimitWriter,
-    PositionGuard, SyncSeekTeeReader, TeeReader, TeeWriter,
+    ChecksumReader,
+    ChecksumWriter,
+    CountingReader,
+    CountingWriter,
+    LimitReader,
+    LimitWriter,
+    PositionGuard,
+    SyncSeekTeeReader,
+    TeeReader,
+    TeeWriter,
 };

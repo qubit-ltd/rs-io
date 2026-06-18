@@ -6,7 +6,10 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::ptr;
+use crate::util::{
+    copy_nonoverlapping_unchecked,
+    copy_unchecked,
+};
 
 /// Low-level contiguous storage with a readable window and spare tail capacity.
 ///
@@ -28,9 +31,10 @@ use std::ptr;
 ///
 /// # Window model
 ///
-/// - `data[..position]` contains consumed elements.
-/// - `data[position..limit]` contains readable elements.
-/// - `data[limit..capacity]` is spare initialized storage.
+/// - [`Self::consumed`] — `data[..position]`, already-consumed elements.
+/// - [`Self::readable`] — `data[position..limit]`, readable elements.
+/// - [`Self::spare`] / [`Self::spare_mut`] — `data[limit..capacity]`, spare
+///   initialized storage.
 ///
 /// # Examples
 ///
@@ -44,12 +48,12 @@ use std::ptr;
 ///     buffer.advance(2);
 /// }
 ///
-/// assert_eq!(b"ab", &buffer.data()[buffer.position()..buffer.limit()]);
+/// assert_eq!(b"ab", buffer.readable());
 /// // SAFETY: One readable element is currently available.
 /// unsafe {
 ///     buffer.consume(1);
 /// }
-/// assert_eq!(b"b", &buffer.data()[buffer.position()..buffer.limit()]);
+/// assert_eq!(b"b", buffer.readable());
 /// ```
 #[derive(Clone, Debug)]
 pub struct Buffer<T>
@@ -156,6 +160,51 @@ where
         self.limit - self.position
     }
 
+    /// Returns the consumed prefix.
+    ///
+    /// # Returns
+    ///
+    /// The slice `data[..position]`.
+    #[inline(always)]
+    #[must_use]
+    pub fn consumed(&self) -> &[T] {
+        &self.data[..self.position]
+    }
+
+    /// Returns the readable window.
+    ///
+    /// # Returns
+    ///
+    /// The slice `data[position..limit]`.
+    #[inline(always)]
+    #[must_use]
+    pub fn readable(&self) -> &[T] {
+        &self.data[self.position..self.limit]
+    }
+
+    /// Returns the spare tail.
+    ///
+    /// # Returns
+    ///
+    /// The slice `data[limit..capacity]`.
+    #[inline(always)]
+    #[must_use]
+    pub fn spare(&self) -> &[T] {
+        &self.data[self.limit..]
+    }
+
+    /// Returns the mutable spare tail.
+    ///
+    /// # Returns
+    ///
+    /// The slice `data[limit..capacity]`.
+    #[inline(always)]
+    #[must_use]
+    pub fn spare_mut(&mut self) -> &mut [T] {
+        let limit = self.limit;
+        &mut self.data[limit..]
+    }
+
     /// Returns the number of spare elements after the limit.
     ///
     /// # Returns
@@ -193,9 +242,9 @@ where
     ///
     /// The returned slice is the full backing storage. `index` is the start of
     /// the spare window, and `count` is the number of spare elements. Callers
-    /// that need a slice can use `&mut buffer[index..index + count]`; callers
-    /// that already validated bounds can pass `buffer` and `index` directly to
-    /// indexed unchecked operations that write from `index`.
+    /// that need a slice can use [`Self::spare_mut`]; callers that already
+    /// validated bounds can pass `buffer` and `index` directly to indexed
+    /// unchecked operations that write from `index`.
     ///
     /// # Returns
     ///
@@ -283,13 +332,10 @@ where
             return;
         }
         if self.position != 0 {
-            // SAFETY: Source and destination ranges are inside the same
-            // allocation and may overlap, so `copy` is used instead of
-            // `copy_nonoverlapping`.
+            // SAFETY: `available` unread elements at `position..limit` fit in
+            // `0..available` after compaction.
             unsafe {
-                let source = self.data.as_ptr().add(self.position);
-                let destination = self.data.as_mut_ptr();
-                ptr::copy(source, destination, available);
+                copy_unchecked(&mut self.data, self.position, 0, available);
             }
         }
         self.position = 0;
@@ -313,13 +359,12 @@ where
     /// `count <= self.spare_capacity()`, and that the source range does not
     /// overlap with this buffer's destination range.
     #[inline(always)]
-    pub unsafe fn copy_from(&mut self, input: &[T], input_index: usize, count: usize) {
-        debug_assert!(
-            input_index
-                .checked_add(count)
-                .is_some_and(|end| end <= input.len()),
-            "unchecked input range exceeds source buffer"
-        );
+    pub unsafe fn copy_from(
+        &mut self,
+        input: &[T],
+        input_index: usize,
+        count: usize,
+    ) {
         debug_assert!(
             count <= self.spare_capacity(),
             "unchecked input copy exceeds spare buffer capacity"
@@ -327,9 +372,13 @@ where
         // SAFETY: The caller guarantees the source range and spare destination
         // range are valid and non-overlapping.
         unsafe {
-            let source = input.as_ptr().add(input_index);
-            let destination = self.data.as_mut_ptr().add(self.limit);
-            ptr::copy_nonoverlapping(source, destination, count);
+            copy_nonoverlapping_unchecked(
+                input,
+                input_index,
+                &mut self.data,
+                self.limit,
+                count,
+            );
             self.advance(count);
         }
     }
@@ -351,23 +400,22 @@ where
     /// `count <= self.available()`, and that the source range does not overlap
     /// with the destination range.
     #[inline(always)]
-    pub unsafe fn copy_to(&mut self, output: &mut [T], output_index: usize, count: usize) {
-        debug_assert!(
-            output_index
-                .checked_add(count)
-                .is_some_and(|end| end <= output.len()),
-            "unchecked output range exceeds destination buffer"
-        );
-        debug_assert!(
-            count <= self.available(),
-            "unchecked output copy exceeds readable buffer"
-        );
+    pub unsafe fn copy_to(
+        &mut self,
+        output: &mut [T],
+        output_index: usize,
+        count: usize,
+    ) {
         // SAFETY: The caller guarantees the readable source range and
         // destination range are valid and non-overlapping.
         unsafe {
-            let source = self.data.as_ptr().add(self.position);
-            let destination = output.as_mut_ptr().add(output_index);
-            ptr::copy_nonoverlapping(source, destination, count);
+            copy_nonoverlapping_unchecked(
+                &self.data,
+                self.position,
+                output,
+                output_index,
+                count,
+            );
             self.consume(count);
         }
     }

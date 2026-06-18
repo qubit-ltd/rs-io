@@ -6,10 +6,26 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{Error, ErrorKind, Result, Seek, SeekFrom, Write};
+use std::io::{
+    Error,
+    ErrorKind,
+    Result,
+    Seek,
+    SeekFrom,
+    Write,
+};
 
 use crate::buffered::DEFAULT_BUFFER_CAPACITY;
-use crate::{Buffer, Output, Seekable, SeekableOutput};
+use crate::util::{
+    copy_nonoverlapping_unchecked,
+    range_fits,
+};
+use crate::{
+    Buffer,
+    Output,
+    Seekable,
+    SeekableOutput,
+};
 
 /// Buffered unit output over a wrapped output sink.
 ///
@@ -117,7 +133,7 @@ where
     #[inline(always)]
     #[must_use]
     pub fn into_parts(self) -> (O, Vec<O::Item>) {
-        let pending = self.buffer.data()[self.buffer.position()..self.buffer.limit()].to_vec();
+        let pending = self.buffer.readable().to_vec();
         (self.inner, pending)
     }
 
@@ -245,9 +261,7 @@ where
         count: usize,
     ) -> Result<usize> {
         debug_assert!(
-            input_index
-                .checked_add(count)
-                .is_some_and(|end| end <= input.len()),
+            range_fits(input.len(), input_index, count),
             "unchecked write range exceeds input buffer"
         );
         if count < self.spare_capacity() {
@@ -296,9 +310,7 @@ where
         count: usize,
     ) -> Result<()> {
         debug_assert!(
-            input_index
-                .checked_add(count)
-                .is_some_and(|end| end <= input.len()),
+            range_fits(input.len(), input_index, count),
             "unchecked write range exceeds input buffer"
         );
         if count < self.spare_capacity() {
@@ -337,7 +349,9 @@ where
             let available = self.buffer.available();
             // SAFETY: `position..position + available` is the current readable
             // range maintained by `Buffer`.
-            match unsafe { self.inner.write(self.buffer.data(), position, available) } {
+            match unsafe {
+                self.inner.write(self.buffer.data(), position, available)
+            } {
                 Ok(0) => {
                     self.buffer.compact();
                     return Err(Error::new(
@@ -346,7 +360,8 @@ where
                     ));
                 }
                 Ok(written) => {
-                    if let Err(error) = validate_write_count(written, available) {
+                    if let Err(error) = validate_write_count(written, available)
+                    {
                         self.buffer.compact();
                         return Err(error);
                     }
@@ -431,11 +446,33 @@ where
     /// source range does not overlap with the destination range in the internal
     /// buffer.
     #[inline(always)]
-    unsafe fn write_to_buffer(&mut self, input: &[O::Item], input_index: usize, count: usize) {
-        // SAFETY: The caller upholds `Buffer::copy_from` range and
-        // non-overlap requirements.
+    unsafe fn write_to_buffer(
+        &mut self,
+        input: &[O::Item],
+        input_index: usize,
+        count: usize,
+    ) {
+        debug_assert!(
+            range_fits(input.len(), input_index, count),
+            "unchecked write range exceeds input buffer"
+        );
+        debug_assert!(
+            count <= self.spare_capacity(),
+            "unchecked write exceeds spare buffer capacity"
+        );
+        let (destination, destination_index, _) =
+            self.buffer.spare_raw_parts_mut();
+        // SAFETY: The caller guarantees valid source and destination ranges and
+        // that they do not overlap.
         unsafe {
-            self.buffer.copy_from(input, input_index, count);
+            copy_nonoverlapping_unchecked(
+                input,
+                input_index,
+                destination,
+                destination_index,
+                count,
+            );
+            self.buffer.advance(count);
         }
     }
 
@@ -502,7 +539,9 @@ where
             let remaining = count - written;
             // SAFETY: `written < count`, so this suffix remains inside the
             // caller-validated source range.
-            match unsafe { self.write_inner(input, input_index + written, remaining) } {
+            match unsafe {
+                self.write_inner(input, input_index + written, remaining)
+            } {
                 Ok(0) => {
                     return Err(Error::new(
                         ErrorKind::WriteZero,
@@ -660,7 +699,9 @@ fn validate_write_count(written: usize, requested: usize) -> Result<()> {
     if written > requested {
         return Err(Error::new(
             ErrorKind::InvalidData,
-            format!("writer reported {written} units for a {requested}-unit buffer"),
+            format!(
+                "writer reported {written} units for a {requested}-unit buffer"
+            ),
         ));
     }
     Ok(())

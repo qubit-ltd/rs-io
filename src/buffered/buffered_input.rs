@@ -6,10 +6,24 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{BufRead, Error, ErrorKind, Read, Result, Seek, SeekFrom};
+use std::io::{
+    BufRead,
+    Error,
+    ErrorKind,
+    Read,
+    Result,
+    Seek,
+    SeekFrom,
+};
 
 use crate::buffered::DEFAULT_BUFFER_CAPACITY;
-use crate::{Buffer, Input, Seekable, SeekableInput};
+use crate::util::range_fits;
+use crate::{
+    Buffer,
+    Input,
+    Seekable,
+    SeekableInput,
+};
 
 /// Buffered unit input over a wrapped input source.
 ///
@@ -113,7 +127,7 @@ where
     #[inline(always)]
     #[must_use]
     pub fn into_parts(self) -> (I, Vec<I::Item>) {
-        let unread = self.buffer.data()[self.buffer.position()..self.buffer.limit()].to_vec();
+        let unread = self.buffer.readable().to_vec();
         (self.inner, unread)
     }
 
@@ -148,7 +162,7 @@ where
     #[inline(always)]
     #[must_use]
     pub fn unread(&self) -> &[I::Item] {
-        &self.buffer.data()[self.buffer.position()..self.buffer.limit()]
+        self.buffer.readable()
     }
 
     /// Advances the unread cursor without checking bounds.
@@ -184,11 +198,14 @@ where
     /// `count <= self.available()`, and that the destination range does not
     /// overlap with the unread range stored inside this buffer.
     #[inline(always)]
-    pub unsafe fn copy_unread_to(&self, output: &mut [I::Item], output_index: usize, count: usize) {
+    pub unsafe fn copy_unread_to(
+        &self,
+        output: &mut [I::Item],
+        output_index: usize,
+        count: usize,
+    ) {
         debug_assert!(
-            output_index
-                .checked_add(count)
-                .is_some_and(|end| end <= output.len()),
+            range_fits(output.len(), output_index, count),
             "unchecked unread copy output range exceeds destination buffer",
         );
         debug_assert!(
@@ -199,7 +216,7 @@ where
         // non-overlapping, and that `count` unread units are currently
         // available.
         unsafe {
-            let source = self.buffer.data().as_ptr().add(self.buffer.position());
+            let source = self.buffer.readable().as_ptr();
             let destination = output.as_mut_ptr().add(output_index);
             std::ptr::copy_nonoverlapping(source, destination, count);
         }
@@ -357,9 +374,7 @@ where
         count: usize,
     ) -> Result<usize> {
         debug_assert!(
-            output_index
-                .checked_add(count)
-                .is_some_and(|end| end <= output.len()),
+            range_fits(output.len(), output_index, count),
             "unchecked read output range exceeds destination buffer"
         );
         if count == 0 {
@@ -369,7 +384,8 @@ where
             self.discard_buffer();
             if count >= self.buffer.capacity() {
                 // SAFETY: The caller guarantees that the target range is valid.
-                let read = unsafe { self.inner.read(output, output_index, count) }?;
+                let read =
+                    unsafe { self.inner.read(output, output_index, count) }?;
                 validate_read_count(read, count)?;
                 return Ok(read);
             }
@@ -430,8 +446,8 @@ where
     /// Moves the logical position relative to the current buffered position.
     ///
     /// If the target remains within the current backing buffer, only the buffer
-    /// cursor is moved and the wrapped input is not sought. Otherwise the seek is
-    /// delegated to the wrapped input and the buffer is discarded.
+    /// cursor is moved and the wrapped input is not sought. Otherwise the seek
+    /// is delegated to the wrapped input and the buffer is discarded.
     ///
     /// # Parameters
     ///
@@ -462,9 +478,9 @@ where
     ///
     /// # Errors
     ///
-    /// Returns any seek error produced while querying the wrapped input's current
-    /// position. Returns [`ErrorKind::InvalidData`] if the wrapped input reports
-    /// a position before the unread buffered window.
+    /// Returns any seek error produced while querying the wrapped input's
+    /// current position. Returns [`ErrorKind::InvalidData`] if the wrapped
+    /// input reports a position before the unread buffered window.
     fn logical_stream_position(&mut self) -> Result<u64>
     where
         I: SeekableInput,
@@ -496,9 +512,9 @@ where
     ///
     /// # Errors
     ///
-    /// Returns [`ErrorKind::InvalidInput`] if `offset` cannot be adjusted by the
-    /// unread buffered unit count. Returns any seek error produced by the wrapped
-    /// input.
+    /// Returns [`ErrorKind::InvalidInput`] if `offset` cannot be adjusted by
+    /// the unread buffered unit count. Returns any seek error produced by
+    /// the wrapped input.
     fn seek_relative_slow(&mut self, offset: i64) -> Result<u64>
     where
         I: SeekableInput,
@@ -518,9 +534,9 @@ where
     /// Attempts to satisfy a relative seek inside the current buffer window.
     ///
     /// Positive offsets consume unread units. Negative offsets can rewind into
-    /// the still-retained consumed prefix of the backing buffer. If the target is
-    /// outside the retained buffer contents, the caller must seek the wrapped
-    /// input instead.
+    /// the still-retained consumed prefix of the backing buffer. If the target
+    /// is outside the retained buffer contents, the caller must seek the
+    /// wrapped input instead.
     ///
     /// # Parameters
     ///
@@ -608,7 +624,9 @@ where
             let limit = self.buffer.limit();
             // SAFETY: `limit` is always within `buffer`, and `count` is the
             // remaining capacity from `limit` to the end of `buffer`.
-            match unsafe { self.inner.read(self.buffer.data_mut(), limit, count) } {
+            match unsafe {
+                self.inner.read(self.buffer.data_mut(), limit, count)
+            } {
                 Ok(0) => return Ok(false),
                 Ok(read) => {
                     validate_read_count(read, count)?;
@@ -665,7 +683,7 @@ where
                 return Ok(&[]);
             }
         }
-        Ok(&self.buffer.data()[self.buffer.position()..self.buffer.limit()])
+        Ok(self.buffer.readable())
     }
 
     /// Consumes `amount` bytes from the unread byte window.
@@ -722,7 +740,9 @@ fn validate_read_count(read: usize, requested: usize) -> Result<()> {
     if read > requested {
         return Err(Error::new(
             ErrorKind::InvalidData,
-            format!("reader reported {read} units for a {requested}-unit buffer"),
+            format!(
+                "reader reported {read} units for a {requested}-unit buffer"
+            ),
         ));
     }
     Ok(())

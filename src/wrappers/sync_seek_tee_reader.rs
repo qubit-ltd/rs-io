@@ -5,9 +5,16 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use std::io::{Read, Result, Seek, SeekFrom, Write};
+use std::io::{
+    Read,
+    Result,
+    Seek,
+    SeekFrom,
+    Write,
+};
 
-/// Reader wrapper that mirrors read bytes and keeps the branch seek position in sync.
+/// Reader wrapper that mirrors read bytes and keeps the branch seek position in
+/// sync.
 ///
 /// `SyncSeekTeeReader` has the same read behavior as [`crate::TeeReader`]:
 /// bytes returned by the source reader are written to the branch writer. The
@@ -51,8 +58,8 @@ impl<R, W> SyncSeekTeeReader<R, W> {
     ///
     /// # Parameters
     /// - `reader`: Source reader.
-    /// - `branch`: Writer that receives bytes successfully read and is sought to
-    ///   the same absolute position as the source reader.
+    /// - `branch`: Writer that receives bytes successfully read and is sought
+    ///   to the same absolute position as the source reader.
     ///
     /// # Returns
     /// A new sync-seek tee reader.
@@ -124,7 +131,8 @@ where
     R: Seek,
     W: Seek,
 {
-    /// Seeks the source reader, then seeks the branch writer to the same position.
+    /// Seeks the source reader, then seeks the branch writer to the same
+    /// position.
     ///
     /// # Parameters
     /// - `position`: Target position for the source reader.

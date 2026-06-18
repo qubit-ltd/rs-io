@@ -6,7 +6,12 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{Error, ErrorKind, Result, Write};
+use std::io::{
+    Error,
+    ErrorKind,
+    Result,
+    Write,
+};
 
 /// Minimal indexed output interface over units.
 ///
@@ -77,7 +82,12 @@ pub trait Output {
     ///
     /// The caller must guarantee that `index..index + count` is a valid range
     /// inside `input` and that the addition does not overflow.
-    unsafe fn write(&mut self, input: &[Self::Item], index: usize, count: usize) -> Result<usize>;
+    unsafe fn write(
+        &mut self,
+        input: &[Self::Item],
+        index: usize,
+        count: usize,
+    ) -> Result<usize>;
 
     /// Writes all units from an indexed input range without checking the range.
     ///
@@ -103,7 +113,12 @@ pub trait Output {
     ///
     /// The caller must guarantee that `index..index + count` is a valid range
     /// inside `input` and that the addition does not overflow.
-    unsafe fn write_all(&mut self, input: &[Self::Item], index: usize, count: usize) -> Result<()> {
+    unsafe fn write_all(
+        &mut self,
+        input: &[Self::Item],
+        index: usize,
+        count: usize,
+    ) -> Result<()> {
         debug_assert!(
             index
                 .checked_add(count)
@@ -156,7 +171,12 @@ where
 
     /// Writes bytes to a standard [`Write`] value from an indexed range.
     #[inline(always)]
-    unsafe fn write(&mut self, input: &[u8], index: usize, count: usize) -> Result<usize> {
+    unsafe fn write(
+        &mut self,
+        input: &[u8],
+        index: usize,
+        count: usize,
+    ) -> Result<usize> {
         debug_assert!(
             index
                 .checked_add(count)
@@ -165,7 +185,9 @@ where
         );
         // SAFETY: The caller guarantees that the range is valid inside
         // `input`.
-        let source = unsafe { core::slice::from_raw_parts(input.as_ptr().add(index), count) };
+        let source = unsafe {
+            core::slice::from_raw_parts(input.as_ptr().add(index), count)
+        };
         Write::write(self, source)
     }
 
