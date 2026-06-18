@@ -25,6 +25,11 @@ use super::SyncSeekTeeReader;
 /// them, while mirroring from `consume` could not report branch write failures
 /// because `BufRead::consume` has no error return.
 ///
+/// If buffered access is needed, wrap this reader outside the tee layer, for
+/// example `BufReader<TeeReader<R, W>>`. In that composition bytes are mirrored
+/// when the outer `BufReader` refills its internal buffer, which may be earlier
+/// than the application later consuming those bytes from `fill_buf`.
+///
 /// # Examples
 /// ```
 /// use std::io::{
