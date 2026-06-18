@@ -10,7 +10,7 @@ mod nz;
 mod slice;
 mod streams;
 
-pub(crate) use allocation::{
+pub use allocation::{
     try_reserve_string,
     try_reserve_vec,
 };
@@ -20,15 +20,5 @@ pub use nz::{
     nz_const,
 };
 #[allow(unused_imports)]
-pub use slice::{
-    copy_nonoverlapping_unchecked,
-    copy_unchecked,
-    mut_unchecked,
-    range_fits,
-    read_ne_unaligned_unchecked,
-    read_unchecked,
-    ref_unchecked,
-    write_ne_unaligned_unchecked,
-    write_unchecked,
-};
+pub use slice::UncheckedSlice;
 pub use streams::Streams;

@@ -56,18 +56,12 @@ pub use traits::{
     WriteSeek,
 };
 pub use util::Streams;
-#[allow(unused_imports)]
 pub use util::{
-    copy_nonoverlapping_unchecked,
-    copy_unchecked,
-    mut_unchecked,
-    range_fits,
-    read_ne_unaligned_unchecked,
-    read_unchecked,
-    ref_unchecked,
-    write_ne_unaligned_unchecked,
-    write_unchecked,
+    try_reserve_string,
+    try_reserve_vec,
 };
+#[allow(unused_imports)]
+pub use util::UncheckedSlice;
 #[allow(unused_imports)]
 pub use util::{
     nz,
