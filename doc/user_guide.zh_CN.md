@@ -46,12 +46,12 @@ input.consume(2);
 
 let (inner, unread) = input.into_parts();
 assert_eq!(4, inner.position());
-assert_eq!(b"cd", unread.as_slice());
+assert_eq!(b"cd", unread.readable());
 # Ok::<(), std::io::Error>(())
 ```
 
-`BufferedOutput::into_parts` 不执行 I/O，会返回被包装的 writer 和 pending
-unit。成功结束时，先调用 `flush`，再用 `into_parts` 验证 pending unit 为空。
+`BufferedOutput::into_parts` 不执行 I/O，会返回被包装的 writer 和保存 pending
+unit 的 buffer。成功结束时，先调用 `flush`，再用 `into_parts` 验证 pending buffer 为空。
 如果 flush 失败，调用方仍然持有 buffered output，可以自行重试或拆解。
 
 ```rust

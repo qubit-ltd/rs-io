@@ -46,14 +46,15 @@ input.consume(2);
 
 let (inner, unread) = input.into_parts();
 assert_eq!(4, inner.position());
-assert_eq!(b"cd", unread.as_slice());
+assert_eq!(b"cd", unread.readable());
 # Ok::<(), std::io::Error>(())
 ```
 
 `BufferedOutput::into_parts` performs no I/O and returns the wrapped writer
-plus any pending units. To finish successfully, call `flush` first and then
-verify that `into_parts` returns an empty pending unit vector. If flushing
-fails, the caller still owns the buffered output and can retry or dismantle it.
+plus the buffer that holds any pending units. To finish successfully, call
+`flush` first and then verify that `into_parts` returns an empty pending
+buffer. If flushing fails, the caller still owns the buffered output and can
+retry or dismantle it.
 
 ```rust
 use std::io::{

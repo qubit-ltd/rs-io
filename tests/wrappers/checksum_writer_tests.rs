@@ -1,13 +1,6 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::Hasher;
-use std::io::{
-    Cursor,
-    Error,
-    ErrorKind,
-    Seek,
-    SeekFrom,
-    Write,
-};
+use std::io::{Cursor, Error, ErrorKind, Seek, SeekFrom, Write};
 
 use qubit_io::ChecksumWriter;
 
@@ -56,13 +49,12 @@ fn expected_checksum(bytes: &[u8]) -> u64 {
 }
 
 #[test]
-fn test_checksum_writer_hashes_successfully_written_bytes_and_exposes_accessors()
- {
+fn test_checksum_writer_hashes_successfully_written_bytes_and_exposes_accessors() {
     let primary = ShortWriter::new(3);
     let mut writer = ChecksumWriter::new(primary, DefaultHasher::new());
     assert_eq!(expected_checksum(b""), writer.checksum());
 
-    writer.get_mut().data.extend_from_slice(b"x");
+    writer.inner_mut().data.extend_from_slice(b"x");
     writer.hasher_mut().write(b"y");
     let count = writer
         .write(b"abcdef")
@@ -70,9 +62,9 @@ fn test_checksum_writer_hashes_successfully_written_bytes_and_exposes_accessors(
     writer.flush().expect("flush should succeed");
 
     assert_eq!(3, count);
-    assert_eq!(b"xabc", writer.get_ref().data.as_slice());
+    assert_eq!(b"xabc", writer.inner().data.as_slice());
     assert_eq!(expected_checksum(b"yabc"), writer.checksum());
-    assert_eq!(expected_checksum(b"yabc"), writer.hasher_ref().finish());
+    assert_eq!(expected_checksum(b"yabc"), writer.hasher().finish());
 
     let (primary, hasher) = writer.into_inner();
     assert_eq!(b"xabc", primary.data.as_slice());

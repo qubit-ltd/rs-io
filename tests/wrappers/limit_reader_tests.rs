@@ -6,12 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Cursor,
-    Error,
-    ErrorKind,
-    Read,
-};
+use std::io::{Cursor, Error, ErrorKind, Read};
 
 use qubit_io::LimitReader;
 
@@ -25,11 +20,7 @@ impl Read for PanicOnRead {
 
 #[test]
 fn test_limit_reader_forwards_buf_read_with_limit() {
-    use std::io::{
-        BufRead,
-        BufReader,
-        Cursor,
-    };
+    use std::io::{BufRead, BufReader, Cursor};
 
     let inner = BufReader::new(Cursor::new(b"abcdef".to_vec()));
     let mut reader = qubit_io::LimitReader::new(inner, 3);
@@ -64,7 +55,7 @@ fn test_limit_reader_reads_at_most_limit() {
     let cursor = Cursor::new(b"abcdef".to_vec());
     let mut reader = LimitReader::new(cursor, 4);
     assert_eq!(4, reader.remaining());
-    assert_eq!(0, reader.get_ref().position());
+    assert_eq!(0, reader.inner().position());
 
     let mut buffer = [0; 8];
     let count = reader
@@ -89,7 +80,7 @@ fn test_limit_reader_get_mut_allows_inner_access() {
     let cursor = Cursor::new(b"abc".to_vec());
     let mut reader = LimitReader::new(cursor, 2);
 
-    reader.get_mut().set_position(1);
+    reader.inner_mut().set_position(1);
     let mut buffer = [0; 4];
     let count = reader
         .read(&mut buffer)

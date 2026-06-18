@@ -5,11 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use std::io::{
-    Result,
-    Seek,
-    SeekFrom,
-};
+use std::io::{Result, Seek, SeekFrom};
 
 /// Guard that restores a seekable stream to its original position.
 ///
@@ -36,7 +32,7 @@ use std::io::{
 ///
 /// {
 ///     let mut guard = PositionGuard::new(&mut stream)?;
-///     guard.get_mut().seek(SeekFrom::End(0))?;
+///     guard.inner_mut().seek(SeekFrom::End(0))?;
 /// }
 ///
 /// assert_eq!(2, stream.position());
@@ -90,7 +86,7 @@ where
     /// # Returns
     /// The guarded stream reference.
     #[inline]
-    pub fn get_mut(&mut self) -> &mut S {
+    pub fn inner_mut(&mut self) -> &mut S {
         self.stream
     }
 

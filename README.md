@@ -74,10 +74,12 @@ reference documentation is available on [docs.rs](https://docs.rs/qubit-io).
   supports `Seek`.
 - **`BufferedOutput<O>`**: buffered unit output over `Output`,
   with spare-window access, unsafe advancing for validated spare ranges, explicit
-  flushing, non-flushing `into_parts`, and large-write bypass paths. It also
-  supports unit-space seeking when the wrapped output implements
-  `Seekable<Item = O::Item>`. When `O::Item = u8`, it implements `Write`,
-  and when the wrapped output also supports `Seek`, it also implements `Seek`.
+  flushing, best-effort drop-time flushing, non-flushing `into_parts`, and
+  large-write bypass paths. It also supports unit-space seeking when the
+  wrapped output implements `Seekable<Item = O::Item>`; position queries and
+  `SeekFrom::Current(0)` preserve pending buffered units without flushing.
+  When `O::Item = u8`, it implements `Write`, and when the wrapped output also
+  supports `Seek`, it also implements `Seek`.
 - **`DEFAULT_BUFFER_CAPACITY`**: shared default capacity for input and output
   buffering.
 
@@ -250,7 +252,7 @@ Most helpers operate directly on caller-provided buffers and delegate to the
 underlying `Read`, `Write`, or `Seek` implementation. Wrapper types avoid hidden
 allocation; any buffering policy remains explicit at the call site.
 
-`Input::read`, `Output::write`, `Output::write_all`, `Buffer<T>`,
+`Input::read_into`, `Output::write_from`, `Output::write_all_from`, `Buffer<T>`,
 `BufferedInput::unread`,
 `BufferedInput::copy_unread_to`, and
 `BufferedOutput::spare_raw_parts_mut` are low-level APIs for callers that have

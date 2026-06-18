@@ -19,12 +19,12 @@ use std::io::{
 /// set `Item = u8`; offsets passed through [`SeekFrom`] then count units
 /// rather than bytes.
 ///
-/// The return value of [`Seekable::seek`] is the new absolute position from
+/// The return value of [`Seekable::seek_to`] is the new absolute position from
 /// the start of the stream, in units.
 ///
 /// # Method name overlap
 ///
-/// `Seekable::seek` has the same method name as [`Seek::seek`]. In generic code
+/// `Seekable::seek_to` has the same method name as [`Seek::seek`]. In generic code
 /// where both traits are in scope for the same value, use fully qualified
 /// syntax to choose unit-oriented seeking or byte-oriented seeking explicitly:
 ///
@@ -41,7 +41,7 @@ use std::io::{
 /// where
 ///     T: Seekable + Seek,
 /// {
-///     <T as Seekable>::seek(stream, position)
+    ///     <T as Seekable>::seek_to(stream, position)
 /// }
 ///
 /// fn seek_bytes<T>(stream: &mut T, position: SeekFrom) -> Result<u64>
@@ -75,7 +75,7 @@ use std::io::{
 ///
 /// impl crate::Seekable for LegacyStream {
 ///     type Item = u8;
-///     fn seek(&mut self, _pos: SeekFrom) -> Result<u64> {
+///     fn seek_to(&mut self, _pos: SeekFrom) -> Result<u64> {
 ///         Ok(0)
 ///     }
 /// }
@@ -108,7 +108,7 @@ pub trait Seekable {
     /// # Errors
     ///
     /// Returns the seek error reported by the implementation.
-    fn seek(&mut self, position: SeekFrom) -> Result<u64>;
+    fn seek_to(&mut self, position: SeekFrom) -> Result<u64>;
 }
 
 impl<S> Seekable for S
@@ -119,7 +119,7 @@ where
 
     /// Seeks a standard [`Seek`] value using byte offsets.
     #[inline(always)]
-    fn seek(&mut self, position: SeekFrom) -> Result<u64> {
+    fn seek_to(&mut self, position: SeekFrom) -> Result<u64> {
         Seek::seek(self, position)
     }
 }

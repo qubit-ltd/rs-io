@@ -5,13 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use std::io::{
-    BufRead,
-    Read,
-    Result,
-    Seek,
-    SeekFrom,
-};
+use std::io::{BufRead, Read, Result, Seek, SeekFrom};
 
 /// Reader wrapper that counts successfully read bytes.
 ///
@@ -70,7 +64,7 @@ impl<R> CountingReader<R> {
     /// # Returns
     /// The wrapped reader reference.
     #[inline]
-    pub fn get_ref(&self) -> &R {
+    pub fn inner(&self) -> &R {
         &self.inner
     }
 
@@ -79,7 +73,7 @@ impl<R> CountingReader<R> {
     /// # Returns
     /// The wrapped reader reference.
     #[inline]
-    pub fn get_mut(&mut self) -> &mut R {
+    pub fn inner_mut(&mut self) -> &mut R {
         &mut self.inner
     }
 

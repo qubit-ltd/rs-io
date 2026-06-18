@@ -27,7 +27,7 @@ use crate::util::{
 ///
 /// # Method name overlap
 ///
-/// `Output::write`, `Output::write_all`, and `Output::flush` have the same
+/// `Output::write_from`, `Output::write_all_from`, and `Output::flush_pending`
 /// method names as [`Write`]. In generic code where both traits are in scope
 /// for the same value, use fully qualified syntax to choose the intended
 /// operation:
@@ -40,18 +40,18 @@ use crate::util::{
 ///
 /// use qubit_io::Output;
 ///
-/// fn flush_units<T>(output: &mut T) -> Result<()>
+/// fn flush_buffered<T>(output: &mut T) -> Result<()>
 /// where
 ///     T: Output + Write,
 /// {
-///     <T as Output>::flush(output)
+///     <T as Output>::flush_pending(output)
 /// }
 ///
-/// fn write_units<T>(output: &mut T, input: &[u8]) -> Result<()>
+/// fn write_all_units<T>(output: &mut T, input: &[u8]) -> Result<()>
 /// where
 ///     T: Output<Item = u8> + Write,
 /// {
-///     unsafe { <T as Output>::write_all(output, input, 0, input.len()) }
+///     unsafe { <T as Output>::write_all_from(output, input, 0, input.len()) }
 /// }
 ///
 /// fn flush_bytes<T>(output: &mut T) -> Result<()>
@@ -86,7 +86,7 @@ pub trait Output {
     ///
     /// The caller must guarantee that `index..index + count` is a valid range
     /// inside `input` and that the addition does not overflow.
-    unsafe fn write(
+    unsafe fn write_from(
         &mut self,
         input: &[Self::Item],
         index: usize,
@@ -95,7 +95,7 @@ pub trait Output {
 
     /// Writes all units from an indexed input range without checking the range.
     ///
-    /// This method repeatedly calls [`Output::write`] until all
+    /// This method repeatedly calls [`Output::write_from`] until all
     /// `count` units are accepted. Interrupted writes are retried. A zero
     /// progress report before the range is complete is converted to
     /// [`ErrorKind::WriteZero`].
@@ -117,7 +117,7 @@ pub trait Output {
     ///
     /// The caller must guarantee that `index..index + count` is a valid range
     /// inside `input` and that the addition does not overflow.
-    unsafe fn write_all(
+    unsafe fn write_all_from(
         &mut self,
         input: &[Self::Item],
         index: usize,
@@ -132,7 +132,7 @@ pub trait Output {
             let remaining = count - written;
             // SAFETY: The caller guarantees the original source range is
             // valid; `written < count`, so this suffix remains inside it.
-            match unsafe { self.write(input, index + written, remaining) } {
+            match unsafe { self.write_from(input, index + written, remaining) } {
                 Ok(0) => {
                     return Err(Error::new(
                         ErrorKind::WriteZero,
@@ -162,7 +162,7 @@ pub trait Output {
     /// # Errors
     ///
     /// Returns the output error reported by the implementation.
-    fn flush(&mut self) -> Result<()>;
+    fn flush_pending(&mut self) -> Result<()>;
 }
 
 impl<W> Output for W
@@ -173,7 +173,7 @@ where
 
     /// Writes bytes to a standard [`Write`] value from an indexed range.
     #[inline(always)]
-    unsafe fn write(
+    unsafe fn write_from(
         &mut self,
         input: &[u8],
         index: usize,
@@ -191,7 +191,7 @@ where
 
     /// Flushes a standard [`Write`] value.
     #[inline(always)]
-    fn flush(&mut self) -> Result<()> {
+    fn flush_pending(&mut self) -> Result<()> {
         Write::flush(self)
     }
 }

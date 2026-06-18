@@ -5,12 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use std::io::{
-    Result,
-    Seek,
-    SeekFrom,
-    Write,
-};
+use std::io::{Result, Seek, SeekFrom, Write};
 
 /// Writer wrapper that mirrors accepted bytes into a branch writer.
 ///
@@ -41,7 +36,7 @@ use std::io::{
 /// # Ok::<(), std::io::Error>(())
 /// ```
 pub struct TeeWriter<P, B> {
-    primary: P,
+    inner: P,
     branch: B,
 }
 
@@ -56,7 +51,10 @@ impl<P, B> TeeWriter<P, B> {
     /// A new tee writer.
     #[inline]
     pub fn new(primary: P, branch: B) -> Self {
-        Self { primary, branch }
+        Self {
+            inner: primary,
+            branch,
+        }
     }
 
     /// Returns an immutable reference to the primary writer.
@@ -64,8 +62,8 @@ impl<P, B> TeeWriter<P, B> {
     /// # Returns
     /// The primary writer reference.
     #[inline]
-    pub fn primary_ref(&self) -> &P {
-        &self.primary
+    pub fn inner(&self) -> &P {
+        &self.inner
     }
 
     /// Returns a mutable reference to the primary writer.
@@ -73,8 +71,8 @@ impl<P, B> TeeWriter<P, B> {
     /// # Returns
     /// The primary writer reference.
     #[inline]
-    pub fn primary_mut(&mut self) -> &mut P {
-        &mut self.primary
+    pub fn inner_mut(&mut self) -> &mut P {
+        &mut self.inner
     }
 
     /// Returns an immutable reference to the branch writer.
@@ -82,7 +80,7 @@ impl<P, B> TeeWriter<P, B> {
     /// # Returns
     /// The branch writer reference.
     #[inline]
-    pub fn branch_ref(&self) -> &B {
+    pub fn branch(&self) -> &B {
         &self.branch
     }
 
@@ -101,7 +99,7 @@ impl<P, B> TeeWriter<P, B> {
     /// A tuple containing the primary writer and branch writer.
     #[inline]
     pub fn into_inner(self) -> (P, B) {
-        (self.primary, self.branch)
+        (self.inner, self.branch)
     }
 }
 
@@ -111,13 +109,13 @@ where
     B: Write,
 {
     fn write(&mut self, buffer: &[u8]) -> Result<usize> {
-        let count = self.primary.write(buffer)?;
+        let count = self.inner.write(buffer)?;
         self.branch.write_all(&buffer[..count])?;
         Ok(count)
     }
 
     fn flush(&mut self) -> Result<()> {
-        self.primary.flush()?;
+        self.inner.flush()?;
         self.branch.flush()
     }
 }
@@ -139,7 +137,7 @@ where
     /// Returns the primary seek error, or the branch seek error after the
     /// primary writer has already moved.
     fn seek(&mut self, position: SeekFrom) -> Result<u64> {
-        let primary_position = self.primary.seek(position)?;
+        let primary_position = self.inner.seek(position)?;
         self.branch.seek(SeekFrom::Start(primary_position))?;
         Ok(primary_position)
     }

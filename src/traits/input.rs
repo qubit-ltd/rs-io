@@ -46,7 +46,7 @@ pub trait Input {
     ///
     /// The caller must guarantee that `index..index + count` is a valid range
     /// inside `output` and that the addition does not overflow.
-    unsafe fn read(
+    unsafe fn read_into(
         &mut self,
         output: &mut [Self::Item],
         index: usize,
@@ -62,7 +62,7 @@ where
 
     /// Reads bytes from a standard [`Read`] value into an indexed range.
     #[inline(always)]
-    unsafe fn read(
+    unsafe fn read_into(
         &mut self,
         output: &mut [u8],
         index: usize,

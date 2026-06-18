@@ -5,12 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use std::io::{
-    Result,
-    Seek,
-    SeekFrom,
-    Write,
-};
+use std::io::{Result, Seek, SeekFrom, Write};
 
 /// Writer wrapper that counts successfully written bytes.
 ///
@@ -27,7 +22,7 @@ use std::io::{
 /// writer.write_all(b"abc")?;
 ///
 /// assert_eq!(3, writer.bytes_written());
-/// assert_eq!(b"abc", writer.get_ref().as_slice());
+/// assert_eq!(b"abc", writer.inner().as_slice());
 /// # Ok::<(), std::io::Error>(())
 /// ```
 pub struct CountingWriter<W> {
@@ -65,7 +60,7 @@ impl<W> CountingWriter<W> {
     /// # Returns
     /// The wrapped writer reference.
     #[inline]
-    pub fn get_ref(&self) -> &W {
+    pub fn inner(&self) -> &W {
         &self.inner
     }
 
@@ -74,7 +69,7 @@ impl<W> CountingWriter<W> {
     /// # Returns
     /// The wrapped writer reference.
     #[inline]
-    pub fn get_mut(&mut self) -> &mut W {
+    pub fn inner_mut(&mut self) -> &mut W {
         &mut self.inner
     }
 

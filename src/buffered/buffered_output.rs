@@ -6,25 +6,13 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Error,
-    ErrorKind,
-    Result,
-    Seek,
-    SeekFrom,
-    Write,
-};
+use std::io::{Error, ErrorKind, Result, Seek, SeekFrom, Write};
+use std::mem::ManuallyDrop;
+use std::ptr;
 
 use crate::buffered::DEFAULT_BUFFER_CAPACITY;
-use crate::util::{
-    UncheckedSlice,
-};
-use crate::{
-    Buffer,
-    Output,
-    Seekable,
-    SeekableOutput,
-};
+use crate::util::UncheckedSlice;
+use crate::{Buffer, Output, Seekable, SeekableOutput};
 
 /// Buffered unit output over a wrapped output sink.
 ///
@@ -39,10 +27,13 @@ use crate::{
 /// [`Self::spare_raw_parts_mut`] and then call [`Self::advance`] after
 /// validating the range they initialized.
 /// Callers that need to recover the wrapped writer should call
-/// [`Write::flush`] first, then use [`Self::into_parts`]. For arbitrary unit
-/// types, `BufferedOutput` also supports [`Seekable`]-based seeking in unit
-/// offsets; when `Item = u8` and the wrapped output is also
-/// [`std::io::Seek`], it additionally implements [`std::io::Seek`].
+/// [`Write::flush`] first, then use [`Self::into_parts`], or call
+/// [`Self::into_inner`] to flush and return the wrapped writer in one step.
+/// Dropping a `BufferedOutput` makes a best-effort attempt to write pending
+/// buffered units, but drop-time errors are ignored. For arbitrary unit types,
+/// `BufferedOutput` also supports [`Seekable`]-based seeking in unit offsets;
+/// when `Item = u8` and the wrapped output is also [`std::io::Seek`], it
+/// additionally implements [`std::io::Seek`].
 #[derive(Debug)]
 pub struct BufferedOutput<O>
 where
@@ -51,6 +42,7 @@ where
 {
     inner: O,
     buffer: Buffer<O::Item>,
+    panicked: bool,
 }
 
 impl<O> BufferedOutput<O>
@@ -92,6 +84,7 @@ where
         Self {
             inner,
             buffer: Buffer::with_capacity(capacity),
+            panicked: false,
         }
     }
 
@@ -120,20 +113,45 @@ where
         &mut self.inner
     }
 
-    /// Consumes this buffered output without flushing pending units.
-    ///
-    /// This method performs no I/O. Pending units that have been accepted into
-    /// the internal buffer but not written to the wrapped writer are returned
-    /// as the second tuple item.
+    /// Consumes this buffered output after flushing pending units.
     ///
     /// # Returns
     ///
-    /// The wrapped writer and pending units in logical write order.
+    /// The wrapped output after all buffered units have been written.
+    ///
+    /// # Errors
+    ///
+    /// Returns any error produced while flushing pending units or flushing the
+    /// wrapped output. If an error is returned, this value is dropped and any
+    /// remaining pending units are flushed only on a best-effort basis.
+    #[inline]
+    pub fn into_inner(mut self) -> Result<O> {
+        self.flush()?;
+        let (inner, _) = self.into_parts();
+        Ok(inner)
+    }
+
+    /// Consumes this buffered output without flushing pending units.
+    ///
+    /// This method performs no I/O. Pending units that have been accepted into
+    /// the internal buffer but not written to the wrapped writer remain in the
+    /// readable window of the returned buffer.
+    ///
+    /// # Returns
+    ///
+    /// The wrapped writer and the buffer holding pending units in logical write
+    /// order.
     #[inline(always)]
     #[must_use]
-    pub fn into_parts(self) -> (O, Vec<O::Item>) {
-        let pending = self.buffer.readable().to_vec();
-        (self.inner, pending)
+    pub fn into_parts(self) -> (O, Buffer<O::Item>) {
+        let this = ManuallyDrop::new(self);
+        // SAFETY: `this` will not be dropped, so reading both fields moves them
+        // out exactly once. The `panicked` flag is intentionally discarded.
+        unsafe {
+            let inner = ptr::read(&this.inner);
+            let buffer = ptr::read(&this.buffer);
+            (inner, buffer)
+        }
     }
 
     /// Returns the internal buffer capacity.
@@ -253,7 +271,7 @@ where
     /// The caller must guarantee that `input_index..input_index + count` is a
     /// valid range inside `input` and that the addition does not overflow.
     #[inline]
-    pub unsafe fn write(
+    pub unsafe fn write_from(
         &mut self,
         input: &[O::Item],
         input_index: usize,
@@ -263,6 +281,10 @@ where
             UncheckedSlice::range_fits(input.len(), input_index, count),
             "unchecked write range exceeds input buffer"
         );
+        // Keep this boundary in sync with `std::io::BufWriter`: it uses
+        // `< spare_capacity()` intentionally so buffer-sized writes skip the
+        // memcpy+advance hot path. That path is only for strictly smaller
+        // inputs as an in-memory append optimization.
         if count < self.spare_capacity() {
             // SAFETY: The branch proves that the input fits in spare capacity.
             unsafe {
@@ -302,7 +324,7 @@ where
     /// The caller must guarantee that `input_index..input_index + count` is a
     /// valid range inside `input` and that the addition does not overflow.
     #[inline]
-    pub unsafe fn write_all(
+    pub unsafe fn write_all_from(
         &mut self,
         input: &[O::Item],
         input_index: usize,
@@ -312,6 +334,10 @@ where
             UncheckedSlice::range_fits(input.len(), input_index, count),
             "unchecked write range exceeds input buffer"
         );
+        // Keep this boundary in sync with `std::io::BufWriter`: it uses
+        // `< spare_capacity()` intentionally so buffer-sized writes skip the
+        // memcpy+advance hot path. That path is only for strictly smaller
+        // inputs as an in-memory append optimization.
         if count < self.spare_capacity() {
             // SAFETY: The branch proves that the input fits in spare capacity.
             unsafe {
@@ -348,9 +374,10 @@ where
             let available = self.buffer.available();
             // SAFETY: `position..position + available` is the current readable
             // range maintained by `Buffer`.
-            match unsafe {
-                self.inner.write(self.buffer.data(), position, available)
-            } {
+            self.panicked = true;
+            let result = unsafe { self.inner.write_from(self.buffer.data(), position, available) };
+            self.panicked = false;
+            match result {
                 Ok(0) => {
                     self.buffer.compact();
                     return Err(Error::new(
@@ -359,8 +386,7 @@ where
                     ));
                 }
                 Ok(written) => {
-                    if let Err(error) = validate_write_count(written, available)
-                    {
+                    if let Err(error) = validate_write_count(written, available) {
                         self.buffer.compact();
                         return Err(error);
                     }
@@ -397,13 +423,43 @@ where
     #[inline(always)]
     pub fn flush(&mut self) -> Result<()> {
         self.flush_buffer()
-            .and_then(|()| Output::flush(&mut self.inner))
+            .and_then(|()| Output::flush_pending(&mut self.inner))
+    }
+
+    /// Returns the logical output position without flushing pending units.
+    ///
+    /// The returned position is the wrapped output's current position plus the
+    /// number of units currently pending in this buffer.
+    ///
+    /// # Returns
+    ///
+    /// The logical stream position in output units.
+    ///
+    /// # Errors
+    ///
+    /// Returns any error produced while querying the wrapped output position.
+    /// Returns [`ErrorKind::InvalidData`] if adding the pending unit count
+    /// overflows `u64`.
+    #[inline]
+    pub fn stream_position(&mut self) -> Result<u64>
+    where
+        O: SeekableOutput,
+    {
+        let position = Seekable::seek_to(&mut self.inner, SeekFrom::Current(0))?;
+        position
+            .checked_add(self.buffer.available() as u64)
+            .ok_or_else(|| {
+                Error::new(
+                    ErrorKind::InvalidData,
+                    "buffered pending units overflow wrapped output position",
+                )
+            })
     }
 
     /// Seeks the wrapped output in units, flushing buffered units first.
     ///
     /// Pending units accepted into the internal buffer are written to the
-    /// wrapped output before [`Seekable::seek`] is invoked, so the seek
+    /// wrapped output before [`Seekable::seek_to`] is invoked, so the seek
     /// position is relative to data already committed to the underlying sink.
     ///
     /// # Parameters
@@ -420,14 +476,18 @@ where
     /// units, [`ErrorKind::WriteZero`] if the wrapped output cannot make
     /// progress while draining the buffer, [`ErrorKind::InvalidData`] if the
     /// writer reports an impossible unit count, or any error returned by
-    /// [`Seekable::seek`] on the wrapped output.
+    /// [`Seekable::seek_to`] on the wrapped output.
     #[inline(always)]
-    pub fn seek(&mut self, position: SeekFrom) -> Result<u64>
+    pub fn seek_to(&mut self, position: SeekFrom) -> Result<u64>
     where
         O: SeekableOutput,
     {
-        self.flush_buffer()
-            .and_then(|()| Seekable::seek(&mut self.inner, position))
+        match position {
+            SeekFrom::Current(0) => self.stream_position(),
+            other => self
+                .flush_buffer()
+                .and_then(|()| Seekable::seek_to(&mut self.inner, other)),
+        }
     }
 
     /// Writes units into the internal buffer without checking spare capacity.
@@ -445,12 +505,7 @@ where
     /// source range does not overlap with the destination range in the internal
     /// buffer.
     #[inline(always)]
-    unsafe fn write_to_buffer(
-        &mut self,
-        input: &[O::Item],
-        input_index: usize,
-        count: usize,
-    ) {
+    unsafe fn write_to_buffer(&mut self, input: &[O::Item], input_index: usize, count: usize) {
         debug_assert!(
             UncheckedSlice::range_fits(input.len(), input_index, count),
             "unchecked write range exceeds input buffer"
@@ -459,8 +514,7 @@ where
             count <= self.spare_capacity(),
             "unchecked write exceeds spare buffer capacity"
         );
-        let (destination, destination_index, _) =
-            self.buffer.spare_raw_parts_mut();
+        let (destination, destination_index, _) = self.buffer.spare_raw_parts_mut();
         // SAFETY: The caller guarantees valid source and destination ranges and
         // that they do not overlap.
         unsafe {
@@ -504,7 +558,7 @@ where
         count: usize,
     ) -> Result<usize> {
         // SAFETY: The caller guarantees the source range is valid.
-        let written = unsafe { self.inner.write(input, input_index, count) }?;
+        let written = unsafe { self.inner.write_from(input, input_index, count) }?;
         validate_write_count(written, count)?;
         Ok(written)
     }
@@ -538,9 +592,7 @@ where
             let remaining = count - written;
             // SAFETY: `written < count`, so this suffix remains inside the
             // caller-validated source range.
-            match unsafe {
-                self.write_inner(input, input_index + written, remaining)
-            } {
+            match unsafe { self.write_inner(input, input_index + written, remaining) } {
                 Ok(0) => {
                     return Err(Error::new(
                         ErrorKind::WriteZero,
@@ -654,14 +706,14 @@ where
     #[inline(always)]
     fn write(&mut self, buffer: &[u8]) -> Result<usize> {
         // SAFETY: The full input slice is a valid source range.
-        unsafe { BufferedOutput::write(self, buffer, 0, buffer.len()) }
+        unsafe { BufferedOutput::write_from(self, buffer, 0, buffer.len()) }
     }
 
     /// Writes all bytes through the internal buffer.
     #[inline(always)]
     fn write_all(&mut self, buffer: &[u8]) -> Result<()> {
         // SAFETY: The full input slice is a valid source range.
-        unsafe { BufferedOutput::write_all(self, buffer, 0, buffer.len()) }
+        unsafe { BufferedOutput::write_all_from(self, buffer, 0, buffer.len()) }
     }
 
     /// Flushes the internal buffer and then the wrapped writer.
@@ -678,7 +730,25 @@ where
     /// Flushes pending bytes before seeking the wrapped writer.
     #[inline(always)]
     fn seek(&mut self, position: SeekFrom) -> Result<u64> {
-        BufferedOutput::seek(self, position)
+        BufferedOutput::seek_to(self, position)
+    }
+
+    /// Returns the logical byte position without flushing pending bytes.
+    #[inline(always)]
+    fn stream_position(&mut self) -> Result<u64> {
+        BufferedOutput::stream_position(self)
+    }
+}
+
+impl<O> Drop for BufferedOutput<O>
+where
+    O: Output,
+    O::Item: Copy + Default,
+{
+    fn drop(&mut self) {
+        if !self.panicked {
+            drop(self.flush());
+        }
     }
 }
 
@@ -698,9 +768,7 @@ fn validate_write_count(written: usize, requested: usize) -> Result<()> {
     if written > requested {
         return Err(Error::new(
             ErrorKind::InvalidData,
-            format!(
-                "writer reported {written} units for a {requested}-unit buffer"
-            ),
+            format!("writer reported {written} units for a {requested}-unit buffer"),
         ));
     }
     Ok(())

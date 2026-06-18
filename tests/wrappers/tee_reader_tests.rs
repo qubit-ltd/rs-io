@@ -6,19 +6,9 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Error,
-    ErrorKind,
-    Read,
-    Seek,
-    SeekFrom,
-    Write,
-};
+use std::io::{Error, ErrorKind, Read, Seek, SeekFrom, Write};
 
-use qubit_io::{
-    SyncSeekTeeReader,
-    TeeReader,
-};
+use qubit_io::{SyncSeekTeeReader, TeeReader};
 
 enum ReadAction {
     Bytes(Vec<u8>),
@@ -152,14 +142,11 @@ impl Seek for ScriptedSeek {
             }
             SeekFrom::Current(offset) => {
                 let target = i128::from(self.position) + i128::from(offset);
-                self.position = u64::try_from(target).map_err(|_| {
-                    Error::new(ErrorKind::InvalidInput, "negative seek target")
-                })?;
+                self.position = u64::try_from(target)
+                    .map_err(|_| Error::new(ErrorKind::InvalidInput, "negative seek target"))?;
                 Ok(self.position)
             }
-            SeekFrom::End(_) => {
-                Err(Error::new(ErrorKind::Unsupported, "unsupported seek"))
-            }
+            SeekFrom::End(_) => Err(Error::new(ErrorKind::Unsupported, "unsupported seek")),
         }
     }
 }
@@ -169,16 +156,16 @@ fn test_tee_reader_copies_read_bytes_to_branch_writer() {
     let source = ScriptedReader::bytes(b"abcdef");
     let branch = ScriptedBranch::new();
     let mut reader = TeeReader::new(source, branch);
-    assert_eq!(6, reader.reader_ref().remaining_len());
-    assert!(reader.branch_ref().as_slice().is_empty());
+    assert_eq!(6, reader.inner().remaining_len());
+    assert!(reader.branch().as_slice().is_empty());
 
     let mut buffer = [0; 3];
     let count = reader.read(&mut buffer).expect("tee read should succeed");
 
     assert_eq!(3, count);
     assert_eq!(b"abc", &buffer);
-    assert_eq!(3, reader.reader_ref().remaining_len());
-    assert_eq!(b"abc", reader.branch_ref().as_slice());
+    assert_eq!(3, reader.inner().remaining_len());
+    assert_eq!(b"abc", reader.branch().as_slice());
 
     let (source, branch) = reader.into_inner();
     assert_eq!(3, source.remaining_len());
@@ -191,22 +178,19 @@ fn test_tee_reader_mut_accessors_allow_inner_access() {
     let branch = ScriptedBranch::new();
     let mut reader = TeeReader::new(source, branch);
 
-    reader.reader_mut().replace_bytes(b"bc");
+    reader.inner_mut().replace_bytes(b"bc");
     reader.branch_mut().data.extend_from_slice(b"x");
     let mut buffer = [0; 2];
     let count = reader.read(&mut buffer).expect("tee read should succeed");
 
     assert_eq!(2, count);
     assert_eq!(b"bc", &buffer);
-    assert_eq!(b"xbc", reader.branch_ref().as_slice());
+    assert_eq!(b"xbc", reader.branch().as_slice());
 }
 
 #[test]
 fn test_tee_reader_returns_source_read_error() {
-    let mut reader = TeeReader::new(
-        ScriptedReader::error("read failed"),
-        ScriptedBranch::new(),
-    );
+    let mut reader = TeeReader::new(ScriptedReader::error("read failed"), ScriptedBranch::new());
     let mut buffer = [0; 2];
 
     let error = reader
@@ -215,7 +199,7 @@ fn test_tee_reader_returns_source_read_error() {
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("read failed", error.to_string());
-    assert!(reader.branch_ref().as_slice().is_empty());
+    assert!(reader.branch().as_slice().is_empty());
 }
 
 #[test]
@@ -230,7 +214,7 @@ fn test_tee_reader_does_not_write_branch_at_eof() {
         .expect("EOF should not be an error");
 
     assert_eq!(0, count);
-    assert!(reader.branch_ref().as_slice().is_empty());
+    assert!(reader.branch().as_slice().is_empty());
 }
 
 #[test]
@@ -246,14 +230,13 @@ fn test_tee_reader_copies_partial_buffer_at_eof() {
 
     assert_eq!(2, count);
     assert_eq!(b"ab", &buffer[..count]);
-    assert_eq!(b"ab", reader.branch_ref().as_slice());
+    assert_eq!(b"ab", reader.branch().as_slice());
 }
 
 #[test]
 #[should_panic]
 fn test_tee_reader_panics_when_source_returns_invalid_count() {
-    let mut reader =
-        TeeReader::new(ScriptedReader::invalid_count(), ScriptedBranch::new());
+    let mut reader = TeeReader::new(ScriptedReader::invalid_count(), ScriptedBranch::new());
     let mut buffer = [0; 2];
 
     let _ = reader.read(&mut buffer);
@@ -262,8 +245,7 @@ fn test_tee_reader_panics_when_source_returns_invalid_count() {
 #[test]
 fn test_tee_reader_returns_branch_write_error() {
     let source = ScriptedReader::bytes(b"abc");
-    let mut reader =
-        TeeReader::new(source, ScriptedBranch::failing("branch write failed"));
+    let mut reader = TeeReader::new(source, ScriptedBranch::failing("branch write failed"));
     let mut buffer = [0; 2];
 
     let error = reader
@@ -291,7 +273,7 @@ fn test_tee_reader_forwards_seek_to_source_reader() {
         .expect("read after seek should succeed");
 
     assert_eq!(b"cd", &buffer);
-    assert_eq!(b"cd", reader.branch_ref().as_slice());
+    assert_eq!(b"cd", reader.branch().as_slice());
 }
 
 #[test]
@@ -312,11 +294,11 @@ fn test_sync_seek_tee_reader_seeks_source_and_branch() {
 
     assert_eq!(2, position);
     assert_eq!(b"cd", &buffer);
-    assert_eq!(4, reader.reader_ref().position());
-    assert_eq!(4, reader.branch_ref().position());
+    assert_eq!(4, reader.inner().position());
+    assert_eq!(4, reader.branch().position());
     assert_eq!(
         &[0, 0, b'c', b'd', 0, 0],
-        reader.branch_ref().get_ref().as_slice()
+        reader.branch().get_ref().as_slice()
     );
 }
 
@@ -332,10 +314,10 @@ fn test_sync_seek_tee_reader_source_seek_error_does_not_seek_branch() {
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("source seek failed", error.to_string());
-    assert_eq!(1, reader.reader_ref().seek_calls);
-    assert_eq!(3, reader.reader_ref().position);
-    assert_eq!(0, reader.branch_ref().seek_calls);
-    assert_eq!(5, reader.branch_ref().position);
+    assert_eq!(1, reader.inner().seek_calls);
+    assert_eq!(3, reader.inner().position);
+    assert_eq!(0, reader.branch().seek_calls);
+    assert_eq!(5, reader.branch().position);
 }
 
 #[test]
@@ -350,10 +332,10 @@ fn test_sync_seek_tee_reader_branch_seek_error_leaves_source_moved() {
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("branch seek failed", error.to_string());
-    assert_eq!(1, reader.reader_ref().seek_calls);
-    assert_eq!(7, reader.reader_ref().position);
-    assert_eq!(1, reader.branch_ref().seek_calls);
-    assert_eq!(5, reader.branch_ref().position);
+    assert_eq!(1, reader.inner().seek_calls);
+    assert_eq!(7, reader.inner().position);
+    assert_eq!(1, reader.branch().seek_calls);
+    assert_eq!(5, reader.branch().position);
 }
 
 #[test]
@@ -394,8 +376,8 @@ fn test_sync_seek_tee_reader_new_exposes_wrapped_streams() {
     let branch = Cursor::new(Vec::<u8>::new());
     let reader = SyncSeekTeeReader::new(source, branch);
 
-    assert_eq!(b"abc", reader.reader_ref().get_ref().as_slice());
-    assert!(reader.branch_ref().get_ref().is_empty());
+    assert_eq!(b"abc", reader.inner().get_ref().as_slice());
+    assert!(reader.branch().get_ref().is_empty());
 }
 
 #[test]
@@ -406,7 +388,7 @@ fn test_sync_seek_tee_reader_mut_accessors_modify_wrapped_streams() {
     let branch = Cursor::new(vec![1_u8, 2_u8]);
     let mut reader = SyncSeekTeeReader::new(source, branch);
 
-    reader.reader_mut().set_position(1);
+    reader.inner_mut().set_position(1);
     reader.branch_mut().get_mut().extend_from_slice(b"xy");
 
     let mut buffer = [0_u8; 1];
@@ -417,10 +399,10 @@ fn test_sync_seek_tee_reader_mut_accessors_modify_wrapped_streams() {
         .read_exact(&mut buffer)
         .expect("read should append byte to branch");
 
-    assert_eq!(3, reader.reader_ref().position());
-    assert_eq!(3, reader.branch_ref().position());
+    assert_eq!(3, reader.inner().position());
+    assert_eq!(3, reader.branch().position());
     assert_eq!(b"c", &buffer);
-    assert_eq!(b"\x01\x02cy", reader.branch_ref().get_ref().as_slice());
+    assert_eq!(b"\x01\x02cy", reader.branch().get_ref().as_slice());
 }
 
 #[test]
