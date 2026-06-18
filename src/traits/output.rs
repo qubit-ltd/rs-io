@@ -6,31 +6,24 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Error,
-    ErrorKind,
-    Result,
-    Write,
-};
+use std::io::{Result, Write};
 
-use crate::util::{
-    UncheckedSlice,
-};
+use crate::util::UncheckedSlice;
 
-/// Minimal indexed output interface over units.
+/// Minimal indexed output interface over items.
 ///
 /// `Output` is intentionally smaller and lower-level than [`Write`]. It only
-/// states that an implementor can write up to `count` units from
+/// states that an implementor can write up to `count` items from
 /// `input[index..index + count]`, plus an explicit flush operation. The caller
 /// owns range validation so hot paths can avoid repeated slicing and bounds
 /// checks.
 ///
 /// # Method name overlap
 ///
-/// `Output::write_from`, `Output::write_all_from`, and `Output::flush_pending`
-/// method names as [`Write`]. In generic code where both traits are in scope
-/// for the same value, use fully qualified syntax to choose the intended
-/// operation:
+/// `Output::write_from` and `Output::flush_pending` names are intentionally
+/// distinct from [`Write::write`] and [`Write::flush`]. In generic code where
+/// both traits are in scope for the same value, use fully qualified syntax to
+/// choose the intended operation:
 ///
 /// ```
 /// use std::io::{
@@ -38,7 +31,10 @@ use crate::util::{
 ///     Write,
 /// };
 ///
-/// use qubit_io::Output;
+/// use qubit_io::{
+///     Output,
+///     OutputExt,
+/// };
 ///
 /// fn flush_buffered<T>(output: &mut T) -> Result<()>
 /// where
@@ -47,11 +43,11 @@ use crate::util::{
 ///     <T as Output>::flush_pending(output)
 /// }
 ///
-/// fn write_all_units<T>(output: &mut T, input: &[u8]) -> Result<()>
+/// fn write_all_items<T>(output: &mut T, input: &[u8]) -> Result<()>
 /// where
 ///     T: Output<Item = u8> + Write,
 /// {
-///     unsafe { <T as Output>::write_all_from(output, input, 0, input.len()) }
+///     unsafe { <T as OutputExt>::write_all_from(output, input, 0, input.len()) }
 /// }
 ///
 /// fn flush_bytes<T>(output: &mut T) -> Result<()>
@@ -65,17 +61,17 @@ pub trait Output {
     /// The unit type written to this output.
     type Item;
 
-    /// Writes units from an indexed input range without checking the range.
+    /// Writes items from an indexed input range without checking the range.
     ///
     /// # Parameters
     ///
     /// * `input` - Source storage.
     /// * `index` - Start index inside `input`.
-    /// * `count` - Maximum number of units to write.
+    /// * `count` - Maximum number of items to write.
     ///
     /// # Returns
     ///
-    /// The number of units accepted from `input[index..index + count]`. The
+    /// The number of items accepted from `input[index..index + count]`. The
     /// value must be in `0..=count`.
     ///
     /// # Errors
@@ -93,71 +89,7 @@ pub trait Output {
         count: usize,
     ) -> Result<usize>;
 
-    /// Writes all units from an indexed input range without checking the range.
-    ///
-    /// This method repeatedly calls [`Output::write_from`] until all
-    /// `count` units are accepted. Interrupted writes are retried. A zero
-    /// progress report before the range is complete is converted to
-    /// [`ErrorKind::WriteZero`].
-    ///
-    /// # Parameters
-    ///
-    /// * `input` - Source storage.
-    /// * `index` - Start index inside `input`.
-    /// * `count` - Number of units to write.
-    ///
-    /// # Errors
-    ///
-    /// Returns the output error reported by the implementation. Returns
-    /// [`ErrorKind::WriteZero`] if the implementation accepts zero units before
-    /// the requested range is complete. Returns [`ErrorKind::InvalidData`] if
-    /// the implementation reports accepting more units than requested.
-    ///
-    /// # Safety
-    ///
-    /// The caller must guarantee that `index..index + count` is a valid range
-    /// inside `input` and that the addition does not overflow.
-    unsafe fn write_all_from(
-        &mut self,
-        input: &[Self::Item],
-        index: usize,
-        count: usize,
-    ) -> Result<()> {
-        debug_assert!(
-            UncheckedSlice::range_fits(input.len(), index, count),
-            "unchecked write-all range exceeds input buffer"
-        );
-        let mut written = 0;
-        while written < count {
-            let remaining = count - written;
-            // SAFETY: The caller guarantees the original source range is
-            // valid; `written < count`, so this suffix remains inside it.
-            match unsafe { self.write_from(input, index + written, remaining) } {
-                Ok(0) => {
-                    return Err(Error::new(
-                        ErrorKind::WriteZero,
-                        "failed to write whole output range",
-                    ));
-                }
-                Ok(progress) => {
-                    if progress > remaining {
-                        return Err(Error::new(
-                            ErrorKind::InvalidData,
-                            format!(
-                                "writer reported {progress} units for a {remaining}-unit range"
-                            ),
-                        ));
-                    }
-                    written += progress;
-                }
-                Err(error) if error.kind() == ErrorKind::Interrupted => {}
-                Err(error) => return Err(error),
-            }
-        }
-        Ok(())
-    }
-
-    /// Flushes any internally buffered units.
+    /// Flushes any internally buffered items.
     ///
     /// # Errors
     ///
@@ -173,12 +105,7 @@ where
 
     /// Writes bytes to a standard [`Write`] value from an indexed range.
     #[inline(always)]
-    unsafe fn write_from(
-        &mut self,
-        input: &[u8],
-        index: usize,
-        count: usize,
-    ) -> Result<usize> {
+    unsafe fn write_from(&mut self, input: &[u8], index: usize, count: usize) -> Result<usize> {
         debug_assert!(
             UncheckedSlice::range_fits(input.len(), index, count),
             "unchecked write range exceeds input buffer"

@@ -24,58 +24,26 @@
 //! and are re-exported from the crate root for ergonomic use.
 
 pub mod buffered;
-mod ext;
+pub mod ext;
 mod traits;
 mod util;
 mod wrappers;
 
-pub use buffered::{
-    Buffer,
-    BufferedInput,
-    BufferedOutput,
-    DEFAULT_BUFFER_CAPACITY,
-};
+pub use buffered::{Buffer, BufferedInput, BufferedOutput, DEFAULT_BUFFER_CAPACITY};
 pub use ext::{
-    BufReadExt,
-    ReadExt,
-    ReadSeekExt,
-    SeekExt,
-    WriteExt,
-    WriteSeekExt,
+    BufReadExt, InputExt, OutputExt, ReadExt, ReadSeekExt, SeekExt, WriteExt, WriteSeekExt,
 };
 pub use traits::{
-    BufReadSeek,
-    Input,
-    Output,
-    ReadSeek,
-    ReadWrite,
-    ReadWriteSeek,
-    Seekable,
-    SeekableInput,
-    SeekableOutput,
-    WriteSeek,
+    BufReadSeek, Input, Output, ReadSeek, ReadWrite, ReadWriteSeek, Seekable, SeekableInput,
+    SeekableOutput, WriteSeek,
 };
 pub use util::Streams;
-pub use util::{
-    try_reserve_string,
-    try_reserve_vec,
-};
 #[allow(unused_imports)]
 pub use util::UncheckedSlice;
 #[allow(unused_imports)]
-pub use util::{
-    nz,
-    nz_const,
-};
+pub use util::{nz, nz_const};
+pub use util::{try_reserve_string, try_reserve_vec};
 pub use wrappers::{
-    ChecksumReader,
-    ChecksumWriter,
-    CountingReader,
-    CountingWriter,
-    LimitReader,
-    LimitWriter,
-    PositionGuard,
-    SyncSeekTeeReader,
-    TeeReader,
-    TeeWriter,
+    ChecksumReader, ChecksumWriter, CountingReader, CountingWriter, LimitReader, LimitWriter,
+    PositionGuard, SyncSeekTeeReader, TeeReader, TeeWriter,
 };
