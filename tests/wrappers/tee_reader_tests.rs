@@ -357,6 +357,36 @@ fn test_sync_seek_tee_reader_branch_seek_error_leaves_source_moved() {
 }
 
 #[test]
+fn test_sync_seek_tee_reader_read_source_error_is_returned() {
+    let source = ScriptedReader::error("sync source read failed");
+    let branch = ScriptedBranch::new();
+    let mut reader = SyncSeekTeeReader::new(source, branch);
+    let mut buffer = [0_u8; 2];
+
+    let error = reader
+        .read(&mut buffer)
+        .expect_err("source read failure should be returned");
+
+    assert_eq!(ErrorKind::Other, error.kind());
+    assert_eq!("sync source read failed", error.to_string());
+}
+
+#[test]
+fn test_sync_seek_tee_reader_read_branch_error_is_returned() {
+    let source = ScriptedReader::bytes(b"abc");
+    let branch = ScriptedBranch::failing("sync branch write failed");
+    let mut reader = SyncSeekTeeReader::new(source, branch);
+    let mut buffer = [0_u8; 2];
+
+    let error = reader
+        .read(&mut buffer)
+        .expect_err("branch write failure should be returned");
+
+    assert_eq!(ErrorKind::Other, error.kind());
+    assert_eq!("sync branch write failed", error.to_string());
+}
+
+#[test]
 fn test_sync_seek_tee_reader_new_exposes_wrapped_streams() {
     use std::io::Cursor;
 
@@ -366,4 +396,42 @@ fn test_sync_seek_tee_reader_new_exposes_wrapped_streams() {
 
     assert_eq!(b"abc", reader.reader_ref().get_ref().as_slice());
     assert!(reader.branch_ref().get_ref().is_empty());
+}
+
+#[test]
+fn test_sync_seek_tee_reader_mut_accessors_modify_wrapped_streams() {
+    use std::io::Cursor;
+
+    let source = Cursor::new(b"abcd".to_vec());
+    let branch = Cursor::new(vec![1_u8, 2_u8]);
+    let mut reader = SyncSeekTeeReader::new(source, branch);
+
+    reader.reader_mut().set_position(1);
+    reader.branch_mut().get_mut().extend_from_slice(b"xy");
+
+    let mut buffer = [0_u8; 1];
+    reader
+        .seek(SeekFrom::Start(2))
+        .expect("sync seek should move both streams");
+    reader
+        .read_exact(&mut buffer)
+        .expect("read should append byte to branch");
+
+    assert_eq!(3, reader.reader_ref().position());
+    assert_eq!(3, reader.branch_ref().position());
+    assert_eq!(b"c", &buffer);
+    assert_eq!(b"\x01\x02cy", reader.branch_ref().get_ref().as_slice());
+}
+
+#[test]
+fn test_sync_seek_tee_reader_into_inner_releases_wrapped_streams() {
+    use std::io::Cursor;
+
+    let source = Cursor::new(b"abc".to_vec());
+    let branch = Cursor::new(vec![0_u8, 1_u8]);
+    let reader = SyncSeekTeeReader::new(source, branch);
+    let (source, branch) = reader.into_inner();
+
+    assert_eq!(b"abc", source.into_inner().as_slice());
+    assert_eq!(b"\0\x01", branch.into_inner().as_slice());
 }

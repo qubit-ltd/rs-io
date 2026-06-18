@@ -486,12 +486,7 @@ where
         I: SeekableInput,
     {
         let position = Seekable::seek(&mut self.inner, SeekFrom::Current(0))?;
-        let unread = u64::try_from(self.available()).map_err(|_| {
-            Error::new(
-                ErrorKind::InvalidInput,
-                "buffered unread unit count exceeds u64",
-            )
-        })?;
+        let unread = self.available() as u64;
         position.checked_sub(unread).ok_or_else(|| {
             Error::new(
                 ErrorKind::InvalidData,
@@ -706,7 +701,6 @@ where
     I: Input<Item = u8> + Seekable<Item = u8>,
 {
     /// Seeks the wrapped reader and discards buffered bytes after success.
-    #[inline(always)]
     fn seek(&mut self, position: SeekFrom) -> Result<u64> {
         BufferedInput::seek(self, position)
     }

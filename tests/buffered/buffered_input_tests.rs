@@ -256,6 +256,57 @@ impl Seek for TrackingSeekReader {
     }
 }
 
+struct InconsistentPositionReader {
+    data: Vec<u8>,
+    position: u64,
+}
+
+impl InconsistentPositionReader {
+    fn new(data: &[u8]) -> Self {
+        Self {
+            data: data.to_vec(),
+            position: 0,
+        }
+    }
+}
+
+impl Read for InconsistentPositionReader {
+    fn read(&mut self, output: &mut [u8]) -> std::io::Result<usize> {
+        let position = usize::try_from(self.position).map_err(|_| {
+            Error::new(ErrorKind::InvalidInput, "position exceeds usize")
+        })?;
+        if position >= self.data.len() {
+            return Ok(0);
+        }
+        let read = (self.data.len() - position).min(output.len());
+        output[..read].copy_from_slice(&self.data[position..position + read]);
+        self.position += read as u64;
+        Ok(read)
+    }
+}
+
+impl Seek for InconsistentPositionReader {
+    fn seek(&mut self, position: SeekFrom) -> std::io::Result<u64> {
+        let current = i128::from(self.position);
+        let end = i128::try_from(self.data.len()).map_err(|_| {
+            Error::new(ErrorKind::InvalidInput, "stream length exceeds i128")
+        })?;
+        let target = match position {
+            SeekFrom::Start(offset) => i128::from(offset),
+            SeekFrom::Current(offset) => current + i128::from(offset),
+            SeekFrom::End(offset) => end + i128::from(offset),
+        };
+        self.position = u64::try_from(target).map_err(|_| {
+            Error::new(ErrorKind::InvalidInput, "seek target is negative")
+        })?;
+        if let SeekFrom::Current(0) = position {
+            Ok(0)
+        } else {
+            Ok(self.position)
+        }
+    }
+}
+
 struct FailingSeekReader;
 
 impl Read for FailingSeekReader {
@@ -861,6 +912,145 @@ fn test_seek_relative_within_buffer_avoids_underlying_seek() {
 }
 
 #[test]
+fn test_seek_relative_within_buffer_rewinds_prefix() {
+    let reader = TrackingSeekReader::new(b"abcdef");
+    let mut input = BufferedInput::with_capacity(reader, 4);
+    assert!(input.fill_more().expect("initial refill should succeed"));
+    // SAFETY: The test has ensured the requested units are currently buffered.
+    unsafe {
+        input.consume(3);
+    }
+
+    Seek::seek_relative(&mut input, -2)
+        .expect("negative seek inside buffer should rewind");
+
+    assert_eq!(0, input.inner().seek_calls);
+    assert_eq!(b"bcd", unread_units(&input).as_slice());
+}
+
+#[test]
+fn test_seek_relative_outside_buffer_delegates_to_underlying_seek() {
+    let reader = TrackingSeekReader::new(b"abcdef");
+    let mut input = BufferedInput::with_capacity(reader, 4);
+    assert!(input.fill_more().expect("initial refill should succeed"));
+    // SAFETY: The test has ensured the requested units are currently buffered.
+    unsafe {
+        input.consume(1);
+    }
+    assert_eq!(b"bcd", unread_units(&input).as_slice());
+
+    Seek::seek_relative(&mut input, 6)
+        .expect("seek beyond buffer should call underlying seek");
+
+    assert_eq!(1, input.inner().seek_calls);
+    assert_eq!(7, input.inner().position);
+    assert_eq!(0, input.available());
+}
+
+#[test]
+fn test_seek_trait_object_dispatches_to_seek_impl() {
+    let reader = TrackingSeekReader::new(b"abcdef");
+    let mut input = BufferedInput::with_capacity(reader, 4);
+    assert!(input.fill_more().expect("initial refill should succeed"));
+
+    let _ = <BufferedInput<TrackingSeekReader> as Seek>::seek(
+        &mut input,
+        SeekFrom::Current(1),
+    )
+    .expect("seek trait impl should be callable");
+
+    assert!(input.available() <= 3);
+}
+
+#[test]
+fn test_seek_trait_object_seek_from_start_and_end() {
+    let reader = TrackingSeekReader::new(b"abcdef");
+    let mut input = BufferedInput::with_capacity(reader, 4);
+    assert!(input.fill_more().expect("initial refill should succeed"));
+
+    let position = <BufferedInput<TrackingSeekReader> as Seek>::seek(
+        &mut input,
+        SeekFrom::Start(2),
+    )
+    .expect("trait seek start should call underlying source");
+
+    assert_eq!(2, position);
+    assert_eq!(0, input.available());
+    assert_eq!(1, input.inner().seek_calls);
+
+    let reader = TrackingSeekReader::new(b"abcdef");
+    let mut input = BufferedInput::with_capacity(reader, 4);
+    assert!(input.fill_more().expect("initial refill should succeed"));
+
+    let position = <BufferedInput<TrackingSeekReader> as Seek>::seek(
+        &mut input,
+        SeekFrom::End(-1),
+    )
+    .expect("trait seek end should call underlying source");
+
+    assert_eq!(5, position);
+    assert_eq!(0, input.available());
+    assert_eq!(1, input.inner().seek_calls);
+}
+
+#[test]
+fn test_seek_ufcs_methods_cover_trait_impl() {
+    let reader = TrackingSeekReader::new(b"abcdef");
+    let mut input = BufferedInput::with_capacity(reader, 4);
+    assert!(input.fill_more().expect("initial refill should succeed"));
+    // SAFETY: The test has ensured the requested units are currently buffered.
+    unsafe {
+        input.consume(1);
+    }
+    assert_eq!(b"bcd", unread_units(&input).as_slice());
+
+    let position = Seek::seek(&mut input, SeekFrom::Current(2))
+        .expect("trait seek within buffer should use existing cache");
+    assert_eq!(3, position);
+    assert_eq!(1, input.inner().seek_calls);
+
+    let position = Seek::seek(&mut input, SeekFrom::Start(1))
+        .expect("absolute trait seek should delegate to inner seek");
+    assert_eq!(1, position);
+    assert_eq!(2, input.inner().seek_calls);
+    assert_eq!(0, input.available());
+
+    Seek::seek_relative(&mut input, 6).expect(
+        "trait seek_relative outside buffer should delegate to inner seek",
+    );
+    assert_eq!(3, input.inner().seek_calls);
+    assert_eq!(0, input.available());
+
+    let position = Seek::stream_position(&mut input)
+        .expect("trait stream_position should use buffered logical position");
+    assert_eq!(7, position);
+}
+
+#[test]
+fn test_seek_trait_relative_error_from_inner_seek() {
+    let mut input = BufferedInput::with_capacity(FailingSeekReader, 4);
+
+    let error = Seek::seek_relative(&mut input, 1)
+        .expect_err("underlying seek error should be surfaced");
+
+    assert_eq!(ErrorKind::Other, error.kind());
+    assert_eq!("seek failed", error.to_string());
+}
+
+#[test]
+fn test_ensure_available_u16_reader_consumes_partial_on_eof() {
+    let mut input =
+        BufferedInput::with_capacity(U16Input::new(vec![vec![42]]), 4);
+
+    let error = input
+        .ensure_available(2)
+        .expect_err("ensure_available should fail when source ends early");
+
+    assert_eq!(ErrorKind::UnexpectedEof, error.kind());
+    assert_eq!(0, input.available());
+}
+
+#[test]
 fn test_stream_position_preserves_prefetched_bytes() {
     let reader = TrackingSeekReader::new(b"abcdef");
     let mut input = BufferedInput::with_capacity(reader, 4);
@@ -877,6 +1067,27 @@ fn test_stream_position_preserves_prefetched_bytes() {
     assert_eq!(1, position);
     assert_eq!(1, input.inner().seek_calls);
     assert_eq!(b"bcd", unread_units(&input).as_slice());
+}
+
+#[test]
+fn test_stream_position_errors_when_inner_reports_too_early_position() {
+    let reader = InconsistentPositionReader::new(b"abcdef");
+    let mut input = BufferedInput::with_capacity(reader, 4);
+    assert!(input.fill_more().expect("initial refill should succeed"));
+    // SAFETY: The test has ensured the requested units are currently buffered.
+    unsafe {
+        input.consume(1);
+    }
+
+    let error = input
+        .stream_position()
+        .expect_err("stream position should validate buffered state");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!(
+        "buffered unread units exceed wrapped input position",
+        error.to_string()
+    );
 }
 
 #[test]
