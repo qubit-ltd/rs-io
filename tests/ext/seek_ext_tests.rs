@@ -6,13 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Cursor,
-    Error,
-    ErrorKind,
-    Seek,
-    SeekFrom,
-};
+use std::io::{Cursor, Error, ErrorKind, Seek, SeekFrom};
 
 use qubit_io::SeekExt;
 
@@ -52,16 +46,16 @@ impl Seek for FailingSeek {
     fn seek(&mut self, position: SeekFrom) -> std::io::Result<u64> {
         match position {
             SeekFrom::Current(0) => Ok(self.original_position),
-            SeekFrom::End(0) => {
-                self.end_result.as_ref().copied().map_err(|error| {
-                    Error::new(error.kind(), error.to_string())
-                })
-            }
-            SeekFrom::Start(position) if position == self.original_position => {
-                self.restore_result.as_ref().copied().map_err(|error| {
-                    Error::new(error.kind(), error.to_string())
-                })
-            }
+            SeekFrom::End(0) => self
+                .end_result
+                .as_ref()
+                .copied()
+                .map_err(|error| Error::new(error.kind(), error.to_string())),
+            SeekFrom::Start(position) if position == self.original_position => self
+                .restore_result
+                .as_ref()
+                .copied()
+                .map_err(|error| Error::new(error.kind(), error.to_string())),
             SeekFrom::Start(position) => Ok(position),
             SeekFrom::Current(_) | SeekFrom::End(_) => {
                 Err(Error::new(ErrorKind::Unsupported, "unsupported seek"))

@@ -5,28 +5,14 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use std::io::{
-    Error,
-    ErrorKind,
-    Read,
-    Result,
-    Write,
-    copy as copy_all,
-};
-use std::string::FromUtf8Error;
+use std::io::{ErrorKind, Read, Result, Write, copy as copy_all};
 
 use crate::Streams;
-use crate::util::{
-    UncheckedSlice,
-    try_reserve_string,
-    try_reserve_vec,
-};
+use crate::ext::internal::read_ext_impl;
+use crate::util::{UncheckedSlice, try_reserve_string};
 
 /// Default stack buffer size used by discard operations.
 const DISCARD_BUFFER_SIZE: usize = 8 * 1024;
-
-/// Default stack buffer size used by bounded read operations.
-const READ_TO_END_BUFFER_SIZE: usize = 8 * 1024;
 
 /// Extension methods for [`Read`] values.
 ///
@@ -189,11 +175,7 @@ pub trait ReadExt: Read {
     /// error reported by [`Read::read_exact`], including
     /// [`ErrorKind::UnexpectedEof`] when EOF is reached before `len` bytes are
     /// read.
-    fn read_exact_vec_limited(
-        &mut self,
-        len: usize,
-        max_len: usize,
-    ) -> Result<Vec<u8>>;
+    fn read_exact_vec_limited(&mut self, len: usize, max_len: usize) -> Result<Vec<u8>>;
 
     /// Reads exactly `len` bytes and appends them to `output`.
     ///
@@ -271,11 +253,7 @@ pub trait ReadExt: Read {
     /// # Errors
     /// Returns the first non-[`ErrorKind::Interrupted`] read error or write
     /// error reported by the underlying streams. Interrupted reads are retried.
-    fn copy_to_at_most(
-        &mut self,
-        writer: &mut dyn Write,
-        max_bytes: u64,
-    ) -> Result<u64>;
+    fn copy_to_at_most(&mut self, writer: &mut dyn Write, max_bytes: u64) -> Result<u64>;
 
     /// Copies the remaining input if its total length is at most `max_bytes`.
     ///
@@ -283,6 +261,12 @@ pub trait ReadExt: Read {
     /// not reached within `max_bytes` bytes, it returns
     /// [`ErrorKind::InvalidData`]. Detecting oversized input consumes one
     /// excess byte from this reader; that excess byte is not written to
+    /// `writer`.
+    ///
+    /// Unlike bounded reads into in-memory collections, this method cannot roll
+    /// back bytes already accepted by `writer` when the limit is exceeded
+    /// because [`Write`] does not provide truncation. On
+    /// [`ErrorKind::InvalidData`], up to `max_bytes` bytes may remain in
     /// `writer`.
     ///
     /// # Parameters
@@ -297,17 +281,14 @@ pub trait ReadExt: Read {
     /// than `max_bytes`. Returns the first non-[`ErrorKind::Interrupted`] read
     /// error or write error reported by the underlying streams. Interrupted
     /// reads are retried.
-    fn copy_to_end_limited(
-        &mut self,
-        writer: &mut dyn Write,
-        max_bytes: u64,
-    ) -> Result<u64>;
+    fn copy_to_end_limited(&mut self, writer: &mut dyn Write, max_bytes: u64) -> Result<u64>;
 
     /// Reads the remaining bytes into a vector with a maximum accepted length.
     ///
     /// This method consumes bytes from the current reader position until EOF is
     /// reached. If the stream contains more than `max_len` bytes, it returns
-    /// [`ErrorKind::InvalidData`] after detecting the first excess byte.
+    /// [`ErrorKind::InvalidData`] after detecting the first excess byte. No
+    /// vector is returned on failure.
     ///
     /// # Parameters
     /// - `max_len`: Maximum number of bytes accepted in the returned vector.
@@ -327,8 +308,9 @@ pub trait ReadExt: Read {
     /// This method appends at most `max_len` bytes from the current reader
     /// position to `output`. If the stream contains more than `max_len` bytes,
     /// it returns [`ErrorKind::InvalidData`] after detecting the first excess
-    /// byte. In that case, the accepted prefix may already have been appended
-    /// to `output`, and one excess byte may have been consumed from the reader.
+    /// byte and truncates `output` back to its original length. The underlying
+    /// reader may still have consumed bytes before the error because [`Read`]
+    /// does not provide rollback.
     ///
     /// # Parameters
     /// - `output`: Destination vector to append to.
@@ -341,11 +323,7 @@ pub trait ReadExt: Read {
     /// Returns [`ErrorKind::InvalidData`] when the stream contains more than
     /// `max_len` bytes. Returns the first non-[`ErrorKind::Interrupted`] error
     /// reported by the underlying reader; interrupted reads are retried.
-    fn read_to_end_limited_into(
-        &mut self,
-        output: &mut Vec<u8>,
-        max_len: usize,
-    ) -> Result<usize>;
+    fn read_to_end_limited_into(&mut self, output: &mut Vec<u8>, max_len: usize) -> Result<usize>;
 
     /// Reads the remaining bytes as UTF-8 text with a maximum accepted length.
     ///
@@ -370,9 +348,10 @@ pub trait ReadExt: Read {
     ///
     /// This method accepts at most `max_len` bytes from the current reader
     /// position, validates them as UTF-8, and appends the decoded text to
-    /// `output`. If the input is oversized or invalid UTF-8, `output` is left
-    /// unchanged. Oversized input may still consume up to `max_len + 1` bytes
-    /// from the reader while detecting the limit violation.
+    /// `output`. If the input is oversized or invalid UTF-8, `output` is
+    /// truncated back to its original length. Oversized input may still consume
+    /// up to `max_len + 1` bytes from the reader while detecting the limit
+    /// violation.
     ///
     /// # Parameters
     /// - `output`: Destination string to append to.
@@ -386,11 +365,8 @@ pub trait ReadExt: Read {
     /// `max_len` bytes or when the collected bytes are not valid UTF-8. Returns
     /// the first non-[`ErrorKind::Interrupted`] error reported by the
     /// underlying reader; interrupted reads are retried.
-    fn read_to_string_limited_into(
-        &mut self,
-        output: &mut String,
-        max_len: usize,
-    ) -> Result<usize>;
+    fn read_to_string_limited_into(&mut self, output: &mut String, max_len: usize)
+    -> Result<usize>;
 }
 
 impl<T> ReadExt for T
@@ -429,9 +405,8 @@ where
             // SAFETY: The caller guarantees that `start_index..start_index +
             // count` is valid for `buffer`; `total < count`, so this remaining
             // suffix is also a valid mutable subslice.
-            let target = unsafe {
-                UncheckedSlice::subslice_mut(buffer, start_index + total, count - total)
-            };
+            let target =
+                unsafe { UncheckedSlice::subslice_mut(buffer, start_index + total, count - total) };
             match self.read(target) {
                 Ok(0) => break,
                 Ok(read) => total += read,
@@ -463,20 +438,8 @@ where
     }
 
     fn read_exact_or_eof(&mut self, buffer: &mut [u8]) -> Result<usize> {
-        let mut total = 0;
-        while total < buffer.len() {
-            match self.read(&mut buffer[total..]) {
-                Ok(0) => break,
-                Ok(count) => total += count,
-                Err(error) => {
-                    if error.kind() == ErrorKind::Interrupted {
-                        continue;
-                    }
-                    return Err(error);
-                }
-            }
-        }
-        Ok(total)
+        let mut reader = self;
+        read_ext_impl::read_exact_or_eof(&mut reader, buffer)
     }
 
     #[inline(always)]
@@ -486,20 +449,10 @@ where
         Ok(buffer)
     }
 
-    fn read_exact_vec_limited(
-        &mut self,
-        len: usize,
-        max_len: usize,
-    ) -> Result<Vec<u8>> {
-        validate_exact_read_len(len, max_len)?;
+    fn read_exact_vec_limited(&mut self, len: usize, max_len: usize) -> Result<Vec<u8>> {
         let mut output = Vec::new();
         let mut reader = self;
-        read_exact_vec_limited_into_impl(
-            &mut reader,
-            &mut output,
-            len,
-            max_len,
-        )?;
+        read_ext_impl::read_exact_vec_limited_into(&mut reader, &mut output, len, max_len)?;
         Ok(output)
     }
 
@@ -511,7 +464,7 @@ where
         max_len: usize,
     ) -> Result<()> {
         let mut reader = self;
-        read_exact_vec_limited_into_impl(&mut reader, output, len, max_len)
+        read_ext_impl::read_exact_vec_limited_into(&mut reader, output, len, max_len)
     }
 
     fn discard_exact_or_eof(&mut self, bytes: u64) -> Result<u64> {
@@ -544,21 +497,13 @@ where
     }
 
     #[inline(always)]
-    fn copy_to_at_most(
-        &mut self,
-        writer: &mut dyn Write,
-        max_bytes: u64,
-    ) -> Result<u64> {
+    fn copy_to_at_most(&mut self, writer: &mut dyn Write, max_bytes: u64) -> Result<u64> {
         let mut reader = self;
         Streams::copy_at_most(&mut reader, writer, max_bytes)
     }
 
     #[inline(always)]
-    fn copy_to_end_limited(
-        &mut self,
-        writer: &mut dyn Write,
-        max_bytes: u64,
-    ) -> Result<u64> {
+    fn copy_to_end_limited(&mut self, writer: &mut dyn Write, max_bytes: u64) -> Result<u64> {
         let mut reader = self;
         Streams::copy_to_end_limited(&mut reader, writer, max_bytes)
     }
@@ -566,23 +511,19 @@ where
     #[inline(always)]
     fn read_to_end_limited(&mut self, max_len: usize) -> Result<Vec<u8>> {
         let mut reader = self;
-        read_to_end_limited_impl(&mut reader, max_len)
+        read_ext_impl::read_to_end_limited(&mut reader, max_len)
     }
 
     #[inline(always)]
-    fn read_to_end_limited_into(
-        &mut self,
-        output: &mut Vec<u8>,
-        max_len: usize,
-    ) -> Result<usize> {
+    fn read_to_end_limited_into(&mut self, output: &mut Vec<u8>, max_len: usize) -> Result<usize> {
         let mut reader = self;
-        read_to_end_limited_into_impl(&mut reader, output, max_len)
+        read_ext_impl::read_to_end_limited_into(&mut reader, output, max_len)
     }
 
     fn read_to_string_limited(&mut self, max_len: usize) -> Result<String> {
         let mut reader = self;
-        let bytes = read_to_end_limited_impl(&mut reader, max_len)?;
-        String::from_utf8(bytes).map_err(invalid_utf8_error)
+        let bytes = read_ext_impl::read_to_end_limited(&mut reader, max_len)?;
+        String::from_utf8(bytes).map_err(read_ext_impl::invalid_utf8_error)
     }
 
     fn read_to_string_limited_into(
@@ -591,162 +532,11 @@ where
         max_len: usize,
     ) -> Result<usize> {
         let mut reader = self;
-        let bytes = read_to_end_limited_impl(&mut reader, max_len)?;
-        let text = String::from_utf8(bytes).map_err(invalid_utf8_error)?;
+        let bytes = read_ext_impl::read_to_end_limited(&mut reader, max_len)?;
+        let text = String::from_utf8(bytes).map_err(read_ext_impl::invalid_utf8_error)?;
         let count = text.len();
         try_reserve_string(output, count)?;
         output.push_str(&text);
         Ok(count)
     }
-}
-
-/// Reads exactly `len` bytes from `reader` and appends them to `output`.
-///
-/// # Parameters
-/// - `reader`: Source reader.
-/// - `output`: Destination vector to append to.
-/// - `len`: Exact number of bytes to read.
-/// - `max_len`: Maximum accepted exact read length.
-///
-/// # Errors
-/// Returns [`ErrorKind::InvalidData`] when `len > max_len` before reading and
-/// leaves `output` unchanged. Returns the error reported by
-/// [`Read::read_exact`] for read failures and truncates `output` back to its
-/// original length.
-fn read_exact_vec_limited_into_impl(
-    reader: &mut dyn Read,
-    output: &mut Vec<u8>,
-    len: usize,
-    max_len: usize,
-) -> Result<()> {
-    validate_exact_read_len(len, max_len)?;
-    let original_len = output.len();
-    let new_len = match original_len.checked_add(len) {
-        Some(value) => value,
-        None => {
-            return Err(Error::new(
-                ErrorKind::InvalidInput,
-                format!("length {original_len} plus {len} overflows usize"),
-            ));
-        }
-    };
-    try_reserve_vec(output, len)?;
-    output.resize(new_len, 0);
-    match reader.read_exact(&mut output[original_len..]) {
-        Ok(()) => Ok(()),
-        Err(error) => {
-            output.truncate(original_len);
-            Err(error)
-        }
-    }
-}
-
-/// Validates that an exact read length is within the configured maximum.
-///
-/// # Parameters
-/// - `len`: Exact number of bytes requested by the caller.
-/// - `max_len`: Maximum accepted exact read length.
-///
-/// # Errors
-/// Returns [`ErrorKind::InvalidData`] when `len > max_len`.
-#[inline(always)]
-fn validate_exact_read_len(len: usize, max_len: usize) -> Result<()> {
-    if len > max_len {
-        return Err(Error::new(
-            ErrorKind::InvalidData,
-            format!("requested length {len} exceeds maximum length {max_len}"),
-        ));
-    }
-    Ok(())
-}
-
-/// Reads all remaining bytes from `reader` when the result fits `max_len`.
-///
-/// # Parameters
-/// - `reader`: Source reader.
-/// - `max_len`: Maximum accepted result length.
-///
-/// # Returns
-/// A vector containing all remaining bytes.
-///
-/// # Errors
-/// Returns [`ErrorKind::InvalidData`] after detecting that the input contains
-/// more than `max_len` bytes. Returns the first non-interrupted read error
-/// reported by `reader`.
-fn read_to_end_limited_impl(
-    reader: &mut dyn Read,
-    max_len: usize,
-) -> Result<Vec<u8>> {
-    let mut output = Vec::new();
-    try_reserve_vec(&mut output, max_len.min(READ_TO_END_BUFFER_SIZE))?;
-    read_to_end_limited_into_impl(reader, &mut output, max_len)?;
-    Ok(output)
-}
-
-/// Reads all remaining bytes from `reader` into `output` when the input fits.
-///
-/// # Parameters
-/// - `reader`: Source reader.
-/// - `output`: Destination vector to append to.
-/// - `max_len`: Maximum accepted input length in bytes.
-///
-/// # Returns
-/// The number of bytes appended to `output`.
-///
-/// # Errors
-/// Returns [`ErrorKind::InvalidData`] after detecting that the input contains
-/// more than `max_len` bytes. Returns the first non-interrupted read error
-/// reported by `reader`.
-fn read_to_end_limited_into_impl(
-    reader: &mut dyn Read,
-    output: &mut Vec<u8>,
-    max_len: usize,
-) -> Result<usize> {
-    let mut buffer = [0; READ_TO_END_BUFFER_SIZE];
-    let mut appended = 0;
-    loop {
-        let remaining = max_len.saturating_sub(appended);
-        // The extra byte is intentional, even when `max_len == 0`, so EOF can
-        // be distinguished from input that exceeds the configured limit.
-        let requested =
-            remaining.saturating_add(1).min(READ_TO_END_BUFFER_SIZE);
-        match reader.read(&mut buffer[..requested]) {
-            Ok(0) => return Ok(appended),
-            Ok(count) if count <= remaining => {
-                try_reserve_vec(output, count)?;
-                output.extend_from_slice(&buffer[..count]);
-                appended += count;
-            }
-            Ok(_) => {
-                if remaining > 0 {
-                    try_reserve_vec(output, remaining)?;
-                    output.extend_from_slice(&buffer[..remaining]);
-                }
-                return Err(Error::new(
-                    ErrorKind::InvalidData,
-                    format!("input exceeds maximum length of {max_len} bytes"),
-                ));
-            }
-            Err(error) => {
-                if error.kind() == ErrorKind::Interrupted {
-                    continue;
-                }
-                return Err(error);
-            }
-        }
-    }
-}
-
-/// Converts an invalid UTF-8 read result into an I/O error.
-///
-/// # Parameters
-/// - `error`: UTF-8 conversion error.
-///
-/// # Returns
-/// An [`ErrorKind::InvalidData`] error containing the UTF-8 error context.
-fn invalid_utf8_error(error: FromUtf8Error) -> Error {
-    Error::new(
-        ErrorKind::InvalidData,
-        format!("limited input is not valid UTF-8: {error}"),
-    )
 }
