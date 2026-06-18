@@ -6,9 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use crate::util::{
-    UncheckedSlice,
-};
+use crate::util::UncheckedSlice;
 
 /// Low-level contiguous storage with a readable window and spare tail capacity.
 ///
@@ -16,6 +14,12 @@ use crate::util::{
 /// `data[position..limit]`. Values before `position` are considered consumed,
 /// and values after `limit` are spare capacity that callers may fill before
 /// advancing the limit.
+///
+/// The backing storage is fully initialized up front, so `T` is constrained to
+/// [`Copy`] + [`Default`]. This buffer is intended for scalar stream units such
+/// as `u8`, `u32`, or `char`, where default initialization is cheap and is
+/// usually optimized aggressively by the compiler. It is not intended to store
+/// expensive opaque values.
 ///
 /// This type is intentionally a low-level, hot-path API. It exposes the full
 /// backing storage through [`Self::data`] and [`Self::data_mut`] so
@@ -358,12 +362,7 @@ where
     /// `count <= self.spare_capacity()`, and that the source range does not
     /// overlap with this buffer's destination range.
     #[inline(always)]
-    pub unsafe fn copy_from(
-        &mut self,
-        input: &[T],
-        input_index: usize,
-        count: usize,
-    ) {
+    pub unsafe fn copy_from(&mut self, input: &[T], input_index: usize, count: usize) {
         debug_assert!(
             count <= self.spare_capacity(),
             "unchecked input copy exceeds spare buffer capacity"
@@ -399,12 +398,7 @@ where
     /// `count <= self.available()`, and that the source range does not overlap
     /// with the destination range.
     #[inline(always)]
-    pub unsafe fn copy_to(
-        &mut self,
-        output: &mut [T],
-        output_index: usize,
-        count: usize,
-    ) {
+    pub unsafe fn copy_to(&mut self, output: &mut [T], output_index: usize, count: usize) {
         // SAFETY: The caller guarantees the readable source range and
         // destination range are valid and non-overlapping.
         unsafe {

@@ -6,7 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{BufRead, Error, ErrorKind, Read, Result, Seek, SeekFrom};
+use std::io::{Error, ErrorKind, Result, SeekFrom};
 
 use crate::buffered::DEFAULT_BUFFER_CAPACITY;
 use crate::util::UncheckedSlice;
@@ -22,8 +22,8 @@ use crate::{Buffer, Input, Seekable, SeekableInput};
 /// decoding, text decoding, or record parsing; higher-level stream adapters can
 /// build those concerns on top of [`Self::ensure_available`],
 /// [`Self::copy_unread_to`], and [`Self::read_into`]. The type also implements
-/// [`BufRead`] for callers that want the standard
-/// buffered-read interface.
+/// [`Input`] and [`Seekable`] directly, so it can be passed to unit-oriented
+/// APIs without converting through standard byte traits.
 #[derive(Debug)]
 pub struct BufferedInput<I>
 where
@@ -360,7 +360,7 @@ where
     /// than the requested destination range could hold. Interrupted reads are
     /// retried when the method refills the internal buffer through
     /// `read_more`; direct delegated reads follow the wrapped reader's own
-    /// [`Read::read`] behavior.
+    /// wrapped input's own single-read behavior.
     ///
     /// # Safety
     ///
@@ -421,7 +421,7 @@ where
     /// Returns [`ErrorKind::InvalidInput`] if a [`SeekFrom::Current`] offset
     /// cannot be adjusted by the unread buffered unit count. Returns any seek
     /// error produced by the wrapped reader.
-    pub fn seek(&mut self, position: SeekFrom) -> Result<u64>
+    pub fn seek_to(&mut self, position: SeekFrom) -> Result<u64>
     where
         I: SeekableInput,
     {
@@ -435,6 +435,12 @@ where
                 Ok(position)
             }
             other => {
+                // Absolute seeks currently delegate to the wrapped input and
+                // discard the buffer. A future optimization could satisfy
+                // SeekFrom::Start targets that fall inside the retained
+                // backing buffer by moving only the buffer cursor, provided we
+                // track or cheaply derive the absolute position of the
+                // retained window.
                 let position = Seekable::seek_to(&mut self.inner, other)?;
                 self.discard_buffer();
                 Ok(position)
@@ -442,31 +448,26 @@ where
         }
     }
 
-    /// Moves the logical position relative to the current buffered position.
+    /// Returns the logical input position without discarding buffered units.
     ///
-    /// If the target remains within the current backing buffer, only the buffer
-    /// cursor is moved and the wrapped input is not sought. Otherwise the seek
-    /// is delegated to the wrapped input and the buffer is discarded.
+    /// The returned position is the wrapped input's current position minus the
+    /// number of units currently unread in this buffer.
     ///
-    /// # Parameters
+    /// # Returns
     ///
-    /// * `offset` - Relative offset in input units.
+    /// The logical stream position in input units.
     ///
     /// # Errors
     ///
-    /// Returns [`ErrorKind::InvalidInput`] if the offset cannot be adjusted by
-    /// the unread buffered unit count. Returns any seek error produced by the
-    /// wrapped reader.
-    fn seek_relative(&mut self, offset: i64) -> Result<()>
+    /// Returns any seek error produced while querying the wrapped input's
+    /// current position. Returns [`ErrorKind::InvalidData`] if the wrapped
+    /// input reports a position before the unread buffered window.
+    #[inline(always)]
+    pub fn stream_position(&mut self) -> Result<u64>
     where
         I: SeekableInput,
     {
-        if self.seek_within_buffer(offset) {
-            return Ok(());
-        }
-        self.seek_relative_slow(offset)?;
-        self.discard_buffer();
-        Ok(())
+        self.logical_stream_position()
     }
 
     /// Returns the logical stream position without discarding buffered units.
@@ -638,80 +639,37 @@ where
     }
 }
 
-impl<I> Read for BufferedInput<I>
+impl<I> Input for BufferedInput<I>
 where
-    I: Input<Item = u8>,
+    I: Input,
+    I::Item: Copy + Default,
 {
-    /// Reads bytes through the internal buffer.
-    ///
-    /// # Arguments
-    ///
-    /// * `output` - Destination slice that receives the bytes read.
-    ///
-    /// # Returns
-    ///
-    /// The number of bytes written to `output`.
-    ///
-    /// # Errors
-    ///
-    /// Returns any I/O error produced by the wrapped reader.
+    type Item = I::Item;
+
+    /// Reads units through the internal buffer.
     #[inline(always)]
-    fn read(&mut self, output: &mut [u8]) -> Result<usize> {
-        // SAFETY: The full output slice is a valid writable range.
-        unsafe { self.read_into(output, 0, output.len()) }
+    unsafe fn read_into(
+        &mut self,
+        output: &mut [I::Item],
+        output_index: usize,
+        count: usize,
+    ) -> Result<usize> {
+        // SAFETY: Forwarded from the trait caller.
+        unsafe { BufferedInput::read_into(self, output, output_index, count) }
     }
 }
 
-impl<I> BufRead for BufferedInput<I>
+impl<I> Seekable for BufferedInput<I>
 where
-    I: Input<Item = u8>,
+    I: SeekableInput,
+    <I as Input>::Item: Copy + Default,
 {
-    /// Returns the currently buffered unread bytes, refilling when empty.
-    #[inline]
-    fn fill_buf(&mut self) -> Result<&[u8]> {
-        if self.available() == 0 {
-            self.discard_buffer();
-            if !self.read_more()? {
-                return Ok(&[]);
-            }
-        }
-        Ok(self.buffer.readable())
-    }
+    type Item = <I as Input>::Item;
 
-    /// Consumes `amount` bytes from the unread byte window.
+    /// Seeks the buffered input in unit offsets.
     #[inline(always)]
-    fn consume(&mut self, amount: usize) {
-        assert!(
-            amount <= BufferedInput::available(self),
-            "cannot consume beyond buffered input"
-        );
-        // SAFETY: The assertion proves that `amount` is within the readable
-        // input window.
-        unsafe {
-            BufferedInput::consume(self, amount);
-        }
-    }
-}
-
-impl<I> Seek for BufferedInput<I>
-where
-    I: Input<Item = u8> + Seekable<Item = u8>,
-{
-    /// Seeks the wrapped reader and discards buffered bytes after success.
-    fn seek(&mut self, position: SeekFrom) -> Result<u64> {
-        BufferedInput::seek(self, position)
-    }
-
-    /// Returns the logical stream position without discarding buffered bytes.
-    #[inline(always)]
-    fn stream_position(&mut self) -> Result<u64> {
-        self.logical_stream_position()
-    }
-
-    /// Seeks relative to the current logical position.
-    #[inline(always)]
-    fn seek_relative(&mut self, offset: i64) -> Result<()> {
-        BufferedInput::seek_relative(self, offset)
+    fn seek_to(&mut self, position: SeekFrom) -> Result<u64> {
+        BufferedInput::seek_to(self, position)
     }
 }
 
