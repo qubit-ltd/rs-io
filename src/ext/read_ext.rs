@@ -17,6 +17,7 @@ use std::string::FromUtf8Error;
 
 use crate::Streams;
 use crate::util::{
+    UncheckedSlice,
     try_reserve_string,
     try_reserve_vec,
 };
@@ -404,20 +405,12 @@ where
         count: usize,
     ) -> Result<usize> {
         debug_assert!(
-            start_index
-                .checked_add(count)
-                .is_some_and(|end_index| end_index <= buffer.len()),
+            UncheckedSlice::range_fits(buffer.len(), start_index, count),
             "unchecked read range exceeds buffer"
         );
         // SAFETY: The caller guarantees that the requested range is valid for
-        // `buffer`, and that the computed pointer and length form a valid
-        // mutable subslice of `buffer`.
-        let target = unsafe {
-            core::slice::from_raw_parts_mut(
-                buffer.as_mut_ptr().add(start_index),
-                count,
-            )
-        };
+        // `buffer`.
+        let target = unsafe { UncheckedSlice::subslice_mut(buffer, start_index, count) };
         self.read(target)
     }
 
@@ -428,19 +421,16 @@ where
         count: usize,
     ) -> Result<usize> {
         debug_assert!(
-            start_index
-                .checked_add(count)
-                .is_some_and(|end_index| end_index <= buffer.len()),
+            UncheckedSlice::range_fits(buffer.len(), start_index, count),
             "unchecked read range exceeds buffer"
         );
-        let base = unsafe { buffer.as_mut_ptr().add(start_index) };
         let mut total = 0;
         while total < count {
             // SAFETY: The caller guarantees that `start_index..start_index +
             // count` is valid for `buffer`; `total < count`, so this remaining
             // suffix is also a valid mutable subslice.
             let target = unsafe {
-                core::slice::from_raw_parts_mut(base.add(total), count - total)
+                UncheckedSlice::subslice_mut(buffer, start_index + total, count - total)
             };
             match self.read(target) {
                 Ok(0) => break,
@@ -463,20 +453,12 @@ where
         count: usize,
     ) -> Result<()> {
         debug_assert!(
-            start_index
-                .checked_add(count)
-                .is_some_and(|end_index| end_index <= buffer.len()),
+            UncheckedSlice::range_fits(buffer.len(), start_index, count),
             "unchecked read range exceeds buffer"
         );
         // SAFETY: The caller guarantees that the requested range is valid for
-        // `buffer`, and that the computed pointer and length form a valid
-        // mutable subslice of `buffer`.
-        let target = unsafe {
-            core::slice::from_raw_parts_mut(
-                buffer.as_mut_ptr().add(start_index),
-                count,
-            )
-        };
+        // `buffer`.
+        let target = unsafe { UncheckedSlice::subslice_mut(buffer, start_index, count) };
         self.read_exact(target)
     }
 

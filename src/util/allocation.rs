@@ -35,7 +35,7 @@ fn allocation_error(error: TryReserveError) -> Error {
 /// # Errors
 ///
 /// Returns [`ErrorKind::Other`] if the allocation request fails.
-pub(crate) fn try_reserve_vec<T>(
+pub fn try_reserve_vec<T>(
     output: &mut Vec<T>,
     additional: usize,
 ) -> Result<()> {
@@ -53,7 +53,7 @@ pub(crate) fn try_reserve_vec<T>(
 /// # Errors
 ///
 /// Returns [`ErrorKind::Other`] if the allocation request fails.
-pub(crate) fn try_reserve_string(
+pub fn try_reserve_string(
     output: &mut String,
     additional: usize,
 ) -> Result<()> {

@@ -17,8 +17,7 @@ use std::io::{
 
 use crate::buffered::DEFAULT_BUFFER_CAPACITY;
 use crate::util::{
-    copy_nonoverlapping_unchecked,
-    range_fits,
+    UncheckedSlice,
 };
 use crate::{
     Buffer,
@@ -261,7 +260,7 @@ where
         count: usize,
     ) -> Result<usize> {
         debug_assert!(
-            range_fits(input.len(), input_index, count),
+            UncheckedSlice::range_fits(input.len(), input_index, count),
             "unchecked write range exceeds input buffer"
         );
         if count < self.spare_capacity() {
@@ -310,7 +309,7 @@ where
         count: usize,
     ) -> Result<()> {
         debug_assert!(
-            range_fits(input.len(), input_index, count),
+            UncheckedSlice::range_fits(input.len(), input_index, count),
             "unchecked write range exceeds input buffer"
         );
         if count < self.spare_capacity() {
@@ -453,7 +452,7 @@ where
         count: usize,
     ) {
         debug_assert!(
-            range_fits(input.len(), input_index, count),
+            UncheckedSlice::range_fits(input.len(), input_index, count),
             "unchecked write range exceeds input buffer"
         );
         debug_assert!(
@@ -465,7 +464,7 @@ where
         // SAFETY: The caller guarantees valid source and destination ranges and
         // that they do not overlap.
         unsafe {
-            copy_nonoverlapping_unchecked(
+            UncheckedSlice::copy_nonoverlapping(
                 input,
                 input_index,
                 destination,

@@ -11,6 +11,10 @@ use std::io::{
     Result,
 };
 
+use crate::util::{
+    UncheckedSlice,
+};
+
 /// Minimal indexed input interface over units.
 ///
 /// `Input` is intentionally smaller and lower-level than [`Read`]. It only
@@ -65,19 +69,12 @@ where
         count: usize,
     ) -> Result<usize> {
         debug_assert!(
-            index
-                .checked_add(count)
-                .is_some_and(|end| end <= output.len()),
+            UncheckedSlice::range_fits(output.len(), index, count),
             "unchecked read range exceeds output buffer"
         );
         // SAFETY: The caller guarantees that the range is valid inside
         // `output`.
-        let target = unsafe {
-            core::slice::from_raw_parts_mut(
-                output.as_mut_ptr().add(index),
-                count,
-            )
-        };
+        let target = unsafe { UncheckedSlice::subslice_mut(output, index, count) };
         Read::read(self, target)
     }
 }

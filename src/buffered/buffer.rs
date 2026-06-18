@@ -7,8 +7,7 @@
 // =============================================================================
 
 use crate::util::{
-    copy_nonoverlapping_unchecked,
-    copy_unchecked,
+    UncheckedSlice,
 };
 
 /// Low-level contiguous storage with a readable window and spare tail capacity.
@@ -335,7 +334,7 @@ where
             // SAFETY: `available` unread elements at `position..limit` fit in
             // `0..available` after compaction.
             unsafe {
-                copy_unchecked(&mut self.data, self.position, 0, available);
+                UncheckedSlice::copy_within(&mut self.data, self.position, 0, available);
             }
         }
         self.position = 0;
@@ -372,7 +371,7 @@ where
         // SAFETY: The caller guarantees the source range and spare destination
         // range are valid and non-overlapping.
         unsafe {
-            copy_nonoverlapping_unchecked(
+            UncheckedSlice::copy_nonoverlapping(
                 input,
                 input_index,
                 &mut self.data,
@@ -409,7 +408,7 @@ where
         // SAFETY: The caller guarantees the readable source range and
         // destination range are valid and non-overlapping.
         unsafe {
-            copy_nonoverlapping_unchecked(
+            UncheckedSlice::copy_nonoverlapping(
                 &self.data,
                 self.position,
                 output,

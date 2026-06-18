@@ -17,7 +17,9 @@ use std::io::{
 };
 
 use crate::buffered::DEFAULT_BUFFER_CAPACITY;
-use crate::util::range_fits;
+use crate::util::{
+    UncheckedSlice,
+};
 use crate::{
     Buffer,
     Input,
@@ -205,7 +207,7 @@ where
         count: usize,
     ) {
         debug_assert!(
-            range_fits(output.len(), output_index, count),
+            UncheckedSlice::range_fits(output.len(), output_index, count),
             "unchecked unread copy output range exceeds destination buffer",
         );
         debug_assert!(
@@ -216,9 +218,13 @@ where
         // non-overlapping, and that `count` unread units are currently
         // available.
         unsafe {
-            let source = self.buffer.readable().as_ptr();
-            let destination = output.as_mut_ptr().add(output_index);
-            std::ptr::copy_nonoverlapping(source, destination, count);
+            UncheckedSlice::copy_nonoverlapping(
+                self.buffer.readable(),
+                0,
+                output,
+                output_index,
+                count,
+            );
         }
     }
 
@@ -374,7 +380,7 @@ where
         count: usize,
     ) -> Result<usize> {
         debug_assert!(
-            range_fits(output.len(), output_index, count),
+            UncheckedSlice::range_fits(output.len(), output_index, count),
             "unchecked read output range exceeds destination buffer"
         );
         if count == 0 {

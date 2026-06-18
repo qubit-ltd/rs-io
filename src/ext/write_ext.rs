@@ -11,6 +11,10 @@ use std::io::{
     Write,
 };
 
+use crate::util::{
+    UncheckedSlice,
+};
+
 /// Extension methods for [`Write`] values.
 ///
 /// `WriteExt` provides small method-style helpers for byte writers. The
@@ -49,16 +53,12 @@ pub trait WriteExt: Write {
         count: usize,
     ) -> Result<usize> {
         debug_assert!(
-            start_index
-                .checked_add(count)
-                .is_some_and(|end_index| end_index <= buffer.len()),
+            UncheckedSlice::range_fits(buffer.len(), start_index, count),
             "unchecked write range exceeds buffer"
         );
         // SAFETY: The caller guarantees that the computed pointer and length
         // form a valid subslice of `buffer`.
-        let source = unsafe {
-            core::slice::from_raw_parts(buffer.as_ptr().add(start_index), count)
-        };
+        let source = unsafe { UncheckedSlice::subslice(buffer, start_index, count) };
         self.write(source)
     }
 
@@ -90,16 +90,12 @@ pub trait WriteExt: Write {
         count: usize,
     ) -> Result<()> {
         debug_assert!(
-            start_index
-                .checked_add(count)
-                .is_some_and(|end_index| end_index <= buffer.len()),
+            UncheckedSlice::range_fits(buffer.len(), start_index, count),
             "unchecked write range exceeds buffer"
         );
         // SAFETY: The caller guarantees that the computed pointer and length
         // form a valid subslice of `buffer`.
-        let source = unsafe {
-            core::slice::from_raw_parts(buffer.as_ptr().add(start_index), count)
-        };
+        let source = unsafe { UncheckedSlice::subslice(buffer, start_index, count) };
         self.write_all(source)
     }
 }

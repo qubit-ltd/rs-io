@@ -13,6 +13,10 @@ use std::io::{
     Write,
 };
 
+use crate::util::{
+    UncheckedSlice,
+};
+
 /// Minimal indexed output interface over units.
 ///
 /// `Output` is intentionally smaller and lower-level than [`Write`]. It only
@@ -120,9 +124,7 @@ pub trait Output {
         count: usize,
     ) -> Result<()> {
         debug_assert!(
-            index
-                .checked_add(count)
-                .is_some_and(|end| end <= input.len()),
+            UncheckedSlice::range_fits(input.len(), index, count),
             "unchecked write-all range exceeds input buffer"
         );
         let mut written = 0;
@@ -178,16 +180,12 @@ where
         count: usize,
     ) -> Result<usize> {
         debug_assert!(
-            index
-                .checked_add(count)
-                .is_some_and(|end| end <= input.len()),
+            UncheckedSlice::range_fits(input.len(), index, count),
             "unchecked write range exceeds input buffer"
         );
         // SAFETY: The caller guarantees that the range is valid inside
         // `input`.
-        let source = unsafe {
-            core::slice::from_raw_parts(input.as_ptr().add(index), count)
-        };
+        let source = unsafe { UncheckedSlice::subslice(input, index, count) };
         Write::write(self, source)
     }
 
