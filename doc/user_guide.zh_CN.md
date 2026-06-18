@@ -55,10 +55,7 @@ unit 的 buffer。成功结束时，先调用 `flush`，再用 `into_parts` 验�
 如果 flush 失败，调用方仍然持有 buffered output，可以自行重试或拆解。
 
 ```rust
-use std::io::{
-    Cursor,
-    Write,
-};
+use std::io::Cursor;
 
 use qubit_io::BufferedOutput;
 
@@ -74,7 +71,7 @@ unsafe {
     output.advance(3);
 }
 
-output.flush()?;
+output.flush_pending()?;
 let (cursor, pending) = output.into_parts();
 assert!(pending.is_empty());
 assert_eq!(b"xyz", cursor.into_inner().as_slice());
@@ -82,7 +79,9 @@ assert_eq!(b"xyz", cursor.into_inner().as_slice());
 ```
 
 hot path adapter 可以在校验 range 后使用 `copy_unread_to`、`advance` 等 unsafe
-方法。通用调用应优先使用标准 `Read`、`BufRead` 和 `Write` trait 方法。
+方法。通用 byte stream 调用应优先使用标准 `Read`、`BufRead` 和 `Write`
+trait 方法；unit-oriented 调用应优先使用 `InputExt` 与 `OutputExt` 上的安全
+helper。
 
 ## Extension Trait
 

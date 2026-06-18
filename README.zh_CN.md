@@ -18,8 +18,8 @@
 - 面向 unit 的缓冲原语：`Buffer<T>`、`BufferedInput` 和 `BufferedOutput`；
 - 可作为 trait object 使用的组合 trait，例如 `ReadSeek`、`ReadWrite` 和
   `ReadWriteSeek`；
-- `Read`、`BufRead`、`Seek`、`Read + Seek`、`Write` 和 `Write + Seek` 的常用
-  extension trait；
+- `Input`、`Output`、`Read`、`BufRead`、`Seek`、`Read + Seek`、`Write` 和
+  `Write + Seek` 的常用 extension trait；
 - 用于复制和内容比较的 `Streams` 工具函数；
 - `CountingReader`、`LimitReader`、`PositionGuard`、`TeeReader`、
   `SyncSeekTeeReader` 和 checksum wrapper 等轻量 reader / writer wrapper。
@@ -62,14 +62,14 @@ binary scalar、LEB128 和 ZigZag 能力已经不在本 crate 中。缓冲区级
   tail capacity。
 - **`BufferedInput<I>`**：包装 `Input` 的缓冲 unit 输入，支持查看
   unread window、按数量 refill、`into_parts`，以及针对已验证输出 range 的 indexed
-  unchecked read。当 `I::Item = u8` 时，它实现 `Read` 和 `BufRead`；当被包装输入
-  支持 `Seek` 时，还实现逻辑 `Seek`。
+  unchecked read。它直接实现 `Input`，并在被包装输入实现
+  `Seekable<Item = I::Item>` 时支持逻辑 unit-space seek。
 - **`BufferedOutput<O>`**：包装 `Output` 的缓冲 unit 输出，支持
   spare window 访问、针对已验证 spare range 的 unsafe advance、显式 flush、drop 时尽力
-  flush、不执行 I/O 的 `into_parts`，以及大块写入绕过缓冲区。它还支持当被包装输出实现
+  flush、不执行 I/O 的 `into_parts`，以及大块写入绕过缓冲区。它直接实现
+  `Output`，并支持当被包装输出实现
   `Seekable<Item = O::Item>` 时的 unit seek；查询当前位置和 `SeekFrom::Current(0)` 会保留
-  pending buffer，不触发 flush。当 `O::Item = u8` 时实现 `Write`，且当被包装输出同时支持
-  `Seek` 时，还会实现 `Seek`。
+  pending buffer，不触发 flush。
 - **`DEFAULT_BUFFER_CAPACITY`**：input 与 output 共用的默认缓冲容量。
 
 ### Seek 一致性
@@ -92,6 +92,8 @@ binary scalar、LEB128 和 ZigZag 能力已经不在本 crate 中。缓冲区级
 
 ### Extension Trait
 
+- **`InputExt`**：安全整片 read、exact read 与 unit copy helper。
+- **`OutputExt`**：安全整片 write 与完整 indexed write。
 - **`ReadExt`**：exact read、partial EOF read、limited read 和 copy helper。
 - **`BufReadExt`**：带上限的按行和按分隔符读取。
 - **`SeekExt`**：保持位置不变的 stream size helper。
@@ -177,7 +179,7 @@ buffered_output.ensure_spare_capacity(3)?;
 unsafe {
     buffered_output.advance(3);
 }
-buffered_output.flush()?;
+buffered_output.flush_pending()?;
 let (cursor, pending) = buffered_output.into_parts();
 assert!(pending.is_empty());
 assert_eq!(b"xyz", cursor.into_inner().as_slice());
@@ -238,13 +240,14 @@ assert_eq!(b"xyz", cursor.into_inner().as_slice());
 大多数 helper 直接操作调用方提供的缓冲区，并委托到底层 `Read`、`Write`
 或 `Seek` 实现。Wrapper 类型不做隐藏分配；是否缓冲以及如何缓冲由调用点显式决定。
 
-`Input::read_into`、`Output::write_from`、`Output::write_all_from`、`Buffer<T>`、
+`Input::read_into`、`Output::write_from`、`OutputExt::write_all_from`、`Buffer<T>`、
 `BufferedInput::unread`、
 `BufferedInput::copy_unread_to` 与
 `BufferedOutput::spare_raw_parts_mut` 是低层 API，面向已经完成 range 校验的调用方。
 它们主要用于 binary/text stream adapter 这类 hot path，在这些场景中避免重复
-slicing 和 bounds check 有明确价值。通用调用应优先使用标准 `Read`、`BufRead`
-和 `Write` trait 方法。
+slicing 和 bounds check 有明确价值。通用 byte stream 调用应优先使用标准
+`Read`、`BufRead` 和 `Write` trait 方法；unit-oriented 调用应优先使用
+`InputExt` 与 `OutputExt` 上的安全 helper。
 
 ## 测试与代码覆盖率
 
