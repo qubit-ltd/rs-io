@@ -28,6 +28,11 @@ use std::io::{Read, Result, Seek, SeekFrom};
 /// that timing is easy to misread and differs from this type's `Read`
 /// semantics, where only bytes returned by a successful read update the hasher.
 ///
+/// If buffered access is needed, wrap this reader outside the checksum layer,
+/// for example `BufReader<ChecksumReader<R, H>>`. In that composition bytes are
+/// hashed when the outer `BufReader` refills its internal buffer, which may be
+/// earlier than the application later consuming those bytes from `fill_buf`.
+///
 /// # Examples
 /// ```
 /// use std::collections::hash_map::DefaultHasher;

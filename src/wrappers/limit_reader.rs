@@ -120,8 +120,12 @@ where
     }
 
     fn consume(&mut self, amount: usize) {
-        let count = self.remaining.min(amount as u64);
-        self.remaining -= count;
-        self.inner.consume(count as usize);
+        let amount = u64::try_from(amount).expect("cannot consume more than u64::MAX bytes");
+        assert!(
+            amount <= self.remaining,
+            "cannot consume beyond limit reader"
+        );
+        self.remaining -= amount;
+        self.inner.consume(amount as usize);
     }
 }

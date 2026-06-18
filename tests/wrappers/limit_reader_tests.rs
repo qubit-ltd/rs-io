@@ -32,7 +32,7 @@ fn test_limit_reader_forwards_buf_read_with_limit() {
         b"c",
         reader.fill_buf().expect("remaining buffer should shrink")
     );
-    reader.consume(8);
+    reader.consume(1);
     assert_eq!(0, reader.remaining());
     assert!(
         reader
@@ -40,6 +40,18 @@ fn test_limit_reader_forwards_buf_read_with_limit() {
             .expect("limit should be exhausted")
             .is_empty()
     );
+}
+
+#[test]
+#[should_panic(expected = "cannot consume beyond limit reader")]
+fn test_limit_reader_buf_read_consume_panics_when_count_exceeds_limit() {
+    use std::io::{BufRead, BufReader, Cursor};
+
+    let inner = BufReader::new(Cursor::new(b"abcdef".to_vec()));
+    let mut reader = qubit_io::LimitReader::new(inner, 3);
+
+    assert_eq!(b"abc", reader.fill_buf().expect("buffer should be capped"));
+    reader.consume(4);
 }
 
 struct FailingReader;
