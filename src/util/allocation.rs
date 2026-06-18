@@ -6,10 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 use std::collections::TryReserveError;
-use std::io::{
-    Error,
-    Result,
-};
+use std::io::{Error, Result};
 
 /// Converts a fallible allocation error into an I/O error.
 ///
@@ -35,10 +32,7 @@ fn allocation_error(error: TryReserveError) -> Error {
 /// # Errors
 ///
 /// Returns [`ErrorKind::Other`] if the allocation request fails.
-pub fn try_reserve_vec<T>(
-    output: &mut Vec<T>,
-    additional: usize,
-) -> Result<()> {
+pub fn try_reserve_vec<T>(output: &mut Vec<T>, additional: usize) -> Result<()> {
     output.try_reserve(additional).map_err(allocation_error)
 }
 
@@ -53,9 +47,6 @@ pub fn try_reserve_vec<T>(
 /// # Errors
 ///
 /// Returns [`ErrorKind::Other`] if the allocation request fails.
-pub fn try_reserve_string(
-    output: &mut String,
-    additional: usize,
-) -> Result<()> {
+pub fn try_reserve_string(output: &mut String, additional: usize) -> Result<()> {
     output.try_reserve(additional).map_err(allocation_error)
 }

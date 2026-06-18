@@ -3,9 +3,7 @@
 //
 //    SPDX-License-Identifier: Apache-2.0
 // =============================================================================
-use qubit_io::{
-    UncheckedSlice,
-};
+use qubit_io::UncheckedSlice;
 
 #[test]
 fn read_unchecked_reads_value() {
@@ -80,13 +78,7 @@ fn copy_nonoverlapping_unchecked_copies_slice() {
     let source = [1_u8, 2, 3, 4];
     let mut destination = [0_u8, 0, 0, 0];
     unsafe {
-        qubit_io::UncheckedSlice::copy_nonoverlapping(
-            &source,
-            0,
-            &mut destination,
-            0,
-            4,
-        );
+        qubit_io::UncheckedSlice::copy_nonoverlapping(&source, 0, &mut destination, 0, 4);
     }
     assert_eq!(destination, source);
 }
