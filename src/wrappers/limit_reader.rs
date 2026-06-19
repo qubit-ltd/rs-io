@@ -5,11 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use std::io::{
-    BufRead,
-    Read,
-    Result,
-};
+use std::io::{BufRead, Read, Result};
 
 /// Reader wrapper that exposes at most a fixed number of bytes.
 ///
@@ -124,8 +120,7 @@ where
     }
 
     fn consume(&mut self, amount: usize) {
-        let amount = u64::try_from(amount)
-            .expect("cannot consume more than u64::MAX bytes");
+        let amount = u64::try_from(amount).expect("cannot consume more than u64::MAX bytes");
         assert!(
             amount <= self.remaining,
             "cannot consume beyond limit reader"

@@ -6,11 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Error,
-    ErrorKind,
-    Result,
-};
+use std::io::{Error, ErrorKind, Result};
 
 use crate::Output;
 use crate::util::UncheckedSlice;
@@ -76,9 +72,7 @@ pub trait OutputExt: Output {
             let remaining = count - written;
             // SAFETY: The caller guarantees the original source range is
             // valid; `written < count`, so this suffix remains inside it.
-            match unsafe {
-                self.write_unchecked(input, index + written, remaining)
-            } {
+            match unsafe { self.write_unchecked(input, index + written, remaining) } {
                 Ok(0) => {
                     return Err(Error::new(
                         ErrorKind::WriteZero,

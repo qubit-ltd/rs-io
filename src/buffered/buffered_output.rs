@@ -6,24 +6,14 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Error,
-    ErrorKind,
-    Result,
-    SeekFrom,
-};
+use std::io::{Error, ErrorKind, Result, SeekFrom};
 use std::mem::ManuallyDrop;
 use std::ptr;
 
 use crate::buffered::DEFAULT_BUFFER_CAPACITY;
 use crate::traits::validate_write_count;
 use crate::util::UncheckedSlice;
-use crate::{
-    Buffer,
-    Output,
-    Seekable,
-    SeekableOutput,
-};
+use crate::{Buffer, Output, Seekable, SeekableOutput};
 
 /// Buffered item output over a wrapped output sink.
 ///
@@ -444,11 +434,8 @@ where
             // range maintained by `Buffer`.
             self.panicked = true;
             let result = unsafe {
-                self.inner.write_unchecked(
-                    self.buffer.data(),
-                    position,
-                    available,
-                )
+                self.inner
+                    .write_unchecked(self.buffer.data(), position, available)
             };
             self.panicked = false;
             match result {
@@ -460,8 +447,7 @@ where
                     ));
                 }
                 Ok(written) => {
-                    if let Err(error) = validate_write_count(written, available)
-                    {
+                    if let Err(error) = validate_write_count(written, available) {
                         self.buffer.compact();
                         return Err(error);
                     }
@@ -499,8 +485,7 @@ where
     where
         O: SeekableOutput,
     {
-        let position =
-            Seekable::seek_to(&mut self.inner, SeekFrom::Current(0))?;
+        let position = Seekable::seek_to(&mut self.inner, SeekFrom::Current(0))?;
         position
             .checked_add(self.buffer.available() as u64)
             .ok_or_else(|| {
@@ -560,12 +545,7 @@ where
     /// source range does not overlap with the destination range in the internal
     /// buffer.
     #[inline(always)]
-    unsafe fn write_to_buffer(
-        &mut self,
-        input: &[O::Item],
-        input_index: usize,
-        count: usize,
-    ) {
+    unsafe fn write_to_buffer(&mut self, input: &[O::Item], input_index: usize, count: usize) {
         debug_assert!(
             UncheckedSlice::range_fits(input.len(), input_index, count),
             "unchecked write range exceeds input buffer"
@@ -574,8 +554,7 @@ where
             count <= self.spare_capacity(),
             "unchecked write exceeds spare buffer capacity"
         );
-        let (destination, destination_index, _) =
-            self.buffer.spare_raw_parts_mut();
+        let (destination, destination_index, _) = self.buffer.spare_raw_parts_mut();
         // SAFETY: The caller guarantees valid source and destination ranges and
         // that they do not overlap.
         unsafe {
@@ -619,8 +598,7 @@ where
         count: usize,
     ) -> Result<usize> {
         // SAFETY: The caller guarantees the source range is valid.
-        let written =
-            unsafe { self.inner.write_unchecked(input, input_index, count) }?;
+        let written = unsafe { self.inner.write_unchecked(input, input_index, count) }?;
         validate_write_count(written, count)?;
         Ok(written)
     }
@@ -654,9 +632,7 @@ where
             let remaining = count - written;
             // SAFETY: `written < count`, so this suffix remains inside the
             // caller-validated source range.
-            match unsafe {
-                self.write_inner(input, input_index + written, remaining)
-            } {
+            match unsafe { self.write_inner(input, input_index + written, remaining) } {
                 Ok(0) => {
                     return Err(Error::new(
                         ErrorKind::WriteZero,
@@ -777,9 +753,7 @@ where
         count: usize,
     ) -> Result<usize> {
         // SAFETY: Forwarded from the trait caller.
-        unsafe {
-            BufferedOutput::write_unchecked(self, input, input_index, count)
-        }
+        unsafe { BufferedOutput::write_unchecked(self, input, input_index, count) }
     }
 
     /// Writes items from the full input slice.
@@ -816,7 +790,7 @@ where
 {
     fn drop(&mut self) {
         if !self.panicked {
-            drop(self.flush());
+            drop(self.flush_buffer());
         }
     }
 }

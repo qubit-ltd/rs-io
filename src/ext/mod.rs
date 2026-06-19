@@ -20,8 +20,7 @@ pub use buf_read_ext::BufReadExt;
 pub use input_ext::InputExt;
 #[cfg(coverage)]
 pub use input_ext::{
-    coverage_fail_next_add_copied,
-    coverage_natural_add_copied_overflow,
+    coverage_fail_next_add_copied, coverage_natural_add_copied_overflow,
     coverage_reset_add_copied_hooks,
 };
 pub use output_ext::OutputExt;

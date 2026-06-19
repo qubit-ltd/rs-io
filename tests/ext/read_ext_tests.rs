@@ -6,12 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Cursor,
-    Error,
-    ErrorKind,
-    Read,
-};
+use std::io::{Cursor, Error, ErrorKind, Read};
 
 use qubit_io::ReadExt;
 
@@ -38,8 +33,7 @@ impl Read for ShortReader {
         }
         let remaining = self.data.len() - self.position;
         let count = remaining.min(buffer.len()).min(self.max_chunk);
-        buffer[..count]
-            .copy_from_slice(&self.data[self.position..self.position + count]);
+        buffer[..count].copy_from_slice(&self.data[self.position..self.position + count]);
         self.position += count;
         Ok(count)
     }
@@ -111,9 +105,9 @@ fn test_read_exact_array_zero_length_does_not_read() {
 fn test_read_exact_array_returns_unexpected_eof() {
     let mut reader = Cursor::new(b"ab".to_vec());
 
-    let error = reader.read_exact_array::<3>().expect_err(
-        "short input should return the standard read_exact EOF error",
-    );
+    let error = reader
+        .read_exact_array::<3>()
+        .expect_err("short input should return the standard read_exact EOF error");
 
     assert_eq!(ErrorKind::UnexpectedEof, error.kind());
 }
@@ -298,13 +292,8 @@ fn test_read_exact_helpers_work_on_dyn_read_with_ufcs() {
 
     // SAFETY: `2..4` is within `prefix` and uniquely borrowed for the read.
     let count = unsafe {
-        <dyn Read as ReadExt>::read_exact_or_eof_unchecked(
-            reader,
-            &mut prefix,
-            2,
-            2,
-        )
-        .expect("UFCS read_exact_or_eof_unchecked should work on dyn Read")
+        <dyn Read as ReadExt>::read_exact_or_eof_unchecked(reader, &mut prefix, 2, 2)
+            .expect("UFCS read_exact_or_eof_unchecked should work on dyn Read")
     };
     assert_eq!(2, count);
     assert_eq!(b"abcd", &prefix);
@@ -358,9 +347,8 @@ fn test_read_ext_ufcs_methods_work_on_dyn_read() {
     let mut cursor = Cursor::new(b"abc".to_vec());
     let reader: &mut dyn Read = &mut cursor;
     let mut output = Vec::new();
-    let count =
-        <dyn Read as ReadExt>::copy_to_end_limited(reader, &mut output, 3)
-            .expect("UFCS copy_to_end_limited should work on dyn Read");
+    let count = <dyn Read as ReadExt>::copy_to_end_limited(reader, &mut output, 3)
+        .expect("UFCS copy_to_end_limited should work on dyn Read");
     assert_eq!(3, count);
     assert_eq!(b"abc", output.as_slice());
 }
@@ -499,9 +487,9 @@ fn test_discard_exact_or_eof_zero_bytes_does_not_read() {
 fn test_discard_exact_or_eof_returns_non_interrupted_error() {
     let mut reader = FailingReader;
 
-    let error = reader.discard_exact_or_eof(3).expect_err(
-        "non-interrupted read errors should be returned while discarding",
-    );
+    let error = reader
+        .discard_exact_or_eof(3)
+        .expect_err("non-interrupted read errors should be returned while discarding");
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("read failed", error.to_string());
@@ -604,9 +592,8 @@ fn test_read_ext_blanket_impl_helpers_via_ufcs() {
 
     let mut reader = Cursor::new(b"hello".to_vec());
     let mut output = String::from("x");
-    let count =
-        ReadExt::read_to_string_limited_into(&mut reader, &mut output, 8)
-            .expect("UFCS read_to_string_limited_into should use blanket impl");
+    let count = ReadExt::read_to_string_limited_into(&mut reader, &mut output, 8)
+        .expect("UFCS read_to_string_limited_into should use blanket impl");
     assert_eq!(5, count);
     assert_eq!("xhello", output);
 }
@@ -615,9 +602,9 @@ fn test_read_ext_blanket_impl_helpers_via_ufcs() {
 fn test_read_exact_vec_limited_propagates_read_error_via_blanket_impl() {
     let mut reader = FailingReader;
 
-    let error = reader.read_exact_vec_limited(3, 3).expect_err(
-        "blanket read_exact_vec_limited should propagate read errors",
-    );
+    let error = reader
+        .read_exact_vec_limited(3, 3)
+        .expect_err("blanket read_exact_vec_limited should propagate read errors");
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("read failed", error.to_string());
@@ -627,9 +614,9 @@ fn test_read_exact_vec_limited_propagates_read_error_via_blanket_impl() {
 fn test_read_to_string_limited_propagates_read_error_via_blanket_impl() {
     let mut reader = FailingReader;
 
-    let error = reader.read_to_string_limited(8).expect_err(
-        "blanket read_to_string_limited should propagate read errors",
-    );
+    let error = reader
+        .read_to_string_limited(8)
+        .expect_err("blanket read_to_string_limited should propagate read errors");
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("read failed", error.to_string());
@@ -642,9 +629,7 @@ fn test_read_to_string_limited_into_propagates_read_error_via_blanket_impl() {
 
     let error = reader
         .read_to_string_limited_into(&mut output, 8)
-        .expect_err(
-            "blanket read_to_string_limited_into should propagate read errors",
-        );
+        .expect_err("blanket read_to_string_limited_into should propagate read errors");
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("read failed", error.to_string());

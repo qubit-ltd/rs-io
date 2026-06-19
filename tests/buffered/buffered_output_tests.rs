@@ -6,22 +6,12 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
-use std::io::{
-    Cursor,
-    Error,
-    ErrorKind,
-    SeekFrom,
-    Write,
-};
+use std::io::{Cursor, Error, ErrorKind, SeekFrom, Write};
 use std::rc::Rc;
 
-use qubit_io::{
-    BufferedOutput,
-    Output,
-    Seekable,
-};
+use qubit_io::{BufferedOutput, Output, Seekable};
 
 #[derive(Default)]
 struct U16SeekOutput {
@@ -47,18 +37,19 @@ impl Output for U16SeekOutput {
         index: usize,
         count: usize,
     ) -> std::io::Result<usize> {
-        let end = index.checked_add(count).ok_or_else(|| {
-            Error::new(ErrorKind::InvalidInput, "write range overflow")
-        })?;
+        let end = index
+            .checked_add(count)
+            .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "write range overflow"))?;
         if end > input.len() {
             return Err(Error::new(
                 ErrorKind::InvalidInput,
                 "write range exceeds source buffer",
             ));
         }
-        let limit = self.position.checked_add(count).ok_or_else(|| {
-            Error::new(ErrorKind::InvalidInput, "position overflow")
-        })?;
+        let limit = self
+            .position
+            .checked_add(count)
+            .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "position overflow"))?;
         if limit > self.values.len() {
             self.values.resize(limit, 0);
         }
@@ -79,20 +70,11 @@ impl qubit_io::Seekable for U16SeekOutput {
         let current = i64::try_from(self.position)
             .expect("position always fits into i64 on current platforms");
         let target = match position {
-            SeekFrom::Start(offset) => i64::try_from(offset).map_err(|_| {
-                Error::new(
-                    ErrorKind::InvalidInput,
-                    "seek start offset overflow",
-                )
+            SeekFrom::Start(offset) => i64::try_from(offset)
+                .map_err(|_| Error::new(ErrorKind::InvalidInput, "seek start offset overflow"))?,
+            SeekFrom::Current(offset) => current.checked_add(offset).ok_or_else(|| {
+                Error::new(ErrorKind::InvalidInput, "seek position overflows i64")
             })?,
-            SeekFrom::Current(offset) => {
-                current.checked_add(offset).ok_or_else(|| {
-                    Error::new(
-                        ErrorKind::InvalidInput,
-                        "seek position overflows i64",
-                    )
-                })?
-            }
             SeekFrom::End(offset) => {
                 let end = i64::try_from(self.values.len()).map_err(|_| {
                     Error::new(
@@ -116,9 +98,8 @@ impl qubit_io::Seekable for U16SeekOutput {
             ));
         }
 
-        let target = usize::try_from(target).map_err(|_| {
-            Error::new(ErrorKind::InvalidInput, "seek position overflow")
-        })?;
+        let target = usize::try_from(target)
+            .map_err(|_| Error::new(ErrorKind::InvalidInput, "seek position overflow"))?;
         if target > self.values.len() {
             self.values.resize(target, 0);
         }
@@ -193,6 +174,30 @@ impl Write for SharedWriter {
     }
 }
 
+#[derive(Clone)]
+struct SharedFlushWriter {
+    output: Rc<RefCell<Vec<u8>>>,
+    flushes: Rc<Cell<usize>>,
+}
+
+impl SharedFlushWriter {
+    fn new(output: Rc<RefCell<Vec<u8>>>, flushes: Rc<Cell<usize>>) -> Self {
+        Self { output, flushes }
+    }
+}
+
+impl Write for SharedFlushWriter {
+    fn write(&mut self, input: &[u8]) -> std::io::Result<usize> {
+        self.output.borrow_mut().extend_from_slice(input);
+        Ok(input.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.flushes.set(self.flushes.get() + 1);
+        Ok(())
+    }
+}
+
 #[test]
 fn test_buffered_output_writes_generic_items() {
     let inner = U16Output::default();
@@ -212,9 +217,7 @@ fn test_buffered_output_writes_generic_items() {
         .expect("spare request should flush pending items");
     assert_eq!(&[1, 2, 3], output.inner().values.as_slice());
 
-    output
-        .flush()
-        .expect("flush should reach inner output");
+    output.flush().expect("flush should reach inner output");
     assert!(output.inner().flushed);
 }
 
@@ -287,8 +290,7 @@ fn test_output_u8_blanket_impl_propagates_std_flush_errors() {
 
     let mut writer = FailingWriter;
 
-    let error = Output::flush(&mut writer)
-        .expect_err("std flush error should be propagated");
+    let error = Output::flush(&mut writer).expect_err("std flush error should be propagated");
 
     assert_eq!(ErrorKind::Other, error.kind());
 }
@@ -349,9 +351,7 @@ impl Write for ScriptedWriter {
                 self.output.extend_from_slice(&input[..count]);
                 Ok(count)
             }
-            WriteStep::Interrupted => {
-                Err(Error::new(ErrorKind::Interrupted, "interrupted"))
-            }
+            WriteStep::Interrupted => Err(Error::new(ErrorKind::Interrupted, "interrupted")),
             WriteStep::Error(kind, message) => Err(Error::new(kind, message)),
             WriteStep::Zero => Ok(0),
         }
@@ -395,8 +395,7 @@ where
 fn test_new_and_inner_mut_expose_writer() {
     let mut output = BufferedOutput::new(Cursor::new(Vec::new()));
 
-    Write::write_all(output.inner_mut(), b"raw")
-        .expect("inner writer should be mutable");
+    Write::write_all(output.inner_mut(), b"raw").expect("inner writer should be mutable");
     let cursor = flush_into_inner(output);
 
     assert_eq!(b"raw", cursor.into_inner().as_slice());
@@ -404,8 +403,7 @@ fn test_new_and_inner_mut_expose_writer() {
 
 #[test]
 fn test_capacity_returns_internal_buffer_capacity() {
-    let output =
-        BufferedOutput::with_capacity(Cursor::new(Vec::<u8>::new()), 4);
+    let output = BufferedOutput::with_capacity(Cursor::new(Vec::<u8>::new()), 4);
 
     assert_eq!(4, output.capacity());
 }
@@ -540,8 +538,7 @@ fn test_write_all_delegates_large_empty_buffer_write() {
 
 #[test]
 fn test_write_all_delegated_large_write_retries_interrupted_writer() {
-    let writer =
-        ScriptedWriter::new(vec![WriteStep::Interrupted, WriteStep::Accept(4)]);
+    let writer = ScriptedWriter::new(vec![WriteStep::Interrupted, WriteStep::Accept(4)]);
     let mut output = BufferedOutput::with_capacity(writer, 4);
 
     output
@@ -688,8 +685,7 @@ fn test_flush_buffer_accepts_empty_buffer() {
 
 #[test]
 fn test_flush_buffer_retries_interrupted_writes() {
-    let writer =
-        ScriptedWriter::new(vec![WriteStep::Interrupted, WriteStep::Accept(4)]);
+    let writer = ScriptedWriter::new(vec![WriteStep::Interrupted, WriteStep::Accept(4)]);
     let mut output = BufferedOutput::with_capacity(writer, 4);
     output
         .write_all(b"abc")
@@ -776,9 +772,7 @@ fn test_output_flush_delegates_to_buffered_flush() {
     output
         .write_all(b"abc")
         .expect("buffered write should succeed");
-    output
-        .flush()
-        .expect("flush should drain buffer");
+    output.flush().expect("flush should drain buffer");
 
     assert_eq!(b"abc", output.inner().get_ref().as_slice());
 }
@@ -857,6 +851,27 @@ fn test_drop_flushes_pending_bytes_best_effort() {
 }
 
 #[test]
+fn test_drop_drains_pending_bytes_without_flushing_inner_writer() {
+    let captured = Rc::new(RefCell::new(Vec::new()));
+    let flushes = Rc::new(Cell::new(0));
+
+    {
+        let writer = SharedFlushWriter::new(Rc::clone(&captured), Rc::clone(&flushes));
+        let mut output = BufferedOutput::with_capacity(writer, 4);
+        output
+            .write_all(b"ab")
+            .expect("buffered write should succeed");
+    }
+
+    assert_eq!(b"ab", captured.borrow().as_slice());
+    assert_eq!(
+        0,
+        flushes.get(),
+        "drop should drain pending buffer without calling the wrapped flush",
+    );
+}
+
+#[test]
 fn test_seekable_items_flushes_pending_items_before_seeking() {
     let inner = U16SeekOutput::new(Vec::new());
     let mut output = BufferedOutput::with_capacity(inner, 4);
@@ -881,8 +896,7 @@ fn test_seekable_items_flushes_pending_items_before_seeking() {
 
 #[test]
 fn test_seekable_items_supports_current_offset() {
-    let mut output =
-        BufferedOutput::with_capacity(U16SeekOutput::new(Vec::new()), 4);
+    let mut output = BufferedOutput::with_capacity(U16SeekOutput::new(Vec::new()), 4);
 
     // SAFETY: The source range is valid for u16 items.
     unsafe {
@@ -1192,8 +1206,7 @@ fn test_stream_position_rejects_pending_item_overflow() {
 
 #[test]
 fn test_seekable_trait_object_dispatches_to_buffered_output() {
-    let mut output =
-        BufferedOutput::with_capacity(U16SeekOutput::new(Vec::new()), 4);
+    let mut output = BufferedOutput::with_capacity(U16SeekOutput::new(Vec::new()), 4);
     let seekable: &mut dyn Seekable<Item = u16> = &mut output;
 
     let position = seekable

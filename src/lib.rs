@@ -31,68 +31,32 @@ mod traits;
 mod util;
 mod wrappers;
 
-pub use buffered::{
-    Buffer,
-    BufferedInput,
-    BufferedOutput,
-};
+pub use buffered::{Buffer, BufferedInput, BufferedOutput};
 pub use capacity_const::DEFAULT_BUFFER_CAPACITY;
 pub use ext::{
-    BufReadExt,
-    InputExt,
-    OutputExt,
-    ReadExt,
-    ReadSeekExt,
-    SeekExt,
-    WriteExt,
-    WriteSeekExt,
+    BufReadExt, InputExt, OutputExt, ReadExt, ReadSeekExt, SeekExt, WriteExt, WriteSeekExt,
 };
 #[cfg(coverage)]
 pub use ext::{
-    coverage_fail_next_add_copied,
-    coverage_natural_add_copied_overflow,
+    coverage_fail_next_add_copied, coverage_natural_add_copied_overflow,
     coverage_reset_add_copied_hooks,
 };
 pub use traits::{
-    BufReadSeek,
-    Input,
-    Output,
-    ReadSeek,
-    ReadWrite,
-    ReadWriteSeek,
-    Seekable,
-    SeekableInput,
-    SeekableOutput,
-    WriteSeek,
+    BufReadSeek, Input, Output, ReadSeek, ReadWrite, ReadWriteSeek, Seekable, SeekableInput,
+    SeekableOutput, WriteSeek,
 };
 pub use util::Streams;
 #[allow(unused_imports)]
 pub use util::UncheckedSlice;
 #[cfg(coverage)]
 pub use util::{
-    coverage_fail_next_reserve,
-    coverage_fail_next_string_reserve,
-    coverage_fail_reserve_after,
+    coverage_fail_next_reserve, coverage_fail_next_string_reserve, coverage_fail_reserve_after,
     coverage_reset_reserve_hooks,
 };
 #[allow(unused_imports)]
-pub use util::{
-    nz,
-    nz_const,
-};
-pub use util::{
-    try_reserve_string,
-    try_reserve_vec,
-};
+pub use util::{nz, nz_const};
+pub use util::{try_reserve_string, try_reserve_vec};
 pub use wrappers::{
-    ChecksumReader,
-    ChecksumWriter,
-    CountingReader,
-    CountingWriter,
-    LimitReader,
-    LimitWriter,
-    PositionGuard,
-    SyncSeekTeeReader,
-    TeeReader,
-    TeeWriter,
+    ChecksumReader, ChecksumWriter, CountingReader, CountingWriter, LimitReader, LimitWriter,
+    PositionGuard, SyncSeekTeeReader, TeeReader, TeeWriter,
 };
