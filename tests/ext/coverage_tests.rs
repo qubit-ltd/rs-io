@@ -84,7 +84,7 @@ mod coverage_tests {
             Ok(count)
         }
 
-        fn flush_pending(&mut self) -> std::io::Result<()> {
+        fn flush(&mut self) -> std::io::Result<()> {
             Ok(())
         }
     }

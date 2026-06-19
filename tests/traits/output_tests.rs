@@ -64,7 +64,7 @@ impl Output for ScriptedOutput {
         }
     }
 
-    fn flush_pending(&mut self) -> std::io::Result<()> {
+    fn flush(&mut self) -> std::io::Result<()> {
         Ok(())
     }
 }
@@ -83,7 +83,7 @@ impl Output for OverreportingOutput {
         Ok(count + 1)
     }
 
-    fn flush_pending(&mut self) -> std::io::Result<()> {
+    fn flush(&mut self) -> std::io::Result<()> {
         Ok(())
     }
 }
@@ -196,5 +196,5 @@ fn test_write_blanket_impl_exposes_output_methods() {
 
     let mut cursor = Cursor::new(Vec::new());
     Write::write_all(&mut cursor, b"z").expect("seed bytes for flush");
-    Output::flush_pending(&mut cursor).expect("flush_pending should succeed");
+    Output::flush(&mut cursor).expect("flush should succeed");
 }

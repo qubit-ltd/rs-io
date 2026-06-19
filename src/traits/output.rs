@@ -45,7 +45,7 @@ use crate::util::UncheckedSlice;
 /// where
 ///     T: Output + Write,
 /// {
-///     <T as Output>::flush_pending(output)
+///     <T as Output>::flush(output)
 /// }
 ///
 /// fn write_all_items<T>(output: &mut T, input: &[u8]) -> Result<()>
@@ -132,7 +132,7 @@ pub trait Output {
     /// # Errors
     ///
     /// Returns the output error reported by the implementation.
-    fn flush_pending(&mut self) -> Result<()>;
+    fn flush(&mut self) -> Result<()>;
 }
 
 impl<W> Output for W
@@ -167,7 +167,7 @@ where
 
     /// Flushes a standard [`Write`] value.
     #[inline(always)]
-    fn flush_pending(&mut self) -> Result<()> {
+    fn flush(&mut self) -> Result<()> {
         Write::flush(self)
     }
 }

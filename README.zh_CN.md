@@ -179,7 +179,7 @@ buffered_output.ensure_spare_capacity(3)?;
 unsafe {
     buffered_output.advance(3);
 }
-buffered_output.flush_pending()?;
+buffered_output.flush()?;
 let (cursor, pending) = buffered_output.into_parts();
 assert!(pending.is_empty());
 assert_eq!(b"xyz", cursor.into_inner().as_slice());

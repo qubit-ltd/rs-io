@@ -73,7 +73,7 @@ unsafe {
     output.advance(3);
 }
 
-output.flush_pending()?;
+output.flush()?;
 let (cursor, pending) = output.into_parts();
 assert!(pending.is_empty());
 assert_eq!(b"xyz", cursor.into_inner().as_slice());
