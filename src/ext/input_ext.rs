@@ -21,6 +21,7 @@ use crate::traits::validate_read_count;
 use crate::util::{
     create_vec,
     try_reserve_vec,
+    UncheckedSlice,
 };
 use crate::{
     Input,
@@ -44,9 +45,51 @@ pub trait InputExt: Input {
     /// error reported by the input. Interrupted reads are retried. Returns
     /// [`ErrorKind::InvalidData`] if the input reports more items than
     /// requested.
+    #[inline]
     fn read_exact(&mut self, output: &mut [Self::Item]) -> Result<()> {
         let read = self.read_exact_or_eof(output)?;
         if read == output.len() {
+            Ok(())
+        } else {
+            Err(Error::new(
+                ErrorKind::UnexpectedEof,
+                "failed to fill whole buffer",
+            ))
+        }
+    }
+
+    /// Reads exactly `count` items into an indexed output range without
+    /// checking the range bounds in release builds.
+    ///
+    /// This method has the same blocking and error behavior as
+    /// [`InputExt::read_exact`], but writes into
+    /// `output[index..index + count]` using indexed unchecked reads.
+    ///
+    /// # Parameters
+    /// - `output`: Destination storage.
+    /// - `index`: Start index inside `output`.
+    /// - `count`: Number of items to read.
+    ///
+    /// # Errors
+    /// Returns [`ErrorKind::UnexpectedEof`] when EOF is reached before the
+    /// range is full. Returns the first non-[`ErrorKind::Interrupted`] error
+    /// reported by the input. Interrupted reads are retried. Returns
+    /// [`ErrorKind::InvalidData`] if the input reports more items than
+    /// requested.
+    ///
+    /// # Safety
+    /// The caller must guarantee that `index..index + count` is a valid range
+    /// inside `output` and that the addition does not overflow.
+    #[inline]
+    unsafe fn read_exact_unchecked(
+        &mut self,
+        output: &mut [Self::Item],
+        index: usize,
+        count: usize,
+    ) -> Result<()> {
+        let read =
+            unsafe { self.read_exact_or_eof_unchecked(output, index, count)? };
+        if read == count {
             Ok(())
         } else {
             Err(Error::new(
@@ -81,6 +124,60 @@ pub trait InputExt: Input {
             let remaining = output.len() - total;
             // SAFETY: `total..output.len()` is a valid suffix of `output`.
             match unsafe { self.read_unchecked(output, total, remaining) } {
+                Ok(0) => break,
+                Ok(read) => {
+                    validate_read_count(read, remaining)?;
+                    total += read;
+                }
+                Err(error) if error.kind() == ErrorKind::Interrupted => {}
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(total)
+    }
+
+    /// Reads items into an indexed output range until that range is full or
+    /// EOF is reached, without checking the range bounds in release builds.
+    ///
+    /// This method has the same EOF and retry behavior as
+    /// [`InputExt::read_exact_or_eof`], but writes into
+    /// `output[index..index + count]` using indexed unchecked reads.
+    ///
+    /// # Parameters
+    /// - `output`: Destination storage.
+    /// - `index`: Start index inside `output`.
+    /// - `count`: Number of items to try to read.
+    ///
+    /// # Returns
+    /// The number of items written into `output[index..index + count]`. The
+    /// value is in `0..=count`.
+    ///
+    /// # Errors
+    /// Returns the first non-[`ErrorKind::Interrupted`] error reported by the
+    /// input. Interrupted reads are retried. Returns [`ErrorKind::InvalidData`]
+    /// if the input reports more items than requested.
+    ///
+    /// # Safety
+    /// The caller must guarantee that `index..index + count` is a valid range
+    /// inside `output` and that the addition does not overflow.
+    unsafe fn read_exact_or_eof_unchecked(
+        &mut self,
+        output: &mut [Self::Item],
+        index: usize,
+        count: usize,
+    ) -> Result<usize> {
+        debug_assert!(
+            UncheckedSlice::range_fits(output.len(), index, count),
+            "unchecked read range exceeds output buffer"
+        );
+        let mut total = 0;
+        while total < count {
+            let remaining = count - total;
+            // SAFETY: The caller guarantees the original destination range is
+            // valid; `total < count`, so this suffix remains inside it.
+            match unsafe {
+                self.read_unchecked(output, index + total, remaining)
+            } {
                 Ok(0) => break,
                 Ok(read) => {
                     validate_read_count(read, remaining)?;
@@ -320,12 +417,6 @@ pub fn coverage_fail_next_add_copied() {
 #[cfg(coverage)]
 pub fn coverage_reset_add_copied_hooks() {
     COVERAGE_FAIL_NEXT_ADD_COPIED.with(|state| state.set(false));
-}
-
-/// Exercises the natural u64 overflow branch in [`add_copied`].
-#[cfg(coverage)]
-pub fn coverage_natural_add_copied_overflow() -> Result<u64> {
-    add_copied(u64::MAX, 1)
 }
 
 /// Adds a copied item count to an accumulated total.
