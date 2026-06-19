@@ -6,15 +6,23 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{Error, ErrorKind, Result};
+use std::io::{
+    Error,
+    ErrorKind,
+    Result,
+};
 
+use crate::capacity_const::DEFAULT_BUFFER_CAPACITY;
 use crate::ext::output_ext::OutputExt;
-use crate::util::try_reserve_vec;
 use crate::traits::validate_read_count;
-use crate::{Input, Output};
-
-/// Default heap buffer size used by item-oriented copy operations.
-const INPUT_COPY_BUFFER_SIZE: usize = 8 * 1024;
+use crate::util::{
+    create_vec,
+    try_reserve_vec,
+};
+use crate::{
+    Input,
+    Output,
+};
 
 /// Extension methods for [`Input`] values.
 ///
@@ -22,40 +30,6 @@ const INPUT_COPY_BUFFER_SIZE: usize = 8 * 1024;
 /// [`Input`] trait. The methods are implemented for every item-oriented input,
 /// including `dyn Input` trait objects.
 pub trait InputExt: Input {
-    /// Reads items until `output` is full or EOF is reached.
-    ///
-    /// This method treats EOF as a successful partial result. It keeps retrying
-    /// short reads until the output slice is full, EOF is reached, or a
-    /// non-interrupted error occurs.
-    ///
-    /// # Parameters
-    /// - `output`: Destination storage to fill.
-    ///
-    /// # Returns
-    /// The number of items written to `output`.
-    ///
-    /// # Errors
-    /// Returns the first non-[`ErrorKind::Interrupted`] error reported by the
-    /// input. Interrupted reads are retried. Returns [`ErrorKind::InvalidData`]
-    /// if the input reports more items than requested.
-    fn read_exact_or_eof(&mut self, output: &mut [Self::Item]) -> Result<usize> {
-        let mut total = 0;
-        while total < output.len() {
-            let remaining = output.len() - total;
-            // SAFETY: `total..output.len()` is a valid suffix of `output`.
-            match unsafe { self.read_unchecked(output, total, remaining) } {
-                Ok(0) => break,
-                Ok(read) => {
-                    validate_read_count(read, remaining)?;
-                    total += read;
-                }
-                Err(error) if error.kind() == ErrorKind::Interrupted => {}
-                Err(error) => return Err(error),
-            }
-        }
-        Ok(total)
-    }
-
     /// Reads exactly enough items to fill `output`.
     ///
     /// # Parameters
@@ -79,6 +53,43 @@ pub trait InputExt: Input {
         }
     }
 
+    /// Reads items until `output` is full or EOF is reached.
+    ///
+    /// This method treats EOF as a successful partial result. It keeps retrying
+    /// short reads until the output slice is full, EOF is reached, or a
+    /// non-interrupted error occurs.
+    ///
+    /// # Parameters
+    /// - `output`: Destination storage to fill.
+    ///
+    /// # Returns
+    /// The number of items written to `output`.
+    ///
+    /// # Errors
+    /// Returns the first non-[`ErrorKind::Interrupted`] error reported by the
+    /// input. Interrupted reads are retried. Returns [`ErrorKind::InvalidData`]
+    /// if the input reports more items than requested.
+    fn read_exact_or_eof(
+        &mut self,
+        output: &mut [Self::Item],
+    ) -> Result<usize> {
+        let mut total = 0;
+        while total < output.len() {
+            let remaining = output.len() - total;
+            // SAFETY: `total..output.len()` is a valid suffix of `output`.
+            match unsafe { self.read_unchecked(output, total, remaining) } {
+                Ok(0) => break,
+                Ok(read) => {
+                    validate_read_count(read, remaining)?;
+                    total += read;
+                }
+                Err(error) if error.kind() == ErrorKind::Interrupted => {}
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(total)
+    }
+
     /// Copies all remaining items from this input into `output`.
     ///
     /// The method allocates a reusable heap buffer and copies until EOF. It
@@ -95,15 +106,23 @@ pub trait InputExt: Input {
     /// error reported by the underlying streams. Interrupted reads are retried.
     /// Returns [`ErrorKind::InvalidData`] if the input reports more items than
     /// requested.
-    fn copy_to(&mut self, output: &mut dyn Output<Item = Self::Item>) -> Result<u64>
+    fn copy_to(
+        &mut self,
+        output: &mut dyn Output<Item = Self::Item>,
+    ) -> Result<u64>
     where
         Self::Item: Copy + Default,
     {
-        let mut buffer = item_buffer::<Self::Item>()?;
+        let mut buffer =
+            create_vec(DEFAULT_BUFFER_CAPACITY, Self::Item::default())?;
         let mut copied = 0_u64;
         loop {
             let requested = buffer.len();
-            let read = read_retrying_interrupted_limited(self, &mut buffer, requested)?;
+            let read = read_retrying_interrupted_limited(
+                self,
+                &mut buffer,
+                requested,
+            )?;
             if read == 0 {
                 return Ok(copied);
             }
@@ -144,12 +163,17 @@ pub trait InputExt: Input {
         if max_units == 0 {
             return Ok(0);
         }
-        let mut buffer = item_buffer::<Self::Item>()?;
+        let mut buffer =
+            create_vec(DEFAULT_BUFFER_CAPACITY, Self::Item::default())?;
         let mut remaining = max_units;
         let mut copied = 0_u64;
         while remaining > 0 {
             let requested = remaining.min(buffer.len() as u64) as usize;
-            let read = read_retrying_interrupted_limited(self, &mut buffer, requested)?;
+            let read = read_retrying_interrupted_limited(
+                self,
+                &mut buffer,
+                requested,
+            )?;
             if read == 0 {
                 break;
             }
@@ -193,18 +217,29 @@ pub trait InputExt: Input {
     where
         Self::Item: Copy + Default,
     {
-        let mut buffer = item_buffer::<Self::Item>()?;
+        let mut buffer =
+            create_vec(DEFAULT_BUFFER_CAPACITY, Self::Item::default())?;
         let mut collected = Vec::new();
         let mut remaining = max_units;
         let mut copied = 0_u64;
         loop {
-            let requested = remaining.saturating_add(1).min(buffer.len() as u64) as usize;
-            let read = read_retrying_interrupted_limited(self, &mut buffer, requested)?;
+            let requested =
+                remaining.saturating_add(1).min(buffer.len() as u64) as usize;
+            let read = read_retrying_interrupted_limited(
+                self,
+                &mut buffer,
+                requested,
+            )?;
             if read == 0 {
                 if !collected.is_empty() {
-                    // SAFETY: `collected` contains exactly the items validated below.
+                    // SAFETY: `collected` contains exactly the items validated
+                    // below.
                     unsafe {
-                        output.write_all_unchecked(&collected, 0, collected.len())?;
+                        output.write_all_unchecked(
+                            &collected,
+                            0,
+                            collected.len(),
+                        )?;
                     }
                 }
                 return Ok(copied);
@@ -212,7 +247,9 @@ pub trait InputExt: Input {
             if (read as u64) > remaining {
                 return Err(Error::new(
                     ErrorKind::InvalidData,
-                    format!("input exceeds maximum length of {max_units} items"),
+                    format!(
+                        "input exceeds maximum length of {max_units} items"
+                    ),
                 ));
             }
             try_reserve_vec(&mut collected, read)?;
@@ -225,23 +262,6 @@ pub trait InputExt: Input {
 }
 
 impl<T> InputExt for T where T: Input + ?Sized {}
-
-/// Allocates the reusable item copy buffer.
-///
-/// # Returns
-/// A buffer initialized with default values.
-///
-/// # Errors
-/// Returns [`ErrorKind::Other`] when the allocation cannot be reserved.
-fn item_buffer<T>() -> Result<Vec<T>>
-where
-    T: Copy + Default,
-{
-    let mut buffer = Vec::new();
-    try_reserve_vec(&mut buffer, INPUT_COPY_BUFFER_SIZE)?;
-    buffer.resize(INPUT_COPY_BUFFER_SIZE, T::default());
-    Ok(buffer)
-}
 
 /// Reads into a buffer prefix while retrying interrupted reads.
 ///
@@ -288,8 +308,9 @@ where
 ///
 /// # Errors
 /// Returns [`ErrorKind::InvalidData`] if the count overflows `u64`.
+#[inline(always)]
 fn add_copied(copied: u64, read: usize) -> Result<u64> {
-    copied
-        .checked_add(read as u64)
-        .ok_or_else(|| Error::new(ErrorKind::InvalidData, "copied item count overflows u64"))
+    copied.checked_add(read as u64).ok_or_else(|| {
+        Error::new(ErrorKind::InvalidData, "copied item count overflows u64")
+    })
 }

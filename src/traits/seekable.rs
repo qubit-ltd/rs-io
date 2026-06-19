@@ -6,7 +6,11 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{Result, Seek, SeekFrom};
+use std::io::{
+    Result,
+    Seek,
+    SeekFrom,
+};
 
 /// Minimal seek interface measured in stream items.
 ///
@@ -20,8 +24,8 @@ use std::io::{Result, Seek, SeekFrom};
 ///
 /// # Method name overlap
 ///
-/// `Seekable::seek_to` has the same method name as [`Seek::seek`]. In generic code
-/// where both traits are in scope for the same value, use fully qualified
+/// `Seekable::seek_to` has the same method name as [`Seek::seek`]. In generic
+/// code where both traits are in scope for the same value, use fully qualified
 /// syntax to choose item-oriented seeking or byte-oriented seeking explicitly:
 ///
 /// ```

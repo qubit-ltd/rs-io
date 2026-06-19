@@ -5,7 +5,13 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use std::io::{Read, Result, Seek, SeekFrom, Write};
+use std::io::{
+    Read,
+    Result,
+    Seek,
+    SeekFrom,
+    Write,
+};
 
 /// Reader wrapper that mirrors read bytes and keeps the branch seek position in
 /// sync.

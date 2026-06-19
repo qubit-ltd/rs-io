@@ -5,7 +5,13 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use std::io::{Read, Result, Seek, SeekFrom, Write};
+use std::io::{
+    Read,
+    Result,
+    Seek,
+    SeekFrom,
+    Write,
+};
 
 use super::SyncSeekTeeReader;
 
@@ -88,7 +94,10 @@ impl<R, W> TeeReader<R, W> {
     /// # Returns
     /// A sync-seek tee reader.
     #[inline]
-    pub fn with_sync_branch_seek(reader: R, branch: W) -> SyncSeekTeeReader<R, W> {
+    pub fn with_sync_branch_seek(
+        reader: R,
+        branch: W,
+    ) -> SyncSeekTeeReader<R, W> {
         SyncSeekTeeReader::new(reader, branch)
     }
 
