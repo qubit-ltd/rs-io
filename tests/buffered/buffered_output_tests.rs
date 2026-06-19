@@ -67,7 +67,7 @@ impl Output for U16SeekOutput {
         Ok(count)
     }
 
-    fn flush_pending(&mut self) -> std::io::Result<()> {
+    fn flush(&mut self) -> std::io::Result<()> {
         Ok(())
     }
 }
@@ -146,7 +146,7 @@ impl Output for U16Output {
         Ok(count)
     }
 
-    fn flush_pending(&mut self) -> std::io::Result<()> {
+    fn flush(&mut self) -> std::io::Result<()> {
         self.flushed = true;
         Ok(())
     }
@@ -166,7 +166,7 @@ impl Output for OverreportingOutput {
         Ok(count + 1)
     }
 
-    fn flush_pending(&mut self) -> std::io::Result<()> {
+    fn flush(&mut self) -> std::io::Result<()> {
         Ok(())
     }
 }
@@ -213,7 +213,7 @@ fn test_buffered_output_writes_generic_items() {
     assert_eq!(&[1, 2, 3], output.inner().values.as_slice());
 
     output
-        .flush_pending()
+        .flush()
         .expect("flush should reach inner output");
     assert!(output.inner().flushed);
 }
@@ -233,7 +233,7 @@ fn test_buffered_output_implements_output_for_generic_items() {
 
     assert_eq!(3, written);
     output
-        .flush_pending()
+        .flush()
         .expect("buffered output should flush pending items");
 }
 
@@ -248,7 +248,7 @@ fn test_buffered_output_adapts_std_write_as_u8_output() {
             .write_all_unchecked(b"abc", 0, 3)
             .expect("std writer should be an Output<Item = u8>");
     }
-    output.flush_pending().expect("flush should succeed");
+    output.flush().expect("flush should succeed");
 
     assert_eq!(b"abc", output.inner().get_ref().as_slice());
 }
@@ -287,7 +287,7 @@ fn test_output_u8_blanket_impl_propagates_std_flush_errors() {
 
     let mut writer = FailingWriter;
 
-    let error = Output::flush_pending(&mut writer)
+    let error = Output::flush(&mut writer)
         .expect_err("std flush error should be propagated");
 
     assert_eq!(ErrorKind::Other, error.kind());
@@ -370,7 +370,7 @@ fn flush_into_inner<W>(mut output: BufferedOutput<W>) -> W
 where
     W: Write,
 {
-    output.flush_pending().expect("flush should succeed");
+    output.flush().expect("flush should succeed");
     let (inner, pending) = output.into_parts();
     assert!(
         pending.is_empty(),
@@ -748,7 +748,7 @@ fn test_flush_returns_inner_flush_error() {
     let mut output = BufferedOutput::with_capacity(writer, 4);
 
     let error = output
-        .flush_pending()
+        .flush()
         .expect_err("inner flush error should be returned");
 
     assert_eq!(ErrorKind::Other, error.kind());
@@ -769,7 +769,7 @@ fn test_write_all_accepts_full_input_slice() {
 }
 
 #[test]
-fn test_output_flush_pending_delegates_to_buffered_flush() {
+fn test_output_flush_delegates_to_buffered_flush() {
     let cursor = Cursor::new(Vec::new());
     let mut output = BufferedOutput::with_capacity(cursor, 4);
 
@@ -777,8 +777,8 @@ fn test_output_flush_pending_delegates_to_buffered_flush() {
         .write_all(b"abc")
         .expect("buffered write should succeed");
     output
-        .flush_pending()
-        .expect("flush_pending should drain buffer");
+        .flush()
+        .expect("flush should drain buffer");
 
     assert_eq!(b"abc", output.inner().get_ref().as_slice());
 }
@@ -910,7 +910,7 @@ fn test_write_forwards_through_buffered_output() {
     let accepted = output.write(b"abc").expect("write should succeed");
     assert_eq!(3, accepted);
 
-    output.flush_pending().expect("flush should succeed");
+    output.flush().expect("flush should succeed");
     assert_eq!(b"abc", output.inner().get_ref().as_slice());
 }
 
@@ -952,14 +952,14 @@ fn test_flush_error_keeps_output_owned_by_caller() {
         .expect("buffered write should succeed");
 
     let error = output
-        .flush_pending()
+        .flush()
         .expect_err("write-zero flush should leave output owned by caller");
 
     assert_eq!(ErrorKind::WriteZero, error.kind());
     output.inner_mut().steps.push_back(WriteStep::Accept(3));
 
     output
-        .flush_pending()
+        .flush()
         .expect("retrying flush should write preserved bytes");
     let (writer, pending) = output.into_parts();
 
@@ -976,7 +976,7 @@ fn test_inner_flush_error_keeps_output_owned_by_caller() {
         .expect("buffered write should succeed");
 
     let error = output
-        .flush_pending()
+        .flush()
         .expect_err("inner flush error should leave output owned by caller");
 
     assert_eq!(ErrorKind::Other, error.kind());
@@ -1023,7 +1023,7 @@ fn test_buffered_output_trait_write_via_dyn_output() {
         .expect("BufferedOutput should implement Output::write");
 
     assert_eq!(3, written);
-    output.flush_pending().expect("flush should succeed");
+    output.flush().expect("flush should succeed");
 }
 
 #[test]
@@ -1040,7 +1040,7 @@ fn test_buffered_output_trait_write_unchecked_via_dyn_output() {
     };
 
     assert_eq!(2, written);
-    output.flush_pending().expect("flush should succeed");
+    output.flush().expect("flush should succeed");
 }
 
 #[test]
@@ -1142,7 +1142,7 @@ impl Output for OverflowPositionOutput {
         Ok(count)
     }
 
-    fn flush_pending(&mut self) -> std::io::Result<()> {
+    fn flush(&mut self) -> std::io::Result<()> {
         Ok(())
     }
 }

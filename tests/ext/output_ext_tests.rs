@@ -60,7 +60,7 @@ impl Output for ScriptedOutput {
         }
     }
 
-    fn flush_pending(&mut self) -> std::io::Result<()> {
+    fn flush(&mut self) -> std::io::Result<()> {
         Ok(())
     }
 }

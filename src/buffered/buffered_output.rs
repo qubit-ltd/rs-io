@@ -38,7 +38,7 @@ use crate::{
 /// [`Self::spare_raw_parts_mut`] and then call [`Self::advance`] after
 /// validating the range they initialized.
 /// Callers that need to recover the wrapped writer should call
-/// [`Self::flush_pending`] first, then use [`Self::into_parts`], or call
+/// [`Self::flush`] first, then use [`Self::into_parts`], or call
 /// [`Self::into_inner`] to flush and return the wrapped writer in one step.
 /// Dropping a `BufferedOutput` makes a best-effort attempt to write pending
 /// buffered items, but drop-time errors are ignored. For arbitrary item types,
@@ -135,7 +135,7 @@ where
     /// remaining pending items are flushed only on a best-effort basis.
     #[inline]
     pub fn into_inner(mut self) -> Result<O> {
-        self.flush_pending()?;
+        self.flush()?;
         let (inner, _) = self.into_parts();
         Ok(inner)
     }
@@ -411,11 +411,11 @@ where
     /// items, [`ErrorKind::WriteZero`] if the wrapped writer cannot make
     /// progress while draining the buffer, [`ErrorKind::InvalidData`] if the
     /// writer reports an impossible item count, or any error returned by
-    /// [`Output::flush_pending`] on the wrapped output.
+    /// [`Output::flush`] on the wrapped output.
     #[inline(always)]
-    pub fn flush_pending(&mut self) -> Result<()> {
+    pub fn flush(&mut self) -> Result<()> {
         self.flush_buffer()
-            .and_then(|()| Output::flush_pending(&mut self.inner))
+            .and_then(|()| Output::flush(&mut self.inner))
     }
 
     /// Flushes buffered items to the wrapped writer.
@@ -790,8 +790,8 @@ where
 
     /// Flushes pending items through the internal buffer.
     #[inline(always)]
-    fn flush_pending(&mut self) -> Result<()> {
-        BufferedOutput::flush_pending(self)
+    fn flush(&mut self) -> Result<()> {
+        BufferedOutput::flush(self)
     }
 }
 
@@ -816,7 +816,7 @@ where
 {
     fn drop(&mut self) {
         if !self.panicked {
-            drop(self.flush_pending());
+            drop(self.flush());
         }
     }
 }
