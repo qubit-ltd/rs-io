@@ -1,7 +1,6 @@
 mod buf_read_ext_tests;
 mod coverage_tests;
 mod input_ext_tests;
-mod internal;
 mod output_ext_tests;
 mod read_ext_tests;
 mod read_seek_ext_tests;

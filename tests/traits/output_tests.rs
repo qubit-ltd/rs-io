@@ -7,9 +7,17 @@
 // =============================================================================
 
 use std::collections::VecDeque;
-use std::io::{Cursor, Error, ErrorKind, Write};
+use std::io::{
+    Cursor,
+    Error,
+    ErrorKind,
+    Write,
+};
 
-use qubit_io::{Output, OutputExt};
+use qubit_io::{
+    Output,
+    OutputExt,
+};
 
 enum WriteStep {
     Accept(usize),
@@ -48,7 +56,9 @@ impl Output for ScriptedOutput {
                     .extend_from_slice(&input[index..index + written]);
                 Ok(written)
             }
-            WriteStep::Interrupted => Err(Error::new(ErrorKind::Interrupted, "interrupted")),
+            WriteStep::Interrupted => {
+                Err(Error::new(ErrorKind::Interrupted, "interrupted"))
+            }
             WriteStep::Error(kind, message) => Err(Error::new(kind, message)),
             WriteStep::Zero => Ok(0),
         }
@@ -80,7 +90,8 @@ impl Output for OverreportingOutput {
 
 #[test]
 fn test_output_write_all_writes_until_range_is_complete() {
-    let mut output = ScriptedOutput::new(vec![WriteStep::Accept(2), WriteStep::Accept(2)]);
+    let mut output =
+        ScriptedOutput::new(vec![WriteStep::Accept(2), WriteStep::Accept(2)]);
     let input = [10, 20, 30, 40, 50];
 
     // SAFETY: `input[1..5]` is a valid source range.
@@ -95,7 +106,8 @@ fn test_output_write_all_writes_until_range_is_complete() {
 
 #[test]
 fn test_output_write_all_retries_interrupted_writes() {
-    let mut output = ScriptedOutput::new(vec![WriteStep::Interrupted, WriteStep::Accept(3)]);
+    let mut output =
+        ScriptedOutput::new(vec![WriteStep::Interrupted, WriteStep::Accept(3)]);
 
     // SAFETY: The full input range is valid.
     unsafe {
@@ -170,7 +182,8 @@ fn test_write_blanket_impl_exposes_output_methods() {
 
     // SAFETY: `b"bc"` is a valid source range inside `b"abc"`.
     let written = unsafe {
-        Output::write_unchecked(&mut cursor, b"abc", 1, 2).expect("write_unchecked should succeed")
+        Output::write_unchecked(&mut cursor, b"abc", 1, 2)
+            .expect("write_unchecked should succeed")
     };
     assert_eq!(2, written);
     assert_eq!(b"bc", cursor.into_inner().as_slice());

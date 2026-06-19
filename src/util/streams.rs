@@ -6,10 +6,19 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 use std::cmp::Ordering;
-use std::io::{Error, ErrorKind, Read, Result, Write};
+use std::io::{
+    Error,
+    ErrorKind,
+    Read,
+    Result,
+    Write,
+};
 
 use crate::ReadExt;
-use crate::capacity_const::{DEFAULT_COMPARE_BUFFER_SIZE, DEFAULT_COPY_BUFFER_SIZE};
+use crate::capacity_const::{
+    DEFAULT_COMPARE_BUFFER_SIZE,
+    DEFAULT_COPY_BUFFER_SIZE,
+};
 use crate::util::create_vec;
 
 /// Stream utility namespace.
@@ -79,7 +88,11 @@ impl Streams {
     /// Returns the first non-interrupted read error or write error reported by
     /// the underlying streams. Interrupted reads are retried.
     #[inline]
-    pub fn copy_at_most<R, W>(reader: &mut R, writer: &mut W, max_bytes: u64) -> Result<u64>
+    pub fn copy_at_most<R, W>(
+        reader: &mut R,
+        writer: &mut W,
+        max_bytes: u64,
+    ) -> Result<u64>
     where
         R: Read + ?Sized,
         W: Write + ?Sized,
@@ -160,7 +173,11 @@ impl Streams {
     /// write error reported by the underlying streams. Interrupted reads are
     /// retried.
     #[inline]
-    pub fn copy_to_end_limited<R, W>(reader: &mut R, writer: &mut W, max_bytes: u64) -> Result<u64>
+    pub fn copy_to_end_limited<R, W>(
+        reader: &mut R,
+        writer: &mut W,
+        max_bytes: u64,
+    ) -> Result<u64>
     where
         R: Read + ?Sized,
         W: Write + ?Sized,
@@ -183,7 +200,9 @@ impl Streams {
                 Ok(_) => {
                     return Err(Error::new(
                         ErrorKind::InvalidData,
-                        format!("input exceeds maximum length of {max_bytes} bytes"),
+                        format!(
+                            "input exceeds maximum length of {max_bytes} bytes"
+                        ),
                     ));
                 }
                 Err(error) => {
@@ -213,7 +232,10 @@ impl Streams {
     /// # Errors
     /// Returns the first read error reported by either stream.
     #[inline]
-    pub fn content_eq(left: &mut dyn Read, right: &mut dyn Read) -> Result<bool> {
+    pub fn content_eq(
+        left: &mut dyn Read,
+        right: &mut dyn Read,
+    ) -> Result<bool> {
         Ok(Self::compare_content(left, right)? == Ordering::Equal)
     }
 
@@ -234,8 +256,15 @@ impl Streams {
     ///
     /// # Errors
     /// Returns the first read error reported by either stream.
-    pub fn compare_content(left: &mut dyn Read, right: &mut dyn Read) -> Result<Ordering> {
-        Self::compare_content_with_buffer_size(left, right, DEFAULT_COMPARE_BUFFER_SIZE)
+    pub fn compare_content(
+        left: &mut dyn Read,
+        right: &mut dyn Read,
+    ) -> Result<Ordering> {
+        Self::compare_content_with_buffer_size(
+            left,
+            right,
+            DEFAULT_COMPARE_BUFFER_SIZE,
+        )
     }
 
     /// Lexicographically compares the remaining contents of two readable
@@ -277,7 +306,10 @@ impl Streams {
             right_buffer.len(),
             "compare buffers must have identical lengths",
         );
-        debug_assert!(!left_buffer.is_empty(), "compare buffers must not be empty",);
+        debug_assert!(
+            !left_buffer.is_empty(),
+            "compare buffers must not be empty",
+        );
         loop {
             let left_count = left.read_exact_or_eof(&mut left_buffer)?;
             let right_count = right.read_exact_or_eof(&mut right_buffer)?;

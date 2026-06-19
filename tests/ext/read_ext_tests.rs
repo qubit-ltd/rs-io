@@ -6,7 +6,12 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{Cursor, Error, ErrorKind, Read};
+use std::io::{
+    Cursor,
+    Error,
+    ErrorKind,
+    Read,
+};
 
 use qubit_io::ReadExt;
 
@@ -33,7 +38,8 @@ impl Read for ShortReader {
         }
         let remaining = self.data.len() - self.position;
         let count = remaining.min(buffer.len()).min(self.max_chunk);
-        buffer[..count].copy_from_slice(&self.data[self.position..self.position + count]);
+        buffer[..count]
+            .copy_from_slice(&self.data[self.position..self.position + count]);
         self.position += count;
         Ok(count)
     }
@@ -79,6 +85,34 @@ impl Read for FailingReader {
     }
 }
 
+struct PartialThenFailReader {
+    data: Vec<u8>,
+    position: usize,
+}
+
+impl PartialThenFailReader {
+    fn new(data: &[u8]) -> Self {
+        Self {
+            data: data.to_vec(),
+            position: 0,
+        }
+    }
+}
+
+impl Read for PartialThenFailReader {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        if self.position < self.data.len() {
+            let count = (self.data.len() - self.position).min(buffer.len());
+            buffer[..count].copy_from_slice(
+                &self.data[self.position..self.position + count],
+            );
+            self.position += count;
+            return Ok(count);
+        }
+        Err(Error::other("read failed after prefix"))
+    }
+}
+
 #[test]
 fn test_read_exact_array_reads_array() {
     let mut reader = ShortReader::new(b"abcdef", 2);
@@ -105,9 +139,9 @@ fn test_read_exact_array_zero_length_does_not_read() {
 fn test_read_exact_array_returns_unexpected_eof() {
     let mut reader = Cursor::new(b"ab".to_vec());
 
-    let error = reader
-        .read_exact_array::<3>()
-        .expect_err("short input should return the standard read_exact EOF error");
+    let error = reader.read_exact_array::<3>().expect_err(
+        "short input should return the standard read_exact EOF error",
+    );
 
     assert_eq!(ErrorKind::UnexpectedEof, error.kind());
 }
@@ -277,6 +311,55 @@ fn test_read_exact_vec_limited_reads_exact_length_via_trait() {
 }
 
 #[test]
+fn test_read_exact_vec_limited_into_zero_length_does_not_read() {
+    let mut reader = PanicOnRead;
+    let mut output = b"prefix".to_vec();
+
+    reader
+        .read_exact_vec_limited_into(&mut output, 0, 0)
+        .expect("zero-length exact reads should leave output unchanged");
+
+    assert_eq!(b"prefix", output.as_slice());
+}
+
+#[test]
+fn test_read_exact_vec_limited_into_rejects_len_over_max_without_changing_output()
+ {
+    let mut reader = PanicOnRead;
+    let mut output = b"prefix".to_vec();
+
+    let error = reader
+        .read_exact_vec_limited_into(&mut output, 4, 3)
+        .expect_err(
+            "requested length over max should be rejected before reading",
+        );
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!(
+        "requested length 4 exceeds maximum length 3",
+        error.to_string()
+    );
+    assert_eq!(b"prefix", output.as_slice());
+}
+
+#[test]
+fn test_read_exact_vec_limited_into_reports_length_overflow_before_reading() {
+    let mut reader = PanicOnRead;
+    let mut output = b"prefix".to_vec();
+
+    let error = reader
+        .read_exact_vec_limited_into(&mut output, usize::MAX, usize::MAX)
+        .expect_err("overflowing output length should fail before reading");
+
+    assert_eq!(ErrorKind::InvalidInput, error.kind());
+    assert_eq!(
+        format!("length 6 plus {} overflows usize", usize::MAX),
+        error.to_string()
+    );
+    assert_eq!(b"prefix", output.as_slice());
+}
+
+#[test]
 fn test_read_exact_helpers_work_on_dyn_read_with_ufcs() {
     let mut cursor = Cursor::new(b"abcdefgh".to_vec());
     let reader: &mut dyn Read = &mut cursor;
@@ -292,8 +375,13 @@ fn test_read_exact_helpers_work_on_dyn_read_with_ufcs() {
 
     // SAFETY: `2..4` is within `prefix` and uniquely borrowed for the read.
     let count = unsafe {
-        <dyn Read as ReadExt>::read_exact_or_eof_unchecked(reader, &mut prefix, 2, 2)
-            .expect("UFCS read_exact_or_eof_unchecked should work on dyn Read")
+        <dyn Read as ReadExt>::read_exact_or_eof_unchecked(
+            reader,
+            &mut prefix,
+            2,
+            2,
+        )
+        .expect("UFCS read_exact_or_eof_unchecked should work on dyn Read")
     };
     assert_eq!(2, count);
     assert_eq!(b"abcd", &prefix);
@@ -347,8 +435,9 @@ fn test_read_ext_ufcs_methods_work_on_dyn_read() {
     let mut cursor = Cursor::new(b"abc".to_vec());
     let reader: &mut dyn Read = &mut cursor;
     let mut output = Vec::new();
-    let count = <dyn Read as ReadExt>::copy_to_end_limited(reader, &mut output, 3)
-        .expect("UFCS copy_to_end_limited should work on dyn Read");
+    let count =
+        <dyn Read as ReadExt>::copy_to_end_limited(reader, &mut output, 3)
+            .expect("UFCS copy_to_end_limited should work on dyn Read");
     assert_eq!(3, count);
     assert_eq!(b"abc", output.as_slice());
 }
@@ -362,6 +451,52 @@ fn test_read_to_end_limited_delegates_to_impl_via_trait() {
         .expect("ReadExt should delegate to read_to_end_limited impl");
 
     assert_eq!(b"abc", data.as_slice());
+}
+
+#[test]
+fn test_read_to_end_limited_retries_interrupted_reads() {
+    let mut reader = InterruptedOnceReader::new(b"abc");
+
+    let data = reader
+        .read_to_end_limited(3)
+        .expect("interrupted reads should be retried");
+
+    assert_eq!(b"abc", data.as_slice());
+}
+
+#[test]
+fn test_read_to_end_limited_rejects_oversized_input_on_first_read() {
+    let mut reader = Cursor::new(b"abcd".to_vec());
+
+    let error = reader
+        .read_to_end_limited(3)
+        .expect_err("oversized input should be rejected on the first read");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!("input exceeds maximum length of 3 bytes", error.to_string());
+    assert_eq!(4, reader.position());
+}
+
+#[test]
+fn test_read_to_end_limited_zero_limit_rejects_non_empty_input() {
+    let mut reader = Cursor::new(b"a".to_vec());
+
+    let error = reader
+        .read_to_end_limited(0)
+        .expect_err("zero limit should reject non-empty input");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+}
+
+#[test]
+fn test_read_to_end_limited_zero_limit_accepts_empty_input() {
+    let mut reader = Cursor::new(Vec::new());
+
+    let value = reader
+        .read_to_end_limited(0)
+        .expect("zero limit should accept empty input");
+
+    assert!(value.is_empty());
 }
 
 #[test]
@@ -487,9 +622,9 @@ fn test_discard_exact_or_eof_zero_bytes_does_not_read() {
 fn test_discard_exact_or_eof_returns_non_interrupted_error() {
     let mut reader = FailingReader;
 
-    let error = reader
-        .discard_exact_or_eof(3)
-        .expect_err("non-interrupted read errors should be returned while discarding");
+    let error = reader.discard_exact_or_eof(3).expect_err(
+        "non-interrupted read errors should be returned while discarding",
+    );
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("read failed", error.to_string());
@@ -518,6 +653,78 @@ fn test_read_to_end_limited_into_delegates_via_trait() {
 
     assert_eq!(3, count);
     assert_eq!(b"seedabc", output.as_slice());
+}
+
+#[test]
+fn test_read_to_end_limited_into_rejects_oversized_input_after_prefix() {
+    let mut reader = Cursor::new(b"abcd".to_vec());
+    let mut output = b"prefix-".to_vec();
+
+    let error = reader
+        .read_to_end_limited_into(&mut output, 3)
+        .expect_err("oversized input should be rejected");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!("input exceeds maximum length of 3 bytes", error.to_string());
+    assert_eq!(b"prefix-", output.as_slice());
+    assert_eq!(4, reader.position());
+}
+
+#[test]
+fn test_read_to_end_limited_into_rejects_oversized_input_after_partial_reads() {
+    let mut reader = ShortReader::new(b"abcd", 1);
+    let mut output = Vec::new();
+
+    let error = reader
+        .read_to_end_limited_into(&mut output, 3)
+        .expect_err("oversized input should be rejected after partial reads");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!("input exceeds maximum length of 3 bytes", error.to_string());
+    assert!(output.is_empty());
+    assert_eq!(4, reader.position);
+}
+
+#[test]
+fn test_read_to_end_limited_into_returns_non_interrupted_error() {
+    let mut reader = FailingReader;
+    let mut output = b"prefix".to_vec();
+
+    let error = reader
+        .read_to_end_limited_into(&mut output, 3)
+        .expect_err("non-interrupted read errors should be returned");
+
+    assert_eq!(ErrorKind::Other, error.kind());
+    assert_eq!("read failed", error.to_string());
+    assert_eq!(b"prefix", output.as_slice());
+}
+
+#[test]
+fn test_read_to_end_limited_into_rolls_back_after_partial_read_error() {
+    let mut reader = PartialThenFailReader::new(b"ab");
+    let mut output = b"prefix".to_vec();
+
+    let error = reader.read_to_end_limited_into(&mut output, 3).expect_err(
+        "read errors after partial appends should roll back output",
+    );
+
+    assert_eq!(ErrorKind::Other, error.kind());
+    assert_eq!("read failed after prefix", error.to_string());
+    assert_eq!(b"prefix", output.as_slice());
+    assert_eq!(2, reader.position);
+}
+
+#[test]
+fn test_read_to_end_limited_into_zero_limit_rejects_non_empty_input() {
+    let mut reader = Cursor::new(b"a".to_vec());
+    let mut output = b"prefix".to_vec();
+
+    let error = reader
+        .read_to_end_limited_into(&mut output, 0)
+        .expect_err("zero limit should reject non-empty input");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!(b"prefix", output.as_slice());
 }
 
 #[test]
@@ -592,8 +799,9 @@ fn test_read_ext_blanket_impl_helpers_via_ufcs() {
 
     let mut reader = Cursor::new(b"hello".to_vec());
     let mut output = String::from("x");
-    let count = ReadExt::read_to_string_limited_into(&mut reader, &mut output, 8)
-        .expect("UFCS read_to_string_limited_into should use blanket impl");
+    let count =
+        ReadExt::read_to_string_limited_into(&mut reader, &mut output, 8)
+            .expect("UFCS read_to_string_limited_into should use blanket impl");
     assert_eq!(5, count);
     assert_eq!("xhello", output);
 }
@@ -602,9 +810,9 @@ fn test_read_ext_blanket_impl_helpers_via_ufcs() {
 fn test_read_exact_vec_limited_propagates_read_error_via_blanket_impl() {
     let mut reader = FailingReader;
 
-    let error = reader
-        .read_exact_vec_limited(3, 3)
-        .expect_err("blanket read_exact_vec_limited should propagate read errors");
+    let error = reader.read_exact_vec_limited(3, 3).expect_err(
+        "blanket read_exact_vec_limited should propagate read errors",
+    );
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("read failed", error.to_string());
@@ -614,9 +822,9 @@ fn test_read_exact_vec_limited_propagates_read_error_via_blanket_impl() {
 fn test_read_to_string_limited_propagates_read_error_via_blanket_impl() {
     let mut reader = FailingReader;
 
-    let error = reader
-        .read_to_string_limited(8)
-        .expect_err("blanket read_to_string_limited should propagate read errors");
+    let error = reader.read_to_string_limited(8).expect_err(
+        "blanket read_to_string_limited should propagate read errors",
+    );
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("read failed", error.to_string());
@@ -629,7 +837,9 @@ fn test_read_to_string_limited_into_propagates_read_error_via_blanket_impl() {
 
     let error = reader
         .read_to_string_limited_into(&mut output, 8)
-        .expect_err("blanket read_to_string_limited_into should propagate read errors");
+        .expect_err(
+            "blanket read_to_string_limited_into should propagate read errors",
+        );
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("read failed", error.to_string());

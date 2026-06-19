@@ -1,6 +1,13 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::Hasher;
-use std::io::{Cursor, Error, ErrorKind, Seek, SeekFrom, Write};
+use std::io::{
+    Cursor,
+    Error,
+    ErrorKind,
+    Seek,
+    SeekFrom,
+    Write,
+};
 
 use qubit_io::ChecksumWriter;
 
@@ -49,7 +56,8 @@ fn expected_checksum(bytes: &[u8]) -> u64 {
 }
 
 #[test]
-fn test_checksum_writer_hashes_successfully_written_bytes_and_exposes_accessors() {
+fn test_checksum_writer_hashes_successfully_written_bytes_and_exposes_accessors()
+ {
     let primary = ShortWriter::new(3);
     let mut writer = ChecksumWriter::new(primary, DefaultHasher::new());
     assert_eq!(expected_checksum(b""), writer.checksum());
