@@ -9,12 +9,22 @@
 #[cfg(coverage)]
 mod coverage_tests {
     use std::collections::VecDeque;
-    use std::io::{Cursor, ErrorKind};
+    use std::io::{
+        Cursor,
+        ErrorKind,
+    };
 
     use qubit_io::{
-        Input, InputExt, Output, ReadExt, coverage_fail_next_add_copied,
-        coverage_fail_next_reserve, coverage_fail_next_string_reserve, coverage_fail_reserve_after,
-        coverage_natural_add_copied_overflow, coverage_reset_add_copied_hooks,
+        Input,
+        InputExt,
+        Output,
+        ReadExt,
+        coverage_fail_next_add_copied,
+        coverage_fail_next_reserve,
+        coverage_fail_next_string_reserve,
+        coverage_fail_reserve_after,
+        coverage_natural_add_copied_overflow,
+        coverage_reset_add_copied_hooks,
         coverage_reset_reserve_hooks,
     };
 
@@ -101,24 +111,25 @@ mod coverage_tests {
         let mut output = CollectOutput::default();
 
         coverage_fail_next_reserve();
-        let error = input
-            .copy_to_at_most(&mut output, 2)
-            .expect_err("copy_to_at_most should propagate buffer allocation failures");
+        let error = input.copy_to_at_most(&mut output, 2).expect_err(
+            "copy_to_at_most should propagate buffer allocation failures",
+        );
 
         assert_eq!(ErrorKind::Other, error.kind());
         assert!(output.values.is_empty());
     }
 
     #[test]
-    fn test_input_ext_copy_to_end_limited_reports_create_vec_allocation_failure() {
+    fn test_input_ext_copy_to_end_limited_reports_create_vec_allocation_failure()
+     {
         reset_coverage_hooks();
         let mut input = ChunkInput::new(vec![vec![1, 2, 3]]);
         let mut output = CollectOutput::default();
 
         coverage_fail_next_reserve();
-        let error = input
-            .copy_to_end_limited(&mut output, 3)
-            .expect_err("copy_to_end_limited should propagate buffer allocation failures");
+        let error = input.copy_to_end_limited(&mut output, 3).expect_err(
+            "copy_to_end_limited should propagate buffer allocation failures",
+        );
 
         assert_eq!(ErrorKind::Other, error.kind());
         assert!(output.values.is_empty());
@@ -145,9 +156,9 @@ mod coverage_tests {
         let mut output = CollectOutput::default();
 
         coverage_fail_next_add_copied();
-        let error = input
-            .copy_to_end_limited(&mut output, 3)
-            .expect_err("copy_to_end_limited should propagate copied item count overflow");
+        let error = input.copy_to_end_limited(&mut output, 3).expect_err(
+            "copy_to_end_limited should propagate copied item count overflow",
+        );
 
         assert_eq!(ErrorKind::InvalidData, error.kind());
     }
@@ -159,9 +170,9 @@ mod coverage_tests {
         let mut output = CollectOutput::default();
 
         coverage_fail_reserve_after(1);
-        let error = input
-            .copy_to_end_limited(&mut output, 3)
-            .expect_err("copy_to_end_limited should propagate collected reserve failures");
+        let error = input.copy_to_end_limited(&mut output, 3).expect_err(
+            "copy_to_end_limited should propagate collected reserve failures",
+        );
 
         assert_eq!(ErrorKind::Other, error.kind());
         assert!(output.values.is_empty());
@@ -185,9 +196,41 @@ mod coverage_tests {
         coverage_fail_next_string_reserve();
         let error = reader
             .read_to_string_limited_into(&mut output, 8)
-            .expect_err("read_to_string_limited_into should propagate reserve failures");
+            .expect_err(
+                "read_to_string_limited_into should propagate reserve failures",
+            );
 
         assert_eq!(ErrorKind::Other, error.kind());
         assert_eq!("seed-", output);
+    }
+
+    #[test]
+    fn test_read_ext_read_to_end_limited_reports_initial_reserve_failure() {
+        reset_coverage_hooks();
+        let mut reader = Cursor::new(b"hello".to_vec());
+
+        coverage_fail_next_reserve();
+        let error = reader.read_to_end_limited(8).expect_err(
+            "read_to_end_limited should propagate reserve failures",
+        );
+
+        assert_eq!(ErrorKind::Other, error.kind());
+        assert_eq!(0, reader.position());
+    }
+
+    #[test]
+    fn test_read_ext_read_to_end_limited_into_rolls_back_on_reserve_failure() {
+        reset_coverage_hooks();
+        let mut reader = Cursor::new(b"hello".to_vec());
+        let mut output = b"seed-".to_vec();
+
+        coverage_fail_next_reserve();
+        let error = reader.read_to_end_limited_into(&mut output, 8).expect_err(
+            "read_to_end_limited_into should propagate reserve failures",
+        );
+
+        assert_eq!(ErrorKind::Other, error.kind());
+        assert_eq!(b"seed-", output.as_slice());
+        assert_eq!(5, reader.position());
     }
 }

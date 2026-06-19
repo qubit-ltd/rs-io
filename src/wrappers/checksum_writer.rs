@@ -6,7 +6,12 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 use std::hash::Hasher;
-use std::io::{Result, Seek, SeekFrom, Write};
+use std::io::{
+    Result,
+    Seek,
+    SeekFrom,
+    Write,
+};
 
 /// Writer wrapper that updates a checksum hasher with bytes written.
 ///

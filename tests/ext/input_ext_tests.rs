@@ -7,9 +7,16 @@
 // =============================================================================
 
 use std::collections::VecDeque;
-use std::io::{Error, ErrorKind};
+use std::io::{
+    Error,
+    ErrorKind,
+};
 
-use qubit_io::{Input, InputExt, Output};
+use qubit_io::{
+    Input,
+    InputExt,
+    Output,
+};
 
 struct ChunkInput {
     chunks: VecDeque<Vec<u16>>,
@@ -265,6 +272,26 @@ fn test_input_ext_read_exact_or_eof_unchecked_retries_interrupted_reads() {
 }
 
 #[test]
+fn test_input_ext_read_exact_or_eof_unchecked_rejects_overreported_count() {
+    let mut input = OverreportingInput;
+    let mut output = [0_u16; 8];
+
+    // SAFETY: `index..index + count` is `2..4`, which is within `output`.
+    let error = unsafe {
+        input
+            .read_exact_or_eof_unchecked(&mut output, 2, 2)
+            .expect_err("overreported read count should be rejected")
+    };
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!(
+        "reader reported 3 items for a 2-item buffer",
+        error.to_string()
+    );
+    assert_eq!([0_u16; 8], output);
+}
+
+#[test]
 fn test_input_ext_read_exact_or_eof_unchecked_returns_non_interrupted_error() {
     let mut input = FailingInput;
     let mut output = [0_u16, 0, 0, 0, 0, 0, 0, 0];
@@ -465,6 +492,34 @@ impl Output for FailOnWriteOutput {
     }
 }
 
+struct PartialThenFailOutput {
+    values: Vec<u16>,
+    fail_after: usize,
+}
+
+impl Output for PartialThenFailOutput {
+    type Item = u16;
+
+    unsafe fn write_unchecked(
+        &mut self,
+        input: &[u16],
+        index: usize,
+        count: usize,
+    ) -> std::io::Result<usize> {
+        if self.values.len() >= self.fail_after {
+            return Err(Error::other("write failed after prefix"));
+        }
+        let writable = (self.fail_after - self.values.len()).min(count);
+        self.values
+            .extend_from_slice(&input[index..index + writable]);
+        Ok(writable)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
 #[test]
 fn test_input_ext_read_exact_or_eof_returns_read_error() {
     let mut input = FailingInput;
@@ -573,7 +628,8 @@ fn test_input_ext_copy_to_end_limited_flushes_collected_items_at_eof() {
 }
 
 #[test]
-fn test_input_ext_copy_to_end_limited_returns_write_error_when_flushing_collected() {
+fn test_input_ext_copy_to_end_limited_returns_write_error_when_flushing_collected()
+ {
     let mut input = ChunkInput::new(vec![vec![1, 2, 3]]);
     let mut output = FailOnWriteOutput {
         values: Vec::new(),
@@ -590,13 +646,30 @@ fn test_input_ext_copy_to_end_limited_returns_write_error_when_flushing_collecte
 }
 
 #[test]
+fn test_input_ext_copy_to_end_limited_write_error_may_leave_partial_output() {
+    let mut input = ChunkInput::new(vec![vec![1, 2, 3]]);
+    let mut output = PartialThenFailOutput {
+        values: Vec::new(),
+        fail_after: 1,
+    };
+
+    let error = input
+        .copy_to_end_limited(&mut output, 3)
+        .expect_err("write errors after EOF should be returned");
+
+    assert_eq!(ErrorKind::Other, error.kind());
+    assert_eq!("write failed after prefix", error.to_string());
+    assert_eq!(&[1], output.values.as_slice());
+}
+
+#[test]
 fn test_input_ext_read_exact_propagates_read_error() {
     let mut input = FailingInput;
     let mut output = [0_u16; 2];
 
-    let error = input
-        .read_exact(&mut output)
-        .expect_err("read_exact should propagate read errors from read_exact_or_eof");
+    let error = input.read_exact(&mut output).expect_err(
+        "read_exact should propagate read errors from read_exact_or_eof",
+    );
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("read failed", error.to_string());
