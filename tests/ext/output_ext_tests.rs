@@ -7,15 +7,9 @@
 // =============================================================================
 
 use std::collections::VecDeque;
-use std::io::{
-    Error,
-    ErrorKind,
-};
+use std::io::{Error, ErrorKind};
 
-use qubit_io::{
-    Output,
-    OutputExt,
-};
+use qubit_io::{Output, OutputExt};
 
 enum WriteStep {
     Accept(usize),
@@ -53,9 +47,7 @@ impl Output for ScriptedOutput {
                     .extend_from_slice(&input[index..index + written]);
                 Ok(written)
             }
-            WriteStep::Interrupted => {
-                Err(Error::new(ErrorKind::Interrupted, "interrupted"))
-            }
+            WriteStep::Interrupted => Err(Error::new(ErrorKind::Interrupted, "interrupted")),
             WriteStep::Zero => Ok(0),
         }
     }
@@ -67,8 +59,7 @@ impl Output for ScriptedOutput {
 
 #[test]
 fn test_output_ext_write_all_unchecked_writes_until_range_is_complete() {
-    let mut output =
-        ScriptedOutput::new(vec![WriteStep::Accept(2), WriteStep::Accept(2)]);
+    let mut output = ScriptedOutput::new(vec![WriteStep::Accept(2), WriteStep::Accept(2)]);
     let input = [10, 20, 30, 40, 50];
 
     // SAFETY: `input[1..5]` is a valid source range.
@@ -83,8 +74,7 @@ fn test_output_ext_write_all_unchecked_writes_until_range_is_complete() {
 
 #[test]
 fn test_output_ext_write_all_unchecked_retries_interrupted_writes() {
-    let mut output =
-        ScriptedOutput::new(vec![WriteStep::Interrupted, WriteStep::Accept(3)]);
+    let mut output = ScriptedOutput::new(vec![WriteStep::Interrupted, WriteStep::Accept(3)]);
 
     // SAFETY: The full input range is valid.
     unsafe {

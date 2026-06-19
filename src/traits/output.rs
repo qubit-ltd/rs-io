@@ -6,12 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Error,
-    ErrorKind,
-    Result,
-    Write,
-};
+use std::io::{Error, ErrorKind, Result, Write};
 
 use crate::util::UncheckedSlice;
 
@@ -188,9 +183,7 @@ pub fn validate_write_count(written: usize, requested: usize) -> Result<()> {
     if written > requested {
         return Err(Error::new(
             ErrorKind::InvalidData,
-            format!(
-                "writer reported {written} items for a {requested}-item buffer"
-            ),
+            format!("writer reported {written} items for a {requested}-item buffer"),
         ));
     }
     Ok(())

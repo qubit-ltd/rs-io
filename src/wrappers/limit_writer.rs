@@ -5,10 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use std::io::{
-    Result,
-    Write,
-};
+use std::io::{Result, Write};
 
 /// Writer wrapper that accepts at most a fixed number of bytes.
 ///

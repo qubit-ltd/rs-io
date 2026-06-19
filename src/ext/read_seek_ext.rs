@@ -5,12 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use std::io::{
-    Read,
-    Result,
-    Seek,
-    SeekFrom,
-};
+use std::io::{Read, Result, Seek, SeekFrom};
 
 use crate::ext::internal::read_ext_impl;
 
@@ -56,11 +51,7 @@ pub trait ReadSeekExt: Read + Seek {
     /// Returns an error when reading the current position, seeking to `offset`,
     /// reading bytes, or restoring the original position fails. If restoration
     /// fails, the restoration error is returned.
-    fn read_exact_or_eof_at(
-        &mut self,
-        offset: u64,
-        buffer: &mut [u8],
-    ) -> Result<usize>;
+    fn read_exact_or_eof_at(&mut self, offset: u64, buffer: &mut [u8]) -> Result<usize>;
 }
 
 impl<T> ReadSeekExt for T
@@ -81,11 +72,7 @@ where
     }
 
     #[inline]
-    fn read_exact_or_eof_at(
-        &mut self,
-        offset: u64,
-        buffer: &mut [u8],
-    ) -> Result<usize> {
+    fn read_exact_or_eof_at(&mut self, offset: u64, buffer: &mut [u8]) -> Result<usize> {
         let mut reader = self;
         let position = reader.stream_position()?;
         let read_result = match reader.seek(SeekFrom::Start(offset)) {
