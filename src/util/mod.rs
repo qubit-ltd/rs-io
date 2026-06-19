@@ -7,8 +7,8 @@
 // =============================================================================
 mod allocation;
 mod nz;
-mod slice;
 mod streams;
+mod unchecked_slice;
 
 pub(crate) use allocation::create_vec;
 pub use allocation::{
@@ -20,6 +20,6 @@ pub use nz::{
     nz,
     nz_const,
 };
-#[allow(unused_imports)]
-pub use slice::UncheckedSlice;
 pub use streams::Streams;
+#[allow(unused_imports)]
+pub use unchecked_slice::UncheckedSlice;
