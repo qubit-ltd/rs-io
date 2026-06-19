@@ -5,8 +5,8 @@
 // =============================================================================
 //! Low-level unchecked slice helpers in a dedicated namespace.
 //!
-//! These helpers avoid bound checks and are intended for call sites that already
-//! validate bounds in their own protocol.
+//! These helpers avoid bound checks and are intended for call sites that
+//! already validate bounds in their own protocol.
 
 use core::mem;
 
@@ -17,8 +17,8 @@ use core::mem;
 pub enum UncheckedSlice {}
 
 impl UncheckedSlice {
-    /// Returns whether a slice has at least `count` readable/writable items from
-    /// `start`.
+    /// Returns whether a slice has at least `count` readable/writable items
+    /// from `start`.
     ///
     /// # Parameters
     ///
@@ -115,8 +115,8 @@ impl UncheckedSlice {
     ///
     /// # Safety
     ///
-    /// The caller must guarantee that `start + count <= input.len()` and that the
-    /// addition does not overflow.
+    /// The caller must guarantee that `start + count <= input.len()` and that
+    /// the addition does not overflow.
     #[inline(always)]
     pub unsafe fn subslice<T>(input: &[T], start: usize, count: usize) -> &[T] {
         debug_assert!(
@@ -140,13 +140,23 @@ impl UncheckedSlice {
     /// The caller must guarantee that `start + count <= output.len()` and that
     /// the addition does not overflow.
     #[inline(always)]
-    pub unsafe fn subslice_mut<T>(output: &mut [T], start: usize, count: usize) -> &mut [T] {
+    pub unsafe fn subslice_mut<T>(
+        output: &mut [T],
+        start: usize,
+        count: usize,
+    ) -> &mut [T] {
         debug_assert!(
             Self::range_fits(output.len(), start, count),
             "subslice range exceeds output buffer"
         );
-        // SAFETY: The caller guarantees that the range is valid inside `output`.
-        unsafe { core::slice::from_raw_parts_mut(output.as_mut_ptr().add(start), count) }
+        // SAFETY: The caller guarantees that the range is valid inside
+        // `output`.
+        unsafe {
+            core::slice::from_raw_parts_mut(
+                output.as_mut_ptr().add(start),
+                count,
+            )
+        }
     }
 
     /// Copies `count` values between unchecked slice offsets.
@@ -269,7 +279,11 @@ impl UncheckedSlice {
     /// The caller must guarantee that `index` points to a valid unaligned
     /// region capable of holding one `T`.
     #[inline(always)]
-    pub unsafe fn write_ne_unaligned<T: Copy>(output: &mut [u8], index: usize, value: T) {
+    pub unsafe fn write_ne_unaligned<T: Copy>(
+        output: &mut [u8],
+        index: usize,
+        value: T,
+    ) {
         debug_assert!(
             Self::range_fits(output.len(), index, mem::size_of::<T>()),
             "unchecked output range exceeds destination buffer"

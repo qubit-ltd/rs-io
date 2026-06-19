@@ -17,8 +17,14 @@ mod seekable_output;
 mod write_seek;
 
 pub use buf_read_seek::BufReadSeek;
-pub use input::{validate_read_count, Input};
-pub use output::{validate_write_count, Output};
+pub use input::{
+    Input,
+    validate_read_count,
+};
+pub use output::{
+    Output,
+    validate_write_count,
+};
 pub use read_seek::ReadSeek;
 pub use read_write::ReadWrite;
 pub use read_write_seek::ReadWriteSeek;
