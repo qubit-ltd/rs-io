@@ -8,8 +8,10 @@
 
 use std::collections::VecDeque;
 use std::io::{
+    Cursor,
     Error,
     ErrorKind,
+    Write,
 };
 
 use qubit_io::{
@@ -172,4 +174,27 @@ fn test_output_write_rejects_overreported_count() {
         .expect_err("overreported write count should be rejected");
 
     assert_eq!(ErrorKind::InvalidData, error.kind());
+}
+
+#[test]
+fn test_write_blanket_impl_exposes_output_methods() {
+    let mut cursor = Cursor::new(Vec::new());
+
+    // SAFETY: `b"bc"` is a valid source range inside `b"abc"`.
+    let written = unsafe {
+        Output::write_unchecked(&mut cursor, b"abc", 1, 2)
+            .expect("write_unchecked should succeed")
+    };
+    assert_eq!(2, written);
+    assert_eq!(b"bc", cursor.into_inner().as_slice());
+
+    let mut cursor = Cursor::new(Vec::new());
+    let written = Output::write(&mut cursor, b"xy")
+        .expect("Output::write should delegate to write_unchecked");
+    assert_eq!(2, written);
+    assert_eq!(b"xy", cursor.into_inner().as_slice());
+
+    let mut cursor = Cursor::new(Vec::new());
+    Write::write_all(&mut cursor, b"z").expect("seed bytes for flush");
+    Output::flush_pending(&mut cursor).expect("flush_pending should succeed");
 }

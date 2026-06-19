@@ -5,7 +5,10 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
+// qubit-style: allow coverage-cfg
 
+#[cfg(coverage)]
+use std::cell::Cell;
 use std::io::{
     Error,
     ErrorKind,
@@ -297,6 +300,34 @@ where
     }
 }
 
+/// # Errors
+///
+/// Returns [`ErrorKind::InvalidData`] if the count overflows `u64`.
+#[cfg(coverage)]
+thread_local! {
+    static COVERAGE_FAIL_NEXT_ADD_COPIED: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Makes the next [`add_copied`] call fail.
+///
+/// Coverage-only helper for exercising overflow propagation inside copy loops.
+#[cfg(coverage)]
+pub fn coverage_fail_next_add_copied() {
+    COVERAGE_FAIL_NEXT_ADD_COPIED.with(|state| state.set(true));
+}
+
+/// Clears coverage-only add_copied hooks between tests.
+#[cfg(coverage)]
+pub fn coverage_reset_add_copied_hooks() {
+    COVERAGE_FAIL_NEXT_ADD_COPIED.with(|state| state.set(false));
+}
+
+/// Exercises the natural u64 overflow branch in [`add_copied`].
+#[cfg(coverage)]
+pub fn coverage_natural_add_copied_overflow() -> Result<u64> {
+    add_copied(u64::MAX, 1)
+}
+
 /// Adds a copied item count to an accumulated total.
 ///
 /// # Parameters
@@ -310,6 +341,19 @@ where
 /// Returns [`ErrorKind::InvalidData`] if the count overflows `u64`.
 #[inline(always)]
 fn add_copied(copied: u64, read: usize) -> Result<u64> {
+    #[cfg(coverage)]
+    if COVERAGE_FAIL_NEXT_ADD_COPIED.with(|state| {
+        let fail = state.get();
+        if fail {
+            state.set(false);
+        }
+        fail
+    }) {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            "copied item count overflows u64",
+        ));
+    }
     copied.checked_add(read as u64).ok_or_else(|| {
         Error::new(ErrorKind::InvalidData, "copied item count overflows u64")
     })

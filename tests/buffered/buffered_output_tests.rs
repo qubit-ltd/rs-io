@@ -20,6 +20,7 @@ use std::rc::Rc;
 use qubit_io::{
     BufferedOutput,
     Output,
+    Seekable,
 };
 
 #[derive(Default)]
@@ -1009,4 +1010,195 @@ fn test_write_rejects_invalid_delegated_write_count() {
         .expect_err("overreported delegated write count should be rejected");
 
     assert_eq!(ErrorKind::InvalidData, error.kind());
+}
+
+#[test]
+fn test_buffered_output_trait_write_via_dyn_output() {
+    let cursor = Cursor::new(Vec::new());
+    let mut output = BufferedOutput::with_capacity(cursor, 4);
+    let output: &mut dyn Output<Item = u8> = &mut output;
+
+    let written = output
+        .write(b"abc")
+        .expect("BufferedOutput should implement Output::write");
+
+    assert_eq!(3, written);
+    output.flush_pending().expect("flush should succeed");
+}
+
+#[test]
+fn test_buffered_output_trait_write_unchecked_via_dyn_output() {
+    let cursor = Cursor::new(Vec::new());
+    let mut output = BufferedOutput::with_capacity(cursor, 4);
+    let output: &mut dyn Output<Item = u8> = &mut output;
+
+    // SAFETY: `b"bc"` is a valid source range inside `b"abc"`.
+    let written = unsafe {
+        output
+            .write_unchecked(b"abc", 1, 2)
+            .expect("BufferedOutput should implement Output::write_unchecked")
+    };
+
+    assert_eq!(2, written);
+    output.flush_pending().expect("flush should succeed");
+}
+
+#[test]
+fn test_buffered_output_with_zero_capacity_uses_one() {
+    let cursor = Cursor::new(Vec::new());
+    let output = BufferedOutput::with_capacity(cursor, 0);
+
+    assert_eq!(1, output.capacity());
+}
+
+#[test]
+fn test_buffered_output_write_rejects_overreported_count_via_trait() {
+    let mut output = BufferedOutput::with_capacity(OverreportingOutput, 4);
+    let output: &mut dyn Output<Item = u16> = &mut output;
+
+    let error = output
+        .write(&[1, 2, 3, 4])
+        .expect_err("trait write should validate reported counts");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+}
+
+#[test]
+fn test_buffered_output_into_inner_flushes_generic_items() {
+    let mut output = BufferedOutput::with_capacity(U16Output::default(), 4);
+
+    // SAFETY: The source range is valid for u16 items.
+    unsafe {
+        output
+            .write_all_unchecked(&[1, 2], 0, 2)
+            .expect("buffered write should succeed");
+    }
+
+    let inner = output
+        .into_inner()
+        .expect("into_inner should flush pending generic items");
+
+    assert_eq!(&[1, 2], inner.values.as_slice());
+    assert!(inner.flushed);
+}
+
+#[test]
+fn test_write_cold_flushes_before_delegated_large_write() {
+    let cursor = Cursor::new(Vec::new());
+    let mut output = BufferedOutput::with_capacity(cursor, 4);
+
+    output
+        .write_all(b"abc")
+        .expect("small write should stay buffered");
+
+    // SAFETY: The source range is valid and triggers the cold write path.
+    let written = unsafe {
+        output
+            .write_unchecked(b"1234", 0, 4)
+            .expect("large write should flush then delegate")
+    };
+
+    assert_eq!(4, written);
+    let cursor = flush_into_inner(output);
+    assert_eq!(b"abc1234", cursor.into_inner().as_slice());
+}
+
+#[test]
+fn test_write_all_cold_flushes_before_delegated_large_write_all() {
+    let cursor = Cursor::new(Vec::new());
+    let mut output = BufferedOutput::with_capacity(cursor, 4);
+
+    output
+        .write_all(b"abc")
+        .expect("small write should stay buffered");
+
+    // SAFETY: The source range is valid and triggers the cold write-all path.
+    unsafe {
+        output
+            .write_all_unchecked(b"1234", 0, 4)
+            .expect("large write_all should flush then delegate");
+    }
+
+    let cursor = flush_into_inner(output);
+    assert_eq!(b"abc1234", cursor.into_inner().as_slice());
+}
+
+#[derive(Default)]
+struct OverflowPositionOutput {
+    values: Vec<u16>,
+    position: u64,
+}
+
+impl Output for OverflowPositionOutput {
+    type Item = u16;
+
+    unsafe fn write_unchecked(
+        &mut self,
+        input: &[u16],
+        index: usize,
+        count: usize,
+    ) -> std::io::Result<usize> {
+        self.values.extend_from_slice(&input[index..index + count]);
+        Ok(count)
+    }
+
+    fn flush_pending(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl qubit_io::Seekable for OverflowPositionOutput {
+    type Item = u16;
+
+    fn seek_to(&mut self, position: SeekFrom) -> std::io::Result<u64> {
+        match position {
+            SeekFrom::Current(0) => Ok(self.position),
+            SeekFrom::Start(offset) => {
+                self.position = offset;
+                Ok(offset)
+            }
+            _ => Err(Error::new(ErrorKind::Unsupported, "unsupported seek")),
+        }
+    }
+}
+
+#[test]
+fn test_stream_position_rejects_pending_item_overflow() {
+    let mut output = BufferedOutput::with_capacity(
+        OverflowPositionOutput {
+            values: Vec::new(),
+            position: u64::MAX,
+        },
+        4,
+    );
+
+    // SAFETY: The source range is valid for u16 items.
+    unsafe {
+        output
+            .write_all_unchecked(&[1, 2], 0, 2)
+            .expect("buffered write should succeed");
+    }
+
+    let error = output
+        .stream_position()
+        .expect_err("pending items must not overflow logical position");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!(
+        "buffered pending items overflow wrapped output position",
+        error.to_string()
+    );
+}
+
+#[test]
+fn test_seekable_trait_object_dispatches_to_buffered_output() {
+    let mut output =
+        BufferedOutput::with_capacity(U16SeekOutput::new(Vec::new()), 4);
+    let seekable: &mut dyn Seekable<Item = u16> = &mut output;
+
+    let position = seekable
+        .seek_to(SeekFrom::Start(0))
+        .expect("Seekable trait object should dispatch to buffered output");
+
+    assert_eq!(0, position);
 }

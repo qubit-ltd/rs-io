@@ -506,3 +506,171 @@ fn test_discard_exact_or_eof_returns_non_interrupted_error() {
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("read failed", error.to_string());
 }
+
+#[test]
+fn test_read_exact_vec_limited_into_delegates_via_trait() {
+    let mut reader = Cursor::new(b"abcdef".to_vec());
+    let mut output = b"prefix".to_vec();
+
+    reader
+        .read_exact_vec_limited_into(&mut output, 4, 8)
+        .expect("ReadExt should delegate read_exact_vec_limited_into");
+
+    assert_eq!(b"prefixabcd", output.as_slice());
+}
+
+#[test]
+fn test_read_to_end_limited_into_delegates_via_trait() {
+    let mut reader = Cursor::new(b"abc".to_vec());
+    let mut output = b"seed".to_vec();
+
+    let count = reader
+        .read_to_end_limited_into(&mut output, 3)
+        .expect("ReadExt should delegate read_to_end_limited_into");
+
+    assert_eq!(3, count);
+    assert_eq!(b"seedabc", output.as_slice());
+}
+
+#[test]
+fn test_read_to_string_limited_into_delegates_via_trait() {
+    let mut reader = Cursor::new(b"hello".to_vec());
+    let mut output = String::from("pre-");
+
+    let count = reader
+        .read_to_string_limited_into(&mut output, 8)
+        .expect("ReadExt should delegate read_to_string_limited_into");
+
+    assert_eq!(5, count);
+    assert_eq!("pre-hello", output);
+}
+
+#[test]
+fn test_read_to_string_limited_into_rejects_invalid_utf8() {
+    let mut reader = Cursor::new(vec![0xff, 0xfe]);
+    let mut output = String::new();
+
+    let error = reader
+        .read_to_string_limited_into(&mut output, 4)
+        .expect_err("invalid UTF-8 should be rejected");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert!(output.is_empty());
+}
+
+#[test]
+fn test_read_ext_blanket_impl_on_concrete_reader() {
+    let mut reader = Cursor::new(b"abcdef".to_vec());
+    let mut buffer = [b'-'; 6];
+
+    // SAFETY: `buffer[1..4]` is a valid destination range.
+    let count = unsafe {
+        reader
+            .read_unchecked(&mut buffer, 1, 3)
+            .expect("blanket read_unchecked should work on concrete readers")
+    };
+    assert_eq!(3, count);
+    assert_eq!(b"-abc--", &buffer);
+
+    let array = reader
+        .read_exact_array::<2>()
+        .expect("blanket read_exact_array should work on concrete readers");
+    assert_eq!(*b"de", array);
+}
+
+#[test]
+fn test_read_to_string_limited_rejects_invalid_utf8() {
+    let mut reader = Cursor::new(vec![0xff, 0xfe]);
+
+    let error = reader
+        .read_to_string_limited(4)
+        .expect_err("invalid UTF-8 should be rejected");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+}
+
+#[test]
+fn test_read_ext_blanket_impl_helpers_via_ufcs() {
+    let mut reader = Cursor::new(b"abcdef".to_vec());
+
+    let data = ReadExt::read_exact_vec_limited(&mut reader, 4, 8)
+        .expect("UFCS read_exact_vec_limited should use blanket impl");
+    assert_eq!(b"abcd", data.as_slice());
+
+    let mut reader = Cursor::new(b"hello".to_vec());
+    let text = ReadExt::read_to_string_limited(&mut reader, 8)
+        .expect("UFCS read_to_string_limited should use blanket impl");
+    assert_eq!("hello", text);
+
+    let mut reader = Cursor::new(b"hello".to_vec());
+    let mut output = String::from("x");
+    let count =
+        ReadExt::read_to_string_limited_into(&mut reader, &mut output, 8)
+            .expect("UFCS read_to_string_limited_into should use blanket impl");
+    assert_eq!(5, count);
+    assert_eq!("xhello", output);
+}
+
+#[test]
+fn test_read_exact_vec_limited_propagates_read_error_via_blanket_impl() {
+    let mut reader = FailingReader;
+
+    let error = reader.read_exact_vec_limited(3, 3).expect_err(
+        "blanket read_exact_vec_limited should propagate read errors",
+    );
+
+    assert_eq!(ErrorKind::Other, error.kind());
+    assert_eq!("read failed", error.to_string());
+}
+
+#[test]
+fn test_read_to_string_limited_propagates_read_error_via_blanket_impl() {
+    let mut reader = FailingReader;
+
+    let error = reader.read_to_string_limited(8).expect_err(
+        "blanket read_to_string_limited should propagate read errors",
+    );
+
+    assert_eq!(ErrorKind::Other, error.kind());
+    assert_eq!("read failed", error.to_string());
+}
+
+#[test]
+fn test_read_to_string_limited_into_propagates_read_error_via_blanket_impl() {
+    let mut reader = FailingReader;
+    let mut output = String::from("seed-");
+
+    let error = reader
+        .read_to_string_limited_into(&mut output, 8)
+        .expect_err(
+            "blanket read_to_string_limited_into should propagate read errors",
+        );
+
+    assert_eq!(ErrorKind::Other, error.kind());
+    assert_eq!("read failed", error.to_string());
+    assert_eq!("seed-", output);
+}
+
+#[test]
+fn test_read_ext_blanket_impl_on_dyn_read() {
+    let mut cursor = Cursor::new(b"abcdef".to_vec());
+    let reader: &mut dyn Read = &mut cursor;
+
+    let data = ReadExt::read_exact_vec_limited(reader, 4, 8)
+        .expect("read_exact_vec_limited should work on dyn Read");
+    assert_eq!(b"abcd", data.as_slice());
+
+    let mut cursor = Cursor::new(b"hello".to_vec());
+    let reader: &mut dyn Read = &mut cursor;
+    let text = ReadExt::read_to_string_limited(reader, 8)
+        .expect("read_to_string_limited should work on dyn Read");
+    assert_eq!("hello", text);
+
+    let mut cursor = Cursor::new(b"hello".to_vec());
+    let reader: &mut dyn Read = &mut cursor;
+    let mut output = String::from("x");
+    let count = ReadExt::read_to_string_limited_into(reader, &mut output, 8)
+        .expect("read_to_string_limited_into should work on dyn Read");
+    assert_eq!(5, count);
+    assert_eq!("xhello", output);
+}

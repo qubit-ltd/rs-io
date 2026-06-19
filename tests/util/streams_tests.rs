@@ -565,3 +565,72 @@ fn test_compare_content_returns_right_read_error() {
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("read failed", error.to_string());
 }
+
+#[test]
+fn test_copy_at_most_impl_retries_interrupted_reads_for_typed_streams() {
+    let mut input = InterruptedOnceReader::new(b"abc");
+    let mut output = Vec::new();
+
+    let copied = Streams::copy_at_most(&mut input, &mut output, 3)
+        .expect("typed copy_at_most should retry interrupted reads");
+
+    assert_eq!(3, copied);
+    assert_eq!(b"abc", output.as_slice());
+}
+
+#[test]
+fn test_compare_content_with_buffer_size_continues_across_equal_chunks() {
+    let mut left = Cursor::new(b"abcdef".to_vec());
+    let mut right = Cursor::new(b"abcdef".to_vec());
+
+    assert_eq!(
+        Ordering::Equal,
+        Streams::compare_content_with_buffer_size(&mut left, &mut right, 2)
+            .expect("equal streams should compare across multiple chunks")
+    );
+    assert_eq!(6, left.position());
+    assert_eq!(6, right.position());
+}
+
+#[test]
+fn test_compare_content_with_buffer_size_detects_shorter_stream() {
+    let mut left = Cursor::new(b"abc".to_vec());
+    let mut right = Cursor::new(b"abcd".to_vec());
+
+    assert_eq!(
+        Ordering::Less,
+        Streams::compare_content_with_buffer_size(&mut left, &mut right, 4)
+            .expect("shorter stream should compare as less")
+    );
+}
+
+#[test]
+fn test_compare_content_with_buffer_size_returns_allocation_error() {
+    let mut left = Cursor::new(b"a".to_vec());
+    let mut right = Cursor::new(b"a".to_vec());
+
+    let error = Streams::compare_content_with_buffer_size(
+        &mut left,
+        &mut right,
+        usize::MAX,
+    )
+    .expect_err("absurd compare buffers should fail allocation");
+
+    assert_eq!(ErrorKind::Other, error.kind());
+}
+
+#[test]
+fn test_copy_at_most_with_buffer_size_returns_allocation_error() {
+    let mut input = Cursor::new(b"abc".to_vec());
+    let mut output = Vec::new();
+
+    let error = Streams::copy_at_most_with_buffer_size(
+        &mut input,
+        &mut output,
+        3,
+        usize::MAX,
+    )
+    .expect_err("absurd copy buffers should fail allocation");
+
+    assert_eq!(ErrorKind::Other, error.kind());
+}

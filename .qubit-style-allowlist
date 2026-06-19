@@ -1,0 +1,5 @@
+coverage-cfg | src/lib.rs | Re-export coverage-only allocation and copy helpers for cfg(coverage) integration tests.
+coverage-cfg | src/util/mod.rs | Re-export coverage-only reserve hooks from the private allocation module.
+coverage-cfg | src/util/allocation.rs | Inject thread-local reserve failure hooks so allocation error propagation paths can be exercised under coverage builds.
+coverage-cfg | src/ext/mod.rs | Re-export coverage-only add_copied hooks from the private input_ext module.
+coverage-cfg | src/ext/input_ext.rs | Inject a thread-local add_copied failure hook so u64 overflow propagation inside copy loops can be exercised under coverage builds.
