@@ -7,9 +7,16 @@
 // =============================================================================
 
 use std::collections::VecDeque;
-use std::io::{Error, ErrorKind};
+use std::io::{
+    Error,
+    ErrorKind,
+};
 
-use qubit_io::{Input, InputExt, Output};
+use qubit_io::{
+    Input,
+    InputExt,
+    Output,
+};
 
 struct ChunkInput {
     chunks: VecDeque<Vec<u16>>,

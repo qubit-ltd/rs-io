@@ -50,7 +50,11 @@ fn ne_unaligned_unchecked_reads_and_writes() {
     let mut output = [0_u8; 8];
     // SAFETY: Writes a little-endian u16 to valid unaligned offset 1.
     unsafe {
-        qubit_io::UncheckedSlice::write_ne_unaligned(&mut output, 1, 0x1234_u16);
+        qubit_io::UncheckedSlice::write_ne_unaligned(
+            &mut output,
+            1,
+            0x1234_u16,
+        );
         let value = UncheckedSlice::read_ne_unaligned::<u16>(&output, 1);
         assert_eq!(value, 0x1234_u16);
     }
@@ -68,7 +72,8 @@ fn subslice_returns_range() {
 #[test]
 fn subslice_mut_returns_mutable_range() {
     let mut output = [1_u8, 2, 3, 4, 5];
-    let slice = unsafe { qubit_io::UncheckedSlice::subslice_mut(&mut output, 2, 2) };
+    let slice =
+        unsafe { qubit_io::UncheckedSlice::subslice_mut(&mut output, 2, 2) };
     slice.copy_from_slice(&[8, 9]);
     assert_eq!(output, [1, 2, 8, 9, 5]);
 }
@@ -78,7 +83,13 @@ fn copy_nonoverlapping_unchecked_copies_slice() {
     let source = [1_u8, 2, 3, 4];
     let mut destination = [0_u8, 0, 0, 0];
     unsafe {
-        qubit_io::UncheckedSlice::copy_nonoverlapping(&source, 0, &mut destination, 0, 4);
+        qubit_io::UncheckedSlice::copy_nonoverlapping(
+            &source,
+            0,
+            &mut destination,
+            0,
+            4,
+        );
     }
     assert_eq!(destination, source);
 }
