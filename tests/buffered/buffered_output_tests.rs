@@ -31,7 +31,7 @@ impl U16SeekOutput {
 impl Output for U16SeekOutput {
     type Item = u16;
 
-    unsafe fn write_from(
+    unsafe fn write_unchecked(
         &mut self,
         input: &[u16],
         index: usize,
@@ -94,7 +94,7 @@ impl qubit_io::Seekable for U16SeekOutput {
         if target < 0 {
             return Err(Error::new(
                 ErrorKind::InvalidInput,
-                "seek position cannot be negative for unit stream",
+                "seek position cannot be negative for item stream",
             ));
         }
 
@@ -117,7 +117,7 @@ struct U16Output {
 impl Output for U16Output {
     type Item = u16;
 
-    unsafe fn write_from(
+    unsafe fn write_unchecked(
         &mut self,
         input: &[u16],
         index: usize,
@@ -138,7 +138,7 @@ struct OverreportingOutput;
 impl Output for OverreportingOutput {
     type Item = u16;
 
-    unsafe fn write_from(
+    unsafe fn write_unchecked(
         &mut self,
         _input: &[u16],
         _index: usize,
@@ -175,14 +175,14 @@ impl Write for SharedWriter {
 }
 
 #[test]
-fn test_buffered_output_writes_generic_units() {
+fn test_buffered_output_writes_generic_items() {
     let inner = U16Output::default();
     let mut output = BufferedOutput::with_capacity(inner, 4);
 
     // SAFETY: The full input range is valid.
     let written = unsafe {
         output
-            .write_from(&[1, 2, 3], 0, 3)
+            .write_unchecked(&[1, 2, 3], 0, 3)
             .expect("small write should be buffered")
     };
     assert_eq!(3, written);
@@ -190,7 +190,7 @@ fn test_buffered_output_writes_generic_units() {
 
     output
         .ensure_spare_capacity(2)
-        .expect("spare request should flush pending units");
+        .expect("spare request should flush pending items");
     assert_eq!(&[1, 2, 3], output.inner().values.as_slice());
 
     output
@@ -200,7 +200,7 @@ fn test_buffered_output_writes_generic_units() {
 }
 
 #[test]
-fn test_buffered_output_implements_output_for_generic_units() {
+fn test_buffered_output_implements_output_for_generic_items() {
     let inner = U16Output::default();
     let mut output = BufferedOutput::with_capacity(inner, 4);
     let output: &mut dyn Output<Item = u16> = &mut output;
@@ -208,14 +208,14 @@ fn test_buffered_output_implements_output_for_generic_units() {
     // SAFETY: The full input range is valid.
     let written = unsafe {
         output
-            .write_from(&[1, 2, 3], 0, 3)
+            .write_unchecked(&[1, 2, 3], 0, 3)
             .expect("buffered output should implement Output")
     };
 
     assert_eq!(3, written);
     output
         .flush_pending()
-        .expect("buffered output should flush pending units");
+        .expect("buffered output should flush pending items");
 }
 
 #[test]
@@ -226,7 +226,7 @@ fn test_buffered_output_adapts_std_write_as_u8_output() {
     // SAFETY: The source range is valid.
     unsafe {
         output
-            .write_all_from(b"abc", 0, 3)
+            .write_all_unchecked(b"abc", 0, 3)
             .expect("std writer should be an Output<Item = u8>");
     }
     output.flush_pending().expect("flush should succeed");
@@ -235,19 +235,19 @@ fn test_buffered_output_adapts_std_write_as_u8_output() {
 }
 
 #[test]
-fn test_buffered_output_rejects_overreported_unit_count() {
+fn test_buffered_output_rejects_overreported_item_count() {
     let mut output = BufferedOutput::with_capacity(OverreportingOutput, 4);
 
     // SAFETY: The source range is valid.
     let error = unsafe {
         output
-            .write_all_from(&[1, 2, 3, 4], 0, 4)
+            .write_all_unchecked(&[1, 2, 3, 4], 0, 4)
             .expect_err("overreported direct write count should fail")
     };
 
     assert_eq!(ErrorKind::InvalidData, error.kind());
     assert_eq!(
-        "writer reported 5 units for a 4-unit buffer",
+        "writer reported 5 items for a 4-item buffer",
         error.to_string()
     );
 }
@@ -580,10 +580,10 @@ fn test_write_all_flushes_then_buffers_smaller_input() {
     // SAFETY: Both full input slices are valid source ranges.
     unsafe {
         output
-            .write_all_from(b"abc", 0, 3)
+            .write_all_unchecked(b"abc", 0, 3)
             .expect("buffered prefix should be accepted");
         output
-            .write_all_from(b"xy", 0, 2)
+            .write_all_unchecked(b"xy", 0, 2)
             .expect("small write should flush prefix and then buffer");
     }
     assert_eq!(b"abc", output.inner().get_ref().as_slice());
@@ -632,7 +632,7 @@ fn test_write_flushes_then_buffers_smaller_input() {
     // SAFETY: Both full input slices are valid source ranges.
     let prefix_count = unsafe {
         output
-            .write_from(b"abc", 0, 3)
+            .write_unchecked(b"abc", 0, 3)
             .expect("buffered prefix should be accepted")
     };
     assert_eq!(3, prefix_count);
@@ -640,7 +640,7 @@ fn test_write_flushes_then_buffers_smaller_input() {
     // SAFETY: The full input slice is a valid source range.
     let count = unsafe {
         output
-            .write_from(b"xy", 0, 2)
+            .write_unchecked(b"xy", 0, 2)
             .expect("small raw write should flush prefix and then buffer")
     };
     assert_eq!(2, count);
@@ -832,48 +832,48 @@ fn test_drop_flushes_pending_bytes_best_effort() {
 }
 
 #[test]
-fn test_seekable_units_flushes_pending_units_before_seeking() {
+fn test_seekable_items_flushes_pending_items_before_seeking() {
     let inner = U16SeekOutput::new(Vec::new());
     let mut output = BufferedOutput::with_capacity(inner, 4);
 
-    // SAFETY: The source range is valid for u16 units.
+    // SAFETY: The source range is valid for u16 items.
     unsafe {
         output
-            .write_all_from(&[10, 20, 30], 0, 3)
-            .expect("buffered write should keep units until flush")
+            .write_all_unchecked(&[10, 20, 30], 0, 3)
+            .expect("buffered write should keep items until flush")
     };
 
     let position = output
         .seek_to(SeekFrom::Start(3))
-        .expect("unit seek should flush pending units before seeking");
+        .expect("item seek should flush pending items before seeking");
     let (inner, pending) = output.into_parts();
 
     assert_eq!(3, position);
     assert_eq!(vec![10, 20, 30], inner.values);
     assert_eq!(3, inner.position);
-    assert!(pending.is_empty(), "seek should flush all pending units");
+    assert!(pending.is_empty(), "seek should flush all pending items");
 }
 
 #[test]
-fn test_seekable_units_supports_current_offset() {
+fn test_seekable_items_supports_current_offset() {
     let mut output = BufferedOutput::with_capacity(U16SeekOutput::new(Vec::new()), 4);
 
-    // SAFETY: The source range is valid for u16 units.
+    // SAFETY: The source range is valid for u16 items.
     unsafe {
         output
-            .write_all_from(&[11, 12], 0, 2)
-            .expect("buffered write should keep units")
+            .write_all_unchecked(&[11, 12], 0, 2)
+            .expect("buffered write should keep items")
     };
 
     let position = output
         .seek_to(SeekFrom::Current(1))
-        .expect("current seek should be interpreted in u16 units");
+        .expect("current seek should be interpreted in u16 items");
     let (inner, pending) = output.into_parts();
 
     assert_eq!(3, position);
     assert_eq!(3, inner.position);
     assert_eq!(vec![11, 12, 0], inner.values);
-    assert!(pending.is_empty(), "seek should flush all pending units");
+    assert!(pending.is_empty(), "seek should flush all pending items");
 }
 
 #[test]

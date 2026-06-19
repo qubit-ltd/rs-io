@@ -13,33 +13,14 @@ use crate::util::UncheckedSlice;
 
 /// Extension methods for [`Output`] values.
 ///
-/// `OutputExt` keeps convenience and complete-write helpers outside the
-/// minimal [`Output`] trait. The methods are implemented for every
-/// unit-oriented output, including `dyn Output` trait objects.
+/// `OutputExt` keeps complete-write helpers outside the minimal [`Output`]
+/// trait. The methods are implemented for every item-oriented output,
+/// including `dyn Output` trait objects.
 pub trait OutputExt: Output {
-    /// Writes items from the full input slice.
-    ///
-    /// This method performs at most one write operation and keeps the same
-    /// short-write behavior as [`Output::write_from`].
-    ///
-    /// # Parameters
-    /// - `input`: Source items.
-    ///
-    /// # Returns
-    /// The number of items accepted from `input`.
-    ///
-    /// # Errors
-    /// Returns the output error reported by the implementation.
-    #[inline(always)]
-    fn write(&mut self, input: &[Self::Item]) -> Result<usize> {
-        // SAFETY: The full input slice is a valid source range.
-        unsafe { self.write_from(input, 0, input.len()) }
-    }
-
     /// Writes all items from the full input slice.
     ///
-    /// This method repeatedly calls [`Output::write_from`] until the full slice
-    /// is accepted. Interrupted writes are retried.
+    /// This method repeatedly calls [`Output::write_unchecked`] until the full
+    /// slice is accepted. Interrupted writes are retried.
     ///
     /// # Parameters
     /// - `input`: Source items.
@@ -52,14 +33,14 @@ pub trait OutputExt: Output {
     #[inline(always)]
     fn write_all(&mut self, input: &[Self::Item]) -> Result<()> {
         // SAFETY: The full input slice is a valid source range.
-        unsafe { self.write_all_from(input, 0, input.len()) }
+        unsafe { self.write_all_unchecked(input, 0, input.len()) }
     }
 
     /// Writes all items from an indexed input range without checking the range.
     ///
-    /// This method repeatedly calls [`Output::write_from`] until all `count`
-    /// items are accepted. Interrupted writes are retried. A zero progress
-    /// report before the range is complete is converted to
+    /// This method repeatedly calls [`Output::write_unchecked`] until all
+    /// `count` items are accepted. Interrupted writes are retried. A zero
+    /// progress report before the range is complete is converted to
     /// [`ErrorKind::WriteZero`].
     ///
     /// # Parameters
@@ -76,7 +57,7 @@ pub trait OutputExt: Output {
     /// # Safety
     /// The caller must guarantee that `index..index + count` is a valid range
     /// inside `input` and that the addition does not overflow.
-    unsafe fn write_all_from(
+    unsafe fn write_all_unchecked(
         &mut self,
         input: &[Self::Item],
         index: usize,
@@ -91,7 +72,7 @@ pub trait OutputExt: Output {
             let remaining = count - written;
             // SAFETY: The caller guarantees the original source range is
             // valid; `written < count`, so this suffix remains inside it.
-            match unsafe { self.write_from(input, index + written, remaining) } {
+            match unsafe { self.write_unchecked(input, index + written, remaining) } {
                 Ok(0) => {
                     return Err(Error::new(
                         ErrorKind::WriteZero,

@@ -240,7 +240,7 @@ assert_eq!(b"xyz", cursor.into_inner().as_slice());
 大多数 helper 直接操作调用方提供的缓冲区，并委托到底层 `Read`、`Write`
 或 `Seek` 实现。Wrapper 类型不做隐藏分配；是否缓冲以及如何缓冲由调用点显式决定。
 
-`Input::read_into`、`Output::write_from`、`OutputExt::write_all_from`、`Buffer<T>`、
+`Input::read_unchecked`、`Output::write_from`、`OutputExt::write_all_from`、`Buffer<T>`、
 `BufferedInput::unread`、
 `BufferedInput::copy_unread_to` 与
 `BufferedOutput::spare_raw_parts_mut` 是低层 API，面向已经完成 range 校验的调用方。

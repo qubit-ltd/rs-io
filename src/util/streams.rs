@@ -9,13 +9,8 @@ use std::cmp::Ordering;
 use std::io::{Error, ErrorKind, Read, Result, Write};
 
 use crate::ReadExt;
+use crate::capacity_const::{DEFAULT_COMPARE_BUFFER_SIZE, DEFAULT_COPY_BUFFER_SIZE};
 use crate::util::try_reserve_vec;
-
-/// Default buffer size used by stream copy operations.
-const COPY_BUFFER_SIZE: usize = 16 * 1024;
-
-/// Buffer size used by stream comparison operations.
-const COMPARE_BUFFER_SIZE: usize = 16 * 1024;
 
 /// Stream utility namespace.
 ///
@@ -91,7 +86,50 @@ impl Streams {
     {
         let mut reader = reader;
         let mut writer = writer;
-        copy_at_most_impl(&mut reader, &mut writer, max_bytes)
+        copy_at_most_impl(
+            &mut reader,
+            &mut writer,
+            max_bytes,
+            DEFAULT_COPY_BUFFER_SIZE,
+        )
+    }
+
+    /// Copies at most `max_bytes` bytes from `reader` to `writer` using a
+    /// caller-selected heap buffer.
+    ///
+    /// This method has the same copy semantics as [`Self::copy_at_most`], but
+    /// allocates a buffer on the heap with `buffer_size` bytes. Use it when
+    /// the default chunk size is too large for the caller's stack budget or
+    /// when a smaller copy window is desirable.
+    ///
+    /// # Parameters
+    /// - `reader`: Source reader.
+    /// - `writer`: Destination writer.
+    /// - `max_bytes`: Maximum number of bytes to copy.
+    /// - `buffer_size`: Number of bytes in the copy buffer.
+    ///
+    /// # Returns
+    /// The number of bytes copied.
+    ///
+    /// # Errors
+    /// Returns [`ErrorKind::InvalidInput`] when `buffer_size == 0`. Returns an
+    /// allocation error if the copy buffer cannot be allocated. Returns the
+    /// first non-interrupted read error or write error reported by the
+    /// underlying streams. Interrupted reads are retried.
+    #[inline]
+    pub fn copy_at_most_with_buffer_size<R, W>(
+        reader: &mut R,
+        writer: &mut W,
+        max_bytes: u64,
+        buffer_size: usize,
+    ) -> Result<u64>
+    where
+        R: Read + ?Sized,
+        W: Write + ?Sized,
+    {
+        let mut reader = reader;
+        let mut writer = writer;
+        copy_at_most_impl(&mut reader, &mut writer, max_bytes, buffer_size)
     }
 
     /// Copies the remaining input if its total length is at most `max_bytes`.
@@ -129,7 +167,12 @@ impl Streams {
     {
         let mut reader = reader;
         let mut writer = writer;
-        let copied = copy_at_most_impl(&mut reader, &mut writer, max_bytes)?;
+        let copied = copy_at_most_impl(
+            &mut reader,
+            &mut writer,
+            max_bytes,
+            DEFAULT_COPY_BUFFER_SIZE,
+        )?;
         if copied < max_bytes {
             return Ok(copied);
         }
@@ -192,7 +235,7 @@ impl Streams {
     /// # Errors
     /// Returns the first read error reported by either stream.
     pub fn compare_content(left: &mut dyn Read, right: &mut dyn Read) -> Result<Ordering> {
-        Self::compare_content_with_buffer_size(left, right, COMPARE_BUFFER_SIZE)
+        Self::compare_content_with_buffer_size(left, right, DEFAULT_COMPARE_BUFFER_SIZE)
     }
 
     /// Lexicographically compares the remaining contents of two readable
@@ -266,19 +309,35 @@ impl Streams {
 /// - `reader`: Source reader.
 /// - `writer`: Destination writer.
 /// - `max_bytes`: Maximum number of bytes to copy.
+/// - `buffer_size`: Number of bytes in the copy buffer.
 ///
 /// # Returns
 /// The number of bytes copied.
 ///
 /// # Errors
-/// Returns the first non-interrupted read error or write error reported by the
-/// underlying streams. Interrupted reads are retried.
-fn copy_at_most_impl(reader: &mut dyn Read, writer: &mut dyn Write, max_bytes: u64) -> Result<u64> {
-    let mut buffer = [0; COPY_BUFFER_SIZE];
+/// Returns [`ErrorKind::InvalidInput`] when `buffer_size == 0`. Returns an
+/// allocation error if the copy buffer cannot be allocated. Returns the first
+/// non-interrupted read error or write error reported by the underlying
+/// streams. Interrupted reads are retried.
+fn copy_at_most_impl(
+    reader: &mut dyn Read,
+    writer: &mut dyn Write,
+    max_bytes: u64,
+    buffer_size: usize,
+) -> Result<u64> {
+    if buffer_size == 0 {
+        return Err(Error::new(
+            ErrorKind::InvalidInput,
+            "copy buffer size must be greater than zero",
+        ));
+    }
+    let mut buffer = Vec::new();
+    try_reserve_vec(&mut buffer, buffer_size)?;
+    buffer.resize(buffer_size, 0);
     let mut remaining = max_bytes;
     let mut copied = 0;
     while remaining > 0 {
-        let requested = remaining.min(COPY_BUFFER_SIZE as u64) as usize;
+        let requested = remaining.min(buffer_size as u64) as usize;
         match reader.read(&mut buffer[..requested]) {
             Ok(0) => break,
             Ok(count) => {

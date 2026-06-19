@@ -250,7 +250,7 @@ Most helpers operate directly on caller-provided buffers and delegate to the
 underlying `Read`, `Write`, or `Seek` implementation. Wrapper types avoid hidden
 allocation; any buffering policy remains explicit at the call site.
 
-`Input::read_into`, `Output::write_from`, `OutputExt::write_all_from`, `Buffer<T>`,
+`Input::read_unchecked`, `Output::write_from`, `OutputExt::write_all_from`, `Buffer<T>`,
 `BufferedInput::unread`,
 `BufferedInput::copy_unread_to`, and
 `BufferedOutput::spare_raw_parts_mut` are low-level APIs for callers that have

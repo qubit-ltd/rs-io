@@ -183,6 +183,34 @@ fn test_copy_at_most_returns_write_error() {
 }
 
 #[test]
+fn test_copy_at_most_with_buffer_size_copies_at_most_requested_bytes() {
+    let mut input = Cursor::new(b"abcdef".to_vec());
+    let mut output = Vec::new();
+
+    let copied = Streams::copy_at_most_with_buffer_size(&mut input, &mut output, 4, 1)
+        .expect("copy should succeed with a caller-selected buffer");
+
+    assert_eq!(4, copied);
+    assert_eq!(b"abcd", output.as_slice());
+    assert_eq!(4, input.position());
+}
+
+#[test]
+fn test_copy_at_most_with_buffer_size_rejects_zero_size() {
+    let mut input = Cursor::new(b"abc".to_vec());
+    let mut output = Vec::new();
+
+    let error = Streams::copy_at_most_with_buffer_size(&mut input, &mut output, 3, 0)
+        .expect_err("zero-sized copy buffers should be rejected");
+
+    assert_eq!(ErrorKind::InvalidInput, error.kind());
+    assert_eq!(
+        "copy buffer size must be greater than zero",
+        error.to_string()
+    );
+}
+
+#[test]
 fn test_copy_copies_until_eof() {
     let mut input = Cursor::new(b"abcdef".to_vec());
     let mut output = Vec::new();

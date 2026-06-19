@@ -9,14 +9,14 @@
 use super::{Output, Seekable};
 
 /// Object-safe capability trait for outputs that can be written and
-/// repositioned in the same unit space.
+/// repositioned in the same item space.
 ///
 /// `SeekableOutput` exists to give the common [`Output`] + [`Seekable`]
-/// combination a stable, named trait with a single unit type. It is useful for
-/// buffered outputs and other adapters that must coordinate pending units when
+/// combination a stable, named trait with a single item type. It is useful for
+/// buffered outputs and other adapters that must coordinate pending items when
 /// seeking the wrapped output.
 ///
-/// [`Self::Item`] is the shared unit type for both writing and seeking. It
+/// [`Self::Item`] is the shared item type for both writing and seeking. It
 /// always matches [`Output::Item`] and [`Seekable::Item`].
 ///
 /// The trait adds no methods of its own. All operations come from the
@@ -24,7 +24,7 @@ use super::{Output, Seekable};
 /// with matching [`Output::Item`] and [`Seekable::Item`] automatically
 /// implements `SeekableOutput`.
 pub trait SeekableOutput: Output + Seekable<Item = <Self as Output>::Item> {
-    /// The unit type shared by writing and seeking on this output.
+    /// The item type shared by writing and seeking on this output.
     type Item;
 }
 

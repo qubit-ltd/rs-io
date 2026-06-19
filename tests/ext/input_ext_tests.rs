@@ -26,7 +26,7 @@ impl ChunkInput {
 impl Input for ChunkInput {
     type Item = u16;
 
-    unsafe fn read_into(
+    unsafe fn read_unchecked(
         &mut self,
         output: &mut [u16],
         index: usize,
@@ -52,7 +52,7 @@ struct CollectOutput {
 impl Output for CollectOutput {
     type Item = u16;
 
-    unsafe fn write_from(
+    unsafe fn write_unchecked(
         &mut self,
         input: &[u16],
         index: usize,
@@ -84,7 +84,7 @@ impl InterruptedInput {
 impl Input for InterruptedInput {
     type Item = u16;
 
-    unsafe fn read_into(
+    unsafe fn read_unchecked(
         &mut self,
         output: &mut [u16],
         index: usize,
@@ -95,7 +95,7 @@ impl Input for InterruptedInput {
             return Err(Error::new(ErrorKind::Interrupted, "interrupted"));
         }
         // SAFETY: The caller supplied the same valid destination range.
-        unsafe { self.inner.read_into(output, index, count) }
+        unsafe { self.inner.read_unchecked(output, index, count) }
     }
 }
 
@@ -138,13 +138,13 @@ fn test_input_ext_read_exact_retries_interrupted_reads() {
 }
 
 #[test]
-fn test_input_ext_copy_to_at_most_copies_requested_units() {
+fn test_input_ext_copy_to_at_most_copies_requested_items() {
     let mut input = ChunkInput::new(vec![vec![1, 2], vec![3, 4]]);
     let mut output = CollectOutput::default();
 
     let copied = input
         .copy_to_at_most(&mut output, 3)
-        .expect("bounded unit copy should succeed");
+        .expect("bounded item copy should succeed");
 
     assert_eq!(3, copied);
     assert_eq!(&[1, 2, 3], output.values.as_slice());
@@ -160,16 +160,14 @@ fn test_input_ext_copy_to_end_limited_rejects_oversized_input() {
         .expect_err("oversized input should be rejected");
 
     assert_eq!(ErrorKind::InvalidData, error.kind());
-    assert_eq!("input exceeds maximum length of 3 units", error.to_string());
+    assert_eq!("input exceeds maximum length of 3 items", error.to_string());
     assert!(output.values.is_empty());
 }
 
 #[test]
 fn test_input_ext_copy_to_end_limited_rejects_oversized_input_after_prefix() {
     let mut input = ChunkInput::new(vec![vec![1, 2, 3, 4]]);
-    let mut output = CollectOutput {
-        values: vec![9, 9],
-    };
+    let mut output = CollectOutput { values: vec![9, 9] };
 
     let error = input
         .copy_to_end_limited(&mut output, 3)

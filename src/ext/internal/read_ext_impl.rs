@@ -5,13 +5,13 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Internal implementation helpers for [`Read`] extension methods.
+//! Internal implementation helpers for [`Read`] and [`BufRead`] extension methods.
 //!
-//! This module provides free functions that back [`crate::ReadExt`]. The
-//! functions are public within the crate so sibling modules and tests can call
-//! them, but they are not re-exported from the crate root and are intended for
-//! internal use only.
-use std::io::{Error, ErrorKind, Read, Result};
+//! This module provides free functions that back [`crate::ReadExt`] and
+//! [`crate::BufReadExt`]. The functions are public within the crate so sibling
+//! modules and tests can call them, but they are not re-exported from the crate
+//! root and are intended for internal use only.
+use std::io::{BufRead, Error, ErrorKind, Read, Result};
 use std::string::FromUtf8Error;
 
 use crate::util::try_reserve_vec;
@@ -196,5 +196,89 @@ pub fn invalid_utf8_error(error: FromUtf8Error) -> Error {
     Error::new(
         ErrorKind::InvalidData,
         format!("limited input is not valid UTF-8: {error}"),
+    )
+}
+
+/// Reads bytes through `delimiter` into `output` with a maximum result size.
+///
+/// # Parameters
+/// - `reader`: Buffered source reader.
+/// - `delimiter`: Delimiter byte to search for.
+/// - `output`: Destination vector to append to.
+/// - `max_len`: Maximum accepted result length.
+///
+/// # Returns
+/// Number of bytes appended to `output`.
+///
+/// # Errors
+/// Returns an invalid-data error when the limit is exceeded, or an I/O error
+/// from `reader`.
+pub fn read_until_limited_into<T>(
+    reader: &mut T,
+    delimiter: u8,
+    output: &mut Vec<u8>,
+    max_len: usize,
+) -> Result<usize>
+where
+    T: BufRead + ?Sized,
+{
+    let original_len = output.len();
+    match read_until_limited_into_inner(reader, delimiter, output, max_len) {
+        Ok(count) => Ok(count),
+        Err(error) => {
+            output.truncate(original_len);
+            Err(error)
+        }
+    }
+}
+
+fn read_until_limited_into_inner<T>(
+    reader: &mut T,
+    delimiter: u8,
+    output: &mut Vec<u8>,
+    max_len: usize,
+) -> Result<usize>
+where
+    T: BufRead + ?Sized,
+{
+    let mut appended = 0;
+    loop {
+        let available = reader.fill_buf()?;
+        if available.is_empty() {
+            return Ok(appended);
+        }
+
+        let delimiter_position = available.iter().position(|byte| *byte == delimiter);
+        let requested = delimiter_position.map_or(available.len(), |position| position + 1);
+        let remaining = max_len.saturating_sub(appended);
+        if requested > remaining {
+            if remaining > 0 {
+                reader.consume(remaining);
+            }
+            return Err(limit_exceeded_error(max_len, delimiter));
+        }
+
+        try_reserve_vec(output, requested)?;
+        output.extend_from_slice(&available[..requested]);
+        reader.consume(requested);
+        appended += requested;
+        if delimiter_position.is_some() {
+            return Ok(appended);
+        }
+    }
+}
+
+/// Builds an invalid-data error for delimiter reads that exceed their limit.
+///
+/// # Parameters
+/// - `max_len`: Maximum accepted byte length.
+/// - `delimiter`: Delimiter byte searched by the caller.
+///
+/// # Returns
+/// An [`ErrorKind::InvalidData`] error.
+fn limit_exceeded_error(max_len: usize, delimiter: u8) -> Error {
+    Error::new(
+        ErrorKind::InvalidData,
+        format!("input exceeds maximum length of {max_len} bytes before delimiter {delimiter}"),
     )
 }

@@ -7,6 +7,7 @@
 // =============================================================================
 use std::io::{BufRead, Error, ErrorKind, Result};
 
+use crate::ext::internal::read_ext_impl;
 use crate::util::{try_reserve_string, try_reserve_vec};
 
 /// Extension methods for [`BufRead`] values.
@@ -127,7 +128,7 @@ where
     fn read_until_limited(&mut self, delimiter: u8, max_len: usize) -> Result<Vec<u8>> {
         let mut output = Vec::new();
         try_reserve_vec(&mut output, max_len.min(8192))?;
-        read_until_limited_into_impl(self, delimiter, &mut output, max_len)?;
+        read_ext_impl::read_until_limited_into(self, delimiter, &mut output, max_len)?;
         Ok(output)
     }
 
@@ -138,7 +139,7 @@ where
         output: &mut Vec<u8>,
         max_len: usize,
     ) -> Result<usize> {
-        read_until_limited_into_impl(self, delimiter, output, max_len)
+        read_ext_impl::read_until_limited_into(self, delimiter, output, max_len)
     }
 
     #[inline]
@@ -153,7 +154,7 @@ where
         let mut bytes = Vec::new();
         try_reserve_vec(&mut bytes, max_len.min(8192))?;
         let result = (|| {
-            let count = read_until_limited_into_impl(self, b'\n', &mut bytes, max_len)?;
+            let count = read_ext_impl::read_until_limited_into(self, b'\n', &mut bytes, max_len)?;
             let line = String::from_utf8(bytes).map_err(|error| {
                 Error::new(
                     ErrorKind::InvalidData,
@@ -185,7 +186,12 @@ where
                 if remaining > 0 {
                     self.consume(remaining);
                 }
-                return Err(limit_exceeded_error(max_len, delimiter));
+                return Err(Error::new(
+                    ErrorKind::InvalidData,
+                    format!(
+                        "input exceeds maximum length of {max_len} bytes before delimiter {delimiter}"
+                    ),
+                ));
             }
 
             self.consume(requested);
@@ -195,88 +201,4 @@ where
             }
         }
     }
-}
-
-/// Reads bytes through `delimiter` into `output` with a maximum result size.
-///
-/// # Parameters
-/// - `reader`: Buffered source reader.
-/// - `delimiter`: Delimiter byte to search for.
-/// - `output`: Destination vector to append to.
-/// - `max_len`: Maximum accepted result length.
-///
-/// # Returns
-/// Number of bytes appended to `output`.
-///
-/// # Errors
-/// Returns an invalid-data error when the limit is exceeded, or an I/O error
-/// from `reader`.
-fn read_until_limited_into_impl<T>(
-    reader: &mut T,
-    delimiter: u8,
-    output: &mut Vec<u8>,
-    max_len: usize,
-) -> Result<usize>
-where
-    T: BufRead + ?Sized,
-{
-    let original_len = output.len();
-    match read_until_limited_into_inner(reader, delimiter, output, max_len) {
-        Ok(count) => Ok(count),
-        Err(error) => {
-            output.truncate(original_len);
-            Err(error)
-        }
-    }
-}
-
-fn read_until_limited_into_inner<T>(
-    reader: &mut T,
-    delimiter: u8,
-    output: &mut Vec<u8>,
-    max_len: usize,
-) -> Result<usize>
-where
-    T: BufRead + ?Sized,
-{
-    let mut appended = 0;
-    loop {
-        let available = reader.fill_buf()?;
-        if available.is_empty() {
-            return Ok(appended);
-        }
-
-        let delimiter_position = available.iter().position(|byte| *byte == delimiter);
-        let requested = delimiter_position.map_or(available.len(), |position| position + 1);
-        let remaining = max_len.saturating_sub(appended);
-        if requested > remaining {
-            if remaining > 0 {
-                reader.consume(remaining);
-            }
-            return Err(limit_exceeded_error(max_len, delimiter));
-        }
-
-        try_reserve_vec(output, requested)?;
-        output.extend_from_slice(&available[..requested]);
-        reader.consume(requested);
-        appended += requested;
-        if delimiter_position.is_some() {
-            return Ok(appended);
-        }
-    }
-}
-
-/// Builds an invalid-data error for delimiter reads that exceed their limit.
-///
-/// # Parameters
-/// - `max_len`: Maximum accepted byte length.
-/// - `delimiter`: Delimiter byte searched by the caller.
-///
-/// # Returns
-/// An [`ErrorKind::InvalidData`] error.
-fn limit_exceeded_error(max_len: usize, delimiter: u8) -> Error {
-    Error::new(
-        ErrorKind::InvalidData,
-        format!("input exceeds maximum length of {max_len} bytes before delimiter {delimiter}"),
-    )
 }

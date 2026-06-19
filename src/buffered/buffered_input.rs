@@ -10,20 +10,21 @@ use std::io::{Error, ErrorKind, Result, SeekFrom};
 
 use crate::buffered::DEFAULT_BUFFER_CAPACITY;
 use crate::util::UncheckedSlice;
+use crate::traits::validate_read_count;
 use crate::{Buffer, Input, Seekable, SeekableInput};
 
-/// Buffered unit input over a wrapped input source.
+/// Buffered item input over a wrapped input source.
 ///
-/// This type owns a wrapped input object and an internal unit buffer. It keeps
-/// unread units in `buffer[position..limit]` so callers can inspect or consume
-/// the current unit window before refilling it.
+/// This type owns a wrapped input object and an internal item buffer. It keeps
+/// unread items in `buffer[position..limit]` so callers can inspect or consume
+/// the current item window before refilling it.
 ///
-/// `BufferedInput` is deliberately unit-oriented. It performs no binary
+/// `BufferedInput` is deliberately item-oriented. It performs no binary
 /// decoding, text decoding, or record parsing; higher-level stream adapters can
 /// build those concerns on top of [`Self::ensure_available`],
-/// [`Self::copy_unread_to`], and [`Self::read_into`]. The type also implements
-/// [`Input`] and [`Seekable`] directly, so it can be passed to unit-oriented
-/// APIs without converting through standard byte traits.
+/// [`Self::copy_unread_to`], and [`Self::read_unchecked`]. The type also
+/// implements [`Input`] and [`Seekable`] directly, so it can be passed to
+/// item-oriented APIs without converting through standard byte traits.
 #[derive(Debug)]
 pub struct BufferedInput<I>
 where
@@ -39,7 +40,7 @@ where
     I: Input,
     I::Item: Copy + Default,
 {
-    /// Creates a buffered unit input with the default capacity.
+    /// Creates a buffered item input with the default capacity.
     ///
     /// # Arguments
     ///
@@ -47,26 +48,26 @@ where
     ///
     /// # Returns
     ///
-    /// A new buffered unit input whose internal buffer has at least
-    /// `DEFAULT_BUFFER_CAPACITY` units.
+    /// A new buffered item input whose internal buffer has at least
+    /// `DEFAULT_BUFFER_CAPACITY` items.
     #[inline(always)]
     #[must_use]
     pub fn new(inner: I) -> Self {
         Self::with_capacity(inner, DEFAULT_BUFFER_CAPACITY)
     }
 
-    /// Creates a buffered unit input with at least the requested capacity.
+    /// Creates a buffered item input with at least the requested capacity.
     ///
     /// The actual capacity is raised to `1` when the requested value is `0`.
     ///
     /// # Arguments
     ///
     /// * `inner` - The input object wrapped by this buffer.
-    /// * `capacity` - The requested internal buffer capacity, in units.
+    /// * `capacity` - The requested internal buffer capacity, in items.
     ///
     /// # Returns
     ///
-    /// A new buffered unit input whose internal buffer capacity is
+    /// A new buffered item input whose internal buffer capacity is
     /// `capacity.max(1)`.
     #[inline]
     #[must_use]
@@ -90,7 +91,7 @@ where
     /// Returns an exclusive reference to the wrapped input object.
     ///
     /// Mutating the wrapped object directly may invalidate assumptions about
-    /// units already buffered by this value.
+    /// items already buffered by this value.
     ///
     /// # Returns
     ///
@@ -124,7 +125,7 @@ where
     ///
     /// # Returns
     ///
-    /// The wrapped input object and the buffer holding unread units in logical
+    /// The wrapped input object and the buffer holding unread items in logical
     /// read order.
     #[inline(always)]
     #[must_use]
@@ -136,30 +137,30 @@ where
     ///
     /// # Returns
     ///
-    /// The total number of units that can be held by the internal buffer.
+    /// The total number of items that can be held by the internal buffer.
     #[inline(always)]
     #[must_use]
     pub fn capacity(&self) -> usize {
         self.buffer.capacity()
     }
 
-    /// Returns the number of unread units currently buffered.
+    /// Returns the number of unread items currently buffered.
     ///
     /// # Returns
     ///
-    /// The length of `buffer[position..limit]`, in units.
+    /// The length of `buffer[position..limit]`, in items.
     #[inline(always)]
     #[must_use]
     pub const fn available(&self) -> usize {
         self.buffer.available()
     }
 
-    /// Returns the currently buffered unread units.
+    /// Returns the currently buffered unread items.
     ///
     /// # Returns
     ///
-    /// The `buffer[position..limit]` unread unit window. The slice may be empty
-    /// when no units are currently buffered.
+    /// The `buffer[position..limit]` unread item window. The slice may be empty
+    /// when no items are currently buffered.
     #[inline(always)]
     #[must_use]
     pub fn unread(&self) -> &[I::Item] {
@@ -170,7 +171,7 @@ where
     ///
     /// # Parameters
     ///
-    /// * `count` - Number of currently unread units to consume.
+    /// * `count` - Number of currently unread items to consume.
     ///
     /// # Safety
     ///
@@ -184,13 +185,13 @@ where
         }
     }
 
-    /// Copies unread units into an indexed output range without consuming them.
+    /// Copies unread items into an indexed output range without consuming them.
     ///
     /// # Parameters
     ///
-    /// * `output` - Destination storage that receives a copy of unread units.
+    /// * `output` - Destination storage that receives a copy of unread items.
     /// * `output_index` - Start index inside `output`.
-    /// * `count` - Number of unread units to copy.
+    /// * `count` - Number of unread items to copy.
     ///
     /// # Safety
     ///
@@ -209,7 +210,7 @@ where
             "unchecked unread copy exceeds available input buffer",
         );
         // SAFETY: The caller guarantees that the destination range is valid,
-        // non-overlapping, and that `count` unread units are currently
+        // non-overlapping, and that `count` unread items are currently
         // available.
         unsafe {
             UncheckedSlice::copy_nonoverlapping(
@@ -222,20 +223,20 @@ where
         }
     }
 
-    /// Refills the internal buffer after preserving unread units.
+    /// Refills the internal buffer after preserving unread items.
     ///
-    /// Consumed units may be discarded, and unread units may be moved to the
+    /// Consumed items may be discarded, and unread items may be moved to the
     /// front of the buffer before the wrapped reader is called.
     ///
     /// # Returns
     ///
-    /// `Ok(true)` if at least one unit was appended, or `Ok(false)` at EOF.
+    /// `Ok(true)` if at least one item was appended, or `Ok(false)` at EOF.
     ///
     /// # Errors
     ///
     /// Returns any non-interrupted I/O error produced by the wrapped reader.
     /// Returns [`ErrorKind::InvalidInput`] when the buffer is already full and
-    /// no unread units have been consumed; callers must consume buffered units
+    /// no unread items have been consumed; callers must consume buffered items
     /// before refilling in that state.
     pub fn fill_more(&mut self) -> Result<bool> {
         if self.available() == 0 {
@@ -245,33 +246,33 @@ where
             if self.tail_capacity() == 0 {
                 return Err(Error::new(
                     ErrorKind::InvalidInput,
-                    "buffered input is full; consume buffered units before refilling",
+                    "buffered input is full; consume buffered items before refilling",
                 ));
             }
         }
         self.read_more()
     }
 
-    /// Refills the buffer until at least `count` unread units are available.
+    /// Refills the buffer until at least `count` unread items are available.
     ///
-    /// This method may discard consumed units or move unread units to the front
+    /// This method may discard consumed items or move unread items to the front
     /// of the buffer before reading more data. It stops as soon as the unread
-    /// window reaches `count` units or the wrapped reader reaches EOF.
+    /// window reaches `count` items or the wrapped reader reaches EOF.
     ///
     /// # Parameters
     ///
-    /// * `count` - Minimum number of unread units required.
+    /// * `count` - Minimum number of unread items required.
     ///
     /// # Returns
     ///
-    /// `Ok(true)` if at least `count` unread units are buffered. `Ok(false)`
-    /// means EOF was reached before the requested unit count became available.
+    /// `Ok(true)` if at least `count` unread items are buffered. `Ok(false)`
+    /// means EOF was reached before the requested item count became available.
     ///
     /// # Errors
     ///
     /// Returns [`ErrorKind::InvalidInput`] when `count` exceeds the internal
     /// buffer capacity. Returns [`ErrorKind::InvalidData`] if the wrapped
-    /// reader reports more units than the spare buffer range could hold.
+    /// reader reports more items than the spare buffer range could hold.
     /// Returns any non-interrupted I/O error produced by the wrapped reader
     /// while refilling the buffer.
     #[inline]
@@ -279,7 +280,7 @@ where
         if count > self.capacity() {
             return Err(Error::new(
                 ErrorKind::InvalidInput,
-                "requested available units exceed buffered input capacity",
+                "requested available items exceed buffered input capacity",
             ));
         }
         while self.available() < count {
@@ -299,23 +300,23 @@ where
         Ok(true)
     }
 
-    /// Ensures that at least `count` unread units are available.
+    /// Ensures that at least `count` unread items are available.
     ///
     /// Unlike [`Self::fill_until`], this method treats EOF before the requested
-    /// unit count as [`ErrorKind::UnexpectedEof`]. Any partial units buffered
+    /// item count as [`ErrorKind::UnexpectedEof`]. Any partial items buffered
     /// before EOF are consumed so callers observe the same logical position as
     /// a failed exact read.
     ///
     /// # Parameters
     ///
-    /// * `count` - Minimum number of unread units required.
+    /// * `count` - Minimum number of unread items required.
     ///
     /// # Errors
     ///
     /// Returns [`ErrorKind::UnexpectedEof`] if EOF is reached before `count`
-    /// units are available. Returns [`ErrorKind::InvalidInput`] when `count`
+    /// items are available. Returns [`ErrorKind::InvalidInput`] when `count`
     /// exceeds the internal buffer capacity. Returns [`ErrorKind::InvalidData`]
-    /// if the wrapped reader reports more units than the spare buffer range
+    /// if the wrapped reader reports more items than the spare buffer range
     /// could hold. Returns any non-interrupted I/O error produced by the
     /// wrapped reader while refilling the buffer.
     #[inline]
@@ -324,7 +325,7 @@ where
             return Ok(());
         }
         let available = self.available();
-        // SAFETY: `available` is the current readable unit count.
+        // SAFETY: `available` is the current readable item count.
         unsafe {
             self.consume(available);
         }
@@ -334,29 +335,29 @@ where
         ))
     }
 
-    /// Reads units through the internal buffer into an indexed output range.
+    /// Reads items through the internal buffer into an indexed output range.
     ///
     /// If the internal buffer is empty and `count` is at least as large as the
     /// internal buffer capacity, the read is delegated directly to the wrapped
-    /// reader to avoid an unnecessary copy. Otherwise, units are served from
+    /// reader to avoid an unnecessary copy. Otherwise, items are served from
     /// the internal buffer.
     ///
     /// # Arguments
     ///
-    /// * `output` - Destination storage that receives units.
+    /// * `output` - Destination storage that receives items.
     /// * `output_index` - Start index inside `output`.
-    /// * `count` - Maximum number of units to read.
+    /// * `count` - Maximum number of items to read.
     ///
     /// # Returns
     ///
-    /// The number of units written into `output[output_index..output_index +
+    /// The number of items written into `output[output_index..output_index +
     /// count]`. A return value of `0` means that `count` was zero or EOF was
-    /// reached before any units were read.
+    /// reached before any items were read.
     ///
     /// # Errors
     ///
     /// Returns any I/O error produced by the wrapped reader. Returns
-    /// [`ErrorKind::InvalidData`] if the wrapped reader reports more units
+    /// [`ErrorKind::InvalidData`] if the wrapped reader reports more items
     /// than the requested destination range could hold. Interrupted reads are
     /// retried when the method refills the internal buffer through
     /// `read_more`; direct delegated reads follow the wrapped reader's own
@@ -366,8 +367,7 @@ where
     ///
     /// The caller must guarantee that `output_index..output_index + count` is
     /// a valid range inside `output` and that the addition does not overflow.
-    #[inline(always)]
-    pub unsafe fn read_into(
+    pub unsafe fn read_unchecked(
         &mut self,
         output: &mut [I::Item],
         output_index: usize,
@@ -384,7 +384,7 @@ where
             self.discard_buffer();
             if count >= self.buffer.capacity() {
                 // SAFETY: The caller guarantees that the target range is valid.
-                let read = unsafe { self.inner.read_into(output, output_index, count) }?;
+                let read = unsafe { self.inner.read_unchecked(output, output_index, count) }?;
                 validate_read_count(read, count)?;
                 return Ok(read);
             }
@@ -401,10 +401,26 @@ where
         Ok(read_count)
     }
 
-    /// Seeks the wrapped reader and discards buffered units after success.
+    /// Reads items into the full output slice.
+    ///
+    /// # Parameters
+    /// - `output`: Destination storage.
+    ///
+    /// # Returns
+    /// The number of items read into `output`.
+    ///
+    /// # Errors
+    /// Returns the input error reported by the implementation.
+    #[inline(always)]
+    pub fn read(&mut self, output: &mut [I::Item]) -> Result<usize> {
+        // SAFETY: The caller ensured the destination slice is valid.
+        unsafe { self.read_unchecked(output, 0, output.len()) }
+    }
+
+    /// Seeks the wrapped reader and discards buffered items after success.
     ///
     /// For [`SeekFrom::Current`], the offset is adjusted by the number of
-    /// unread units already buffered, so seeking is relative to the logical
+    /// unread items already buffered, so seeking is relative to the logical
     /// position observed by callers of this buffered input.
     ///
     /// # Arguments
@@ -414,12 +430,12 @@ where
     /// # Returns
     ///
     /// The new absolute stream position reported by the wrapped reader, in
-    /// units.
+    /// items.
     ///
     /// # Errors
     ///
     /// Returns [`ErrorKind::InvalidInput`] if a [`SeekFrom::Current`] offset
-    /// cannot be adjusted by the unread buffered unit count. Returns any seek
+    /// cannot be adjusted by the unread buffered item count. Returns any seek
     /// error produced by the wrapped reader.
     pub fn seek_to(&mut self, position: SeekFrom) -> Result<u64>
     where
@@ -428,7 +444,7 @@ where
         match position {
             SeekFrom::Current(offset) => {
                 if self.seek_within_buffer(offset) {
-                    return self.logical_stream_position();
+                    return self.stream_position();
                 }
                 let position = self.seek_relative_slow(offset)?;
                 self.discard_buffer();
@@ -448,40 +464,21 @@ where
         }
     }
 
-    /// Returns the logical input position without discarding buffered units.
+    /// Returns the logical input position without discarding buffered items.
     ///
     /// The returned position is the wrapped input's current position minus the
-    /// number of units currently unread in this buffer.
+    /// number of items currently unread in this buffer.
     ///
     /// # Returns
     ///
-    /// The logical stream position in input units.
+    /// The logical stream position in input items.
     ///
     /// # Errors
     ///
     /// Returns any seek error produced while querying the wrapped input's
     /// current position. Returns [`ErrorKind::InvalidData`] if the wrapped
     /// input reports a position before the unread buffered window.
-    #[inline(always)]
     pub fn stream_position(&mut self) -> Result<u64>
-    where
-        I: SeekableInput,
-    {
-        self.logical_stream_position()
-    }
-
-    /// Returns the logical stream position without discarding buffered units.
-    ///
-    /// # Returns
-    ///
-    /// The wrapped input position minus the unread buffered unit count.
-    ///
-    /// # Errors
-    ///
-    /// Returns any seek error produced while querying the wrapped input's
-    /// current position. Returns [`ErrorKind::InvalidData`] if the wrapped
-    /// input reports a position before the unread buffered window.
-    fn logical_stream_position(&mut self) -> Result<u64>
     where
         I: SeekableInput,
     {
@@ -490,7 +487,7 @@ where
         position.checked_sub(unread).ok_or_else(|| {
             Error::new(
                 ErrorKind::InvalidData,
-                "buffered unread units exceed wrapped input position",
+                "buffered unread items exceed wrapped input position",
             )
         })
     }
@@ -499,7 +496,7 @@ where
     ///
     /// # Parameters
     ///
-    /// * `offset` - Relative offset in input units.
+    /// * `offset` - Relative offset in input items.
     ///
     /// # Returns
     ///
@@ -508,13 +505,13 @@ where
     /// # Errors
     ///
     /// Returns [`ErrorKind::InvalidInput`] if `offset` cannot be adjusted by
-    /// the unread buffered unit count. Returns any seek error produced by
+    /// the unread buffered item count. Returns any seek error produced by
     /// the wrapped input.
     fn seek_relative_slow(&mut self, offset: i64) -> Result<u64>
     where
         I: SeekableInput,
     {
-        // Unread units fit in `isize` for any `Vec`-backed buffer, which always
+        // Unread items fit in `isize` for any `Vec`-backed buffer, which always
         // fits in `i64`.
         let unread = self.available() as i64;
         let adjusted = offset.checked_sub(unread).ok_or_else(|| {
@@ -528,14 +525,14 @@ where
 
     /// Attempts to satisfy a relative seek inside the current buffer window.
     ///
-    /// Positive offsets consume unread units. Negative offsets can rewind into
+    /// Positive offsets consume unread items. Negative offsets can rewind into
     /// the still-retained consumed prefix of the backing buffer. If the target
     /// is outside the retained buffer contents, the caller must seek the
     /// wrapped input instead.
     ///
     /// # Parameters
     ///
-    /// * `offset` - Relative offset in input units.
+    /// * `offset` - Relative offset in input items.
     ///
     /// # Returns
     ///
@@ -572,13 +569,13 @@ where
     ///
     /// # Returns
     ///
-    /// The number of writable units in `buffer[limit..]`.
+    /// The number of writable items in `buffer[limit..]`.
     #[inline(always)]
     fn tail_capacity(&self) -> usize {
         self.buffer.spare_capacity()
     }
 
-    /// Invalidates all buffered units.
+    /// Invalidates all buffered items.
     ///
     /// After this call, the buffer is considered empty and subsequent reads
     /// will refill it from the wrapped input.
@@ -587,10 +584,10 @@ where
         self.buffer.clear();
     }
 
-    /// Moves unread units to the front of the buffer.
+    /// Moves unread items to the front of the buffer.
     ///
     /// This preserves the unread range while reclaiming tail capacity for
-    /// future reads. If there are no unread units, the buffer is discarded.
+    /// future reads. If there are no unread items, the buffer is discarded.
     #[inline(always)]
     fn backshift(&mut self) {
         self.buffer.compact();
@@ -599,19 +596,19 @@ where
     /// Appends one more chunk from the wrapped reader to the internal buffer.
     ///
     /// This method reads into `buffer[limit..]` and advances `limit` by the
-    /// number of units read. It retries automatically when the wrapped reader
+    /// number of items read. It retries automatically when the wrapped reader
     /// returns [`ErrorKind::Interrupted`].
     ///
     /// # Returns
     ///
-    /// `Ok(true)` if at least one unit was appended, or `Ok(false)` if the
+    /// `Ok(true)` if at least one item was appended, or `Ok(false)` if the
     /// wrapped reader reached EOF.
     ///
     /// # Errors
     ///
     /// Returns any non-interrupted I/O error produced by the wrapped reader.
     /// Returns [`ErrorKind::InvalidData`] if the wrapped reader reports more
-    /// units than the spare buffer range could hold.
+    /// items than the spare buffer range could hold.
     fn read_more(&mut self) -> Result<bool> {
         let count = self.tail_capacity();
         debug_assert!(count > 0, "buffer has no tail capacity");
@@ -619,7 +616,10 @@ where
             let limit = self.buffer.limit();
             // SAFETY: `limit` is always within `buffer`, and `count` is the
             // remaining capacity from `limit` to the end of `buffer`.
-            match unsafe { self.inner.read_into(self.buffer.data_mut(), limit, count) } {
+            match unsafe {
+                self.inner
+                    .read_unchecked(self.buffer.data_mut(), limit, count)
+            } {
                 Ok(0) => return Ok(false),
                 Ok(read) => {
                     validate_read_count(read, count)?;
@@ -646,16 +646,22 @@ where
 {
     type Item = I::Item;
 
-    /// Reads units through the internal buffer.
+    /// Reads items through the internal buffer.
     #[inline(always)]
-    unsafe fn read_into(
+    unsafe fn read_unchecked(
         &mut self,
         output: &mut [I::Item],
         output_index: usize,
         count: usize,
     ) -> Result<usize> {
         // SAFETY: Forwarded from the trait caller.
-        unsafe { BufferedInput::read_into(self, output, output_index, count) }
+        unsafe { BufferedInput::read_unchecked(self, output, output_index, count) }
+    }
+
+    /// Reads items into the full output slice.
+    #[inline(always)]
+    fn read(&mut self, output: &mut [I::Item]) -> Result<usize> {
+        BufferedInput::read(self, output)
     }
 }
 
@@ -666,31 +672,9 @@ where
 {
     type Item = <I as Input>::Item;
 
-    /// Seeks the buffered input in unit offsets.
+    /// Seeks the buffered input in item offsets.
     #[inline(always)]
     fn seek_to(&mut self, position: SeekFrom) -> Result<u64> {
         BufferedInput::seek_to(self, position)
     }
-}
-
-/// Validates a unit count returned by a wrapped reader.
-///
-/// # Parameters
-///
-/// * `read` - Unit count reported by the wrapped reader.
-/// * `requested` - Maximum unit count requested from the wrapped reader.
-///
-/// # Errors
-///
-/// Returns [`ErrorKind::InvalidData`] when the wrapped reader reports more
-/// units than the destination range could hold.
-#[inline(always)]
-fn validate_read_count(read: usize, requested: usize) -> Result<()> {
-    if read > requested {
-        return Err(Error::new(
-            ErrorKind::InvalidData,
-            format!("reader reported {read} units for a {requested}-unit buffer"),
-        ));
-    }
-    Ok(())
 }
