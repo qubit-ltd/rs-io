@@ -12,16 +12,17 @@ use std::ptr;
 
 use crate::buffered::DEFAULT_BUFFER_CAPACITY;
 use crate::util::UncheckedSlice;
+use crate::traits::validate_write_count;
 use crate::{Buffer, Output, Seekable, SeekableOutput};
 
-/// Buffered unit output over a wrapped output sink.
+/// Buffered item output over a wrapped output sink.
 ///
-/// This type keeps a fixed-size unit buffer in front of an underlying output so
-/// small unit writes can be accumulated before they are written to the I/O
-/// target. Large writes may bypass the buffer after pending buffered units
+/// This type keeps a fixed-size item buffer in front of an underlying output so
+/// small item writes can be accumulated before they are written to the I/O
+/// target. Large writes may bypass the buffer after pending buffered items
 /// have been flushed.
 ///
-/// `BufferedOutput` is deliberately unit-oriented. It performs no binary
+/// `BufferedOutput` is deliberately item-oriented. It performs no binary
 /// encoding, text encoding, or record framing. Higher-level writers can either
 /// use the [`Output`] implementation or write directly into
 /// [`Self::spare_raw_parts_mut`] and then call [`Self::advance`] after
@@ -30,8 +31,8 @@ use crate::{Buffer, Output, Seekable, SeekableOutput};
 /// [`Self::flush_pending`] first, then use [`Self::into_parts`], or call
 /// [`Self::into_inner`] to flush and return the wrapped writer in one step.
 /// Dropping a `BufferedOutput` makes a best-effort attempt to write pending
-/// buffered units, but drop-time errors are ignored. For arbitrary unit types,
-/// `BufferedOutput` also supports [`Seekable`]-based seeking in unit offsets.
+/// buffered items, but drop-time errors are ignored. For arbitrary item types,
+/// `BufferedOutput` also supports [`Seekable`]-based seeking in item offsets.
 #[derive(Debug)]
 pub struct BufferedOutput<O>
 where
@@ -48,33 +49,33 @@ where
     O: Output,
     O::Item: Copy + Default,
 {
-    /// Creates a buffered unit output with the default capacity.
+    /// Creates a buffered item output with the default capacity.
     ///
     /// # Parameters
     ///
-    /// * `inner` - The output that receives units when the internal buffer is
+    /// * `inner` - The output that receives items when the internal buffer is
     ///   flushed.
     ///
     /// # Returns
     ///
-    /// A new buffered unit output using `DEFAULT_BUFFER_CAPACITY`.
+    /// A new buffered item output using `DEFAULT_BUFFER_CAPACITY`.
     #[inline(always)]
     #[must_use]
     pub fn new(inner: O) -> Self {
         Self::with_capacity(inner, DEFAULT_BUFFER_CAPACITY)
     }
 
-    /// Creates a buffered unit output with at least the requested capacity.
+    /// Creates a buffered item output with at least the requested capacity.
     ///
     /// # Parameters
     ///
-    /// * `inner` - The output that receives units when the internal buffer is
+    /// * `inner` - The output that receives items when the internal buffer is
     ///   flushed.
-    /// * `capacity` - The requested internal buffer capacity in units.
+    /// * `capacity` - The requested internal buffer capacity in items.
     ///
     /// # Returns
     ///
-    /// A new buffered unit output whose actual buffer capacity is
+    /// A new buffered item output whose actual buffer capacity is
     /// `capacity.max(1)`.
     #[inline(always)]
     #[must_use]
@@ -90,7 +91,7 @@ where
     ///
     /// # Returns
     ///
-    /// An immutable reference to the underlying writer. Pending units may
+    /// An immutable reference to the underlying writer. Pending items may
     /// still be present in the internal buffer and are not flushed by this
     /// method.
     #[inline(always)]
@@ -100,7 +101,7 @@ where
 
     /// Returns an exclusive reference to the wrapped writer.
     ///
-    /// Pending units may still be present in the internal buffer and are not
+    /// Pending items may still be present in the internal buffer and are not
     /// flushed by this method.
     ///
     /// # Returns
@@ -111,17 +112,17 @@ where
         &mut self.inner
     }
 
-    /// Consumes this buffered output after flushing pending units.
+    /// Consumes this buffered output after flushing pending items.
     ///
     /// # Returns
     ///
-    /// The wrapped output after all buffered units have been written.
+    /// The wrapped output after all buffered items have been written.
     ///
     /// # Errors
     ///
-    /// Returns any error produced while flushing pending units or flushing the
+    /// Returns any error produced while flushing pending items or flushing the
     /// wrapped output. If an error is returned, this value is dropped and any
-    /// remaining pending units are flushed only on a best-effort basis.
+    /// remaining pending items are flushed only on a best-effort basis.
     #[inline]
     pub fn into_inner(mut self) -> Result<O> {
         self.flush_pending()?;
@@ -129,15 +130,15 @@ where
         Ok(inner)
     }
 
-    /// Consumes this buffered output without flushing pending units.
+    /// Consumes this buffered output without flushing pending items.
     ///
-    /// This method performs no I/O. Pending units that have been accepted into
+    /// This method performs no I/O. Pending items that have been accepted into
     /// the internal buffer but not written to the wrapped writer remain in the
     /// readable window of the returned buffer.
     ///
     /// # Returns
     ///
-    /// The wrapped writer and the buffer holding pending units in logical write
+    /// The wrapped writer and the buffer holding pending items in logical write
     /// order.
     #[inline(always)]
     #[must_use]
@@ -156,7 +157,7 @@ where
     ///
     /// # Returns
     ///
-    /// The total number of units that can be held by the internal buffer.
+    /// The total number of items that can be held by the internal buffer.
     #[inline(always)]
     #[must_use]
     pub fn capacity(&self) -> usize {
@@ -167,7 +168,7 @@ where
     ///
     /// # Returns
     ///
-    /// The number of units that can still be appended to the internal buffer
+    /// The number of items that can still be appended to the internal buffer
     /// before it must be flushed.
     #[inline(always)]
     #[must_use]
@@ -178,34 +179,34 @@ where
     /// Returns raw spare-buffer parts for hot-path callers.
     ///
     /// The returned slice is the full internal backing storage. `index` is the
-    /// start of the spare unit window, and `count` is the number of spare
-    /// units. Callers that need a slice can use `&mut buffer[index..index +
+    /// start of the spare item window, and `count` is the number of spare
+    /// items. Callers that need a slice can use `&mut buffer[index..index +
     /// count]`; callers that already validated bounds can pass `buffer` and
     /// `index` directly to indexed unchecked codecs.
     ///
-    /// Mutating units outside `index..index + count` changes pending output
-    /// units and may corrupt the logical stream.
+    /// Mutating items outside `index..index + count` changes pending output
+    /// items and may corrupt the logical stream.
     ///
     /// # Returns
     ///
-    /// The backing storage, the spare start index, and the spare unit count.
+    /// The backing storage, the spare start index, and the spare item count.
     #[inline(always)]
     #[must_use]
     pub fn spare_raw_parts_mut(&mut self) -> (&mut [O::Item], usize, usize) {
         self.buffer.spare_raw_parts_mut()
     }
 
-    /// Marks spare units as written without checking bounds.
+    /// Marks spare items as written without checking bounds.
     ///
     /// # Parameters
     ///
-    /// * `count` - Number of initialized spare units to make pending for
+    /// * `count` - Number of initialized spare items to make pending for
     ///   output.
     ///
     /// # Safety
     ///
     /// The caller must guarantee that `count <= self.spare_capacity()` and
-    /// that the corresponding units in the spare range reported by
+    /// that the corresponding items in the spare range reported by
     /// [`Self::spare_raw_parts_mut`] have been initialized.
     #[inline(always)]
     pub unsafe fn advance(&mut self, count: usize) {
@@ -215,18 +216,18 @@ where
         }
     }
 
-    /// Ensures that at least `count` units are available in the spare buffer.
+    /// Ensures that at least `count` items are available in the spare buffer.
     ///
     /// # Parameters
     ///
-    /// * `count` - Number of spare units required.
+    /// * `count` - Number of spare items required.
     ///
     /// # Errors
     ///
     /// Returns any non-interrupted I/O error produced while flushing buffered
-    /// units. Returns [`ErrorKind::InvalidInput`] if `count` exceeds the buffer
+    /// items. Returns [`ErrorKind::InvalidInput`] if `count` exceeds the buffer
     /// capacity. Returns [`ErrorKind::InvalidData`] if the wrapped writer
-    /// reports more units than the pending buffer range contained.
+    /// reports more items than the pending buffer range contained.
     pub fn ensure_spare_capacity(&mut self, count: usize) -> Result<()> {
         if count > self.buffer.capacity() {
             return Err(Error::new(
@@ -240,36 +241,36 @@ where
         Ok(())
     }
 
-    /// Writes units from the input slice and reports the accepted unit count.
+    /// Writes items from the input slice and reports the accepted item count.
     ///
     /// This is the buffered implementation for single-write callers.
     /// Small inputs are appended to the buffer and reported as fully accepted;
-    /// large inputs may be delegated to the wrapped writer after pending units
+    /// large inputs may be delegated to the wrapped writer after pending items
     /// are flushed.
     ///
     /// # Parameters
     ///
-    /// * `input` - The units to write.
+    /// * `input` - The items to write.
     ///
     /// # Returns
     ///
-    /// The number of units accepted. Buffered writes return `input.len()`;
-    /// direct writes return the unit count reported by the wrapped writer.
+    /// The number of items accepted. Buffered writes return `input.len()`;
+    /// direct writes return the item count reported by the wrapped writer.
     ///
     /// # Errors
     ///
-    /// Returns any I/O error produced while flushing pending units or writing a
+    /// Returns any I/O error produced while flushing pending items or writing a
     /// large input directly to the wrapped writer. Flush failures include
-    /// [`ErrorKind::WriteZero`] if the writer reports that zero units were
+    /// [`ErrorKind::WriteZero`] if the writer reports that zero items were
     /// written before the buffer is drained, and [`ErrorKind::InvalidData`] if
-    /// it reports more units than the requested range contained.
+    /// it reports more items than the requested range contained.
     ///
     /// # Safety
     ///
     /// The caller must guarantee that `input_index..input_index + count` is a
     /// valid range inside `input` and that the addition does not overflow.
     #[inline]
-    pub unsafe fn write_from(
+    pub unsafe fn write_unchecked(
         &mut self,
         input: &[O::Item],
         input_index: usize,
@@ -295,7 +296,7 @@ where
         }
     }
 
-    /// Writes all units through the internal buffer.
+    /// Writes all items through the internal buffer.
     ///
     /// Small inputs are appended to the internal buffer.  Inputs that do not
     /// fit may flush the buffer first, and inputs at least as large as the
@@ -303,26 +304,26 @@ where
     ///
     /// # Parameters
     ///
-    /// * `input` - The units to write.
+    /// * `input` - The items to write.
     ///
     /// # Returns
     ///
-    /// `Ok(())` after all units from `input` have been accepted.
+    /// `Ok(())` after all items from `input` have been accepted.
     ///
     /// # Errors
     ///
-    /// Returns any I/O error produced while flushing pending units or writing a
+    /// Returns any I/O error produced while flushing pending items or writing a
     /// large input directly to the wrapped writer. Flush failures include
-    /// [`ErrorKind::WriteZero`] if the writer reports that zero units were
+    /// [`ErrorKind::WriteZero`] if the writer reports that zero items were
     /// written before the buffer is drained, and [`ErrorKind::InvalidData`] if
-    /// it reports more units than the requested range contained.
+    /// it reports more items than the requested range contained.
     ///
     /// # Safety
     ///
     /// The caller must guarantee that `input_index..input_index + count` is a
     /// valid range inside `input` and that the addition does not overflow.
     #[inline]
-    pub unsafe fn write_all_from(
+    pub unsafe fn write_all_unchecked(
         &mut self,
         input: &[O::Item],
         input_index: usize,
@@ -348,23 +349,23 @@ where
         }
     }
 
-    /// Flushes buffered units to the wrapped writer.
+    /// Flushes buffered items to the wrapped writer.
     ///
     /// The method retries interrupted writes.  If an error occurs after some
-    /// units have been written, the already-written units are removed from the
+    /// items have been written, the already-written items are removed from the
     /// front of the buffer and the unwritten suffix is kept for a later retry.
     ///
     /// # Returns
     ///
-    /// `Ok(())` once all currently buffered units have been written to the
+    /// `Ok(())` once all currently buffered items have been written to the
     /// wrapped writer.
     ///
     /// # Errors
     ///
     /// Returns any non-interrupted I/O error produced by the wrapped writer.
     /// Returns [`ErrorKind::WriteZero`] if the writer reports a zero-length
-    /// write before all buffered units are drained. Returns
-    /// [`ErrorKind::InvalidData`] if the writer reports more units than the
+    /// write before all buffered items are drained. Returns
+    /// [`ErrorKind::InvalidData`] if the writer reports more items than the
     /// pending buffer range contained.
     pub fn flush_buffer(&mut self) -> Result<()> {
         while !self.buffer.is_empty() {
@@ -375,7 +376,7 @@ where
             self.panicked = true;
             let result = unsafe {
                 self.inner
-                    .write_from(self.buffer.data(), position, available)
+                    .write_unchecked(self.buffer.data(), position, available)
             };
             self.panicked = false;
             match result {
@@ -407,19 +408,19 @@ where
         Ok(())
     }
 
-    /// Flushes buffered units and then flushes the wrapped output.
+    /// Flushes buffered items and then flushes the wrapped output.
     ///
     /// # Returns
     ///
-    /// `Ok(())` once pending buffered units and the wrapped output are
+    /// `Ok(())` once pending buffered items and the wrapped output are
     /// flushed.
     ///
     /// # Errors
     ///
     /// Returns any non-interrupted I/O error produced while flushing buffered
-    /// units, [`ErrorKind::WriteZero`] if the wrapped writer cannot make
+    /// items, [`ErrorKind::WriteZero`] if the wrapped writer cannot make
     /// progress while draining the buffer, [`ErrorKind::InvalidData`] if the
-    /// writer reports an impossible unit count, or any error returned by
+    /// writer reports an impossible item count, or any error returned by
     /// [`Output::flush_pending`] on the wrapped output.
     #[inline(always)]
     pub fn flush_pending(&mut self) -> Result<()> {
@@ -427,21 +428,20 @@ where
             .and_then(|()| Output::flush_pending(&mut self.inner))
     }
 
-    /// Returns the logical output position without flushing pending units.
+    /// Returns the logical output position without flushing pending items.
     ///
     /// The returned position is the wrapped output's current position plus the
-    /// number of units currently pending in this buffer.
+    /// number of items currently pending in this buffer.
     ///
     /// # Returns
     ///
-    /// The logical stream position in output units.
+    /// The logical stream position in output items.
     ///
     /// # Errors
     ///
     /// Returns any error produced while querying the wrapped output position.
-    /// Returns [`ErrorKind::InvalidData`] if adding the pending unit count
+    /// Returns [`ErrorKind::InvalidData`] if adding the pending item count
     /// overflows `u64`.
-    #[inline]
     pub fn stream_position(&mut self) -> Result<u64>
     where
         O: SeekableOutput,
@@ -452,31 +452,31 @@ where
             .ok_or_else(|| {
                 Error::new(
                     ErrorKind::InvalidData,
-                    "buffered pending units overflow wrapped output position",
+                    "buffered pending items overflow wrapped output position",
                 )
             })
     }
 
-    /// Seeks the wrapped output in units, flushing buffered units first.
+    /// Seeks the wrapped output in items, flushing buffered items first.
     ///
-    /// Pending units accepted into the internal buffer are written to the
+    /// Pending items accepted into the internal buffer are written to the
     /// wrapped output before [`Seekable::seek_to`] is invoked, so the seek
     /// position is relative to data already committed to the underlying sink.
     ///
     /// # Parameters
     ///
-    /// * `position` - The target seek position in output units.
+    /// * `position` - The target seek position in output items.
     ///
     /// # Returns
     ///
-    /// The new stream position in units.
+    /// The new stream position in items.
     ///
     /// # Errors
     ///
     /// Returns any non-interrupted I/O error produced while flushing buffered
-    /// units, [`ErrorKind::WriteZero`] if the wrapped output cannot make
+    /// items, [`ErrorKind::WriteZero`] if the wrapped output cannot make
     /// progress while draining the buffer, [`ErrorKind::InvalidData`] if the
-    /// writer reports an impossible unit count, or any error returned by
+    /// writer reports an impossible item count, or any error returned by
     /// [`Seekable::seek_to`] on the wrapped output.
     #[inline(always)]
     pub fn seek_to(&mut self, position: SeekFrom) -> Result<u64>
@@ -491,13 +491,13 @@ where
         }
     }
 
-    /// Writes units into the internal buffer without checking spare capacity.
+    /// Writes items into the internal buffer without checking spare capacity.
     ///
     /// # Parameters
     ///
-    /// * `input` - The source units.
+    /// * `input` - The source items.
     /// * `input_index` - The starting index in `input`.
-    /// * `count` - The number of units to copy.
+    /// * `count` - The number of items to copy.
     ///
     /// # Safety
     ///
@@ -530,22 +530,22 @@ where
         }
     }
 
-    /// Writes units to the wrapped writer and validates the reported count.
+    /// Writes items to the wrapped writer and validates the reported count.
     ///
     /// # Parameters
     ///
     /// * `input` - Source storage.
     /// * `input_index` - Start index inside `input`.
-    /// * `count` - Maximum number of units to write.
+    /// * `count` - Maximum number of items to write.
     ///
     /// # Returns
     ///
-    /// The number of units accepted by the wrapped writer.
+    /// The number of items accepted by the wrapped writer.
     ///
     /// # Errors
     ///
     /// Returns the wrapped writer's I/O error, or [`ErrorKind::InvalidData`]
-    /// if it reports a unit count larger than `count`.
+    /// if it reports an item count larger than `count`.
     ///
     /// # Safety
     ///
@@ -559,24 +559,24 @@ where
         count: usize,
     ) -> Result<usize> {
         // SAFETY: The caller guarantees the source range is valid.
-        let written = unsafe { self.inner.write_from(input, input_index, count) }?;
+        let written = unsafe { self.inner.write_unchecked(input, input_index, count) }?;
         validate_write_count(written, count)?;
         Ok(written)
     }
 
-    /// Writes all units in an indexed source range to the wrapped writer.
+    /// Writes all items in an indexed source range to the wrapped writer.
     ///
     /// # Parameters
     ///
     /// * `input` - Source storage.
     /// * `input_index` - Start index inside `input`.
-    /// * `count` - Number of units to write.
+    /// * `count` - Number of items to write.
     ///
     /// # Errors
     ///
     /// Returns the wrapped writer's I/O error, [`ErrorKind::WriteZero`] if the
     /// writer cannot make progress, or [`ErrorKind::InvalidData`] if it
-    /// reports an impossible unit count.
+    /// reports an impossible item count.
     ///
     /// # Safety
     ///
@@ -612,21 +612,21 @@ where
     ///
     /// # Parameters
     ///
-    /// * `input` - The units to write after the fast path determined that they
+    /// * `input` - The items to write after the fast path determined that they
     ///   do not fit comfortably in the current spare buffer capacity.
     ///
     /// # Returns
     ///
-    /// `Ok(())` after all units from `input` have been accepted either by the
+    /// `Ok(())` after all items from `input` have been accepted either by the
     /// buffer or by the wrapped writer.
     ///
     /// # Errors
     ///
-    /// Returns any I/O error produced while flushing pending units or writing a
+    /// Returns any I/O error produced while flushing pending items or writing a
     /// large input directly to the wrapped writer. Flush failures include
-    /// [`ErrorKind::WriteZero`] if the writer reports that zero units were
+    /// [`ErrorKind::WriteZero`] if the writer reports that zero items were
     /// written before the buffer is drained, and [`ErrorKind::InvalidData`] if
-    /// it reports more units than the requested range contained.
+    /// it reports more items than the requested range contained.
     #[cold]
     #[inline(never)]
     unsafe fn write_all_cold(
@@ -653,26 +653,26 @@ where
 
     /// Handles slow-path raw writes for single-write semantics.
     ///
-    /// The method may accept fewer units than the input length when the write
+    /// The method may accept fewer items than the input length when the write
     /// is delegated directly to the wrapped output.
     ///
     /// # Parameters
     ///
-    /// * `input` - The units to write after the fast path determined that they
+    /// * `input` - The items to write after the fast path determined that they
     ///   do not fit comfortably in the current spare buffer capacity.
     ///
     /// # Returns
     ///
-    /// The number of units accepted. Buffered writes return `input.len()`;
-    /// direct writes return the unit count reported by the wrapped writer.
+    /// The number of items accepted. Buffered writes return `input.len()`;
+    /// direct writes return the item count reported by the wrapped writer.
     ///
     /// # Errors
     ///
-    /// Returns any I/O error produced while flushing pending units or writing a
+    /// Returns any I/O error produced while flushing pending items or writing a
     /// large input directly to the wrapped writer. Flush failures include
-    /// [`ErrorKind::WriteZero`] if the writer reports that zero units were
+    /// [`ErrorKind::WriteZero`] if the writer reports that zero items were
     /// written before the buffer is drained, and [`ErrorKind::InvalidData`] if
-    /// it reports more units than the requested range contained.
+    /// it reports more items than the requested range contained.
     #[cold]
     #[inline(never)]
     unsafe fn write_cold(
@@ -705,19 +705,19 @@ where
 {
     type Item = O::Item;
 
-    /// Writes units through the internal buffer.
+    /// Writes items through the internal buffer.
     #[inline(always)]
-    unsafe fn write_from(
+    unsafe fn write_unchecked(
         &mut self,
         input: &[O::Item],
         input_index: usize,
         count: usize,
     ) -> Result<usize> {
         // SAFETY: Forwarded from the trait caller.
-        unsafe { BufferedOutput::write_from(self, input, input_index, count) }
+        unsafe { BufferedOutput::write_unchecked(self, input, input_index, count) }
     }
 
-    /// Flushes pending units through the internal buffer.
+    /// Flushes pending items through the internal buffer.
     #[inline(always)]
     fn flush_pending(&mut self) -> Result<()> {
         BufferedOutput::flush_pending(self)
@@ -731,7 +731,7 @@ where
 {
     type Item = <O as Output>::Item;
 
-    /// Seeks the buffered output in unit offsets.
+    /// Seeks the buffered output in item offsets.
     #[inline(always)]
     fn seek_to(&mut self, position: SeekFrom) -> Result<u64> {
         BufferedOutput::seek_to(self, position)
@@ -748,26 +748,4 @@ where
             drop(self.flush_pending());
         }
     }
-}
-
-/// Validates a unit count returned by a wrapped writer.
-///
-/// # Parameters
-///
-/// * `written` - Unit count reported by the wrapped writer.
-/// * `requested` - Maximum unit count requested from the wrapped writer.
-///
-/// # Errors
-///
-/// Returns [`ErrorKind::InvalidData`] when the wrapped writer reports more
-/// units than the source range contained.
-#[inline(always)]
-fn validate_write_count(written: usize, requested: usize) -> Result<()> {
-    if written > requested {
-        return Err(Error::new(
-            ErrorKind::InvalidData,
-            format!("writer reported {written} units for a {requested}-unit buffer"),
-        ));
-    }
-    Ok(())
 }

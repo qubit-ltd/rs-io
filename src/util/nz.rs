@@ -19,7 +19,7 @@ use core::num::NonZeroUsize;
 ///
 /// # Parameters
 ///
-/// - `value`: Non-zero unit count.
+/// - `value`: Non-zero item count.
 ///
 /// # Returns
 ///
@@ -41,7 +41,7 @@ pub const fn nz(value: usize) -> NonZeroUsize {
 ///
 /// Prefer this macro over `unsafe { NonZeroUsize::new_unchecked(...) }` in
 /// `Codec::min_units_per_value` / `max_units_per_value` and similar sites
-/// where the unit count is a compile-time constant: the panic branch is
+/// where the item count is a compile-time constant: the panic branch is
 /// folded away and the call expands to a `NonZeroUsize` value the compiler
 /// can prove is non-zero.
 ///
@@ -63,7 +63,7 @@ macro_rules! nz {
 ///
 /// # Parameters
 ///
-/// - `value`: Non-zero unit count.
+/// - `value`: Non-zero item count.
 ///
 /// # Returns
 ///

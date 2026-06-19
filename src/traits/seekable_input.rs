@@ -9,14 +9,14 @@
 use super::{Input, Seekable};
 
 /// Object-safe capability trait for inputs that can be read and repositioned
-/// in the same unit space.
+/// in the same item space.
 ///
 /// `SeekableInput` exists to give the common [`Input`] + [`Seekable`]
-/// combination a stable, named trait with a single unit type. It is useful for
+/// combination a stable, named trait with a single item type. It is useful for
 /// buffered inputs and other adapters that must adjust seek offsets by unread
-/// units already pulled from the wrapped input.
+/// items already pulled from the wrapped input.
 ///
-/// [`Self::Item`] is the shared unit type for both reading and seeking. It
+/// [`Self::Item`] is the shared item type for both reading and seeking. It
 /// always matches [`Input::Item`] and [`Seekable::Item`].
 ///
 /// The trait adds no methods of its own. All operations come from the
@@ -24,7 +24,7 @@ use super::{Input, Seekable};
 /// with matching [`Input::Item`] and [`Seekable::Item`] automatically
 /// implements `SeekableInput`.
 pub trait SeekableInput: Input + Seekable<Item = <Self as Input>::Item> {
-    /// The unit type shared by reading and seeking on this input.
+    /// The item type shared by reading and seeking on this input.
     type Item;
 }
 

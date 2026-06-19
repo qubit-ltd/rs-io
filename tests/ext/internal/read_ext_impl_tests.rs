@@ -6,7 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{Cursor, Error, ErrorKind, Read};
+use std::io::{BufRead, Cursor, Error, ErrorKind, Read};
 
 use qubit_io::ext::internal::read_ext_impl;
 
@@ -237,8 +237,13 @@ fn test_read_exact_vec_limited_into_reports_length_overflow_before_reading() {
     let mut reader = PanicOnRead;
     let mut output = b"prefix".to_vec();
 
-    let error = read_ext_impl::read_exact_vec_limited_into(&mut reader, &mut output, usize::MAX, usize::MAX)
-        .expect_err("overflowing output length should fail before reading");
+    let error = read_ext_impl::read_exact_vec_limited_into(
+        &mut reader,
+        &mut output,
+        usize::MAX,
+        usize::MAX,
+    )
+    .expect_err("overflowing output length should fail before reading");
 
     assert_eq!(ErrorKind::InvalidInput, error.kind());
     assert_eq!(
@@ -253,8 +258,13 @@ fn test_read_exact_vec_limited_into_reports_allocation_failure_before_reading() 
     let mut reader = PanicOnRead;
     let mut output = Vec::new();
 
-    let error = read_ext_impl::read_exact_vec_limited_into(&mut reader, &mut output, usize::MAX, usize::MAX)
-        .expect_err("allocation failure should be returned before reading");
+    let error = read_ext_impl::read_exact_vec_limited_into(
+        &mut reader,
+        &mut output,
+        usize::MAX,
+        usize::MAX,
+    )
+    .expect_err("allocation failure should be returned before reading");
 
     assert_eq!(ErrorKind::Other, error.kind());
 }
@@ -325,7 +335,8 @@ fn test_read_to_end_limited_works_on_dyn_read() {
     let mut cursor = Cursor::new(b"abc".to_vec());
     let reader: &mut dyn Read = &mut cursor;
 
-    let data = read_ext_impl::read_to_end_limited(reader, 3).expect("bounded read should work on dyn Read");
+    let data = read_ext_impl::read_to_end_limited(reader, 3)
+        .expect("bounded read should work on dyn Read");
 
     assert_eq!(b"abc", data.as_slice());
 }
@@ -385,7 +396,10 @@ fn test_read_to_end_limited_into_rejects_oversized_input_on_first_read() {
 
     assert_eq!(ErrorKind::InvalidData, error.kind());
     assert_eq!("input exceeds maximum length of 3 bytes", error.to_string());
-    assert!(output.is_empty(), "output must be rolled back to its original length");
+    assert!(
+        output.is_empty(),
+        "output must be rolled back to its original length"
+    );
     assert_eq!(4, reader.position());
 }
 
@@ -421,8 +435,7 @@ fn test_read_to_end_limited_into_rejects_oversized_input_after_partial_reads() {
 }
 
 #[test]
-fn test_read_to_end_limited_into_rejects_oversized_input_when_last_read_exceeds_remaining(
-) {
+fn test_read_to_end_limited_into_rejects_oversized_input_when_last_read_exceeds_remaining() {
     let mut reader = ShortReader::new(b"abcX", 2);
     let mut output = Vec::new();
 
@@ -561,5 +574,97 @@ fn test_read_to_end_limited_collects_invalid_utf8_bytes() {
         io_error
             .to_string()
             .starts_with("limited input is not valid UTF-8")
+    );
+}
+
+#[test]
+fn test_read_until_limited_into_appends_through_delimiter() {
+    let mut reader = Cursor::new(b"abc,def".to_vec());
+    let mut output = b"prefix-".to_vec();
+
+    let count = read_ext_impl::read_until_limited_into(&mut reader, b',', &mut output, 4)
+        .expect("delimited bytes should be appended");
+
+    assert_eq!(4, count);
+    assert_eq!(b"prefix-abc,", output.as_slice());
+    assert_eq!(
+        b"def",
+        reader.fill_buf().expect("remaining bytes should exist")
+    );
+}
+
+#[test]
+fn test_read_until_limited_into_accepts_eof_before_delimiter() {
+    let mut reader = Cursor::new(b"abc".to_vec());
+    let mut output = Vec::new();
+
+    let count = read_ext_impl::read_until_limited_into(&mut reader, b',', &mut output, 3)
+        .expect("EOF within the limit should be accepted");
+
+    assert_eq!(3, count);
+    assert_eq!(b"abc", output.as_slice());
+}
+
+#[test]
+fn test_read_until_limited_into_rejects_input_beyond_limit() {
+    let mut reader = Cursor::new(b"abcdef\n".to_vec());
+    let mut output = Vec::new();
+
+    let error = read_ext_impl::read_until_limited_into(&mut reader, b'\n', &mut output, 3)
+        .expect_err("input beyond the limit should be rejected");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!(
+        "input exceeds maximum length of 3 bytes before delimiter 10",
+        error.to_string()
+    );
+    assert!(output.is_empty());
+    assert_eq!(
+        b"def\n",
+        reader.fill_buf().expect("remaining bytes should exist")
+    );
+}
+
+#[test]
+fn test_read_until_limited_into_rejects_input_beyond_limit_after_prefix() {
+    let mut reader = Cursor::new(b"abcdef\n".to_vec());
+    let mut output = b"prefix-".to_vec();
+
+    let error = read_ext_impl::read_until_limited_into(&mut reader, b'\n', &mut output, 3)
+        .expect_err("input beyond the limit should be rejected");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!(b"prefix-", output.as_slice());
+    assert_eq!(
+        b"def\n",
+        reader.fill_buf().expect("remaining bytes should exist")
+    );
+}
+
+#[test]
+fn test_read_until_limited_into_rejects_oversized_input_after_partial_reads() {
+    let mut reader = Cursor::new(b"abcd\n".to_vec());
+    let mut output = Vec::new();
+
+    let error = read_ext_impl::read_until_limited_into(&mut reader, b'\n', &mut output, 3)
+        .expect_err("input beyond the limit should be rejected");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert!(output.is_empty());
+}
+
+#[test]
+fn test_read_until_limited_into_rejects_zero_limit_without_appending() {
+    let mut reader = Cursor::new(b"abcdef\n".to_vec());
+    let mut output = b"prefix-".to_vec();
+
+    let error = read_ext_impl::read_until_limited_into(&mut reader, b'\n', &mut output, 0)
+        .expect_err("input beyond the zero limit should be rejected");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!(b"prefix-", output.as_slice());
+    assert_eq!(
+        b"abcdef\n",
+        reader.fill_buf().expect("remaining bytes should exist")
     );
 }

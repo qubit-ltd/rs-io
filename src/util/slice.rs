@@ -17,14 +17,14 @@ use core::mem;
 pub enum UncheckedSlice {}
 
 impl UncheckedSlice {
-    /// Returns whether a slice has at least `count` readable/writable units from
+    /// Returns whether a slice has at least `count` readable/writable items from
     /// `start`.
     ///
     /// # Parameters
     ///
     /// - `len`: Slice length.
     /// - `start`: Start index in the slice.
-    /// - `count`: Number of requested units after `start`.
+    /// - `count`: Number of requested items after `start`.
     ///
     /// # Returns
     ///
@@ -42,7 +42,7 @@ impl UncheckedSlice {
     /// # Parameters
     ///
     /// - `input`: Source slice.
-    /// - `index`: Start index that must be valid for reading one unit.
+    /// - `index`: Start index that must be valid for reading one item.
     ///
     /// # Safety
     ///
@@ -58,7 +58,7 @@ impl UncheckedSlice {
     /// # Parameters
     ///
     /// - `output`: Destination slice.
-    /// - `index`: Start index that must be valid for writing one unit.
+    /// - `index`: Start index that must be valid for writing one item.
     /// - `value`: Value to write.
     ///
     /// # Safety
@@ -77,7 +77,7 @@ impl UncheckedSlice {
     /// # Parameters
     ///
     /// - `input`: Source slice.
-    /// - `index`: Start index that must be valid for reading one unit.
+    /// - `index`: Start index that must be valid for reading one item.
     ///
     /// # Safety
     ///
@@ -94,7 +94,7 @@ impl UncheckedSlice {
     /// # Parameters
     ///
     /// - `output`: Destination slice.
-    /// - `index`: Start index that must be valid for writing one unit.
+    /// - `index`: Start index that must be valid for writing one item.
     ///
     /// # Safety
     ///
@@ -111,7 +111,7 @@ impl UncheckedSlice {
     ///
     /// - `input`: Source slice.
     /// - `start`: Start index in `input`.
-    /// - `count`: Number of units in the returned subslice.
+    /// - `count`: Number of items in the returned subslice.
     ///
     /// # Safety
     ///
@@ -133,7 +133,7 @@ impl UncheckedSlice {
     ///
     /// - `output`: Destination slice.
     /// - `start`: Start index in `output`.
-    /// - `count`: Number of units in the returned subslice.
+    /// - `count`: Number of items in the returned subslice.
     ///
     /// # Safety
     ///
@@ -154,11 +154,11 @@ impl UncheckedSlice {
     /// # Parameters
     ///
     /// - `source`: Source slice.
-    /// - `source_index`: Source offset, must be valid for `count` units.
+    /// - `source_index`: Source offset, must be valid for `count` items.
     /// - `destination`: Destination slice.
     /// - `destination_index`: Destination offset, must be valid for `count`
-    ///   units.
-    /// - `count`: Number of units to copy.
+    ///   items.
+    /// - `count`: Number of items to copy.
     ///
     /// # Safety
     ///
@@ -197,9 +197,9 @@ impl UncheckedSlice {
     /// # Parameters
     ///
     /// - `buffer`: Buffer containing both ranges.
-    /// - `source_index`: Source offset, must be valid for `count` units.
+    /// - `source_index`: Source offset, must be valid for `count` items.
     /// - `destination_index`: Destination offset, must be valid for `count`
-    ///   units.
+    ///   items.
     /// - `count`: Number of values to copy.
     ///
     /// # Safety

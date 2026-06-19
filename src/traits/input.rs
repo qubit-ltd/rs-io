@@ -6,7 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{Read, Result};
+use std::io::{Error, ErrorKind, Read, Result};
 
 use crate::util::UncheckedSlice;
 
@@ -17,7 +17,7 @@ use crate::util::UncheckedSlice;
 /// `output[index..index + count]`. The caller owns range validation so hot
 /// paths can avoid repeated slicing and bounds checks.
 pub trait Input {
-    /// The unit type read from this input.
+    /// The item type read from this input.
     type Item;
 
     /// Reads items into an indexed output range without checking the range.
@@ -41,12 +41,33 @@ pub trait Input {
     ///
     /// The caller must guarantee that `index..index + count` is a valid range
     /// inside `output` and that the addition does not overflow.
-    unsafe fn read_into(
+    unsafe fn read_unchecked(
         &mut self,
         output: &mut [Self::Item],
         index: usize,
         count: usize,
     ) -> Result<usize>;
+
+    /// Reads items into the full output slice.
+    ///
+    /// # Parameters
+    /// - `output`: Destination storage.
+    ///
+    /// # Returns
+    /// The number of items read into `output`.
+    ///
+    /// # Errors
+    ///
+    /// Returns the input error reported by the implementation. Returns
+    /// [`ErrorKind::InvalidData`] if the implementation reports reading more
+    /// items than requested.
+    #[inline(always)]
+    fn read(&mut self, output: &mut [Self::Item]) -> Result<usize> {
+        // SAFETY: The caller ensured the destination slice is valid.
+        let read = unsafe { self.read_unchecked(output, 0, output.len()) }?;
+        validate_read_count(read, output.len())?;
+        Ok(read)
+    }
 }
 
 impl<R> Input for R
@@ -57,7 +78,12 @@ where
 
     /// Reads bytes from a standard [`Read`] value into an indexed range.
     #[inline(always)]
-    unsafe fn read_into(&mut self, output: &mut [u8], index: usize, count: usize) -> Result<usize> {
+    unsafe fn read_unchecked(
+        &mut self,
+        output: &mut [u8],
+        index: usize,
+        count: usize,
+    ) -> Result<usize> {
         debug_assert!(
             UncheckedSlice::range_fits(output.len(), index, count),
             "unchecked read range exceeds output buffer"
@@ -67,4 +93,32 @@ where
         let target = unsafe { UncheckedSlice::subslice_mut(output, index, count) };
         Read::read(self, target)
     }
+
+    /// Reads items into the full output slice.
+    #[inline(always)]
+    fn read(&mut self, output: &mut [Self::Item]) -> Result<usize> {
+        Read::read(self, output)
+    }
+}
+
+/// Validates an item count returned by an input.
+///
+/// # Parameters
+///
+/// * `read` - Item count reported by the input.
+/// * `requested` - Maximum item count requested from the input.
+///
+/// # Errors
+///
+/// Returns [`ErrorKind::InvalidData`] when the input reports more items than
+/// the destination range could hold.
+#[inline(always)]
+pub fn validate_read_count(read: usize, requested: usize) -> Result<()> {
+    if read > requested {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            format!("reader reported {read} items for a {requested}-item buffer"),
+        ));
+    }
+    Ok(())
 }

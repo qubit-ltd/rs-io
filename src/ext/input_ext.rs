@@ -10,45 +10,23 @@ use std::io::{Error, ErrorKind, Result};
 
 use crate::ext::output_ext::OutputExt;
 use crate::util::try_reserve_vec;
+use crate::traits::validate_read_count;
 use crate::{Input, Output};
 
-/// Default heap buffer size used by unit-oriented copy operations.
+/// Default heap buffer size used by item-oriented copy operations.
 const INPUT_COPY_BUFFER_SIZE: usize = 8 * 1024;
 
 /// Extension methods for [`Input`] values.
 ///
 /// `InputExt` keeps convenience and complete-read helpers outside the minimal
-/// [`Input`] trait. The methods are implemented for every unit-oriented input,
+/// [`Input`] trait. The methods are implemented for every item-oriented input,
 /// including `dyn Input` trait objects.
 pub trait InputExt: Input {
-    /// Reads items into the full output slice.
-    ///
-    /// This method performs at most one read operation and keeps the same
-    /// short-read behavior as [`Input::read_into`].
-    ///
-    /// # Parameters
-    /// - `output`: Destination storage.
-    ///
-    /// # Returns
-    /// The number of items written to `output`.
-    ///
-    /// # Errors
-    /// Returns the input error reported by the implementation. Returns
-    /// [`ErrorKind::InvalidData`] if the input reports more items than the
-    /// destination slice could hold.
-    #[inline(always)]
-    fn read(&mut self, output: &mut [Self::Item]) -> Result<usize> {
-        // SAFETY: The full output slice is a valid destination range.
-        let read = unsafe { self.read_into(output, 0, output.len()) }?;
-        validate_read_count(read, output.len())?;
-        Ok(read)
-    }
-
     /// Reads items until `output` is full or EOF is reached.
     ///
-    /// This method treats EOF as a successful partial result. It keeps
-    /// retrying short reads until the output slice is full, EOF is reached, or
-    /// a non-interrupted error occurs.
+    /// This method treats EOF as a successful partial result. It keeps retrying
+    /// short reads until the output slice is full, EOF is reached, or a
+    /// non-interrupted error occurs.
     ///
     /// # Parameters
     /// - `output`: Destination storage to fill.
@@ -65,7 +43,7 @@ pub trait InputExt: Input {
         while total < output.len() {
             let remaining = output.len() - total;
             // SAFETY: `total..output.len()` is a valid suffix of `output`.
-            match unsafe { self.read_into(output, total, remaining) } {
+            match unsafe { self.read_unchecked(output, total, remaining) } {
                 Ok(0) => break,
                 Ok(read) => {
                     validate_read_count(read, remaining)?;
@@ -121,7 +99,7 @@ pub trait InputExt: Input {
     where
         Self::Item: Copy + Default,
     {
-        let mut buffer = unit_buffer::<Self::Item>()?;
+        let mut buffer = item_buffer::<Self::Item>()?;
         let mut copied = 0_u64;
         loop {
             let requested = buffer.len();
@@ -131,7 +109,7 @@ pub trait InputExt: Input {
             }
             // SAFETY: `read` has been validated against `buffer.len()`.
             unsafe {
-                output.write_all_from(&buffer, 0, read)?;
+                output.write_all_unchecked(&buffer, 0, read)?;
             }
             copied = add_copied(copied, read)?;
         }
@@ -166,7 +144,7 @@ pub trait InputExt: Input {
         if max_units == 0 {
             return Ok(0);
         }
-        let mut buffer = unit_buffer::<Self::Item>()?;
+        let mut buffer = item_buffer::<Self::Item>()?;
         let mut remaining = max_units;
         let mut copied = 0_u64;
         while remaining > 0 {
@@ -177,7 +155,7 @@ pub trait InputExt: Input {
             }
             // SAFETY: `read` has been validated against the requested prefix.
             unsafe {
-                output.write_all_from(&buffer, 0, read)?;
+                output.write_all_unchecked(&buffer, 0, read)?;
             }
             let read = read as u64;
             remaining -= read;
@@ -215,7 +193,7 @@ pub trait InputExt: Input {
     where
         Self::Item: Copy + Default,
     {
-        let mut buffer = unit_buffer::<Self::Item>()?;
+        let mut buffer = item_buffer::<Self::Item>()?;
         let mut collected = Vec::new();
         let mut remaining = max_units;
         let mut copied = 0_u64;
@@ -224,9 +202,9 @@ pub trait InputExt: Input {
             let read = read_retrying_interrupted_limited(self, &mut buffer, requested)?;
             if read == 0 {
                 if !collected.is_empty() {
-                    // SAFETY: `collected` contains exactly the units validated below.
+                    // SAFETY: `collected` contains exactly the items validated below.
                     unsafe {
-                        output.write_all_from(&collected, 0, collected.len())?;
+                        output.write_all_unchecked(&collected, 0, collected.len())?;
                     }
                 }
                 return Ok(copied);
@@ -234,7 +212,7 @@ pub trait InputExt: Input {
             if (read as u64) > remaining {
                 return Err(Error::new(
                     ErrorKind::InvalidData,
-                    format!("input exceeds maximum length of {max_units} units"),
+                    format!("input exceeds maximum length of {max_units} items"),
                 ));
             }
             try_reserve_vec(&mut collected, read)?;
@@ -248,14 +226,14 @@ pub trait InputExt: Input {
 
 impl<T> InputExt for T where T: Input + ?Sized {}
 
-/// Allocates the reusable unit copy buffer.
+/// Allocates the reusable item copy buffer.
 ///
 /// # Returns
 /// A buffer initialized with default values.
 ///
 /// # Errors
 /// Returns [`ErrorKind::Other`] when the allocation cannot be reserved.
-fn unit_buffer<T>() -> Result<Vec<T>>
+fn item_buffer<T>() -> Result<Vec<T>>
 where
     T: Copy + Default,
 {
@@ -288,7 +266,7 @@ where
 {
     loop {
         // SAFETY: Callers pass a valid prefix length within `buffer`.
-        match unsafe { input.read_into(buffer, 0, requested) } {
+        match unsafe { input.read_unchecked(buffer, 0, requested) } {
             Ok(read) => {
                 validate_read_count(read, requested)?;
                 return Ok(read);
@@ -313,24 +291,5 @@ where
 fn add_copied(copied: u64, read: usize) -> Result<u64> {
     copied
         .checked_add(read as u64)
-        .ok_or_else(|| Error::new(ErrorKind::InvalidData, "copied unit count overflows u64"))
-}
-
-/// Validates a unit count returned by an input.
-///
-/// # Parameters
-/// - `read`: Unit count reported by the input.
-/// - `requested`: Maximum unit count requested from the input.
-///
-/// # Errors
-/// Returns [`ErrorKind::InvalidData`] when the input reports more units than
-/// the destination range could hold.
-fn validate_read_count(read: usize, requested: usize) -> Result<()> {
-    if read > requested {
-        return Err(Error::new(
-            ErrorKind::InvalidData,
-            format!("reader reported {read} units for a {requested}-unit buffer"),
-        ));
-    }
-    Ok(())
+        .ok_or_else(|| Error::new(ErrorKind::InvalidData, "copied item count overflows u64"))
 }

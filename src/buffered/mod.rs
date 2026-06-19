@@ -5,16 +5,16 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Shared unit-oriented buffering primitives.
+//! Shared item-oriented buffering primitives.
 //!
-//! This module contains unit-oriented buffering types used by higher-level
+//! This module contains item-oriented buffering types used by higher-level
 //! stream adapters. It does not know about binary codecs, text encodings, or
-//! record formats; callers compose those concerns on top of the unit windows
+//! record formats; callers compose those concerns on top of the item windows
 //! exposed here.
 //!
-//! [`BufferedInput`] buffers units in front of an [`crate::Input`] value,
+//! [`BufferedInput`] buffers items in front of an [`crate::Input`] value,
 //! implements [`crate::Input`] and [`crate::Seekable`], and exposes the
-//! currently unread unit window. [`BufferedOutput`] buffers units before an
+//! currently unread item window. [`BufferedOutput`] buffers items before an
 //! [`crate::Output`] value, implements [`crate::Output`] and
 //! [`crate::Seekable`], and exposes spare writable capacity for hot-path
 //! encoders. [`Buffer`] is the low-level position/limit storage object shared
@@ -26,9 +26,8 @@
 mod buffer;
 mod buffered_input;
 mod buffered_output;
-mod capacity;
 
+pub use crate::capacity_const::DEFAULT_BUFFER_CAPACITY;
 pub use buffer::Buffer;
 pub use buffered_input::BufferedInput;
 pub use buffered_output::BufferedOutput;
-pub use capacity::DEFAULT_BUFFER_CAPACITY;

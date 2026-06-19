@@ -7,8 +7,8 @@
 // =============================================================================
 mod buf_read_ext;
 mod input_ext;
-mod output_ext;
 pub mod internal;
+mod output_ext;
 mod read_ext;
 mod read_seek_ext;
 mod seek_ext;

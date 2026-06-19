@@ -16,7 +16,7 @@ use crate::util::UncheckedSlice;
 /// advancing the limit.
 ///
 /// The backing storage is fully initialized up front, so `T` is constrained to
-/// [`Copy`] + [`Default`]. This buffer is intended for scalar stream units such
+/// [`Copy`] + [`Default`]. This buffer is intended for scalar stream items such
 /// as `u8`, `u32`, or `char`, where default initialization is cheap and is
 /// usually optimized aggressively by the compiler. It is not intended to store
 /// expensive opaque values.
