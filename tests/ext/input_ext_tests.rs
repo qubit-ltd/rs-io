@@ -7,16 +7,9 @@
 // =============================================================================
 
 use std::collections::VecDeque;
-use std::io::{
-    Error,
-    ErrorKind,
-};
+use std::io::{Error, ErrorKind};
 
-use qubit_io::{
-    Input,
-    InputExt,
-    Output,
-};
+use qubit_io::{Input, InputExt, Output};
 
 struct ChunkInput {
     chunks: VecDeque<Vec<u16>>,
@@ -403,6 +396,34 @@ fn test_input_ext_copy_to_end_limited_copies_within_limit() {
     assert_eq!(&[1, 2, 3], output.values.as_slice());
 }
 
+#[test]
+fn test_input_ext_copy_helpers_accept_generic_output_type() {
+    let mut input = ChunkInput::new(vec![vec![1, 2]]);
+    let mut output = CollectOutput::default();
+
+    let copied = input
+        .copy_to::<CollectOutput>(&mut output)
+        .expect("generic output copy should succeed");
+    assert_eq!(2, copied);
+    assert_eq!(&[1, 2], output.values.as_slice());
+
+    let mut input = ChunkInput::new(vec![vec![3, 4]]);
+    let mut output = CollectOutput::default();
+    let copied = input
+        .copy_to_at_most::<CollectOutput>(&mut output, 1)
+        .expect("generic bounded copy should succeed");
+    assert_eq!(1, copied);
+    assert_eq!(&[3], output.values.as_slice());
+
+    let mut input = ChunkInput::new(vec![vec![5, 6]]);
+    let mut output = CollectOutput::default();
+    let copied = input
+        .copy_to_end_limited::<CollectOutput>(&mut output, 2)
+        .expect("generic limited-end copy should succeed");
+    assert_eq!(2, copied);
+    assert_eq!(&[5, 6], output.values.as_slice());
+}
+
 struct FailingInput;
 
 impl Input for FailingInput {
@@ -552,8 +573,7 @@ fn test_input_ext_copy_to_end_limited_flushes_collected_items_at_eof() {
 }
 
 #[test]
-fn test_input_ext_copy_to_end_limited_returns_write_error_when_flushing_collected()
- {
+fn test_input_ext_copy_to_end_limited_returns_write_error_when_flushing_collected() {
     let mut input = ChunkInput::new(vec![vec![1, 2, 3]]);
     let mut output = FailOnWriteOutput {
         values: Vec::new(),
@@ -574,9 +594,9 @@ fn test_input_ext_read_exact_propagates_read_error() {
     let mut input = FailingInput;
     let mut output = [0_u16; 2];
 
-    let error = input.read_exact(&mut output).expect_err(
-        "read_exact should propagate read errors from read_exact_or_eof",
-    );
+    let error = input
+        .read_exact(&mut output)
+        .expect_err("read_exact should propagate read errors from read_exact_or_eof");
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("read failed", error.to_string());
