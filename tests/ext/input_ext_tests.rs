@@ -69,7 +69,7 @@ impl Output for CollectOutput {
         Ok(count)
     }
 
-    fn flush_pending(&mut self) -> std::io::Result<()> {
+    fn flush(&mut self) -> std::io::Result<()> {
         Ok(())
     }
 }
@@ -224,6 +224,134 @@ fn test_input_ext_read_exact_or_eof_rejects_overreported_count() {
 }
 
 #[test]
+fn test_input_ext_read_exact_or_eof_unchecked_reads_into_middle_range() {
+    let mut input = ChunkInput::new(vec![vec![1, 2], vec![3, 4]]);
+    let mut output = [0_u16, 0, 0, 0, 0, 0, 0, 0];
+
+    // SAFETY: `index..index + count` is `2..6`, which is within `output`.
+    let read = unsafe {
+        input
+            .read_exact_or_eof_unchecked(&mut output, 2, 4)
+            .expect("middle range should be filled across short reads")
+    };
+
+    assert_eq!(4, read);
+    assert_eq!([0, 0, 1, 2, 3, 4, 0, 0], output);
+}
+
+#[test]
+fn test_input_ext_read_exact_or_eof_unchecked_returns_partial_count_at_eof() {
+    let mut input = ChunkInput::new(vec![vec![1, 2], vec![3]]);
+    let mut output = [0_u16, 0, 0, 0, 0, 0, 0, 0];
+
+    // SAFETY: `index..index + count` is `2..6`, which is within `output`.
+    let read = unsafe {
+        input
+            .read_exact_or_eof_unchecked(&mut output, 2, 4)
+            .expect("EOF after partial data should not be an error")
+    };
+
+    assert_eq!(3, read);
+    assert_eq!([0, 0, 1, 2, 3, 0, 0, 0], output);
+}
+
+#[test]
+fn test_input_ext_read_exact_or_eof_unchecked_retries_interrupted_reads() {
+    let mut input = InterruptedInput::new(vec![vec![1, 2, 3, 4]]);
+    let mut output = [0_u16, 0, 0, 0, 0, 0, 0, 0];
+
+    // SAFETY: `index..index + count` is `2..6`, which is within `output`.
+    let read = unsafe {
+        input
+            .read_exact_or_eof_unchecked(&mut output, 2, 4)
+            .expect("interrupted reads should be retried")
+    };
+
+    assert_eq!(4, read);
+    assert_eq!([0, 0, 1, 2, 3, 4, 0, 0], output);
+}
+
+#[test]
+fn test_input_ext_read_exact_or_eof_unchecked_returns_non_interrupted_error() {
+    let mut input = FailingInput;
+    let mut output = [0_u16, 0, 0, 0, 0, 0, 0, 0];
+
+    // SAFETY: `index..index + count` is `2..6`, which is within `output`.
+    let error = unsafe {
+        input
+            .read_exact_or_eof_unchecked(&mut output, 2, 4)
+            .expect_err("non-interrupted read errors should be returned")
+    };
+
+    assert_eq!(ErrorKind::Other, error.kind());
+    assert_eq!("read failed", error.to_string());
+    assert_eq!([0, 0, 0, 0, 0, 0, 0, 0], output);
+}
+
+#[test]
+fn test_input_ext_read_exact_unchecked_reads_into_middle_range() {
+    let mut input = ChunkInput::new(vec![vec![1, 2], vec![3, 4]]);
+    let mut output = [0_u16, 0, 0, 0, 0, 0, 0, 0];
+
+    // SAFETY: `index..index + count` is `2..6`, which is within `output`.
+    unsafe {
+        input
+            .read_exact_unchecked(&mut output, 2, 4)
+            .expect("middle range should be filled across short reads");
+    }
+
+    assert_eq!([0, 0, 1, 2, 3, 4, 0, 0], output);
+}
+
+#[test]
+fn test_input_ext_read_exact_unchecked_retries_interrupted_reads() {
+    let mut input = InterruptedInput::new(vec![vec![1, 2, 3, 4]]);
+    let mut output = [0_u16, 0, 0, 0, 0, 0, 0, 0];
+
+    // SAFETY: `index..index + count` is `2..6`, which is within `output`.
+    unsafe {
+        input
+            .read_exact_unchecked(&mut output, 2, 4)
+            .expect("interrupted reads should be retried");
+    }
+
+    assert_eq!([0, 0, 1, 2, 3, 4, 0, 0], output);
+}
+
+#[test]
+fn test_input_ext_read_exact_unchecked_returns_non_interrupted_error() {
+    let mut input = FailingInput;
+    let mut output = [0_u16, 0, 0, 0, 0, 0, 0, 0];
+
+    // SAFETY: `index..index + count` is `2..6`, which is within `output`.
+    let error = unsafe {
+        input
+            .read_exact_unchecked(&mut output, 2, 4)
+            .expect_err("non-interrupted read errors should be returned")
+    };
+
+    assert_eq!(ErrorKind::Other, error.kind());
+    assert_eq!("read failed", error.to_string());
+    assert_eq!([0, 0, 0, 0, 0, 0, 0, 0], output);
+}
+
+#[test]
+fn test_input_ext_read_exact_unchecked_returns_unexpected_eof() {
+    let mut input = ChunkInput::new(vec![vec![1, 2], vec![3]]);
+    let mut output = [0_u16, 0, 0, 0, 0, 0, 0, 0];
+
+    // SAFETY: `index..index + count` is `2..6`, which is within `output`.
+    let error = unsafe {
+        input
+            .read_exact_unchecked(&mut output, 2, 4)
+            .expect_err("short input should return unexpected EOF")
+    };
+
+    assert_eq!(ErrorKind::UnexpectedEof, error.kind());
+    assert_eq!([0, 0, 1, 2, 3, 0, 0, 0], output);
+}
+
+#[test]
 fn test_input_ext_copy_to_copies_all_remaining_items() {
     let mut input = ChunkInput::new(vec![vec![1, 2], vec![3, 4]]);
     let mut output = CollectOutput::default();
@@ -311,7 +439,7 @@ impl Output for FailOnWriteOutput {
         Ok(count)
     }
 
-    fn flush_pending(&mut self) -> std::io::Result<()> {
+    fn flush(&mut self) -> std::io::Result<()> {
         Ok(())
     }
 }
