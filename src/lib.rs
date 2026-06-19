@@ -22,6 +22,7 @@
 //!
 //! The concrete trait definitions and wrapper types live in dedicated modules
 //! and are re-exported from the crate root for ergonomic use.
+// qubit-style: allow coverage-cfg
 
 pub mod buffered;
 mod capacity_const;
@@ -46,6 +47,12 @@ pub use ext::{
     WriteExt,
     WriteSeekExt,
 };
+#[cfg(coverage)]
+pub use ext::{
+    coverage_fail_next_add_copied,
+    coverage_natural_add_copied_overflow,
+    coverage_reset_add_copied_hooks,
+};
 pub use traits::{
     BufReadSeek,
     Input,
@@ -61,6 +68,13 @@ pub use traits::{
 pub use util::Streams;
 #[allow(unused_imports)]
 pub use util::UncheckedSlice;
+#[cfg(coverage)]
+pub use util::{
+    coverage_fail_next_reserve,
+    coverage_fail_next_string_reserve,
+    coverage_fail_reserve_after,
+    coverage_reset_reserve_hooks,
+};
 #[allow(unused_imports)]
 pub use util::{
     nz,

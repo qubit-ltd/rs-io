@@ -1171,3 +1171,110 @@ fn test_seek_returns_underlying_seek_error() {
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("seek failed", error.to_string());
 }
+
+#[test]
+fn test_stream_position_returns_underlying_seek_error() {
+    let mut input = BufferedInput::with_capacity(FailingSeekReader, 4);
+
+    let error = input
+        .stream_position()
+        .expect_err("stream_position should propagate underlying seek errors");
+
+    assert_eq!(ErrorKind::Other, error.kind());
+    assert_eq!("seek failed", error.to_string());
+}
+
+#[test]
+fn test_ensure_available_propagates_fill_until_error() {
+    let mut input = BufferedInput::new(Cursor::new(b"abc".to_vec()));
+
+    let error = input
+        .ensure_available(input.capacity() + 1)
+        .expect_err("ensure_available should propagate fill_until errors");
+
+    assert_eq!(ErrorKind::InvalidInput, error.kind());
+}
+
+#[test]
+fn test_buffered_input_trait_read_via_dyn_input() {
+    let cursor = Cursor::new(b"abc".to_vec());
+    let mut input = BufferedInput::with_capacity(cursor, 4);
+    assert!(input.fill_more().expect("initial refill should succeed"));
+    let input: &mut dyn Input<Item = u8> = &mut input;
+    let mut output = [0_u8; 2];
+
+    let read = input
+        .read(&mut output)
+        .expect("BufferedInput should implement Input::read");
+
+    assert_eq!(2, read);
+    assert_eq!(b"ab", &output);
+}
+
+#[test]
+fn test_buffered_input_with_zero_capacity_uses_one() {
+    let cursor = Cursor::new(b"a".to_vec());
+    let input = BufferedInput::with_capacity(cursor, 0);
+
+    assert_eq!(1, input.capacity());
+}
+
+#[test]
+fn test_inner_returns_wrapped_input() {
+    let cursor = Cursor::new(b"abc".to_vec());
+    let input = BufferedInput::new(cursor);
+
+    assert_eq!(0, input.inner().position());
+}
+
+#[test]
+fn test_fill_more_backshifts_when_buffer_is_full_with_unread() {
+    let cursor = Cursor::new(b"abcdefgh".to_vec());
+    let mut input = BufferedInput::with_capacity(cursor, 4);
+
+    assert!(input.fill_more().expect("initial refill should succeed"));
+    // SAFETY: One buffered item is consumed to leave unread data at the tail.
+    unsafe {
+        input.consume(1);
+    }
+    assert!(input.fill_more().expect("backshift refill should succeed"));
+    assert_eq!(4, input.available());
+    assert_eq!(b"bcde", unread_units(&input).as_slice());
+}
+
+#[test]
+fn test_u16_ensure_available_succeeds_when_items_are_buffered() {
+    let inner = U16Input::new(vec![vec![1, 2, 3]]);
+    let mut input = BufferedInput::with_capacity(inner, 4);
+
+    assert!(input.fill_more().expect("initial refill should succeed"));
+    input
+        .ensure_available(2)
+        .expect("ensure_available should succeed for generic item inputs");
+    assert_eq!(&[1, 2, 3], unread_units(&input).as_slice());
+}
+
+#[test]
+fn test_buffered_input_read_rejects_overreported_delegated_count() {
+    let mut input = BufferedInput::with_capacity(OverreportingInput, 4);
+    let mut output = [0_u16; 4];
+
+    let error = input
+        .read(&mut output)
+        .expect_err("delegated reads should validate reported counts");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+}
+
+#[test]
+fn test_ensure_available_succeeds_after_refill_from_empty_buffer() {
+    let mut input = BufferedInput::new(Cursor::new(b"abc".to_vec()));
+
+    input
+        .ensure_available(2)
+        .expect("ensure_available should refill an initially empty buffer");
+
+    assert!(input.available() >= 2);
+    assert_eq!(b'a', unread_units(&input)[0]);
+    assert_eq!(b'b', unread_units(&input)[1]);
+}

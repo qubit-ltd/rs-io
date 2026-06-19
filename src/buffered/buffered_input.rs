@@ -431,9 +431,7 @@ where
     #[inline(always)]
     pub fn read(&mut self, output: &mut [I::Item]) -> Result<usize> {
         // SAFETY: The caller ensured the destination slice is valid.
-        let read = unsafe { self.read_unchecked(output, 0, output.len()) }?;
-        validate_read_count(read, output.len())?;
-        Ok(read)
+        unsafe { self.read_unchecked(output, 0, output.len()) }
     }
 
     /// Seeks the wrapped reader and discards buffered items after success.
