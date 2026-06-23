@@ -9,6 +9,11 @@
 //! already validate bounds in their own protocol.
 
 use core::mem;
+use std::io::{
+    Error,
+    ErrorKind,
+    Result,
+};
 
 /// Namespace for low-level slice operations without bound checks.
 ///
@@ -17,6 +22,30 @@ use core::mem;
 pub enum UncheckedSlice {}
 
 impl UncheckedSlice {
+    /// Returns the exclusive end index of a checked slice range.
+    ///
+    /// # Parameters
+    ///
+    /// - `len`: Slice length.
+    /// - `start`: Start index in the slice.
+    /// - `count`: Number of requested items after `start`.
+    ///
+    /// # Returns
+    ///
+    /// `Some(end)` if `start + count <= len` and no overflow occurs, or
+    /// `None` when the requested range does not fit inside the slice.
+    #[inline(always)]
+    pub const fn range_end(
+        len: usize,
+        start: usize,
+        count: usize,
+    ) -> Option<usize> {
+        match start.checked_add(count) {
+            Some(end) if len >= end => Some(end),
+            _ => None,
+        }
+    }
+
     /// Returns whether a slice has at least `count` readable/writable items
     /// from `start`.
     ///
@@ -31,10 +60,36 @@ impl UncheckedSlice {
     /// `true` if `start + count <= len` and no overflow occurs.
     #[inline(always)]
     pub const fn range_fits(len: usize, start: usize, count: usize) -> bool {
-        match start.checked_add(count) {
-            Some(end) => len >= end,
-            None => false,
-        }
+        Self::range_end(len, start, count).is_some()
+    }
+
+    /// Returns the exclusive end index of a checked slice range as an I/O
+    /// result.
+    ///
+    /// # Parameters
+    ///
+    /// - `len`: Slice length.
+    /// - `start`: Start index in the slice.
+    /// - `count`: Number of requested items after `start`.
+    /// - `message`: Error message used when the requested range is invalid.
+    ///
+    /// # Returns
+    ///
+    /// Returns the exclusive end index when the range fits inside the slice.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ErrorKind::InvalidInput`] with `message` when
+    /// `start + count` overflows or exceeds `len`.
+    #[inline]
+    pub fn checked_range_end(
+        len: usize,
+        start: usize,
+        count: usize,
+        message: &'static str,
+    ) -> Result<usize> {
+        Self::range_end(len, start, count)
+            .ok_or_else(|| Error::new(ErrorKind::InvalidInput, message))
     }
 
     /// Reads one value from an unchecked slice index.
