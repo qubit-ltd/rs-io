@@ -6,6 +6,7 @@
 //    Licensed under the Apache License, Version 2.0
 // =============================================================================
 use std::cmp::Ordering;
+use std::collections::VecDeque;
 use std::io::{
     Cursor,
     Error,
@@ -15,6 +16,8 @@ use std::io::{
 };
 
 use qubit_io::{
+    Input,
+    Output,
     ReadExt,
     Streams,
 };
@@ -39,7 +42,7 @@ impl Read for InterruptedOnceReader {
             self.interrupted = true;
             return Err(Error::new(ErrorKind::Interrupted, "interrupted once"));
         }
-        self.data.read(buffer)
+        Read::read(&mut self.data, buffer)
     }
 }
 
@@ -88,7 +91,7 @@ impl InterruptThenEofReader {
 impl Read for InterruptThenEofReader {
     fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
         if self.data.position() < self.data.get_ref().len() as u64 {
-            return self.data.read(buffer);
+            return Read::read(&mut self.data, buffer);
         }
         if !self.interrupted {
             self.interrupted = true;
@@ -116,9 +119,181 @@ impl FailAfterDataReader {
 impl Read for FailAfterDataReader {
     fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
         if self.data.position() < self.data.get_ref().len() as u64 {
-            return self.data.read(buffer);
+            return Read::read(&mut self.data, buffer);
         }
         Err(Error::other("tail read failed"))
+    }
+}
+
+struct ChunkInput {
+    chunks: VecDeque<Vec<u16>>,
+}
+
+impl ChunkInput {
+    fn new(chunks: Vec<Vec<u16>>) -> Self {
+        Self {
+            chunks: VecDeque::from(chunks),
+        }
+    }
+}
+
+impl Input for ChunkInput {
+    type Item = u16;
+
+    unsafe fn read_unchecked(
+        &mut self,
+        output: &mut [u16],
+        index: usize,
+        count: usize,
+    ) -> std::io::Result<usize> {
+        let Some(chunk) = self.chunks.pop_front() else {
+            return Ok(0);
+        };
+        let read = count.min(chunk.len());
+        output[index..index + read].copy_from_slice(&chunk[..read]);
+        if read < chunk.len() {
+            self.chunks.push_front(chunk[read..].to_vec());
+        }
+        Ok(read)
+    }
+}
+
+struct InterruptedItemInput {
+    interrupted: bool,
+    inner: ChunkInput,
+}
+
+impl InterruptedItemInput {
+    fn new(chunks: Vec<Vec<u16>>) -> Self {
+        Self {
+            interrupted: false,
+            inner: ChunkInput::new(chunks),
+        }
+    }
+}
+
+impl Input for InterruptedItemInput {
+    type Item = u16;
+
+    unsafe fn read_unchecked(
+        &mut self,
+        output: &mut [u16],
+        index: usize,
+        count: usize,
+    ) -> std::io::Result<usize> {
+        if !self.interrupted {
+            self.interrupted = true;
+            return Err(Error::new(ErrorKind::Interrupted, "interrupted"));
+        }
+        // SAFETY: The caller supplied the same valid destination range.
+        unsafe { self.inner.read_unchecked(output, index, count) }
+    }
+}
+
+struct OverreportingItemInput;
+
+impl Input for OverreportingItemInput {
+    type Item = u16;
+
+    unsafe fn read_unchecked(
+        &mut self,
+        _output: &mut [u16],
+        _index: usize,
+        count: usize,
+    ) -> std::io::Result<usize> {
+        Ok(count + 1)
+    }
+}
+
+struct FailingItemInput;
+
+impl Input for FailingItemInput {
+    type Item = u16;
+
+    unsafe fn read_unchecked(
+        &mut self,
+        _output: &mut [u16],
+        _index: usize,
+        _count: usize,
+    ) -> std::io::Result<usize> {
+        Err(Error::other("read failed"))
+    }
+}
+
+#[derive(Default)]
+struct CollectOutput {
+    values: Vec<u16>,
+}
+
+impl Output for CollectOutput {
+    type Item = u16;
+
+    unsafe fn write_unchecked(
+        &mut self,
+        input: &[u16],
+        index: usize,
+        count: usize,
+    ) -> std::io::Result<usize> {
+        self.values.extend_from_slice(&input[index..index + count]);
+        Ok(count)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+struct FailOnWriteItemOutput {
+    values: Vec<u16>,
+    fail: bool,
+}
+
+impl Output for FailOnWriteItemOutput {
+    type Item = u16;
+
+    unsafe fn write_unchecked(
+        &mut self,
+        input: &[u16],
+        index: usize,
+        count: usize,
+    ) -> std::io::Result<usize> {
+        if self.fail {
+            return Err(Error::other("write failed"));
+        }
+        self.values.extend_from_slice(&input[index..index + count]);
+        Ok(count)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+struct PartialThenFailItemOutput {
+    values: Vec<u16>,
+    fail_after: usize,
+}
+
+impl Output for PartialThenFailItemOutput {
+    type Item = u16;
+
+    unsafe fn write_unchecked(
+        &mut self,
+        input: &[u16],
+        index: usize,
+        count: usize,
+    ) -> std::io::Result<usize> {
+        if self.values.len() >= self.fail_after {
+            return Err(Error::other("write failed after prefix"));
+        }
+        let writable = (self.fail_after - self.values.len()).min(count);
+        self.values
+            .extend_from_slice(&input[index..index + writable]);
+        Ok(writable)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
     }
 }
 
@@ -444,6 +619,242 @@ fn test_read_to_end_limited_rejects_input_beyond_limit() {
         .expect_err("input beyond limit should fail");
 
     assert_eq!(ErrorKind::InvalidData, error.kind());
+}
+
+#[test]
+fn test_copy_input_to_output_copies_all_remaining_items() {
+    let mut input = ChunkInput::new(vec![vec![1, 2], vec![3, 4]]);
+    let mut output = CollectOutput::default();
+
+    let copied = Streams::copy_input_to_output(&mut input, &mut output)
+        .expect("item copy should reach EOF");
+
+    assert_eq!(4, copied);
+    assert_eq!(&[1, 2, 3, 4], output.values.as_slice());
+}
+
+#[test]
+fn test_copy_input_to_output_retries_interrupted_reads() {
+    let mut input = InterruptedItemInput::new(vec![vec![1, 2, 3]]);
+    let mut output = CollectOutput::default();
+
+    let copied = Streams::copy_input_to_output(&mut input, &mut output)
+        .expect("interrupted item reads should be retried");
+
+    assert_eq!(3, copied);
+    assert_eq!(&[1, 2, 3], output.values.as_slice());
+}
+
+#[test]
+fn test_copy_input_to_output_returns_read_error() {
+    let mut input = FailingItemInput;
+    let mut output = CollectOutput::default();
+
+    let error = Streams::copy_input_to_output(&mut input, &mut output)
+        .expect_err("item read errors should be returned");
+
+    assert_eq!(ErrorKind::Other, error.kind());
+    assert_eq!("read failed", error.to_string());
+    assert!(output.values.is_empty());
+}
+
+#[test]
+fn test_copy_input_to_output_returns_write_error() {
+    let mut input = ChunkInput::new(vec![vec![1, 2, 3]]);
+    let mut output = FailOnWriteItemOutput {
+        values: Vec::new(),
+        fail: true,
+    };
+
+    let error = Streams::copy_input_to_output(&mut input, &mut output)
+        .expect_err("item write errors should be returned");
+
+    assert_eq!(ErrorKind::Other, error.kind());
+    assert_eq!("write failed", error.to_string());
+    assert!(output.values.is_empty());
+}
+
+#[test]
+fn test_copy_input_to_output_rejects_overreported_read_count() {
+    let mut input = OverreportingItemInput;
+    let mut output = CollectOutput::default();
+
+    let error = Streams::copy_input_to_output(&mut input, &mut output)
+        .expect_err("overreported item read counts should fail");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert!(output.values.is_empty());
+}
+
+#[test]
+fn test_copy_input_to_output_at_most_copies_requested_items() {
+    let mut input = ChunkInput::new(vec![vec![1, 2], vec![3, 4]]);
+    let mut output = CollectOutput::default();
+
+    let copied =
+        Streams::copy_input_to_output_at_most(&mut input, &mut output, 3)
+            .expect("bounded item copy should stop at the limit");
+
+    assert_eq!(3, copied);
+    assert_eq!(&[1, 2, 3], output.values.as_slice());
+}
+
+#[test]
+fn test_copy_input_to_output_at_most_zero_returns_immediately() {
+    let mut input = ChunkInput::new(vec![vec![1, 2, 3]]);
+    let mut output = CollectOutput::default();
+
+    let copied =
+        Streams::copy_input_to_output_at_most(&mut input, &mut output, 0)
+            .expect("zero-length item copy should succeed");
+
+    assert_eq!(0, copied);
+    assert!(output.values.is_empty());
+}
+
+#[test]
+fn test_copy_input_to_output_at_most_stops_at_eof() {
+    let mut input = ChunkInput::new(vec![vec![1, 2]]);
+    let mut output = CollectOutput::default();
+
+    let copied =
+        Streams::copy_input_to_output_at_most(&mut input, &mut output, 10)
+            .expect("bounded item copy should stop at EOF");
+
+    assert_eq!(2, copied);
+    assert_eq!(&[1, 2], output.values.as_slice());
+}
+
+#[test]
+fn test_copy_input_to_output_at_most_returns_read_error() {
+    let mut input = FailingItemInput;
+    let mut output = CollectOutput::default();
+
+    let error =
+        Streams::copy_input_to_output_at_most(&mut input, &mut output, 3)
+            .expect_err("bounded item copy should propagate read errors");
+
+    assert_eq!(ErrorKind::Other, error.kind());
+    assert_eq!("read failed", error.to_string());
+    assert!(output.values.is_empty());
+}
+
+#[test]
+fn test_copy_input_to_output_at_most_returns_write_error() {
+    let mut input = ChunkInput::new(vec![vec![1, 2, 3]]);
+    let mut output = FailOnWriteItemOutput {
+        values: Vec::new(),
+        fail: true,
+    };
+
+    let error =
+        Streams::copy_input_to_output_at_most(&mut input, &mut output, 3)
+            .expect_err("bounded item copy should propagate write errors");
+
+    assert_eq!(ErrorKind::Other, error.kind());
+    assert_eq!("write failed", error.to_string());
+}
+
+#[test]
+fn test_copy_input_to_output_end_limited_copies_within_limit() {
+    let mut input = ChunkInput::new(vec![vec![1, 2], vec![3]]);
+    let mut output = CollectOutput::default();
+
+    let copied =
+        Streams::copy_input_to_output_end_limited(&mut input, &mut output, 4)
+            .expect("end-limited item copy should accept short input");
+
+    assert_eq!(3, copied);
+    assert_eq!(&[1, 2, 3], output.values.as_slice());
+}
+
+#[test]
+fn test_copy_input_to_output_end_limited_accepts_empty_input() {
+    let mut input = ChunkInput::new(vec![]);
+    let mut output = CollectOutput::default();
+
+    let copied =
+        Streams::copy_input_to_output_end_limited(&mut input, &mut output, 3)
+            .expect("end-limited item copy should accept empty input");
+
+    assert_eq!(0, copied);
+    assert!(output.values.is_empty());
+}
+
+#[test]
+fn test_copy_input_to_output_end_limited_rejects_oversized_input() {
+    let mut input = ChunkInput::new(vec![vec![1, 2], vec![3, 4]]);
+    let mut output = CollectOutput::default();
+
+    let error =
+        Streams::copy_input_to_output_end_limited(&mut input, &mut output, 3)
+            .expect_err("oversized item input should be rejected");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!("input exceeds maximum length of 3 items", error.to_string());
+    assert!(output.values.is_empty());
+}
+
+#[test]
+fn test_copy_input_to_output_end_limited_retries_interrupted_reads() {
+    let mut input = InterruptedItemInput::new(vec![vec![1, 2, 3]]);
+    let mut output = CollectOutput::default();
+
+    let copied =
+        Streams::copy_input_to_output_end_limited(&mut input, &mut output, 3)
+            .expect("end-limited item copy should retry interrupted reads");
+
+    assert_eq!(3, copied);
+    assert_eq!(&[1, 2, 3], output.values.as_slice());
+}
+
+#[test]
+fn test_copy_input_to_output_end_limited_returns_read_error() {
+    let mut input = FailingItemInput;
+    let mut output = CollectOutput::default();
+
+    let error =
+        Streams::copy_input_to_output_end_limited(&mut input, &mut output, 3)
+            .expect_err("end-limited item copy should propagate read errors");
+
+    assert_eq!(ErrorKind::Other, error.kind());
+    assert_eq!("read failed", error.to_string());
+    assert!(output.values.is_empty());
+}
+
+#[test]
+fn test_copy_input_to_output_end_limited_returns_write_error() {
+    let mut input = ChunkInput::new(vec![vec![1, 2, 3]]);
+    let mut output = FailOnWriteItemOutput {
+        values: Vec::new(),
+        fail: true,
+    };
+
+    let error =
+        Streams::copy_input_to_output_end_limited(&mut input, &mut output, 3)
+            .expect_err("flush of collected items should propagate errors");
+
+    assert_eq!(ErrorKind::Other, error.kind());
+    assert_eq!("write failed", error.to_string());
+    assert!(output.values.is_empty());
+}
+
+#[test]
+fn test_copy_input_to_output_end_limited_write_error_may_leave_partial_output()
+{
+    let mut input = ChunkInput::new(vec![vec![1, 2, 3]]);
+    let mut output = PartialThenFailItemOutput {
+        values: Vec::new(),
+        fail_after: 1,
+    };
+
+    let error =
+        Streams::copy_input_to_output_end_limited(&mut input, &mut output, 3)
+            .expect_err("write errors after EOF should be returned");
+
+    assert_eq!(ErrorKind::Other, error.kind());
+    assert_eq!("write failed after prefix", error.to_string());
+    assert_eq!(&[1], output.values.as_slice());
 }
 
 #[test]

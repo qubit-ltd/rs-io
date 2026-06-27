@@ -209,7 +209,7 @@ where
     /// a valid range inside `output`, that the addition does not overflow, that
     /// `count <= self.available()`, and that the destination range does not
     /// overlap with the unread range stored inside this buffer.
-    #[inline(always)]
+    #[inline]
     pub unsafe fn copy_unread_to(
         &self,
         output: &mut [I::Item],
@@ -290,7 +290,6 @@ where
     /// reader reports more items than the spare buffer range could hold.
     /// Returns any non-interrupted I/O error produced by the wrapped reader
     /// while refilling the buffer.
-    #[inline]
     pub fn fill_until(&mut self, count: usize) -> Result<bool> {
         if count > self.capacity() {
             return Err(Error::new(
@@ -334,7 +333,6 @@ where
     /// if the wrapped reader reports more items than the spare buffer range
     /// could hold. Returns any non-interrupted I/O error produced by the
     /// wrapped reader while refilling the buffer.
-    #[inline]
     pub fn ensure_available(&mut self, count: usize) -> Result<()> {
         if self.fill_until(count)? {
             return Ok(());
@@ -432,6 +430,83 @@ where
     pub fn read(&mut self, output: &mut [I::Item]) -> Result<usize> {
         // SAFETY: The caller ensured the destination slice is valid.
         unsafe { self.read_unchecked(output, 0, output.len()) }
+    }
+
+    /// Reads items through the internal buffer until the target range is full
+    /// or EOF is reached.
+    ///
+    /// # Parameters
+    ///
+    /// * `output` - Destination storage that receives items.
+    /// * `output_index` - Start index inside `output`.
+    /// * `count` - Maximum number of items to read.
+    ///
+    /// # Returns
+    ///
+    /// The number of items written into `output[output_index..output_index +
+    /// count]`.
+    ///
+    /// # Errors
+    ///
+    /// Returns any non-interrupted I/O error produced by the wrapped reader.
+    /// Returns [`ErrorKind::InvalidData`] if the wrapped reader reports more
+    /// items than requested.
+    ///
+    /// # Safety
+    ///
+    /// The caller must guarantee that `output_index..output_index + count` is a
+    /// valid range inside `output` and that the addition does not overflow.
+    pub unsafe fn read_fully_unchecked(
+        &mut self,
+        output: &mut [I::Item],
+        output_index: usize,
+        count: usize,
+    ) -> Result<usize> {
+        debug_assert!(
+            UncheckedSlice::range_fits(output.len(), output_index, count),
+            "unchecked read-fully output range exceeds destination buffer"
+        );
+        let mut total = 0;
+        while total < count {
+            let remaining = count - total;
+            // SAFETY: The caller guarantees the original destination range is
+            // valid; `total < count`, so this suffix remains inside it.
+            match unsafe {
+                self.read_unchecked(output, output_index + total, remaining)
+            } {
+                Ok(0) => break,
+                Ok(read) => {
+                    total += read;
+                }
+                Err(error) => {
+                    if error.kind() == ErrorKind::Interrupted {
+                        continue;
+                    }
+                    return Err(error);
+                }
+            }
+        }
+        Ok(total)
+    }
+
+    /// Reads items into the full output slice until it is full or EOF is
+    /// reached.
+    ///
+    /// # Parameters
+    ///
+    /// * `output` - Destination storage to fill as far as possible.
+    ///
+    /// # Returns
+    ///
+    /// The number of items written into `output`.
+    ///
+    /// # Errors
+    ///
+    /// Returns any non-interrupted I/O error produced by the wrapped reader.
+    #[inline(always)]
+    pub fn read_fully(&mut self, output: &mut [I::Item]) -> Result<usize> {
+        // SAFETY: The full output slice is a valid destination range.
+        unsafe { self.read_fully_unchecked(output, 0, output.len()) }
     }
 
     /// Seeks the wrapped reader and discards buffered items after success.
@@ -664,6 +739,12 @@ where
 {
     type Item = I::Item;
 
+    /// Reports that this input already buffers items internally.
+    #[inline(always)]
+    fn is_buffered(&self) -> bool {
+        true
+    }
+
     /// Reads items through the internal buffer.
     #[inline(always)]
     unsafe fn read_unchecked(
@@ -682,6 +763,27 @@ where
     #[inline(always)]
     fn read(&mut self, output: &mut [I::Item]) -> Result<usize> {
         BufferedInput::read(self, output)
+    }
+
+    /// Reads items through the internal buffer until the target range is full
+    /// or EOF is reached.
+    #[inline(always)]
+    unsafe fn read_fully_unchecked(
+        &mut self,
+        output: &mut [Self::Item],
+        index: usize,
+        count: usize,
+    ) -> Result<usize> {
+        // SAFETY: Forwarded from the trait caller.
+        unsafe {
+            BufferedInput::read_fully_unchecked(self, output, index, count)
+        }
+    }
+
+    /// Reads items into the full output slice through the internal buffer.
+    #[inline(always)]
+    fn read_fully(&mut self, output: &mut [Self::Item]) -> Result<usize> {
+        BufferedInput::read_fully(self, output)
     }
 }
 

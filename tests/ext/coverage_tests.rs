@@ -16,21 +16,21 @@ mod coverage_tests {
 
     use qubit_io::{
         Input,
-        InputExt,
         Output,
         ReadExt,
-        coverage_fail_next_add_copied,
+        Streams,
+        coverage_add_item_count_overflow,
+        coverage_fail_next_add_item_count,
         coverage_fail_next_reserve,
         coverage_fail_next_string_reserve,
         coverage_fail_reserve_after,
-        coverage_natural_add_copied_overflow,
-        coverage_reset_add_copied_hooks,
+        coverage_reset_add_item_count_hooks,
         coverage_reset_reserve_hooks,
     };
 
     fn reset_coverage_hooks() {
+        coverage_reset_add_item_count_hooks();
         coverage_reset_reserve_hooks();
-        coverage_reset_add_copied_hooks();
     }
 
     struct ChunkInput {
@@ -90,15 +90,90 @@ mod coverage_tests {
     }
 
     #[test]
+    fn test_streams_reports_copied_item_count_overflow() {
+        let error = coverage_add_item_count_overflow()
+            .expect_err("copied item count overflow should fail");
+
+        assert_eq!(ErrorKind::InvalidData, error.kind());
+        assert_eq!("copied item count overflows u64", error.to_string());
+    }
+
+    #[test]
+    fn test_streams_copy_input_to_output_reports_add_item_count_overflow() {
+        reset_coverage_hooks();
+        let mut input = ChunkInput::new(vec![vec![1, 2, 3]]);
+        let mut output = CollectOutput::default();
+
+        coverage_fail_next_add_item_count();
+        let error = Streams::copy_input_to_output(&mut input, &mut output)
+            .expect_err("copy should propagate copied item count overflow");
+
+        assert_eq!(ErrorKind::InvalidData, error.kind());
+    }
+
+    #[test]
+    fn test_streams_copy_input_to_output_at_most_reports_add_item_count_overflow()
+     {
+        reset_coverage_hooks();
+        let mut input = ChunkInput::new(vec![vec![1, 2, 3]]);
+        let mut output = CollectOutput::default();
+
+        coverage_fail_next_add_item_count();
+        let error =
+            Streams::copy_input_to_output_at_most(&mut input, &mut output, 3)
+                .expect_err(
+                    "bounded copy should propagate copied item count overflow",
+                );
+
+        assert_eq!(ErrorKind::InvalidData, error.kind());
+    }
+
+    #[test]
+    fn test_streams_copy_input_to_output_end_limited_reports_add_item_count_overflow()
+     {
+        reset_coverage_hooks();
+        let mut input = ChunkInput::new(vec![vec![1, 2, 3]]);
+        let mut output = CollectOutput::default();
+
+        coverage_fail_next_add_item_count();
+        let error = Streams::copy_input_to_output_end_limited(
+            &mut input,
+            &mut output,
+            3,
+        )
+        .expect_err(
+            "end-limited copy should propagate copied item count overflow",
+        );
+
+        assert_eq!(ErrorKind::InvalidData, error.kind());
+    }
+
+    #[test]
+    fn test_streams_compare_content_reports_second_buffer_allocation_failure() {
+        reset_coverage_hooks();
+        let mut left = Cursor::new(b"abc".to_vec());
+        let mut right = Cursor::new(b"abc".to_vec());
+
+        coverage_fail_reserve_after(1);
+        let error = Streams::compare_content_with_buffer_size(
+            &mut left, &mut right, 4,
+        )
+        .expect_err(
+            "compare should propagate second buffer allocation failures",
+        );
+
+        assert_eq!(ErrorKind::Other, error.kind());
+    }
+
+    #[test]
     fn test_input_ext_copy_to_reports_create_vec_allocation_failure() {
         reset_coverage_hooks();
         let mut input = ChunkInput::new(vec![vec![1, 2, 3]]);
         let mut output = CollectOutput::default();
 
         coverage_fail_next_reserve();
-        let error = input
-            .copy_to(&mut output)
-            .expect_err("copy_to should propagate buffer allocation failures");
+        let error = Streams::copy_input_to_output(&mut input, &mut output)
+            .expect_err("copy should propagate buffer allocation failures");
 
         assert_eq!(ErrorKind::Other, error.kind());
         assert!(output.values.is_empty());
@@ -111,9 +186,11 @@ mod coverage_tests {
         let mut output = CollectOutput::default();
 
         coverage_fail_next_reserve();
-        let error = input.copy_to_at_most(&mut output, 2).expect_err(
-            "copy_to_at_most should propagate buffer allocation failures",
-        );
+        let error =
+            Streams::copy_input_to_output_at_most(&mut input, &mut output, 2)
+                .expect_err(
+                    "bounded copy should propagate buffer allocation failures",
+                );
 
         assert_eq!(ErrorKind::Other, error.kind());
         assert!(output.values.is_empty());
@@ -127,40 +204,17 @@ mod coverage_tests {
         let mut output = CollectOutput::default();
 
         coverage_fail_next_reserve();
-        let error = input.copy_to_end_limited(&mut output, 3).expect_err(
-            "copy_to_end_limited should propagate buffer allocation failures",
+        let error = Streams::copy_input_to_output_end_limited(
+            &mut input,
+            &mut output,
+            3,
+        )
+        .expect_err(
+            "end-limited copy should propagate buffer allocation failures",
         );
 
         assert_eq!(ErrorKind::Other, error.kind());
         assert!(output.values.is_empty());
-    }
-
-    #[test]
-    fn test_input_ext_copy_to_reports_add_copied_overflow() {
-        reset_coverage_hooks();
-        let mut input = ChunkInput::new(vec![vec![1, 2, 3]]);
-        let mut output = CollectOutput::default();
-
-        coverage_fail_next_add_copied();
-        let error = input
-            .copy_to(&mut output)
-            .expect_err("copy_to should propagate copied item count overflow");
-
-        assert_eq!(ErrorKind::InvalidData, error.kind());
-    }
-
-    #[test]
-    fn test_input_ext_copy_to_end_limited_reports_add_copied_overflow() {
-        reset_coverage_hooks();
-        let mut input = ChunkInput::new(vec![vec![1, 2, 3]]);
-        let mut output = CollectOutput::default();
-
-        coverage_fail_next_add_copied();
-        let error = input.copy_to_end_limited(&mut output, 3).expect_err(
-            "copy_to_end_limited should propagate copied item count overflow",
-        );
-
-        assert_eq!(ErrorKind::InvalidData, error.kind());
     }
 
     #[test]
@@ -170,21 +224,15 @@ mod coverage_tests {
         let mut output = CollectOutput::default();
 
         coverage_fail_reserve_after(1);
-        let error = input.copy_to_end_limited(&mut output, 3).expect_err(
-            "copy_to_end_limited should propagate collected reserve failures",
-        );
+        let error = Streams::copy_input_to_output_end_limited(
+            &mut input,
+            &mut output,
+            3,
+        )
+        .expect_err("end-limited copy should propagate reserve failures");
 
         assert_eq!(ErrorKind::Other, error.kind());
         assert!(output.values.is_empty());
-    }
-
-    #[test]
-    fn test_coverage_natural_add_copied_overflow() {
-        let error = coverage_natural_add_copied_overflow()
-            .expect_err("natural u64 overflow should be reported");
-
-        assert_eq!(ErrorKind::InvalidData, error.kind());
-        assert_eq!("copied item count overflows u64", error.to_string());
     }
 
     #[test]

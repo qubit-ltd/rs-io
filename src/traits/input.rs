@@ -25,6 +25,18 @@ pub trait Input {
     /// The item type read from this input.
     type Item;
 
+    /// Returns whether this input already buffers items internally.
+    ///
+    /// # Returns
+    ///
+    /// `true` when callers should avoid wrapping this input in another generic
+    /// item buffer automatically.
+    #[inline(always)]
+    #[must_use]
+    fn is_buffered(&self) -> bool {
+        false
+    }
+
     /// Reads items into an indexed output range without checking the range.
     ///
     /// # Parameters
@@ -72,6 +84,81 @@ pub trait Input {
         let read = unsafe { self.read_unchecked(output, 0, output.len()) }?;
         validate_read_count(read, output.len())?;
         Ok(read)
+    }
+
+    /// Reads items into an indexed output range until it is full or EOF is
+    /// reached.
+    ///
+    /// This method retries interrupted reads and treats EOF as a successful
+    /// partial result.
+    ///
+    /// # Parameters
+    ///
+    /// * `output` - Destination storage.
+    /// * `index` - Start index inside `output`.
+    /// * `count` - Maximum number of items to read.
+    ///
+    /// # Returns
+    ///
+    /// The number of items written into `output[index..index + count]`.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first non-[`ErrorKind::Interrupted`] input error. Returns
+    /// [`ErrorKind::InvalidData`] if the implementation reports more items than
+    /// requested.
+    ///
+    /// # Safety
+    ///
+    /// The caller must guarantee that `index..index + count` is a valid range
+    /// inside `output` and that the addition does not overflow.
+    unsafe fn read_fully_unchecked(
+        &mut self,
+        output: &mut [Self::Item],
+        index: usize,
+        count: usize,
+    ) -> Result<usize> {
+        debug_assert!(
+            UncheckedSlice::range_fits(output.len(), index, count),
+            "unchecked read-fully range exceeds output buffer"
+        );
+        let mut total = 0;
+        while total < count {
+            let remaining = count - total;
+            // SAFETY: The caller guarantees the original destination range is
+            // valid; `total < count`, so this suffix remains inside it.
+            match unsafe {
+                self.read_unchecked(output, index + total, remaining)
+            } {
+                Ok(0) => break,
+                Ok(read) => {
+                    validate_read_count(read, remaining)?;
+                    total += read;
+                }
+                Err(error) if error.kind() == ErrorKind::Interrupted => {}
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(total)
+    }
+
+    /// Reads items into the full output slice until it is full or EOF is
+    /// reached.
+    ///
+    /// # Parameters
+    /// - `output`: Destination storage to fill as far as possible.
+    ///
+    /// # Returns
+    /// The number of items written into `output`.
+    ///
+    /// # Errors
+    /// Returns the first non-interrupted input error, or
+    /// [`ErrorKind::InvalidData`] if the implementation reports an impossible
+    /// item count.
+    #[inline(always)]
+    fn read_fully(&mut self, output: &mut [Self::Item]) -> Result<usize> {
+        // SAFETY: The full output slice is a valid destination range.
+        unsafe { self.read_fully_unchecked(output, 0, output.len()) }
     }
 }
 

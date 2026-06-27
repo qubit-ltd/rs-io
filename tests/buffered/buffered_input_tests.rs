@@ -99,6 +99,13 @@ fn test_buffered_input_reads_generic_items() {
 }
 
 #[test]
+fn test_buffered_input_reports_buffered() {
+    let input = BufferedInput::with_capacity(U16Input::new(vec![]), 4);
+
+    assert!(input.is_buffered());
+}
+
+#[test]
 fn test_buffered_input_implements_input_for_generic_items() {
     let inner = U16Input::new(vec![vec![1, 2, 3]]);
     let mut input = BufferedInput::with_capacity(inner, 4);
@@ -114,6 +121,75 @@ fn test_buffered_input_implements_input_for_generic_items() {
 
     assert_eq!(2, read);
     assert_eq!([1, 2], output);
+}
+
+#[test]
+fn test_buffered_input_trait_read_fully_unchecked_for_generic_items() {
+    let inner = U16Input::new(vec![vec![1], vec![2, 3]]);
+    let mut input = BufferedInput::with_capacity(inner, 2);
+    let mut output = [0_u16; 4];
+
+    // SAFETY: `output[1..4]` is a valid destination range.
+    let read = unsafe {
+        <BufferedInput<U16Input> as Input>::read_fully_unchecked(
+            &mut input,
+            &mut output,
+            1,
+            3,
+        )
+        .expect("trait read_fully_unchecked should fill through buffer")
+    };
+
+    assert_eq!(3, read);
+    assert_eq!([0, 1, 2, 3], output);
+}
+
+#[test]
+fn test_buffered_input_trait_read_fully_for_generic_items() {
+    let inner = U16Input::new(vec![vec![1, 2], vec![3]]);
+    let mut input = BufferedInput::with_capacity(inner, 2);
+    let mut output = [0_u16; 4];
+
+    let read =
+        <BufferedInput<U16Input> as Input>::read_fully(&mut input, &mut output)
+            .expect("trait read_fully should return partial count at EOF");
+
+    assert_eq!(3, read);
+    assert_eq!([1, 2, 3, 0], output);
+}
+
+#[test]
+fn test_buffered_input_read_fully_retries_interrupted_reads() {
+    let reader = ScriptedReader::new(vec![
+        ReadStep::Interrupted,
+        ReadStep::Data(b"abc".to_vec()),
+    ]);
+    let mut input = BufferedInput::with_capacity(reader, 4);
+    let mut output = [0_u8; 3];
+
+    let read = input
+        .read_fully(&mut output)
+        .expect("read_fully should retry interrupted reads");
+
+    assert_eq!(3, read);
+    assert_eq!(b"abc", &output);
+}
+
+#[test]
+fn test_buffered_input_read_fully_returns_non_interrupted_error() {
+    let reader = ScriptedReader::new(vec![ReadStep::Error(
+        ErrorKind::PermissionDenied,
+        "read failed",
+    )]);
+    let mut input = BufferedInput::with_capacity(reader, 4);
+    let mut output = [0_u8; 3];
+
+    let error = input
+        .read_fully(&mut output)
+        .expect_err("read_fully should return non-interrupted errors");
+
+    assert_eq!(ErrorKind::PermissionDenied, error.kind());
+    assert_eq!("read failed", error.to_string());
 }
 
 #[test]

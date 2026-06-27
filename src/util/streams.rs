@@ -5,6 +5,9 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
+// qubit-style: allow coverage-cfg
+#[cfg(coverage)]
+use std::cell::Cell;
 use std::cmp::Ordering;
 use std::io::{
     Error,
@@ -16,10 +19,18 @@ use std::io::{
 
 use crate::ReadExt;
 use crate::capacity_const::{
+    DEFAULT_BUFFER_CAPACITY,
     DEFAULT_COMPARE_BUFFER_SIZE,
     DEFAULT_COPY_BUFFER_SIZE,
 };
-use crate::util::create_vec;
+use crate::util::{
+    create_vec,
+    try_reserve_vec,
+};
+use crate::{
+    Input,
+    Output,
+};
 
 /// Stream utility namespace.
 ///
@@ -215,6 +226,175 @@ impl Streams {
         }
     }
 
+    /// Copies all remaining items from `input` to `output`.
+    ///
+    /// This method allocates a reusable item buffer and copies until EOF. It
+    /// does not close or flush `output`.
+    ///
+    /// # Parameters
+    /// - `input`: Source item input.
+    /// - `output`: Destination item output.
+    ///
+    /// # Returns
+    /// The number of items copied.
+    ///
+    /// # Errors
+    /// Returns the first non-interrupted read error or output error reported by
+    /// the underlying streams. Returns [`ErrorKind::InvalidData`] if an input
+    /// or output reports an impossible item count.
+    pub fn copy_input_to_output<I, O>(
+        input: &mut I,
+        output: &mut O,
+    ) -> Result<u64>
+    where
+        I: Input + ?Sized,
+        O: Output<Item = I::Item> + ?Sized,
+        I::Item: Copy + Default,
+    {
+        let mut buffer =
+            create_vec(DEFAULT_BUFFER_CAPACITY, I::Item::default())?;
+        let mut copied = 0_u64;
+        loop {
+            let read = input.read_fully(&mut buffer)?;
+            if read == 0 {
+                return Ok(copied);
+            }
+            // SAFETY: `read` is bounded by `buffer.len()`.
+            unsafe {
+                output.write_fully_unchecked(&buffer, 0, read)?;
+            }
+            copied = add_item_count(copied, read)?;
+        }
+    }
+
+    /// Copies at most `max_items` items from `input` to `output`.
+    ///
+    /// This method stops successfully when either EOF is reached or `max_items`
+    /// items have been copied. It does not close or flush `output`.
+    ///
+    /// # Parameters
+    /// - `input`: Source item input.
+    /// - `output`: Destination item output.
+    /// - `max_items`: Maximum number of items to copy.
+    ///
+    /// # Returns
+    /// The number of items copied.
+    ///
+    /// # Errors
+    /// Returns the first non-interrupted read error or output error reported by
+    /// the underlying streams. Returns [`ErrorKind::InvalidData`] if an input
+    /// or output reports an impossible item count.
+    pub fn copy_input_to_output_at_most<I, O>(
+        input: &mut I,
+        output: &mut O,
+        max_items: u64,
+    ) -> Result<u64>
+    where
+        I: Input + ?Sized,
+        O: Output<Item = I::Item> + ?Sized,
+        I::Item: Copy + Default,
+    {
+        if max_items == 0 {
+            return Ok(0);
+        }
+        let mut buffer =
+            create_vec(DEFAULT_BUFFER_CAPACITY, I::Item::default())?;
+        let mut remaining = max_items;
+        let mut copied = 0_u64;
+        while remaining > 0 {
+            let requested = remaining.min(buffer.len() as u64) as usize;
+            // SAFETY: `requested` is a valid prefix length inside `buffer`.
+            let read = unsafe {
+                input.read_fully_unchecked(&mut buffer, 0, requested)?
+            };
+            if read == 0 {
+                break;
+            }
+            // SAFETY: `read` is bounded by the requested prefix.
+            unsafe {
+                output.write_fully_unchecked(&buffer, 0, read)?;
+            }
+            let read = read as u64;
+            remaining -= read;
+            copied = add_item_count(copied, read as usize)?;
+        }
+        Ok(copied)
+    }
+
+    /// Copies the remaining input if its total length is at most `max_items`.
+    ///
+    /// This method copies from the current input position until EOF. If EOF is
+    /// not reached within `max_items` items, it returns
+    /// [`ErrorKind::InvalidData`]. Detecting oversized input consumes one
+    /// excess item from `input`; that excess item is not written to
+    /// `output`.
+    ///
+    /// Oversized input, read errors, and allocation failures before output
+    /// flushing leave `output` unchanged. Once EOF is reached and collected
+    /// items are written to `output`, a write error may leave partial items
+    /// accepted by `output` because [`Output`] has no rollback operation.
+    ///
+    /// # Parameters
+    /// - `input`: Source item input.
+    /// - `output`: Destination item output.
+    /// - `max_items`: Maximum accepted number of remaining input items.
+    ///
+    /// # Returns
+    /// The number of items copied when EOF is reached within the limit.
+    ///
+    /// # Errors
+    /// Returns [`ErrorKind::InvalidData`] when the remaining input is longer
+    /// than `max_items`. Returns the first non-interrupted read error or output
+    /// error reported by the underlying streams.
+    pub fn copy_input_to_output_end_limited<I, O>(
+        input: &mut I,
+        output: &mut O,
+        max_items: u64,
+    ) -> Result<u64>
+    where
+        I: Input + ?Sized,
+        O: Output<Item = I::Item> + ?Sized,
+        I::Item: Copy + Default,
+    {
+        let mut buffer =
+            create_vec(DEFAULT_BUFFER_CAPACITY, I::Item::default())?;
+        let mut collected = Vec::new();
+        let mut remaining = max_items;
+        let mut copied = 0_u64;
+        loop {
+            let requested =
+                remaining.saturating_add(1).min(buffer.len() as u64) as usize;
+            // SAFETY: `requested` is a valid prefix length inside `buffer`.
+            let read = unsafe {
+                input.read_fully_unchecked(&mut buffer, 0, requested)?
+            };
+            if read == 0 {
+                let count = collected.len();
+                if count == 0 {
+                    return Ok(copied);
+                }
+                // SAFETY: The full collected range is valid.
+                unsafe {
+                    output.write_fully_unchecked(&collected, 0, count)?;
+                }
+                return Ok(copied);
+            }
+            if (read as u64) > remaining {
+                return Err(Error::new(
+                    ErrorKind::InvalidData,
+                    format!(
+                        "input exceeds maximum length of {max_items} items"
+                    ),
+                ));
+            }
+            try_reserve_vec(&mut collected, read)?;
+            collected.extend_from_slice(&buffer[..read]);
+            let read = read as u64;
+            remaining -= read;
+            copied = add_item_count(copied, read as usize)?;
+        }
+    }
+
     /// Tests whether two readable streams have equal remaining contents.
     ///
     /// The comparison starts at each reader's current position and reads both
@@ -381,4 +561,63 @@ fn copy_at_most_impl(
         }
     }
     Ok(copied)
+}
+
+#[cfg(coverage)]
+thread_local! {
+    static COVERAGE_FAIL_NEXT_ADD_ITEM_COUNT: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Makes the next [`add_item_count`] call fail.
+///
+/// Coverage-only helper for exercising overflow propagation inside copy loops.
+#[cfg(coverage)]
+#[doc(hidden)]
+pub fn coverage_fail_next_add_item_count() {
+    COVERAGE_FAIL_NEXT_ADD_ITEM_COUNT.with(|state| state.set(true));
+}
+
+/// Clears coverage-only [`add_item_count`] hooks between tests.
+#[cfg(coverage)]
+#[doc(hidden)]
+pub fn coverage_reset_add_item_count_hooks() {
+    COVERAGE_FAIL_NEXT_ADD_ITEM_COUNT.with(|state| state.set(false));
+}
+
+/// Adds a copied item count to an accumulated total.
+///
+/// # Parameters
+/// - `copied`: Existing copied item count.
+/// - `count`: Newly copied item count.
+///
+/// # Returns
+/// The updated copied item count.
+///
+/// # Errors
+/// Returns [`ErrorKind::InvalidData`] if the count overflows `u64`.
+#[inline(always)]
+fn add_item_count(copied: u64, count: usize) -> Result<u64> {
+    #[cfg(coverage)]
+    if COVERAGE_FAIL_NEXT_ADD_ITEM_COUNT.with(|state| {
+        let fail = state.get();
+        if fail {
+            state.set(false);
+        }
+        fail
+    }) {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            "copied item count overflows u64",
+        ));
+    }
+    copied.checked_add(count as u64).ok_or_else(|| {
+        Error::new(ErrorKind::InvalidData, "copied item count overflows u64")
+    })
+}
+
+/// Exercises the copied-item overflow branch in coverage builds.
+#[cfg(coverage)]
+#[doc(hidden)]
+pub fn coverage_add_item_count_overflow() -> Result<u64> {
+    add_item_count(u64::MAX, 1)
 }
