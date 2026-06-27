@@ -55,6 +55,114 @@ impl Input for U16Input {
     }
 }
 
+struct SpecializedReadFullyInput {
+    data: Vec<u16>,
+    position: usize,
+    read_fully_unchecked_calls: usize,
+}
+
+impl SpecializedReadFullyInput {
+    fn new(data: Vec<u16>) -> Self {
+        Self {
+            data,
+            position: 0,
+            read_fully_unchecked_calls: 0,
+        }
+    }
+}
+
+impl Input for SpecializedReadFullyInput {
+    type Item = u16;
+
+    unsafe fn read_unchecked(
+        &mut self,
+        output: &mut [u16],
+        index: usize,
+        count: usize,
+    ) -> std::io::Result<usize> {
+        if self.position >= self.data.len() {
+            return Ok(0);
+        }
+        let read = count.min(1).min(self.data.len() - self.position);
+        output[index..index + read]
+            .copy_from_slice(&self.data[self.position..self.position + read]);
+        self.position += read;
+        Ok(read)
+    }
+
+    unsafe fn read_fully_unchecked(
+        &mut self,
+        output: &mut [u16],
+        index: usize,
+        count: usize,
+    ) -> std::io::Result<usize> {
+        self.read_fully_unchecked_calls += 1;
+        let read = count.min(self.data.len() - self.position);
+        output[index..index + read]
+            .copy_from_slice(&self.data[self.position..self.position + read]);
+        self.position += read;
+        Ok(read)
+    }
+}
+
+enum ReadFullyStep {
+    Data(Vec<u16>),
+    Interrupted,
+    Error(ErrorKind, &'static str),
+    Overreport,
+}
+
+struct ScriptedReadFullyInput {
+    steps: VecDeque<ReadFullyStep>,
+    read_fully_unchecked_calls: usize,
+}
+
+impl ScriptedReadFullyInput {
+    fn new(steps: Vec<ReadFullyStep>) -> Self {
+        Self {
+            steps: VecDeque::from(steps),
+            read_fully_unchecked_calls: 0,
+        }
+    }
+}
+
+impl Input for ScriptedReadFullyInput {
+    type Item = u16;
+
+    unsafe fn read_unchecked(
+        &mut self,
+        _output: &mut [u16],
+        _index: usize,
+        _count: usize,
+    ) -> std::io::Result<usize> {
+        panic!("read_unchecked should not be used for large direct reads")
+    }
+
+    unsafe fn read_fully_unchecked(
+        &mut self,
+        output: &mut [u16],
+        index: usize,
+        count: usize,
+    ) -> std::io::Result<usize> {
+        self.read_fully_unchecked_calls += 1;
+        match self.steps.pop_front() {
+            Some(ReadFullyStep::Data(data)) => {
+                let read = count.min(data.len());
+                output[index..index + read].copy_from_slice(&data[..read]);
+                Ok(read)
+            }
+            Some(ReadFullyStep::Interrupted) => {
+                Err(Error::new(ErrorKind::Interrupted, "interrupted"))
+            }
+            Some(ReadFullyStep::Error(kind, message)) => {
+                Err(Error::new(kind, message))
+            }
+            Some(ReadFullyStep::Overreport) => Ok(count + 1),
+            None => Ok(0),
+        }
+    }
+}
+
 struct OverreportingInput;
 
 impl Input for OverreportingInput {
@@ -156,6 +264,124 @@ fn test_buffered_input_trait_read_fully_for_generic_items() {
 
     assert_eq!(3, read);
     assert_eq!([1, 2, 3, 0], output);
+}
+
+#[test]
+fn test_buffered_input_read_fully_empty_output_does_not_read() {
+    let mut input = BufferedInput::with_capacity(PanicOnRead, 4);
+    let mut output = [];
+
+    let read = input
+        .read_fully(&mut output)
+        .expect("empty read_fully should not read inner");
+
+    assert_eq!(0, read);
+}
+
+#[test]
+fn test_buffered_input_read_fully_small_empty_buffer_returns_zero_at_eof() {
+    let reader = ScriptedReader::new(vec![ReadStep::Eof]);
+    let mut input = BufferedInput::with_capacity(reader, 4);
+    let mut output = [0_u8; 3];
+
+    let read = input
+        .read_fully(&mut output)
+        .expect("small read_fully should return zero at EOF");
+
+    assert_eq!(0, read);
+    assert_eq!([0, 0, 0], output);
+}
+
+#[test]
+fn test_buffered_input_read_fully_serves_satisfied_range_from_unread() {
+    let inner = U16Input::new(vec![vec![1, 2, 3, 4], vec![5]]);
+    let mut input = BufferedInput::with_capacity(inner, 4);
+    let mut output = [0_u16; 2];
+
+    assert!(input.fill_more().expect("initial refill should succeed"));
+
+    let read = input
+        .read_fully(&mut output)
+        .expect("buffered unread bytes should satisfy read fully");
+
+    assert_eq!(2, read);
+    assert_eq!([1, 2], output);
+    assert_eq!(&[3, 4], unread_units(&input).as_slice());
+}
+
+#[test]
+fn test_buffered_input_read_fully_delegates_large_remainder_to_inner() {
+    let inner = SpecializedReadFullyInput::new(vec![1, 2, 3, 4, 5, 6]);
+    let mut input = BufferedInput::with_capacity(inner, 4);
+    let mut output = [0_u16; 5];
+
+    assert!(input.fill_more().expect("initial refill should succeed"));
+
+    // SAFETY: `output[..5]` is a valid destination range.
+    let read = unsafe {
+        input
+            .read_fully_unchecked(&mut output, 0, 5)
+            .expect("large remaining read should delegate to inner")
+    };
+
+    assert_eq!(5, read);
+    assert_eq!([1, 2, 3, 4, 5], output);
+    assert_eq!(0, input.unread_len());
+    assert_eq!(1, input.inner().read_fully_unchecked_calls);
+}
+
+#[test]
+fn test_buffered_input_read_fully_direct_inner_retries_interrupted() {
+    let inner = ScriptedReadFullyInput::new(vec![
+        ReadFullyStep::Interrupted,
+        ReadFullyStep::Data(vec![1, 2, 3, 4]),
+    ]);
+    let mut input = BufferedInput::with_capacity(inner, 4);
+    let mut output = [0_u16; 4];
+
+    let read = input
+        .read_fully(&mut output)
+        .expect("direct inner read_fully should retry interrupted errors");
+
+    assert_eq!(4, read);
+    assert_eq!([1, 2, 3, 4], output);
+    assert_eq!(2, input.inner().read_fully_unchecked_calls);
+}
+
+#[test]
+fn test_buffered_input_read_fully_direct_inner_returns_error() {
+    let inner = ScriptedReadFullyInput::new(vec![ReadFullyStep::Error(
+        ErrorKind::PermissionDenied,
+        "read failed",
+    )]);
+    let mut input = BufferedInput::with_capacity(inner, 4);
+    let mut output = [0_u16; 4];
+
+    let error = input
+        .read_fully(&mut output)
+        .expect_err("direct inner read_fully should return errors");
+
+    assert_eq!(ErrorKind::PermissionDenied, error.kind());
+    assert_eq!("read failed", error.to_string());
+    assert_eq!(1, input.inner().read_fully_unchecked_calls);
+}
+
+#[test]
+fn test_buffered_input_read_fully_direct_inner_rejects_overreported_count() {
+    let inner = ScriptedReadFullyInput::new(vec![ReadFullyStep::Overreport]);
+    let mut input = BufferedInput::with_capacity(inner, 4);
+    let mut output = [0_u16; 4];
+
+    let error = input
+        .read_fully(&mut output)
+        .expect_err("direct inner read_fully should validate reported count");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!(
+        "reader reported 5 items for a 4-item buffer",
+        error.to_string()
+    );
+    assert_eq!(1, input.inner().read_fully_unchecked_calls);
 }
 
 #[test]
