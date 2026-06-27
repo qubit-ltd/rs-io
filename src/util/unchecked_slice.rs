@@ -110,6 +110,9 @@ impl UncheckedSlice {
 
     /// Writes one value to an unchecked mutable slice index.
     ///
+    /// This replaces the existing initialized element at `index`. The previous
+    /// value is dropped before `value` is moved into the slot.
+    ///
     /// # Parameters
     ///
     /// - `output`: Destination slice.
@@ -120,7 +123,7 @@ impl UncheckedSlice {
     ///
     /// The caller must guarantee that `index < output.len()`.
     #[inline(always)]
-    pub unsafe fn write<T: Copy>(output: &mut [T], index: usize, value: T) {
+    pub unsafe fn write<T>(output: &mut [T], index: usize, value: T) {
         // SAFETY: The caller guarantees that `index` is in-bounds.
         unsafe {
             *output.as_mut_ptr().add(index) = value;

@@ -19,6 +19,19 @@ fn write_unchecked_writes_value() {
 }
 
 #[test]
+fn write_unchecked_moves_non_copy_value() {
+    let mut output = [
+        String::from("left"),
+        String::from("middle"),
+        String::from("right"),
+    ];
+    unsafe {
+        qubit_io::UncheckedSlice::write(&mut output, 1, String::from("updated"))
+    };
+    assert_eq!(output[1], "updated");
+}
+
+#[test]
 fn ref_unchecked_returns_reference() {
     let input = [4_u16, 5, 6];
     assert_eq!(unsafe { *qubit_io::UncheckedSlice::get(&input, 2) }, 6);
