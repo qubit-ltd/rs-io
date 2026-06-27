@@ -435,6 +435,11 @@ where
     /// Reads items through the internal buffer until the target range is full
     /// or EOF is reached.
     ///
+    /// Buffered unread items are copied first. If the remaining destination
+    /// range is at least as large as the internal buffer capacity, the
+    /// remaining read is delegated directly to the wrapped input to avoid
+    /// refilling and draining the internal buffer.
+    ///
     /// # Parameters
     ///
     /// * `output` - Destination storage that receives items.
@@ -466,7 +471,57 @@ where
             UncheckedSlice::range_fits(output.len(), output_index, count),
             "unchecked read-fully output range exceeds destination buffer"
         );
+        if count == 0 {
+            return Ok(0);
+        }
+
+        let available = self.unread_len();
+        if available >= count {
+            // SAFETY: The branch proves that enough unread items are
+            // available, and the caller guarantees that the destination range
+            // is valid.
+            unsafe {
+                self.buffer.copy_to(output, output_index, count);
+            }
+            return Ok(count);
+        }
+
         let mut total = 0;
+        if available > 0 {
+            // SAFETY: `available` is the current readable item count, and the
+            // caller guarantees that the destination range is valid.
+            unsafe {
+                self.buffer.copy_to(output, output_index, available);
+            }
+            total = available;
+        }
+
+        let remaining = count - total;
+        if remaining >= self.buffer.capacity() {
+            self.discard_buffer();
+            loop {
+                // SAFETY: The caller guarantees the original destination
+                // range is valid; `remaining` is its suffix after `total`
+                // copied items.
+                match unsafe {
+                    self.inner.read_fully_unchecked(
+                        output,
+                        output_index + total,
+                        remaining,
+                    )
+                } {
+                    Ok(read) => {
+                        validate_read_count(read, remaining)?;
+                        return Ok(total + read);
+                    }
+                    Err(error) if error.kind() == ErrorKind::Interrupted => {
+                        continue;
+                    }
+                    Err(error) => return Err(error),
+                }
+            }
+        }
+
         while total < count {
             let remaining = count - total;
             // SAFETY: The caller guarantees the original destination range is
@@ -478,12 +533,7 @@ where
                 Ok(read) => {
                     total += read;
                 }
-                Err(error) => {
-                    if error.kind() == ErrorKind::Interrupted {
-                        continue;
-                    }
-                    return Err(error);
-                }
+                Err(error) => return Err(error),
             }
         }
         Ok(total)
