@@ -279,7 +279,7 @@ where
     ///
     /// The caller must guarantee that `input_index..input_index + count` is a
     /// valid range inside `input` and that the addition does not overflow.
-    #[inline(always)]
+    #[inline]
     pub unsafe fn write_unchecked(
         &mut self,
         input: &[O::Item],
@@ -353,7 +353,7 @@ where
     /// The caller must guarantee that `input_index..input_index + count` is a
     /// valid range inside `input` and that the addition does not overflow.
     #[inline]
-    pub unsafe fn write_all_unchecked(
+    pub unsafe fn write_fully_unchecked(
         &mut self,
         input: &[O::Item],
         input_index: usize,
@@ -371,31 +371,24 @@ where
             Ok(())
         } else {
             // SAFETY: The caller guarantees the source range is valid.
-            unsafe { self.write_all_cold(input, input_index, count) }
+            unsafe { self.write_fully_cold(input, input_index, count) }
         }
     }
 
-    /// Writes all items from the full input slice.
+    /// Writes all items from the full input slice through the internal buffer.
     ///
     /// # Parameters
     ///
     /// * `input` - Source items.
     ///
-    /// # Returns
-    ///
-    /// `Ok(())` after all items from `input` have been accepted.
-    ///
     /// # Errors
     ///
     /// Returns any I/O error produced while flushing pending items or writing a
-    /// large input directly to the wrapped writer. Flush failures include
-    /// [`ErrorKind::WriteZero`] if the writer reports that zero items were
-    /// written before the buffer is drained, and [`ErrorKind::InvalidData`] if
-    /// it reports more items than the requested range contained.
+    /// large input directly to the wrapped writer.
     #[inline(always)]
-    pub fn write_all(&mut self, input: &[O::Item]) -> Result<()> {
+    pub fn write_fully(&mut self, input: &[O::Item]) -> Result<()> {
         // SAFETY: The full input slice is a valid source range.
-        unsafe { self.write_all_unchecked(input, 0, input.len()) }
+        unsafe { self.write_fully_unchecked(input, 0, input.len()) }
     }
 
     /// Flushes buffered items and then flushes the wrapped output.
@@ -643,7 +636,7 @@ where
     ///
     /// The caller must guarantee that `input_index..input_index + count` is a
     /// valid range inside `input` and that the addition does not overflow.
-    unsafe fn write_all_inner(
+    unsafe fn write_fully_inner(
         &mut self,
         input: &[O::Item],
         input_index: usize,
@@ -692,7 +685,7 @@ where
     /// it reports more items than the requested range contained.
     #[cold]
     #[inline(never)]
-    unsafe fn write_all_cold(
+    unsafe fn write_fully_cold(
         &mut self,
         input: &[O::Item],
         input_index: usize,
@@ -703,7 +696,7 @@ where
         }
         if count >= self.buffer.capacity() {
             // SAFETY: The range covers the full source slice.
-            unsafe { self.write_all_inner(input, input_index, count) }
+            unsafe { self.write_fully_inner(input, input_index, count) }
         } else {
             // SAFETY: After the optional flush, any input smaller than the
             // buffer capacity fits in the empty or sufficiently spare buffer.
@@ -768,6 +761,12 @@ where
 {
     type Item = O::Item;
 
+    /// Reports that this output already buffers items internally.
+    #[inline(always)]
+    fn is_buffered(&self) -> bool {
+        true
+    }
+
     /// Writes items through the internal buffer.
     #[inline(always)]
     unsafe fn write_unchecked(
@@ -786,6 +785,26 @@ where
     #[inline(always)]
     fn write(&mut self, input: &[Self::Item]) -> Result<usize> {
         BufferedOutput::write(self, input)
+    }
+
+    /// Writes all items through the internal buffer.
+    #[inline(always)]
+    unsafe fn write_fully_unchecked(
+        &mut self,
+        input: &[Self::Item],
+        index: usize,
+        count: usize,
+    ) -> Result<()> {
+        // SAFETY: Forwarded from the trait caller.
+        unsafe {
+            BufferedOutput::write_fully_unchecked(self, input, index, count)
+        }
+    }
+
+    /// Writes all items from the full input slice through the internal buffer.
+    #[inline(always)]
+    fn write_fully(&mut self, input: &[Self::Item]) -> Result<()> {
+        BufferedOutput::write_fully(self, input)
     }
 
     /// Flushes pending items through the internal buffer.

@@ -39,20 +39,11 @@ pub use buffered::{
 pub use capacity_const::DEFAULT_BUFFER_CAPACITY;
 pub use ext::{
     BufReadExt,
-    InputExt,
-    OutputExt,
     ReadExt,
     ReadSeekExt,
     SeekExt,
     WriteExt,
     WriteSeekExt,
-};
-#[cfg(coverage)]
-#[doc(hidden)]
-pub use ext::{
-    coverage_fail_next_add_copied,
-    coverage_natural_add_copied_overflow,
-    coverage_reset_add_copied_hooks,
 };
 pub use traits::{
     BufReadSeek,
@@ -72,9 +63,12 @@ pub use util::UncheckedSlice;
 #[cfg(coverage)]
 #[doc(hidden)]
 pub use util::{
+    coverage_add_item_count_overflow,
+    coverage_fail_next_add_item_count,
     coverage_fail_next_reserve,
     coverage_fail_next_string_reserve,
     coverage_fail_reserve_after,
+    coverage_reset_add_item_count_hooks,
     coverage_reset_reserve_hooks,
 };
 #[allow(unused_imports)]

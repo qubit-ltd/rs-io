@@ -5,15 +5,12 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Extension traits for standard and item-oriented I/O.
+//! Extension traits for standard I/O.
 //!
 //! Internal implementation helpers remain crate-private and are not part of the
 //! public API.
-// qubit-style: allow coverage-cfg
 mod buf_read_ext;
-mod input_ext;
 pub(crate) mod internal;
-mod output_ext;
 mod read_ext;
 mod read_seek_ext;
 mod seek_ext;
@@ -21,15 +18,6 @@ mod write_ext;
 mod write_seek_ext;
 
 pub use buf_read_ext::BufReadExt;
-pub use input_ext::InputExt;
-#[cfg(coverage)]
-#[doc(hidden)]
-pub use input_ext::{
-    coverage_fail_next_add_copied,
-    coverage_natural_add_copied_overflow,
-    coverage_reset_add_copied_hooks,
-};
-pub use output_ext::OutputExt;
 pub use read_ext::ReadExt;
 pub use read_seek_ext::ReadSeekExt;
 pub use seek_ext::SeekExt;

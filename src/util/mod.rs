@@ -30,5 +30,12 @@ pub use nz::{
     nz_const,
 };
 pub use streams::Streams;
+#[cfg(coverage)]
+#[doc(hidden)]
+pub use streams::{
+    coverage_add_item_count_overflow,
+    coverage_fail_next_add_item_count,
+    coverage_reset_add_item_count_hooks,
+};
 #[allow(unused_imports)]
 pub use unchecked_slice::UncheckedSlice;

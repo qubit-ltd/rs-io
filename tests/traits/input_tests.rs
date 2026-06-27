@@ -6,8 +6,10 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
+use std::collections::VecDeque;
 use std::io::{
     Cursor,
+    Error,
     ErrorKind,
 };
 
@@ -28,6 +30,56 @@ impl Input for OverreportingInput {
     }
 }
 
+enum ReadStep {
+    Data(Vec<u8>),
+    Interrupted,
+    Error(ErrorKind, &'static str),
+    Eof,
+}
+
+struct ScriptedInput {
+    steps: VecDeque<ReadStep>,
+}
+
+impl ScriptedInput {
+    fn new(steps: Vec<ReadStep>) -> Self {
+        Self {
+            steps: VecDeque::from(steps),
+        }
+    }
+}
+
+impl Input for ScriptedInput {
+    type Item = u8;
+
+    unsafe fn read_unchecked(
+        &mut self,
+        output: &mut [u8],
+        index: usize,
+        count: usize,
+    ) -> std::io::Result<usize> {
+        match self.steps.pop_front().unwrap_or(ReadStep::Eof) {
+            ReadStep::Data(data) => {
+                let read = count.min(data.len());
+                output[index..index + read].copy_from_slice(&data[..read]);
+                Ok(read)
+            }
+            ReadStep::Interrupted => {
+                Err(Error::new(ErrorKind::Interrupted, "interrupted"))
+            }
+            ReadStep::Error(kind, message) => Err(Error::new(kind, message)),
+            ReadStep::Eof => Ok(0),
+        }
+    }
+}
+
+#[test]
+fn test_input_default_reports_unbuffered() {
+    let input = ScriptedInput::new(vec![]);
+
+    assert!(!input.is_buffered());
+}
+
 #[test]
 fn test_input_read_uses_default_validation() {
     let mut input = OverreportingInput;
@@ -36,6 +88,65 @@ fn test_input_read_uses_default_validation() {
     let error = input
         .read(&mut output)
         .expect_err("default read should validate reported counts");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+}
+
+#[test]
+fn test_input_read_returns_successful_count() {
+    let mut input = ScriptedInput::new(vec![ReadStep::Data(vec![1, 2])]);
+    let mut output = [0_u8; 4];
+
+    let read = input
+        .read(&mut output)
+        .expect("default read should return successful short count");
+
+    assert_eq!(2, read);
+    assert_eq!([1, 2, 0, 0], output);
+}
+
+#[test]
+fn test_input_read_fully_reads_until_buffer_full_or_eof() {
+    let mut input = ScriptedInput::new(vec![
+        ReadStep::Data(vec![1, 2]),
+        ReadStep::Interrupted,
+        ReadStep::Data(vec![3]),
+        ReadStep::Eof,
+    ]);
+    let mut output = [0_u8; 4];
+
+    let read = input
+        .read_fully(&mut output)
+        .expect("read_fully should return partial count at EOF");
+
+    assert_eq!(3, read);
+    assert_eq!([1, 2, 3, 0], output);
+}
+
+#[test]
+fn test_input_read_fully_returns_non_interrupted_error() {
+    let mut input = ScriptedInput::new(vec![ReadStep::Error(
+        ErrorKind::PermissionDenied,
+        "read failed",
+    )]);
+    let mut output = [0_u8; 3];
+
+    let error = input
+        .read_fully(&mut output)
+        .expect_err("read_fully should return non-interrupted errors");
+
+    assert_eq!(ErrorKind::PermissionDenied, error.kind());
+    assert_eq!("read failed", error.to_string());
+}
+
+#[test]
+fn test_input_read_fully_rejects_overreported_count() {
+    let mut input = OverreportingInput;
+    let mut output = [0_u8; 3];
+
+    let error = input
+        .read_fully(&mut output)
+        .expect_err("read_fully should validate reported counts");
 
     assert_eq!(ErrorKind::InvalidData, error.kind());
 }
