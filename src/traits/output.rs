@@ -27,10 +27,10 @@ use crate::util::UncheckedSlice;
 /// # Coherence note
 ///
 /// Every [`Write`] value automatically implements `Output<Item = u8>` through
-/// the blanket impl below. Because [`Output::Item`] is an associated type rather
-/// than a trait parameter, a concrete type that implements [`Write`] cannot also
-/// provide any other direct `Output` implementation for the same type, including
-/// one with a different item type.
+/// the blanket impl below. Because [`Output::Item`] is an associated type
+/// rather than a trait parameter, a concrete type that implements [`Write`]
+/// cannot also provide any other direct `Output` implementation for the same
+/// type, including one with a different item type.
 ///
 /// Use a wrapper/newtype when a type needs item-oriented output semantics that
 /// differ from its byte-oriented [`Write`] implementation.
