@@ -25,8 +25,8 @@ use crate::util::UncheckedSlice;
 /// # Coherence note
 ///
 /// Every [`Read`] value automatically implements `Input<Item = u8>` through the
-/// blanket impl below. Because [`Input::Item`] is an associated type rather than
-/// a trait parameter, a concrete type that implements [`Read`] cannot also
+/// blanket impl below. Because [`Input::Item`] is an associated type rather
+/// than a trait parameter, a concrete type that implements [`Read`] cannot also
 /// provide any other direct `Input` implementation for the same type, including
 /// one with a different item type.
 ///
