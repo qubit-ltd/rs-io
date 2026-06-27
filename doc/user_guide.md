@@ -19,7 +19,7 @@ binary or text encoding format. The crate stays at the generic I/O layer.
 
 ```toml
 [dependencies]
-qubit-io = "0.9"
+qubit-io = "0.11"
 ```
 
 ## Buffered Unit I/O
@@ -29,10 +29,7 @@ primitives. They do not decode binary values, decode text, or parse records.
 Those layers should be built in sibling crates on top of these unit windows.
 
 ```rust
-use std::io::{
-    BufRead,
-    Cursor,
-};
+use std::io::Cursor;
 
 use qubit_io::BufferedInput;
 
@@ -41,8 +38,11 @@ let mut input = BufferedInput::with_capacity(
     4,
 );
 
-assert_eq!(b"abcd", input.fill_buf()?);
-input.consume(2);
+input.ensure_available(4)?;
+assert_eq!(b"abcd", input.unread());
+unsafe {
+    input.consume(2);
+}
 
 let (inner, unread) = input.into_parts();
 assert_eq!(4, inner.position());
@@ -83,8 +83,8 @@ assert_eq!(b"xyz", cursor.into_inner().as_slice());
 Hot-path adapters can use unsafe methods such as `copy_unread_to` and
 `advance` after validating their ranges. General-purpose byte-stream code
 should prefer standard `Read`, `BufRead`, and `Write` trait methods where
-possible; unit-oriented code should prefer the safe helpers on `InputExt` and
-`OutputExt`.
+possible; unit-oriented code should prefer safe helpers such as `Input::read`,
+`Input::read_fully`, `Output::write`, and `Output::write_fully`.
 
 ## Extension Traits
 

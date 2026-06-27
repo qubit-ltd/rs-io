@@ -19,7 +19,7 @@
 
 ```toml
 [dependencies]
-qubit-io = "0.9"
+qubit-io = "0.11"
 ```
 
 ## Buffered Unit I/O
@@ -29,10 +29,7 @@ binary value、不解码文本，也不解析 record；这些能力应该由兄�
 unit window 组合出来。
 
 ```rust
-use std::io::{
-    BufRead,
-    Cursor,
-};
+use std::io::Cursor;
 
 use qubit_io::BufferedInput;
 
@@ -41,8 +38,11 @@ let mut input = BufferedInput::with_capacity(
     4,
 );
 
-assert_eq!(b"abcd", input.fill_buf()?);
-input.consume(2);
+input.ensure_available(4)?;
+assert_eq!(b"abcd", input.unread());
+unsafe {
+    input.consume(2);
+}
 
 let (inner, unread) = input.into_parts();
 assert_eq!(4, inner.position());
@@ -80,8 +80,8 @@ assert_eq!(b"xyz", cursor.into_inner().as_slice());
 
 hot path adapter 可以在校验 range 后使用 `copy_unread_to`、`advance` 等 unsafe
 方法。通用 byte stream 调用应优先使用标准 `Read`、`BufRead` 和 `Write`
-trait 方法；unit-oriented 调用应优先使用 `InputExt` 与 `OutputExt` 上的安全
-helper。
+trait 方法；unit-oriented 调用应优先使用 `Input::read`、`Input::read_fully`、
+`Output::write` 与 `Output::write_fully` 等安全 helper。
 
 ## Extension Trait
 

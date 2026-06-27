@@ -18,8 +18,8 @@
 - 面向 unit 的缓冲原语：`Buffer<T>`、`BufferedInput` 和 `BufferedOutput`；
 - 可作为 trait object 使用的组合 trait，例如 `ReadSeek`、`ReadWrite` 和
   `ReadWriteSeek`；
-- `Input`、`Output`、`Read`、`BufRead`、`Seek`、`Read + Seek`、`Write` 和
-  `Write + Seek` 的常用 extension trait；
+- `Read`、`BufRead`、`Seek`、`Read + Seek`、`Write` 和 `Write + Seek`
+  的常用 extension trait；
 - 用于复制和内容比较的 `Streams` 工具函数；
 - `CountingReader`、`LimitReader`、`PositionGuard`、`TeeReader`、
   `SyncSeekTeeReader` 和 checksum wrapper 等轻量 reader / writer wrapper。
@@ -51,10 +51,12 @@ binary scalar、LEB128 和 ZigZag 能力已经不在本 crate 中。缓冲区级
 
 - **`Input`**：带关联类型 `Item` 的最小化 unchecked indexed read 契约，将
   unit 读入 `output[index..index + count]`；所有 `Read` 值都实现
-  `Input<Item = u8>`。
+  `Input<Item = u8>`。安全整片读取通过 `Input::read` 和
+  `Input::read_fully` 提供。
 - **`Output`**：最小化 unchecked indexed write 契约，从
   `input[index..index + count]` 写出关联类型 `Item` 的 unit，并提供显式
-  flush；所有 `Write` 值都实现 `Output<Item = u8>`。
+  flush；所有 `Write` 值都实现 `Output<Item = u8>`。安全整片写入通过
+  `Output::write` 和 `Output::write_fully` 提供。
 
 ### Buffered I/O
 
@@ -74,6 +76,13 @@ binary scalar、LEB128 和 ZigZag 能力已经不在本 crate 中。缓冲区级
 
 ### Seek 一致性
 
+`Input` 和 `Output` 使用关联类型表示 item。所有 `Read` 值都会通过 blanket impl
+自动实现 `Input<Item = u8>`，所有 `Write` 值都会自动实现
+`Output<Item = u8>`。由于 item 类型属于 trait impl 本身，已经实现 `Read` 或
+`Write` 的类型不能再为同一类型提供另一份直接的 `Input` 或 `Output` 实现，即使
+另一份实现使用不同 item 类型也不行。需要第二套 item 解释时，应使用 wrapper /
+newtype。
+
 `Seekable` 是按单位（unit）语义定义的，稳定策略是「每个 `(类型, unit)` 只
 有一份实现」。一个实现了 `std::io::Seek` 的类型会通过 blanket impl 自动具备
 `Seekable<Item = u8>`，如果再次为同一类型再写 `Item = u8` 的 `Seekable`
@@ -92,8 +101,6 @@ binary scalar、LEB128 和 ZigZag 能力已经不在本 crate 中。缓冲区级
 
 ### Extension Trait
 
-- **`InputExt`**：安全整片 read、exact read 与 unit copy helper。
-- **`OutputExt`**：安全整片 write 与完整 indexed write。
 - **`ReadExt`**：exact read、partial EOF read、limited read 和 copy helper。
 - **`BufReadExt`**：带上限的按行和按分隔符读取。
 - **`SeekExt`**：保持位置不变的 stream size helper。
@@ -240,14 +247,14 @@ assert_eq!(b"xyz", cursor.into_inner().as_slice());
 大多数 helper 直接操作调用方提供的缓冲区，并委托到底层 `Read`、`Write`
 或 `Seek` 实现。Wrapper 类型不做隐藏分配；是否缓冲以及如何缓冲由调用点显式决定。
 
-`Input::read_unchecked`、`Output::write_from`、`OutputExt::write_all_from`、`Buffer<T>`、
-`BufferedInput::unread`、
-`BufferedInput::copy_unread_to` 与
+`Input::read_unchecked`、`Output::write_unchecked`、`Buffer<T>`、
+`BufferedInput::unread`、`BufferedInput::copy_unread_to` 与
 `BufferedOutput::spare_raw_parts_mut` 是低层 API，面向已经完成 range 校验的调用方。
 它们主要用于 binary/text stream adapter 这类 hot path，在这些场景中避免重复
 slicing 和 bounds check 有明确价值。通用 byte stream 调用应优先使用标准
 `Read`、`BufRead` 和 `Write` trait 方法；unit-oriented 调用应优先使用
-`InputExt` 与 `OutputExt` 上的安全 helper。
+`Input::read`、`Input::read_fully`、`Output::write` 与
+`Output::write_fully` 等安全 helper。
 
 ## 测试与代码覆盖率
 
