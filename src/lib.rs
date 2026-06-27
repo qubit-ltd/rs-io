@@ -36,7 +36,11 @@ pub use buffered::{
     BufferedInput,
     BufferedOutput,
 };
-pub use capacity_const::DEFAULT_BUFFER_CAPACITY;
+pub use capacity_const::{
+    DEFAULT_BUFFER_CAPACITY,
+    DEFAULT_COMPARE_BUFFER_SIZE,
+    DEFAULT_COPY_BUFFER_SIZE,
+};
 pub use ext::{
     BufReadExt,
     ReadExt,
