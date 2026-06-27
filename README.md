@@ -20,8 +20,8 @@ utilities for Rust.
   `BufferedOutput`;
 - object-safe composition traits such as `ReadSeek`, `ReadWrite`, and
   `ReadWriteSeek`;
-- extension traits for recurring `Input`, `Output`, `Read`, `BufRead`, `Seek`,
-  `Read + Seek`, `Write`, and `Write + Seek` patterns;
+- extension traits for recurring `Read`, `BufRead`, `Seek`, `Read + Seek`,
+  `Write`, and `Write + Seek` patterns;
 - `Streams` utility functions for copy and content comparison operations;
 - lightweight reader and writer wrappers such as `CountingReader`,
   `LimitReader`, `PositionGuard`, `TeeReader`, `SyncSeekTeeReader`, and
@@ -58,10 +58,13 @@ reference documentation is available on [docs.rs](https://docs.rs/qubit-io).
 
 - **`Input`**: minimal unchecked indexed read contract with an associated
   `Item` type for copying units into `output[index..index + count]`; every
-  `Read` value implements `Input<Item = u8>`.
+  `Read` value implements `Input<Item = u8>`. Safe full-slice reads are
+  available through `Input::read` and `Input::read_fully`.
 - **`Output`**: minimal unchecked indexed write contract for copying
   units of its associated `Item` type from `input[index..index + count]` plus
-  explicit flushing; every `Write` value implements `Output<Item = u8>`.
+  explicit flushing; every `Write` value implements `Output<Item = u8>`. Safe
+  full-slice writes are available through `Output::write` and
+  `Output::write_fully`.
 
 ### Buffered I/O
 
@@ -84,6 +87,13 @@ reference documentation is available on [docs.rs](https://docs.rs/qubit-io).
 
 ### Seekability Coherency
 
+`Input` and `Output` use associated item types. Every `Read` value automatically
+implements `Input<Item = u8>`, and every `Write` value automatically implements
+`Output<Item = u8>`. Because the item type is associated with the trait impl, a
+type that already implements `Read` or `Write` cannot also provide a different
+direct `Input` or `Output` impl. Use a wrapper/newtype when a byte stream needs
+a second item interpretation.
+
 `Seekable` is unit-oriented, and the stable rule is one implementation per
 `(type, unit)` pair. If a type implements `std::io::Seek`, the blanket impl
 already gives `Seekable<Item = u8>`, so another `Seekable` impl for the same
@@ -103,8 +113,6 @@ type and expose unit-space seeking via a dedicated adapter/newtype that implemen
 
 ### Extension Traits
 
-- **`InputExt`**: safe full-slice reads, exact reads, and unit copy helpers.
-- **`OutputExt`**: safe full-slice writes and complete indexed writes.
 - **`ReadExt`**: exact reads, partial EOF reads, limited reads, and copy helpers.
 - **`BufReadExt`**: bounded line and delimiter reads.
 - **`SeekExt`**: stream size helpers that preserve position.
@@ -250,15 +258,15 @@ Most helpers operate directly on caller-provided buffers and delegate to the
 underlying `Read`, `Write`, or `Seek` implementation. Wrapper types avoid hidden
 allocation; any buffering policy remains explicit at the call site.
 
-`Input::read_unchecked`, `Output::write_from`, `OutputExt::write_all_from`, `Buffer<T>`,
-`BufferedInput::unread`,
-`BufferedInput::copy_unread_to`, and
+`Input::read_unchecked`, `Output::write_unchecked`, `Buffer<T>`,
+`BufferedInput::unread`, `BufferedInput::copy_unread_to`, and
 `BufferedOutput::spare_raw_parts_mut` are low-level APIs for callers that have
 already validated ranges. They are intended for hot paths such as binary and
 text stream adapters where avoiding repeated slicing and bounds checks matters.
 General-purpose byte-stream code should prefer standard `Read`, `BufRead`, and
-`Write` trait methods where possible; unit-oriented code should prefer the safe
-helpers on `InputExt` and `OutputExt`.
+`Write` trait methods where possible; unit-oriented code should prefer safe
+helpers such as `Input::read`, `Input::read_fully`, `Output::write`, and
+`Output::write_fully`.
 
 ## Testing & Code Coverage
 

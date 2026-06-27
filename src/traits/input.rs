@@ -21,6 +21,17 @@ use crate::util::UncheckedSlice;
 /// states that an implementor can read up to `count` items into
 /// `output[index..index + count]`. The caller owns range validation so hot
 /// paths can avoid repeated slicing and bounds checks.
+///
+/// # Coherence note
+///
+/// Every [`Read`] value automatically implements `Input<Item = u8>` through the
+/// blanket impl below. Because [`Input::Item`] is an associated type rather than
+/// a trait parameter, a concrete type that implements [`Read`] cannot also
+/// provide any other direct `Input` implementation for the same type, including
+/// one with a different item type.
+///
+/// Use a wrapper/newtype when a type needs item-oriented input semantics that
+/// differ from its byte-oriented [`Read`] implementation.
 pub trait Input {
     /// The item type read from this input.
     type Item;
