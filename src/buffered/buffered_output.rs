@@ -429,7 +429,7 @@ where
     /// write before all buffered items are drained. Returns
     /// [`ErrorKind::InvalidData`] if the writer reports more items than the
     /// pending buffer range contained.
-    pub(crate) fn flush_buffer(&mut self) -> Result<()> {
+    fn flush_buffer(&mut self) -> Result<()> {
         while !self.buffer.is_empty() {
             let position = self.buffer.position();
             let available = self.buffer.available();
