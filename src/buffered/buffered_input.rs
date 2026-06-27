@@ -161,7 +161,7 @@ where
     /// The length of `buffer[position..limit]`, in items.
     #[inline(always)]
     #[must_use]
-    pub const fn available(&self) -> usize {
+    pub fn unread_len(&self) -> usize {
         self.buffer.available()
     }
 
@@ -185,7 +185,7 @@ where
     ///
     /// # Safety
     ///
-    /// The caller must guarantee that `count <= self.available()`.
+    /// The caller must guarantee that `count <= self.unread_len()`.
     #[inline(always)]
     pub unsafe fn consume(&mut self, count: usize) {
         // SAFETY: The caller guarantees that `count` is within the readable
@@ -207,7 +207,7 @@ where
     ///
     /// The caller must guarantee that `output_index..output_index + count` is
     /// a valid range inside `output`, that the addition does not overflow, that
-    /// `count <= self.available()`, and that the destination range does not
+    /// `count <= self.unread_len()`, and that the destination range does not
     /// overlap with the unread range stored inside this buffer.
     #[inline]
     pub unsafe fn copy_unread_to(
@@ -221,7 +221,7 @@ where
             "unchecked unread copy output range exceeds destination buffer",
         );
         debug_assert!(
-            count <= self.available(),
+            count <= self.unread_len(),
             "unchecked unread copy exceeds available input buffer",
         );
         // SAFETY: The caller guarantees that the destination range is valid,
@@ -254,7 +254,7 @@ where
     /// no unread items have been consumed; callers must consume buffered items
     /// before refilling in that state.
     pub fn fill_more(&mut self) -> Result<bool> {
-        if self.available() == 0 {
+        if self.unread_len() == 0 {
             self.discard_buffer();
         } else if self.tail_capacity() == 0 {
             self.backshift();
@@ -297,8 +297,8 @@ where
                 "requested available items exceed buffered input capacity",
             ));
         }
-        while self.available() < count {
-            let available = self.available();
+        while self.unread_len() < count {
+            let available = self.unread_len();
             if available == 0 {
                 self.discard_buffer();
             } else {
@@ -337,7 +337,7 @@ where
         if self.fill_until(count)? {
             return Ok(());
         }
-        let available = self.available();
+        let available = self.unread_len();
         // SAFETY: `available` is the current readable item count.
         unsafe {
             self.consume(available);
@@ -393,7 +393,7 @@ where
         if count == 0 {
             return Ok(0);
         }
-        if self.available() == 0 {
+        if self.unread_len() == 0 {
             self.discard_buffer();
             if count >= self.buffer.capacity() {
                 // SAFETY: The caller guarantees that the target range is valid.
@@ -407,7 +407,7 @@ where
                 return Ok(0);
             }
         }
-        let read_count = count.min(self.available());
+        let read_count = count.min(self.unread_len());
         // SAFETY: `read_count` is bounded by the caller-provided output range
         // and the available input range.
         unsafe {
@@ -576,7 +576,7 @@ where
     {
         let position =
             Seekable::seek_to(&mut self.inner, SeekFrom::Current(0))?;
-        let unread = self.available() as u64;
+        let unread = self.unread_len() as u64;
         position.checked_sub(unread).ok_or_else(|| {
             Error::new(
                 ErrorKind::InvalidData,
@@ -606,7 +606,7 @@ where
     {
         // Unread items fit in `isize` for any `Vec`-backed buffer, which always
         // fits in `i64`.
-        let unread = self.available() as i64;
+        let unread = self.unread_len() as i64;
         let adjusted = offset.checked_sub(unread).ok_or_else(|| {
             Error::new(
                 ErrorKind::InvalidInput,
@@ -634,7 +634,7 @@ where
     fn seek_within_buffer(&mut self, offset: i64) -> bool {
         if offset >= 0 {
             let count = offset as u64;
-            if count <= self.available() as u64 {
+            if count <= self.unread_len() as u64 {
                 let count = count as usize;
                 // SAFETY: The branch proves that `count` is within the unread
                 // buffer window.

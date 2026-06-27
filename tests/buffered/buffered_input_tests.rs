@@ -421,7 +421,7 @@ where
     I: Input,
     I::Item: Copy + Default,
 {
-    let count = input.available();
+    let count = input.unread_len();
     let mut unread = vec![I::Item::default(); count];
     // SAFETY: `unread[..count]` is a valid destination range that does not
     // overlap with the buffered input storage.
@@ -435,7 +435,7 @@ where
 fn test_new_and_accessors_expose_inner_reader() {
     let mut input = BufferedInput::new(Cursor::new(b"abc".to_vec()));
 
-    assert_eq!(0, input.available());
+    assert_eq!(0, input.unread_len());
     assert_eq!(0, input.inner().position());
 
     input.inner_mut().set_position(2);
@@ -657,7 +657,7 @@ fn test_ensure_available_returns_unexpected_eof_and_consumes_partial_bytes() {
         .expect_err("ensure_available should require the full byte count");
 
     assert_eq!(ErrorKind::UnexpectedEof, error.kind());
-    assert_eq!(0, input.available());
+    assert_eq!(0, input.unread_len());
 }
 
 #[test]
@@ -678,7 +678,7 @@ fn test_fill_more_returns_false_at_eof() {
     let mut input = BufferedInput::with_capacity(cursor, 4);
 
     assert!(!input.fill_more().expect("EOF refill should succeed"));
-    assert_eq!(0, input.available());
+    assert_eq!(0, input.unread_len());
 }
 
 #[test]
@@ -745,7 +745,7 @@ fn test_fill_more_rejects_refill_when_buffer_is_full() {
     let cursor = Cursor::new(b"abcdef".to_vec());
     let mut input = BufferedInput::with_capacity(cursor, 4);
     assert!(input.fill_more().expect("initial refill should succeed"));
-    assert_eq!(4, input.available());
+    assert_eq!(4, input.unread_len());
 
     let error = input
         .fill_more()
@@ -814,7 +814,7 @@ fn test_read_unchecked_writes_at_output_index_and_count() {
 
     assert_eq!(3, count);
     assert_eq!(b"..bcd.", &output);
-    assert_eq!(0, input.available());
+    assert_eq!(0, input.unread_len());
 }
 
 #[test]
@@ -999,7 +999,7 @@ fn test_seek_current_large_offset_outside_buffer_delegates_to_inner_seek() {
         position
     );
     assert_eq!(1, input.inner().seek_calls);
-    assert_eq!(0, input.available());
+    assert_eq!(0, input.unread_len());
 }
 
 #[test]
@@ -1056,7 +1056,7 @@ fn test_seek_relative_outside_buffer_delegates_to_underlying_seek() {
 
     assert_eq!(1, input.inner().seek_calls);
     assert_eq!(7, input.inner().position);
-    assert_eq!(0, input.available());
+    assert_eq!(0, input.unread_len());
 }
 
 #[test]
@@ -1071,7 +1071,7 @@ fn test_seekable_trait_object_dispatches_to_seek_impl() {
     )
     .expect("seekable trait impl should be callable");
 
-    assert!(input.available() <= 3);
+    assert!(input.unread_len() <= 3);
 }
 
 #[test]
@@ -1087,7 +1087,7 @@ fn test_seekable_trait_object_seek_from_start_and_end() {
     .expect("trait seek start should call underlying source");
 
     assert_eq!(2, position);
-    assert_eq!(0, input.available());
+    assert_eq!(0, input.unread_len());
     assert_eq!(1, input.inner().seek_calls);
 
     let reader = TrackingSeekReader::new(b"abcdef");
@@ -1101,7 +1101,7 @@ fn test_seekable_trait_object_seek_from_start_and_end() {
     .expect("trait seek end should call underlying source");
 
     assert_eq!(5, position);
-    assert_eq!(0, input.available());
+    assert_eq!(0, input.unread_len());
     assert_eq!(1, input.inner().seek_calls);
 }
 
@@ -1125,13 +1125,13 @@ fn test_seekable_ufcs_methods_cover_trait_impl() {
         .expect("absolute trait seek should delegate to inner seek");
     assert_eq!(1, position);
     assert_eq!(2, input.inner().seek_calls);
-    assert_eq!(0, input.available());
+    assert_eq!(0, input.unread_len());
 
     Seekable::seek_to(&mut input, SeekFrom::Current(6)).expect(
         "trait seek_relative outside buffer should delegate to inner seek",
     );
     assert_eq!(3, input.inner().seek_calls);
-    assert_eq!(0, input.available());
+    assert_eq!(0, input.unread_len());
 
     let position = input
         .stream_position()
@@ -1161,7 +1161,7 @@ fn test_ensure_available_u16_reader_consumes_partial_on_eof() {
         .expect_err("ensure_available should fail when source ends early");
 
     assert_eq!(ErrorKind::UnexpectedEof, error.kind());
-    assert_eq!(0, input.available());
+    assert_eq!(0, input.unread_len());
 }
 
 #[test]
@@ -1314,7 +1314,7 @@ fn test_fill_more_backshifts_when_buffer_is_full_with_unread() {
         input.consume(1);
     }
     assert!(input.fill_more().expect("backshift refill should succeed"));
-    assert_eq!(4, input.available());
+    assert_eq!(4, input.unread_len());
     assert_eq!(b"bcde", unread_units(&input).as_slice());
 }
 
@@ -1350,7 +1350,7 @@ fn test_ensure_available_succeeds_after_refill_from_empty_buffer() {
         .ensure_available(2)
         .expect("ensure_available should refill an initially empty buffer");
 
-    assert!(input.available() >= 2);
+    assert!(input.unread_len() >= 2);
     assert_eq!(b'a', unread_units(&input)[0]);
     assert_eq!(b'b', unread_units(&input)[1]);
 }
