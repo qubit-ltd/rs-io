@@ -13,7 +13,10 @@ use std::io::{
     SeekFrom,
 };
 
-use crate::buffered::DEFAULT_BUFFER_CAPACITY;
+use crate::buffered::{
+    DEFAULT_BUFFER_CAPACITY,
+    EnsuredBufferedInput,
+};
 use crate::traits::validate_read_count;
 use crate::util::UncheckedSlice;
 use crate::{
@@ -64,6 +67,27 @@ where
     #[must_use]
     pub fn new(inner: I) -> Self {
         Self::with_capacity(inner, DEFAULT_BUFFER_CAPACITY)
+    }
+
+    /// Ensures that an input is buffered.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` - The input to keep or wrap.
+    ///
+    /// # Returns
+    ///
+    /// [`EnsuredBufferedInput::AlreadyBuffered`] when `input` already reports
+    /// buffered status, or [`EnsuredBufferedInput::Buffered`] wrapping `input`
+    /// in [`BufferedInput`] otherwise.
+    #[inline(always)]
+    #[must_use]
+    pub fn ensure(input: I) -> EnsuredBufferedInput<I> {
+        if input.is_buffered() {
+            EnsuredBufferedInput::AlreadyBuffered(input)
+        } else {
+            EnsuredBufferedInput::Buffered(Self::new(input))
+        }
     }
 
     /// Creates a buffered item input with at least the requested capacity.

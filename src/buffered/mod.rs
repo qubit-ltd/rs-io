@@ -26,8 +26,12 @@
 mod buffer;
 mod buffered_input;
 mod buffered_output;
+mod ensured_buffered_input;
+mod ensured_buffered_output;
 
 pub use crate::capacity_const::DEFAULT_BUFFER_CAPACITY;
 pub use buffer::Buffer;
 pub use buffered_input::BufferedInput;
 pub use buffered_output::BufferedOutput;
+pub use ensured_buffered_input::EnsuredBufferedInput;
+pub use ensured_buffered_output::EnsuredBufferedOutput;

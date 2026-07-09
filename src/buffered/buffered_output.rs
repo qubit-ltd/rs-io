@@ -15,7 +15,10 @@ use std::io::{
 use std::mem::ManuallyDrop;
 use std::ptr;
 
-use crate::buffered::DEFAULT_BUFFER_CAPACITY;
+use crate::buffered::{
+    DEFAULT_BUFFER_CAPACITY,
+    EnsuredBufferedOutput,
+};
 use crate::traits::validate_write_count;
 use crate::util::UncheckedSlice;
 use crate::{
@@ -73,6 +76,27 @@ where
     #[must_use]
     pub fn new(inner: O) -> Self {
         Self::with_capacity(inner, DEFAULT_BUFFER_CAPACITY)
+    }
+
+    /// Ensures that an output is buffered.
+    ///
+    /// # Parameters
+    ///
+    /// * `output` - The output to keep or wrap.
+    ///
+    /// # Returns
+    ///
+    /// [`EnsuredBufferedOutput::AlreadyBuffered`] when `output` already
+    /// reports buffered status, or [`EnsuredBufferedOutput::Buffered`]
+    /// wrapping `output` in [`BufferedOutput`] otherwise.
+    #[inline(always)]
+    #[must_use]
+    pub fn ensure(output: O) -> EnsuredBufferedOutput<O> {
+        if output.is_buffered() {
+            EnsuredBufferedOutput::AlreadyBuffered(output)
+        } else {
+            EnsuredBufferedOutput::Buffered(Self::new(output))
+        }
     }
 
     /// Creates a buffered item output with at least the requested capacity.

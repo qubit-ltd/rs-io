@@ -22,6 +22,7 @@ use std::rc::Rc;
 
 use qubit_io::{
     BufferedOutput,
+    EnsuredBufferedOutput,
     Output,
     Seekable,
 };
@@ -179,6 +180,137 @@ fn test_buffered_output_reports_buffered() {
     let output = BufferedOutput::with_capacity(U16Output::default(), 4);
 
     assert!(output.is_buffered());
+}
+
+#[test]
+fn test_buffered_output_ensure_wraps_unbuffered_output() {
+    let output = U16Output::default();
+    let mut output = BufferedOutput::ensure(output);
+
+    assert!(matches!(output, EnsuredBufferedOutput::Buffered(_)));
+    assert!(output.is_buffered());
+
+    output
+        .write_fully(&[1, 2])
+        .expect("ensured buffered output should write items");
+    output
+        .flush()
+        .expect("ensured buffered output should flush items");
+
+    let inner = match output {
+        EnsuredBufferedOutput::Buffered(output) => output
+            .into_inner()
+            .expect("buffered output should flush on into_inner"),
+        EnsuredBufferedOutput::AlreadyBuffered(_) => {
+            panic!("unbuffered output should have been wrapped")
+        }
+    };
+
+    assert_eq!(inner.values, vec![1, 2]);
+}
+
+#[test]
+fn test_buffered_output_ensure_keeps_buffered_output() {
+    let output = BufferedOutput::new(U16Output::default());
+    let mut output = BufferedOutput::ensure(output);
+
+    assert!(matches!(output, EnsuredBufferedOutput::AlreadyBuffered(_)));
+    assert!(output.is_buffered());
+
+    output
+        .write_fully(&[1, 2, 3])
+        .expect("already buffered output should still write fully");
+    output
+        .flush()
+        .expect("already buffered output should still flush");
+
+    let inner = match output {
+        EnsuredBufferedOutput::AlreadyBuffered(output) => output
+            .into_inner()
+            .expect("buffered output should flush on into_inner"),
+        EnsuredBufferedOutput::Buffered(_) => {
+            panic!("buffered output should have been kept")
+        }
+    };
+
+    assert_eq!(inner.values, vec![1, 2, 3]);
+}
+
+#[test]
+fn test_buffered_output_ensure_delegates_single_writes() {
+    let output = U16Output::default();
+    let mut output = BufferedOutput::ensure(output);
+    let written = output
+        .write(&[1, 2])
+        .expect("wrapped output should support single writes");
+
+    assert_eq!(written, 2);
+
+    let output = BufferedOutput::new(U16Output::default());
+    let mut output = BufferedOutput::ensure(output);
+    let written = output
+        .write(&[3, 4])
+        .expect("already buffered output should support single writes");
+
+    assert_eq!(written, 2);
+}
+
+#[test]
+fn test_buffered_output_ensure_delegates_unchecked_writes() {
+    let output = U16Output::default();
+    let mut output = BufferedOutput::ensure(output);
+
+    // SAFETY: `input[1..3]` is a valid source range.
+    let written = unsafe { output.write_unchecked(&[0, 1, 2], 1, 2) }
+        .expect("wrapped output should support unchecked writes");
+
+    assert_eq!(written, 2);
+
+    let output = BufferedOutput::new(U16Output::default());
+    let mut output = BufferedOutput::ensure(output);
+
+    // SAFETY: `input[0..2]` is a valid source range.
+    let written = unsafe { output.write_unchecked(&[3, 4, 0], 0, 2) }
+        .expect("already buffered output should support unchecked writes");
+
+    assert_eq!(written, 2);
+}
+
+#[test]
+fn test_buffered_output_ensure_delegates_unchecked_write_fully() {
+    let output = U16Output::default();
+    let mut output = BufferedOutput::ensure(output);
+
+    // SAFETY: `input[1..3]` is a valid source range.
+    unsafe { output.write_fully_unchecked(&[0, 1, 2], 1, 2) }
+        .expect("wrapped output should support unchecked full writes");
+
+    let output = BufferedOutput::new(U16Output::default());
+    let mut output = BufferedOutput::ensure(output);
+
+    // SAFETY: `input[0..2]` is a valid source range.
+    unsafe { output.write_fully_unchecked(&[3, 4, 0], 0, 2) }
+        .expect("already buffered output should support unchecked full writes");
+}
+
+#[test]
+fn test_buffered_output_ensure_delegates_seek() {
+    let output = U16SeekOutput::new(vec![1, 2, 3, 4]);
+    let mut output = BufferedOutput::ensure(output);
+    let position = output
+        .seek_to(SeekFrom::Start(2))
+        .expect("wrapped seekable output should seek");
+
+    assert_eq!(position, 2);
+
+    let output = U16SeekOutput::new(vec![1, 2, 3, 4]);
+    let output = BufferedOutput::new(output);
+    let mut output = BufferedOutput::ensure(output);
+    let position = output
+        .seek_to(SeekFrom::Start(3))
+        .expect("already buffered seekable output should seek");
+
+    assert_eq!(position, 3);
 }
 
 #[derive(Clone)]
