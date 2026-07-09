@@ -16,6 +16,7 @@ use std::mem::ManuallyDrop;
 use std::ptr;
 
 use crate::buffered::{
+    BoxedDynOutput,
     DEFAULT_BUFFER_CAPACITY,
     EnsuredBufferedOutput,
 };
@@ -78,6 +79,28 @@ where
         Self::with_capacity(inner, DEFAULT_BUFFER_CAPACITY)
     }
 
+    /// Creates a buffered item output with at least the requested capacity.
+    ///
+    /// # Parameters
+    ///
+    /// * `inner` - The output that receives items when the internal buffer is
+    ///   flushed.
+    /// * `capacity` - The requested internal buffer capacity in items.
+    ///
+    /// # Returns
+    ///
+    /// A new buffered item output whose actual buffer capacity is
+    /// `capacity.max(1)`.
+    #[inline(always)]
+    #[must_use]
+    pub fn with_capacity(inner: O, capacity: usize) -> Self {
+        Self {
+            inner,
+            buffer: Buffer::with_capacity(capacity),
+            panicked: false,
+        }
+    }
+
     /// Ensures that an output is buffered.
     ///
     /// # Parameters
@@ -99,25 +122,53 @@ where
         }
     }
 
-    /// Creates a buffered item output with at least the requested capacity.
+    /// Ensures that an output is buffered and boxes the resulting output.
     ///
     /// # Parameters
     ///
-    /// * `inner` - The output that receives items when the internal buffer is
-    ///   flushed.
-    /// * `capacity` - The requested internal buffer capacity in items.
+    /// * `output` - The concrete output to keep or wrap.
     ///
     /// # Returns
     ///
-    /// A new buffered item output whose actual buffer capacity is
-    /// `capacity.max(1)`.
+    /// A boxed output trait object. The original output is boxed directly when
+    /// it already reports buffered status; otherwise it is first wrapped in
+    /// [`BufferedOutput`].
     #[inline(always)]
     #[must_use]
-    pub fn with_capacity(inner: O, capacity: usize) -> Self {
-        Self {
-            inner,
-            buffer: Buffer::with_capacity(capacity),
-            panicked: false,
+    pub fn ensure_boxed<'a>(output: O) -> Box<dyn Output<Item = O::Item> + 'a>
+    where
+        O: 'a,
+        O::Item: 'a,
+    {
+        if output.is_buffered() {
+            Box::new(output)
+        } else {
+            Box::new(Self::new(output))
+        }
+    }
+
+    /// Ensures that a boxed output trait object is buffered.
+    ///
+    /// # Parameters
+    ///
+    /// * `output` - The boxed output trait object to keep or wrap.
+    ///
+    /// # Returns
+    ///
+    /// `output` unchanged when it already reports buffered status; otherwise a
+    /// boxed [`BufferedOutput`] wrapping `output`.
+    #[inline(always)]
+    #[must_use]
+    pub fn ensure_boxed_dyn<'a>(
+        output: Box<dyn Output<Item = O::Item> + 'a>,
+    ) -> Box<dyn Output<Item = O::Item> + 'a>
+    where
+        O::Item: 'a,
+    {
+        if output.is_buffered() {
+            output
+        } else {
+            Box::new(BufferedOutput::new(BoxedDynOutput::new(output)))
         }
     }
 
