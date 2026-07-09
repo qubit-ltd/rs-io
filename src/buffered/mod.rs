@@ -23,6 +23,8 @@
 //! The default capacity used by buffered input and output is
 //! [`DEFAULT_BUFFER_CAPACITY`].
 
+mod boxed_dyn_input;
+mod boxed_dyn_output;
 mod buffer;
 mod buffered_input;
 mod buffered_output;
@@ -30,6 +32,8 @@ mod ensured_buffered_input;
 mod ensured_buffered_output;
 
 pub use crate::capacity_const::DEFAULT_BUFFER_CAPACITY;
+pub(crate) use boxed_dyn_input::BoxedDynInput;
+pub(crate) use boxed_dyn_output::BoxedDynOutput;
 pub use buffer::Buffer;
 pub use buffered_input::BufferedInput;
 pub use buffered_output::BufferedOutput;

@@ -14,6 +14,7 @@ use std::io::{
 };
 
 use crate::buffered::{
+    BoxedDynInput,
     DEFAULT_BUFFER_CAPACITY,
     EnsuredBufferedInput,
 };
@@ -69,6 +70,28 @@ where
         Self::with_capacity(inner, DEFAULT_BUFFER_CAPACITY)
     }
 
+    /// Creates a buffered item input with at least the requested capacity.
+    ///
+    /// The actual capacity is raised to `1` when the requested value is `0`.
+    ///
+    /// # Arguments
+    ///
+    /// * `inner` - The input object wrapped by this buffer.
+    /// * `capacity` - The requested internal buffer capacity, in items.
+    ///
+    /// # Returns
+    ///
+    /// A new buffered item input whose internal buffer capacity is
+    /// `capacity.max(1)`.
+    #[inline]
+    #[must_use]
+    pub fn with_capacity(inner: I, capacity: usize) -> Self {
+        Self {
+            inner,
+            buffer: Buffer::with_capacity(capacity),
+        }
+    }
+
     /// Ensures that an input is buffered.
     ///
     /// # Parameters
@@ -90,25 +113,53 @@ where
         }
     }
 
-    /// Creates a buffered item input with at least the requested capacity.
+    /// Ensures that an input is buffered and boxes the resulting input.
     ///
-    /// The actual capacity is raised to `1` when the requested value is `0`.
+    /// # Parameters
     ///
-    /// # Arguments
-    ///
-    /// * `inner` - The input object wrapped by this buffer.
-    /// * `capacity` - The requested internal buffer capacity, in items.
+    /// * `input` - The concrete input to keep or wrap.
     ///
     /// # Returns
     ///
-    /// A new buffered item input whose internal buffer capacity is
-    /// `capacity.max(1)`.
-    #[inline]
+    /// A boxed input trait object. The original input is boxed directly when it
+    /// already reports buffered status; otherwise it is first wrapped in
+    /// [`BufferedInput`].
+    #[inline(always)]
     #[must_use]
-    pub fn with_capacity(inner: I, capacity: usize) -> Self {
-        Self {
-            inner,
-            buffer: Buffer::with_capacity(capacity),
+    pub fn ensure_boxed<'a>(input: I) -> Box<dyn Input<Item = I::Item> + 'a>
+    where
+        I: 'a,
+        I::Item: 'a,
+    {
+        if input.is_buffered() {
+            Box::new(input)
+        } else {
+            Box::new(Self::new(input))
+        }
+    }
+
+    /// Ensures that a boxed input trait object is buffered.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` - The boxed input trait object to keep or wrap.
+    ///
+    /// # Returns
+    ///
+    /// `input` unchanged when it already reports buffered status; otherwise a
+    /// boxed [`BufferedInput`] wrapping `input`.
+    #[inline(always)]
+    #[must_use]
+    pub fn ensure_boxed_dyn<'a>(
+        input: Box<dyn Input<Item = I::Item> + 'a>,
+    ) -> Box<dyn Input<Item = I::Item> + 'a>
+    where
+        I::Item: 'a,
+    {
+        if input.is_buffered() {
+            input
+        } else {
+            Box::new(BufferedInput::new(BoxedDynInput::new(input)))
         }
     }
 
