@@ -129,7 +129,7 @@ newtype。
 
 ```toml
 [dependencies]
-qubit-io = "0.11"
+qubit-io = "0.12"
 ```
 
 ## 快速开始
