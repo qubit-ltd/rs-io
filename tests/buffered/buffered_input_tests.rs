@@ -18,6 +18,7 @@ use std::io::{
 
 use qubit_io::{
     BufferedInput,
+    EnsuredBufferedInput,
     Input,
     Seekable,
 };
@@ -211,6 +212,137 @@ fn test_buffered_input_reports_buffered() {
     let input = BufferedInput::with_capacity(U16Input::new(vec![]), 4);
 
     assert!(input.is_buffered());
+}
+
+#[test]
+fn test_buffered_input_ensure_wraps_unbuffered_input() {
+    let input = U16Input::new(vec![vec![1, 2, 3]]);
+    let mut input = BufferedInput::ensure(input);
+
+    assert!(matches!(input, EnsuredBufferedInput::Buffered(_)));
+    assert!(input.is_buffered());
+
+    let mut output = [0; 2];
+    let read = input
+        .read(&mut output)
+        .expect("ensured buffered input should read items");
+
+    assert_eq!(read, 2);
+    assert_eq!(output, [1, 2]);
+}
+
+#[test]
+fn test_buffered_input_ensure_keeps_buffered_input() {
+    let input = U16Input::new(vec![vec![1, 2, 3]]);
+    let input = BufferedInput::new(input);
+    let mut input = BufferedInput::ensure(input);
+
+    assert!(matches!(input, EnsuredBufferedInput::AlreadyBuffered(_)));
+    assert!(input.is_buffered());
+
+    let mut output = [0; 3];
+    let read = input
+        .read_fully(&mut output)
+        .expect("already buffered input should still read fully");
+
+    assert_eq!(read, 3);
+    assert_eq!(output, [1, 2, 3]);
+}
+
+#[test]
+fn test_buffered_input_ensure_delegates_safe_reads_for_both_branches() {
+    let input = U16Input::new(vec![vec![1, 2]]);
+    let mut input = BufferedInput::ensure(input);
+    let mut output = [0; 2];
+    let read = input
+        .read_fully(&mut output)
+        .expect("wrapped input should support safe full reads");
+
+    assert_eq!(read, 2);
+    assert_eq!(output, [1, 2]);
+
+    let input = U16Input::new(vec![vec![3, 4]]);
+    let input = BufferedInput::new(input);
+    let mut input = BufferedInput::ensure(input);
+    let mut output = [0; 2];
+    let read = input
+        .read(&mut output)
+        .expect("already buffered input should support safe reads");
+
+    assert_eq!(read, 2);
+    assert_eq!(output, [3, 4]);
+}
+
+#[test]
+fn test_buffered_input_ensure_delegates_unchecked_reads() {
+    let input = U16Input::new(vec![vec![1, 2, 3]]);
+    let mut input = BufferedInput::ensure(input);
+    let mut output = [0; 3];
+
+    // SAFETY: `output[1..3]` is a valid destination range.
+    let read = unsafe { input.read_unchecked(&mut output, 1, 2) }
+        .expect("wrapped input should support unchecked reads");
+
+    assert_eq!(read, 2);
+    assert_eq!(output, [0, 1, 2]);
+
+    let input = U16Input::new(vec![vec![4, 5, 6]]);
+    let input = BufferedInput::new(input);
+    let mut input = BufferedInput::ensure(input);
+    let mut output = [0; 3];
+
+    // SAFETY: `output[0..2]` is a valid destination range.
+    let read = unsafe { input.read_unchecked(&mut output, 0, 2) }
+        .expect("already buffered input should support unchecked reads");
+
+    assert_eq!(read, 2);
+    assert_eq!(output, [4, 5, 0]);
+}
+
+#[test]
+fn test_buffered_input_ensure_delegates_unchecked_read_fully() {
+    let input = U16Input::new(vec![vec![1], vec![2, 3]]);
+    let mut input = BufferedInput::ensure(input);
+    let mut output = [0; 3];
+
+    // SAFETY: `output[0..3]` is a valid destination range.
+    let read = unsafe { input.read_fully_unchecked(&mut output, 0, 3) }
+        .expect("wrapped input should support unchecked full reads");
+
+    assert_eq!(read, 3);
+    assert_eq!(output, [1, 2, 3]);
+
+    let input = U16Input::new(vec![vec![4], vec![5, 6]]);
+    let input = BufferedInput::new(input);
+    let mut input = BufferedInput::ensure(input);
+    let mut output = [0; 3];
+
+    // SAFETY: `output[0..3]` is a valid destination range.
+    let read = unsafe { input.read_fully_unchecked(&mut output, 0, 3) }
+        .expect("already buffered input should support unchecked full reads");
+
+    assert_eq!(read, 3);
+    assert_eq!(output, [4, 5, 6]);
+}
+
+#[test]
+fn test_buffered_input_ensure_delegates_seek() {
+    let input = Cursor::new(b"abcdef".to_vec());
+    let mut input = BufferedInput::ensure(input);
+    let position = input
+        .seek_to(SeekFrom::Start(3))
+        .expect("wrapped seekable input should seek");
+
+    assert_eq!(position, 3);
+
+    let input = Cursor::new(b"abcdef".to_vec());
+    let input = BufferedInput::new(input);
+    let mut input = BufferedInput::ensure(input);
+    let position = input
+        .seek_to(SeekFrom::Start(4))
+        .expect("already buffered seekable input should seek");
+
+    assert_eq!(position, 4);
 }
 
 #[test]
