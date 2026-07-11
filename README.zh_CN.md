@@ -65,12 +65,12 @@ binary scalar、LEB128 和 ZigZag 能力已经不在本 crate 中。缓冲区级
 - **`BufferedInput<I>`**：包装 `Input` 的缓冲 unit 输入，支持查看
   unread window、按数量 refill、`into_parts`，以及针对已验证输出 range 的 indexed
   unchecked read。它直接实现 `Input`，并在被包装输入实现
-  `Seekable<Item = I::Item>` 时支持逻辑 unit-space seek。
+  `Seekable<Unit = I::Item>` 时支持逻辑 unit-space seek。
 - **`BufferedOutput<O>`**：包装 `Output` 的缓冲 unit 输出，支持
   spare window 访问、针对已验证 spare range 的 unsafe advance、显式 flush、drop 时尽力
   flush、不执行 I/O 的 `into_parts`，以及大块写入绕过缓冲区。它直接实现
   `Output`，并支持当被包装输出实现
-  `Seekable<Item = O::Item>` 时的 unit seek；查询当前位置和 `SeekFrom::Current(0)` 会保留
+  `Seekable<Unit = O::Item>` 时的 unit seek；查询当前位置和 `SeekFrom::Current(0)` 会保留
   pending buffer，不触发 flush。
 - **`DEFAULT_BUFFER_CAPACITY`**：input 与 output 共用的默认缓冲容量。
 
@@ -85,7 +85,7 @@ newtype。
 
 `Seekable` 是按单位（unit）语义定义的，稳定策略是「每个 `(类型, unit)` 只
 有一份实现」。一个实现了 `std::io::Seek` 的类型会通过 blanket impl 自动具备
-`Seekable<Item = u8>`，如果再次为同一类型再写 `Item = u8` 的 `Seekable`
+`Seekable<Unit = u8>`，如果再次为同一类型再写 `Unit = u8` 的 `Seekable`
 实现，会触发一致性冲突。
 
 对于自定义单位（例如 `u16`），应保留原类型的字节语义 `Seek`，并通过独立适配

@@ -121,7 +121,7 @@ where
     O: SeekableOutput,
     <O as Output>::Item: Copy + Default,
 {
-    type Item = <O as Output>::Item;
+    type Unit = <O as Output>::Item;
 
     /// Seeks in item offsets through the selected output branch.
     #[inline(always)]

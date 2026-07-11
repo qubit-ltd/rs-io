@@ -74,13 +74,13 @@ reference documentation is available on [docs.rs](https://docs.rs/qubit-io).
   with unread-window inspection, count-aware refilling, `into_parts`, and
   indexed unchecked reads for validated output ranges. It implements `Input`
   directly and supports logical unit-space seeking when the wrapped input
-  implements `Seekable<Item = I::Item>`.
+  implements `Seekable<Unit = I::Item>`.
 - **`BufferedOutput<O>`**: buffered unit output over `Output`,
   with spare-window access, unsafe advancing for validated spare ranges, explicit
   flushing, best-effort drop-time flushing, non-flushing `into_parts`, and
   large-write bypass paths. It implements `Output` directly and supports
   unit-space seeking when the
-  wrapped output implements `Seekable<Item = O::Item>`; position queries and
+  wrapped output implements `Seekable<Unit = O::Item>`; position queries and
   `SeekFrom::Current(0)` preserve pending buffered units without flushing.
 - **`DEFAULT_BUFFER_CAPACITY`**: shared default capacity for input and output
   buffering.
@@ -96,8 +96,8 @@ a second item interpretation.
 
 `Seekable` is unit-oriented, and the stable rule is one implementation per
 `(type, unit)` pair. If a type implements `std::io::Seek`, the blanket impl
-already gives `Seekable<Item = u8>`, so another `Seekable` impl for the same
-type with `Item = u8` will trigger a coherence conflict.
+already gives `Seekable<Unit = u8>`, so another `Seekable` impl for the same
+type with `Unit = u8` will trigger a coherence conflict.
 
 For custom units (for example `u16`), keep byte-sized seeking on the original
 type and expose unit-space seeking via a dedicated adapter/newtype that implements

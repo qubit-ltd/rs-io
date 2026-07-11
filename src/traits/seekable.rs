@@ -15,8 +15,8 @@ use std::io::{
 /// Minimal seek interface measured in stream items.
 ///
 /// Unlike [`Seek`], which measures positions and offsets in bytes,
-/// `Seekable` measures them in items of [`Self::Item`]. For byte streams,
-/// set `Item = u8`; offsets passed through [`SeekFrom`] then count items
+/// `Seekable` measures them in units of [`Self::Unit`]. For byte streams,
+/// set `Unit = u8`; offsets passed through [`SeekFrom`] then count units
 /// rather than bytes.
 ///
 /// The return value of [`Seekable::seek_to`] is the new absolute position from
@@ -54,10 +54,10 @@ use std::io::{
 ///
 /// # Coherence note
 ///
-/// The blanket impl below maps [`std::io::Seek`] to `Item = u8` for binary
+/// The blanket impl below maps [`std::io::Seek`] to `Unit = u8` for binary
 /// compatibility. If a concrete type already implements `Seek`, it already has
-/// an implicit `Seekable<Item = u8>` impl from this blanket, so another
-/// `Seekable` impl with the same `(Self, Item)` pair would be a coherence
+/// an implicit `Seekable<Unit = u8>` impl from this blanket, so another
+/// `Seekable` impl with the same `(Self, Unit)` pair would be a coherence
 /// conflict.
 ///
 /// For example, this is rejected by the compiler:
@@ -74,7 +74,7 @@ use std::io::{
 /// }
 ///
 /// impl crate::Seekable for LegacyStream {
-///     type Item = u8;
+///     type Unit = u8;
 ///     fn seek_to(&mut self, _pos: SeekFrom) -> Result<u64> {
 ///         Ok(0)
 ///     }
@@ -88,18 +88,18 @@ use std::io::{
 ///
 /// The stable workaround is to keep byte-positioned seeking on the original
 /// type and introduce a wrapper/newtype when another item interpretation is
-/// needed: implement `Seekable` for the wrapper with a different `Item`, and
+/// needed: implement `Seekable` for the wrapper with a different `Unit`, and
 /// keep `std::io::Seek`/byte semantics on the original type.
 pub trait Seekable {
-    /// The item type used to measure seek positions and offsets.
-    type Item;
+    /// The unit type used to measure seek positions and offsets.
+    type Unit;
 
     /// Seeks to a position in the stream.
     ///
     /// # Parameters
     ///
     /// * `position` - Target position relative to the start, end, or current
-    ///   logical position. All offsets are counted in items of [`Self::Item`].
+    ///   logical position. All offsets are counted in units of [`Self::Unit`].
     ///
     /// # Returns
     ///
@@ -115,7 +115,7 @@ impl<S> Seekable for S
 where
     S: Seek + ?Sized,
 {
-    type Item = u8;
+    type Unit = u8;
 
     /// Seeks a standard [`Seek`] value using byte offsets.
     #[inline(always)]
