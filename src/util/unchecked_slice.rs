@@ -231,8 +231,8 @@ impl UncheckedSlice {
     /// # Safety
     ///
     /// The caller must guarantee that both source and destination ranges are
-    /// valid for `count` elements and the copy does not overflow pointer
-    /// arithmetic.
+    /// valid for `count` elements, the copy does not overflow pointer
+    /// arithmetic, and the two memory regions do not overlap.
     #[inline(always)]
     pub unsafe fn copy_nonoverlapping<T: Copy>(
         source: &[T],
@@ -308,8 +308,17 @@ impl UncheckedSlice {
     ///
     /// # Safety
     ///
-    /// The caller must guarantee that `index` points to a valid unaligned
-    /// region capable of holding one `T`.
+    /// The caller must guarantee that `index..index + size_of::<T>()` is a
+    /// valid readable range inside `input` and that the addition does not
+    /// overflow. Every byte in that range must be initialized and together
+    /// form a valid value of `T`, including all bit-validity and pointer
+    /// provenance requirements imposed by `T`.
+    ///
+    /// `T: Copy` does not guarantee that an arbitrary byte sequence is a valid
+    /// `T`. Primitive integer and floating-point types satisfy this
+    /// representation requirement; types with restricted bit patterns,
+    /// references, or pointers require additional justification from the
+    /// caller.
     #[inline(always)]
     pub unsafe fn read_ne_unaligned<T: Copy>(input: &[u8], index: usize) -> T {
         debug_assert!(
@@ -334,8 +343,15 @@ impl UncheckedSlice {
     ///
     /// # Safety
     ///
-    /// The caller must guarantee that `index` points to a valid unaligned
-    /// region capable of holding one `T`.
+    /// The caller must guarantee that `index..index + size_of::<T>()` is a
+    /// valid writable range inside `output` and that the addition does not
+    /// overflow. The complete object representation of `value`, including any
+    /// padding bytes, must be initialized and valid to store in and later
+    /// observe through the destination byte slice.
+    ///
+    /// `T: Copy` does not guarantee initialized padding or unrestricted
+    /// bytewise representation. Types containing padding, references, or
+    /// pointers require additional justification from the caller.
     #[inline(always)]
     pub unsafe fn write_ne_unaligned<T: Copy>(
         output: &mut [u8],
