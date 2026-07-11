@@ -23,6 +23,24 @@ use std::io::{
 /// primary writer's resulting absolute position. If the branch seek fails, the
 /// primary writer may already have moved.
 ///
+/// # Failure and retry semantics
+///
+/// A branch error does not roll back bytes already accepted by the primary
+/// writer. Callers should therefore treat a branch write error as terminal
+/// unless repeating the primary write is known to be safe. In particular, an
+/// outer buffering layer may retain the entire failed chunk because
+/// [`Write::write`] returned an error rather than a byte count. Retrying that
+/// buffered chunk can duplicate data in the primary writer:
+///
+/// ```text
+/// first attempt: primary accepts "abc", branch returns an error
+/// retry:         primary accepts "abc" again
+/// result:        primary may contain "abcabc"
+/// ```
+///
+/// After a branch error, the primary and branch writers may be out of sync.
+/// This wrapper does not record a sticky error or provide rollback.
+///
 /// # Examples
 /// ```
 /// use std::io::Write;

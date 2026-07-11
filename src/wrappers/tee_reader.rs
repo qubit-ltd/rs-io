@@ -36,6 +36,22 @@ use super::SyncSeekTeeReader;
 /// when the outer `BufReader` refills its internal buffer, which may be earlier
 /// than the application later consuming those bytes from `fill_buf`.
 ///
+/// # Failure and retry semantics
+///
+/// A branch error does not restore bytes already consumed from the source.
+/// Callers should therefore treat a branch write error as terminal unless they
+/// can reposition or otherwise recover the source. An outer buffering layer
+/// may discard a failed refill even though the source has already advanced:
+///
+/// ```text
+/// source before refill: "abcdef"
+/// refill reads "abc":   source advances to "def", branch returns an error
+/// retry:                reading resumes at "def"; "abc" may be unavailable
+/// ```
+///
+/// After a branch error, the source and branch may be out of sync. This wrapper
+/// does not retain the consumed bytes or provide rollback.
+///
 /// # Examples
 /// ```
 /// use std::io::{
