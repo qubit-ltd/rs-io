@@ -23,6 +23,7 @@ use crate::capacity_const::{
     DEFAULT_COMPARE_BUFFER_SIZE,
     DEFAULT_COPY_BUFFER_SIZE,
 };
+use crate::traits::validate_read_count;
 use crate::util::{
     create_vec,
     try_reserve_vec,
@@ -256,6 +257,7 @@ impl Streams {
         let mut copied = 0_u64;
         loop {
             let read = input.read_fully(&mut buffer)?;
+            validate_read_count(read, buffer.len())?;
             if read == 0 {
                 return Ok(copied);
             }
@@ -307,6 +309,7 @@ impl Streams {
             let read = unsafe {
                 input.read_fully_unchecked(&mut buffer, 0, requested)?
             };
+            validate_read_count(read, requested)?;
             if read == 0 {
                 break;
             }
@@ -344,8 +347,9 @@ impl Streams {
     ///
     /// # Errors
     /// Returns [`ErrorKind::InvalidData`] when the remaining input is longer
-    /// than `max_items`. Returns the first non-interrupted read error or output
-    /// error reported by the underlying streams.
+    /// than `max_items`, or when an input reports an impossible item count.
+    /// Returns the first non-interrupted read error or output error reported by
+    /// the underlying streams.
     pub fn copy_input_to_output_end_limited<I, O>(
         input: &mut I,
         output: &mut O,
@@ -368,6 +372,7 @@ impl Streams {
             let read = unsafe {
                 input.read_fully_unchecked(&mut buffer, 0, requested)?
             };
+            validate_read_count(read, requested)?;
             if read == 0 {
                 let count = collected.len();
                 if count == 0 {
