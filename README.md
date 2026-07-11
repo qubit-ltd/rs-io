@@ -142,7 +142,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-qubit-io = "0.12"
+qubit-io = "0.13"
 ```
 
 ## Quick Start
