@@ -16,7 +16,6 @@ use std::mem::ManuallyDrop;
 use std::ptr;
 
 use crate::buffered::{
-    BoxedDynOutput,
     DEFAULT_BUFFER_CAPACITY,
     EnsuredBufferedOutput,
 };
@@ -144,31 +143,6 @@ where
             Box::new(output)
         } else {
             Box::new(Self::new(output))
-        }
-    }
-
-    /// Ensures that a boxed output trait object is buffered.
-    ///
-    /// # Parameters
-    ///
-    /// * `output` - The boxed output trait object to keep or wrap.
-    ///
-    /// # Returns
-    ///
-    /// `output` unchanged when it already reports buffered status; otherwise a
-    /// boxed [`BufferedOutput`] wrapping `output`.
-    #[inline(always)]
-    #[must_use]
-    pub fn ensure_boxed_dyn<'a>(
-        output: Box<dyn Output<Item = O::Item> + 'a>,
-    ) -> Box<dyn Output<Item = O::Item> + 'a>
-    where
-        O::Item: 'a,
-    {
-        if output.is_buffered() {
-            output
-        } else {
-            Box::new(BufferedOutput::new(BoxedDynOutput::new(output)))
         }
     }
 

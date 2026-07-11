@@ -378,40 +378,6 @@ fn test_buffered_input_ensure_boxed_keeps_buffered_input() {
 }
 
 #[test]
-fn test_buffered_input_ensure_boxed_dyn_wraps_unbuffered_input() {
-    let input: Box<dyn Input<Item = u16>> =
-        Box::new(U16Input::new(vec![vec![1, 2, 3]]));
-    let mut input = BufferedInput::<U16Input>::ensure_boxed_dyn(input);
-
-    assert!(input.is_buffered());
-
-    let mut output = [0; 3];
-    let read = input
-        .read_fully(&mut output)
-        .expect("boxed dyn ensured input should read fully");
-
-    assert_eq!(read, 3);
-    assert_eq!(output, [1, 2, 3]);
-}
-
-#[test]
-fn test_buffered_input_ensure_boxed_dyn_keeps_buffered_input() {
-    let input: Box<dyn Input<Item = u16>> =
-        Box::new(BufferedInput::new(U16Input::new(vec![vec![1, 2]])));
-    let mut input = BufferedInput::<U16Input>::ensure_boxed_dyn(input);
-
-    assert!(input.is_buffered());
-
-    let mut output = [0; 2];
-    let read = input
-        .read(&mut output)
-        .expect("boxed dyn already buffered input should read");
-
-    assert_eq!(read, 2);
-    assert_eq!(output, [1, 2]);
-}
-
-#[test]
 fn test_buffered_input_implements_input_for_generic_items() {
     let inner = U16Input::new(vec![vec![1, 2, 3]]);
     let mut input = BufferedInput::with_capacity(inner, 4);

@@ -339,35 +339,6 @@ fn test_buffered_output_ensure_boxed_keeps_buffered_output() {
         .expect("boxed already buffered output should flush");
 }
 
-#[test]
-fn test_buffered_output_ensure_boxed_dyn_wraps_unbuffered_output() {
-    let output: Box<dyn Output<Item = u16>> = Box::new(U16Output::default());
-    let mut output = BufferedOutput::<U16Output>::ensure_boxed_dyn(output);
-
-    assert!(output.is_buffered());
-    output
-        .write_fully(&[1, 2, 3])
-        .expect("boxed dyn ensured output should write fully");
-    output
-        .flush()
-        .expect("boxed dyn ensured output should flush");
-}
-
-#[test]
-fn test_buffered_output_ensure_boxed_dyn_keeps_buffered_output() {
-    let output: Box<dyn Output<Item = u16>> =
-        Box::new(BufferedOutput::new(U16Output::default()));
-    let mut output = BufferedOutput::<U16Output>::ensure_boxed_dyn(output);
-
-    assert!(output.is_buffered());
-    output
-        .write_fully(&[1, 2])
-        .expect("boxed dyn already buffered output should write fully");
-    output
-        .flush()
-        .expect("boxed dyn already buffered output should flush");
-}
-
 #[derive(Clone)]
 struct SharedWriter {
     output: Rc<RefCell<Vec<u8>>>,

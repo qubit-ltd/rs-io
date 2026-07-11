@@ -14,7 +14,6 @@ use std::io::{
 };
 
 use crate::buffered::{
-    BoxedDynInput,
     DEFAULT_BUFFER_CAPACITY,
     EnsuredBufferedInput,
 };
@@ -135,31 +134,6 @@ where
             Box::new(input)
         } else {
             Box::new(Self::new(input))
-        }
-    }
-
-    /// Ensures that a boxed input trait object is buffered.
-    ///
-    /// # Parameters
-    ///
-    /// * `input` - The boxed input trait object to keep or wrap.
-    ///
-    /// # Returns
-    ///
-    /// `input` unchanged when it already reports buffered status; otherwise a
-    /// boxed [`BufferedInput`] wrapping `input`.
-    #[inline(always)]
-    #[must_use]
-    pub fn ensure_boxed_dyn<'a>(
-        input: Box<dyn Input<Item = I::Item> + 'a>,
-    ) -> Box<dyn Input<Item = I::Item> + 'a>
-    where
-        I::Item: 'a,
-    {
-        if input.is_buffered() {
-            input
-        } else {
-            Box::new(BufferedInput::new(BoxedDynInput::new(input)))
         }
     }
 
