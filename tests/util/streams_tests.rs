@@ -16,6 +16,7 @@ use std::io::{
 };
 
 use qubit_io::{
+    DEFAULT_BUFFER_CAPACITY,
     Input,
     Output,
     ReadExt,
@@ -196,6 +197,34 @@ impl Input for OverreportingItemInput {
     type Item = u16;
 
     unsafe fn read_unchecked(
+        &mut self,
+        _output: &mut [u16],
+        _index: usize,
+        count: usize,
+    ) -> std::io::Result<usize> {
+        Ok(count + 1)
+    }
+}
+
+struct OverreportingFullyItemInput;
+
+impl Input for OverreportingFullyItemInput {
+    type Item = u16;
+
+    unsafe fn read_unchecked(
+        &mut self,
+        _output: &mut [u16],
+        _index: usize,
+        _count: usize,
+    ) -> std::io::Result<usize> {
+        Ok(0)
+    }
+
+    fn read_fully(&mut self, output: &mut [u16]) -> std::io::Result<usize> {
+        Ok(output.len() + 1)
+    }
+
+    unsafe fn read_fully_unchecked(
         &mut self,
         _output: &mut [u16],
         _index: usize,
@@ -687,6 +716,18 @@ fn test_copy_input_to_output_rejects_overreported_read_count() {
 }
 
 #[test]
+fn test_copy_input_to_output_rejects_overridden_read_fully_count() {
+    let mut input = OverreportingFullyItemInput;
+    let mut output = CollectOutput::default();
+
+    let error = Streams::copy_input_to_output(&mut input, &mut output)
+        .expect_err("overridden read_fully count should be validated");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert!(output.values.is_empty());
+}
+
+#[test]
 fn test_copy_input_to_output_at_most_copies_requested_items() {
     let mut input = ChunkInput::new(vec![vec![1, 2], vec![3, 4]]);
     let mut output = CollectOutput::default();
@@ -753,6 +794,19 @@ fn test_copy_input_to_output_at_most_returns_write_error() {
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("write failed", error.to_string());
+}
+
+#[test]
+fn test_copy_input_to_output_at_most_rejects_overridden_read_fully_count() {
+    let mut input = OverreportingFullyItemInput;
+    let mut output = CollectOutput::default();
+
+    let error =
+        Streams::copy_input_to_output_at_most(&mut input, &mut output, 3)
+            .expect_err("overridden read_fully count should be validated");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert!(output.values.is_empty());
 }
 
 #[test]
@@ -836,6 +890,23 @@ fn test_copy_input_to_output_end_limited_returns_write_error() {
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("write failed", error.to_string());
+    assert!(output.values.is_empty());
+}
+
+#[test]
+fn test_copy_input_to_output_end_limited_rejects_overridden_read_fully_count() {
+    let mut input = OverreportingFullyItemInput;
+    let mut output = CollectOutput::default();
+    let max_items = DEFAULT_BUFFER_CAPACITY as u64 + 1;
+
+    let error = Streams::copy_input_to_output_end_limited(
+        &mut input,
+        &mut output,
+        max_items,
+    )
+    .expect_err("overridden read_fully count should be validated");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
     assert!(output.values.is_empty());
 }
 
