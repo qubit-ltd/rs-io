@@ -868,7 +868,7 @@ where
     O: SeekableOutput,
     <O as Output>::Item: Copy + Default,
 {
-    type Item = <O as Output>::Item;
+    type Unit = <O as Output>::Item;
 
     /// Seeks the buffered output in item offsets.
     #[inline(always)]

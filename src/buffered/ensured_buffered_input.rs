@@ -113,7 +113,7 @@ where
     I: SeekableInput,
     <I as Input>::Item: Copy + Default,
 {
-    type Item = <I as Input>::Item;
+    type Unit = <I as Input>::Item;
 
     /// Seeks in item offsets through the selected input branch.
     #[inline(always)]

@@ -19,23 +19,38 @@ use super::{
 /// buffered outputs and other adapters that must coordinate pending items when
 /// seeking the wrapped output.
 ///
-/// [`Self::Item`] is the shared item type for both writing and seeking. It
-/// always matches [`Output::Item`] and [`Seekable::Item`].
+/// [`Output::Item`] is the shared type for both writing and seeking. It
+/// always matches [`Seekable::Unit`].
 ///
 /// The trait adds no methods of its own. All operations come from the
 /// supertraits, and every type implementing both [`Output`] and [`Seekable`]
-/// with matching [`Output::Item`] and [`Seekable::Item`] automatically
+/// with matching [`Output::Item`] and [`Seekable::Unit`] automatically
 /// implements `SeekableOutput`.
+///
+/// # Examples
+///
+/// ```
+/// use std::io::{
+///     Cursor,
+///     SeekFrom,
+/// };
+///
+/// use qubit_io::SeekableOutput;
+///
+/// let output = Cursor::new(Vec::<u8>::new());
+/// let mut output: Box<dyn SeekableOutput<Item = u8, Unit = u8>> =
+///     Box::new(output);
+///
+/// assert_eq!(1, output.write(&[1_u8])?);
+/// assert_eq!(0, output.seek_to(SeekFrom::Start(0))?);
+/// # Ok::<(), std::io::Error>(())
+/// ```
 pub trait SeekableOutput:
-    Output + Seekable<Item = <Self as Output>::Item>
+    Output + Seekable<Unit = <Self as Output>::Item>
 {
-    /// The item type shared by writing and seeking on this output.
-    type Item;
 }
 
-impl<T> SeekableOutput for T
-where
-    T: Output + Seekable<Item = <T as Output>::Item>,
+impl<T> SeekableOutput for T where
+    T: Output + Seekable<Unit = <T as Output>::Item>
 {
-    type Item = <T as Output>::Item;
 }

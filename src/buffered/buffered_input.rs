@@ -422,8 +422,8 @@ where
     /// [`ErrorKind::InvalidData`] if the wrapped reader reports more items
     /// than the requested destination range could hold. Interrupted reads are
     /// retried when the method refills the internal buffer through
-    /// `read_more`; direct delegated reads follow the wrapped reader's own
-    /// wrapped input's own single-read behavior.
+    /// `read_more`; direct delegated reads follow the wrapped input's own
+    /// single-read behavior.
     ///
     /// # Safety
     ///
@@ -891,7 +891,7 @@ where
     I: SeekableInput,
     <I as Input>::Item: Copy + Default,
 {
-    type Item = <I as Input>::Item;
+    type Unit = <I as Input>::Item;
 
     /// Seeks the buffered input in item offsets.
     #[inline(always)]

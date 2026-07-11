@@ -77,7 +77,7 @@ impl Output for U16SeekOutput {
 }
 
 impl qubit_io::Seekable for U16SeekOutput {
-    type Item = u16;
+    type Unit = u16;
 
     fn seek_to(&mut self, position: SeekFrom) -> std::io::Result<u64> {
         let current = i64::try_from(self.position)
@@ -1394,7 +1394,7 @@ impl Output for OverflowPositionOutput {
 }
 
 impl qubit_io::Seekable for OverflowPositionOutput {
-    type Item = u16;
+    type Unit = u16;
 
     fn seek_to(&mut self, position: SeekFrom) -> std::io::Result<u64> {
         match position {
@@ -1440,7 +1440,7 @@ fn test_stream_position_rejects_pending_item_overflow() {
 fn test_seekable_trait_object_dispatches_to_buffered_output() {
     let mut output =
         BufferedOutput::with_capacity(U16SeekOutput::new(Vec::new()), 4);
-    let seekable: &mut dyn Seekable<Item = u16> = &mut output;
+    let seekable: &mut dyn Seekable<Unit = u16> = &mut output;
 
     let position = seekable
         .seek_to(SeekFrom::Start(0))
