@@ -7,11 +7,7 @@
 // =============================================================================
 
 use std::collections::VecDeque;
-use std::io::{
-    Cursor,
-    Error,
-    ErrorKind,
-};
+use std::io::{Cursor, Error, ErrorKind};
 
 use qubit_io::Input;
 
@@ -64,9 +60,7 @@ impl Input for ScriptedInput {
                 output[index..index + read].copy_from_slice(&data[..read]);
                 Ok(read)
             }
-            ReadStep::Interrupted => {
-                Err(Error::new(ErrorKind::Interrupted, "interrupted"))
-            }
+            ReadStep::Interrupted => Err(Error::new(ErrorKind::Interrupted, "interrupted")),
             ReadStep::Error(kind, message) => Err(Error::new(kind, message)),
             ReadStep::Eof => Ok(0),
         }
@@ -156,8 +150,7 @@ fn test_read_blanket_impl_exposes_input_read_and_read_unchecked() {
     let mut cursor = Cursor::new(b"ab".to_vec());
     let mut output = [0_u8; 4];
 
-    let read =
-        Input::read(&mut cursor, &mut output).expect("read should succeed");
+    let read = Input::read(&mut cursor, &mut output).expect("read should succeed");
     assert_eq!(2, read);
     assert_eq!(b"ab\x00\x00", &output);
 

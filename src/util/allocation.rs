@@ -9,10 +9,7 @@
 #[cfg(coverage)]
 use std::cell::Cell;
 use std::collections::TryReserveError;
-use std::io::{
-    Error,
-    Result,
-};
+use std::io::{Error, Result};
 
 /// Converts a fallible allocation error into an I/O error.
 ///
@@ -98,10 +95,7 @@ fn coverage_maybe_fail_reserve<T>() -> Option<Result<T>> {
 /// # Errors
 ///
 /// Returns [`std::io::ErrorKind::Other`] if the allocation request fails.
-pub fn try_reserve_vec<T>(
-    output: &mut Vec<T>,
-    additional: usize,
-) -> Result<()> {
+pub fn try_reserve_vec<T>(output: &mut Vec<T>, additional: usize) -> Result<()> {
     #[cfg(coverage)]
     if let Some(result) = coverage_maybe_fail_reserve::<()>() {
         return result;
@@ -120,10 +114,7 @@ pub fn try_reserve_vec<T>(
 /// # Errors
 ///
 /// Returns [`std::io::ErrorKind::Other`] if the allocation request fails.
-pub fn try_reserve_string(
-    output: &mut String,
-    additional: usize,
-) -> Result<()> {
+pub fn try_reserve_string(output: &mut String, additional: usize) -> Result<()> {
     #[cfg(coverage)]
     if COVERAGE_FAIL_NEXT_STRING_RESERVE.with(|state| {
         let fail = state.get();

@@ -5,10 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use std::io::{
-    Read,
-    Seek,
-};
+use std::io::{Read, Seek};
 
 /// Object-safe capability trait for values that can be read and repositioned.
 ///
