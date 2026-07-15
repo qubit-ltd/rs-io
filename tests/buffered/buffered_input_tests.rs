@@ -7,21 +7,9 @@
 // =============================================================================
 
 use std::collections::VecDeque;
-use std::io::{
-    Cursor,
-    Error,
-    ErrorKind,
-    Read,
-    Seek,
-    SeekFrom,
-};
+use std::io::{Cursor, Error, ErrorKind, Read, Seek, SeekFrom};
 
-use qubit_io::{
-    BufferedInput,
-    EnsuredBufferedInput,
-    Input,
-    Seekable,
-};
+use qubit_io::{BufferedInput, EnsuredBufferedInput, Input, Seekable};
 
 struct U16Input {
     chunks: VecDeque<Vec<u16>>,
@@ -155,9 +143,7 @@ impl Input for ScriptedReadFullyInput {
             Some(ReadFullyStep::Interrupted) => {
                 Err(Error::new(ErrorKind::Interrupted, "interrupted"))
             }
-            Some(ReadFullyStep::Error(kind, message)) => {
-                Err(Error::new(kind, message))
-            }
+            Some(ReadFullyStep::Error(kind, message)) => Err(Error::new(kind, message)),
             Some(ReadFullyStep::Overreport) => Ok(count + 1),
             None => Ok(0),
         }
@@ -403,13 +389,8 @@ fn test_buffered_input_trait_read_fully_unchecked_for_generic_items() {
 
     // SAFETY: `output[1..4]` is a valid destination range.
     let read = unsafe {
-        <BufferedInput<U16Input> as Input>::read_fully_unchecked(
-            &mut input,
-            &mut output,
-            1,
-            3,
-        )
-        .expect("trait read_fully_unchecked should fill through buffer")
+        <BufferedInput<U16Input> as Input>::read_fully_unchecked(&mut input, &mut output, 1, 3)
+            .expect("trait read_fully_unchecked should fill through buffer")
     };
 
     assert_eq!(3, read);
@@ -422,9 +403,8 @@ fn test_buffered_input_trait_read_fully_for_generic_items() {
     let mut input = BufferedInput::with_capacity(inner, 2);
     let mut output = [0_u16; 4];
 
-    let read =
-        <BufferedInput<U16Input> as Input>::read_fully(&mut input, &mut output)
-            .expect("trait read_fully should return partial count at EOF");
+    let read = <BufferedInput<U16Input> as Input>::read_fully(&mut input, &mut output)
+        .expect("trait read_fully should return partial count at EOF");
 
     assert_eq!(3, read);
     assert_eq!([1, 2, 3, 0], output);
@@ -550,10 +530,7 @@ fn test_buffered_input_read_fully_direct_inner_rejects_overreported_count() {
 
 #[test]
 fn test_buffered_input_read_fully_retries_interrupted_reads() {
-    let reader = ScriptedReader::new(vec![
-        ReadStep::Interrupted,
-        ReadStep::Data(b"abc".to_vec()),
-    ]);
+    let reader = ScriptedReader::new(vec![ReadStep::Interrupted, ReadStep::Data(b"abc".to_vec())]);
     let mut input = BufferedInput::with_capacity(reader, 4);
     let mut output = [0_u8; 3];
 
@@ -628,9 +605,8 @@ fn test_input_u8_blanket_impl_reuses_std_read_errors() {
     let mut output = [0_u8; 1];
 
     // SAFETY: The full output range is valid.
-    let error =
-        unsafe { Input::read_unchecked(&mut reader, &mut output, 0, 1) }
-            .expect_err("std read error should be propagated");
+    let error = unsafe { Input::read_unchecked(&mut reader, &mut output, 0, 1) }
+        .expect_err("std read error should be propagated");
 
     assert_eq!(ErrorKind::Other, error.kind());
 }
@@ -665,9 +641,7 @@ impl Read for ScriptedReader {
                 }
                 Ok(count)
             }
-            ReadStep::Interrupted => {
-                Err(Error::new(ErrorKind::Interrupted, "interrupted"))
-            }
+            ReadStep::Interrupted => Err(Error::new(ErrorKind::Interrupted, "interrupted")),
             ReadStep::Error(kind, message) => Err(Error::new(kind, message)),
             ReadStep::Eof => Ok(0),
         }
@@ -708,9 +682,8 @@ impl TrackingSeekReader {
 
 impl Read for TrackingSeekReader {
     fn read(&mut self, output: &mut [u8]) -> std::io::Result<usize> {
-        let position = usize::try_from(self.position).map_err(|_| {
-            Error::new(ErrorKind::InvalidInput, "position exceeds usize")
-        })?;
+        let position = usize::try_from(self.position)
+            .map_err(|_| Error::new(ErrorKind::InvalidInput, "position exceeds usize"))?;
         if position >= self.data.len() {
             return Ok(0);
         }
@@ -725,17 +698,15 @@ impl Seek for TrackingSeekReader {
     fn seek(&mut self, position: SeekFrom) -> std::io::Result<u64> {
         self.seek_calls += 1;
         let current = i128::from(self.position);
-        let end = i128::try_from(self.data.len()).map_err(|_| {
-            Error::new(ErrorKind::InvalidInput, "stream length exceeds i128")
-        })?;
+        let end = i128::try_from(self.data.len())
+            .map_err(|_| Error::new(ErrorKind::InvalidInput, "stream length exceeds i128"))?;
         let target = match position {
             SeekFrom::Start(offset) => i128::from(offset),
             SeekFrom::Current(offset) => current + i128::from(offset),
             SeekFrom::End(offset) => end + i128::from(offset),
         };
-        let position = u64::try_from(target).map_err(|_| {
-            Error::new(ErrorKind::InvalidInput, "seek target is negative")
-        })?;
+        let position = u64::try_from(target)
+            .map_err(|_| Error::new(ErrorKind::InvalidInput, "seek target is negative"))?;
         self.position = position;
         Ok(self.position)
     }
@@ -757,9 +728,8 @@ impl InconsistentPositionReader {
 
 impl Read for InconsistentPositionReader {
     fn read(&mut self, output: &mut [u8]) -> std::io::Result<usize> {
-        let position = usize::try_from(self.position).map_err(|_| {
-            Error::new(ErrorKind::InvalidInput, "position exceeds usize")
-        })?;
+        let position = usize::try_from(self.position)
+            .map_err(|_| Error::new(ErrorKind::InvalidInput, "position exceeds usize"))?;
         if position >= self.data.len() {
             return Ok(0);
         }
@@ -773,17 +743,15 @@ impl Read for InconsistentPositionReader {
 impl Seek for InconsistentPositionReader {
     fn seek(&mut self, position: SeekFrom) -> std::io::Result<u64> {
         let current = i128::from(self.position);
-        let end = i128::try_from(self.data.len()).map_err(|_| {
-            Error::new(ErrorKind::InvalidInput, "stream length exceeds i128")
-        })?;
+        let end = i128::try_from(self.data.len())
+            .map_err(|_| Error::new(ErrorKind::InvalidInput, "stream length exceeds i128"))?;
         let target = match position {
             SeekFrom::Start(offset) => i128::from(offset),
             SeekFrom::Current(offset) => current + i128::from(offset),
             SeekFrom::End(offset) => end + i128::from(offset),
         };
-        self.position = u64::try_from(target).map_err(|_| {
-            Error::new(ErrorKind::InvalidInput, "seek target is negative")
-        })?;
+        self.position = u64::try_from(target)
+            .map_err(|_| Error::new(ErrorKind::InvalidInput, "seek target is negative"))?;
         if let SeekFrom::Current(0) = position {
             Ok(0)
         } else {
@@ -981,9 +949,9 @@ fn test_fill_until_buffers_requested_available_bytes() {
     }
 
     assert!(
-        input.fill_until(4).expect(
-            "fill_until should read until requested bytes are buffered"
-        )
+        input
+            .fill_until(4)
+            .expect("fill_until should read until requested bytes are buffered")
     );
 
     assert_eq!(b"bcde", unread_units(&input).as_slice());
@@ -991,10 +959,7 @@ fn test_fill_until_buffers_requested_available_bytes() {
 
 #[test]
 fn test_fill_until_returns_false_when_eof_prevents_requested_bytes() {
-    let reader = ScriptedReader::new(vec![
-        ReadStep::Data(b"ab".to_vec()),
-        ReadStep::Eof,
-    ]);
+    let reader = ScriptedReader::new(vec![ReadStep::Data(b"ab".to_vec()), ReadStep::Eof]);
     let mut input = BufferedInput::with_capacity(reader, 4);
 
     assert!(
@@ -1036,10 +1001,7 @@ fn test_fill_until_rejects_count_exceeding_capacity() {
 
 #[test]
 fn test_ensure_available_returns_unexpected_eof_and_consumes_partial_bytes() {
-    let reader = ScriptedReader::new(vec![
-        ReadStep::Data(b"ab".to_vec()),
-        ReadStep::Eof,
-    ]);
+    let reader = ScriptedReader::new(vec![ReadStep::Data(b"ab".to_vec()), ReadStep::Eof]);
     let mut input = BufferedInput::with_capacity(reader, 4);
 
     let error = input
@@ -1098,10 +1060,7 @@ fn test_fill_more_returns_refill_error() {
 
 #[test]
 fn test_fill_more_retries_interrupted_reads() {
-    let reader = ScriptedReader::new(vec![
-        ReadStep::Interrupted,
-        ReadStep::Data(b"ab".to_vec()),
-    ]);
+    let reader = ScriptedReader::new(vec![ReadStep::Interrupted, ReadStep::Data(b"ab".to_vec())]);
     let mut input = BufferedInput::with_capacity(reader, 4);
 
     assert!(
@@ -1455,11 +1414,9 @@ fn test_seekable_trait_object_dispatches_to_seek_impl() {
     let mut input = BufferedInput::with_capacity(reader, 4);
     assert!(input.fill_more().expect("initial refill should succeed"));
 
-    let _ = <BufferedInput<TrackingSeekReader> as Seekable>::seek_to(
-        &mut input,
-        SeekFrom::Current(1),
-    )
-    .expect("seekable trait impl should be callable");
+    let _ =
+        <BufferedInput<TrackingSeekReader> as Seekable>::seek_to(&mut input, SeekFrom::Current(1))
+            .expect("seekable trait impl should be callable");
 
     assert!(input.unread_len() <= 3);
 }
@@ -1470,11 +1427,9 @@ fn test_seekable_trait_object_seek_from_start_and_end() {
     let mut input = BufferedInput::with_capacity(reader, 4);
     assert!(input.fill_more().expect("initial refill should succeed"));
 
-    let position = <BufferedInput<TrackingSeekReader> as Seekable>::seek_to(
-        &mut input,
-        SeekFrom::Start(2),
-    )
-    .expect("trait seek start should call underlying source");
+    let position =
+        <BufferedInput<TrackingSeekReader> as Seekable>::seek_to(&mut input, SeekFrom::Start(2))
+            .expect("trait seek start should call underlying source");
 
     assert_eq!(2, position);
     assert_eq!(0, input.unread_len());
@@ -1484,11 +1439,9 @@ fn test_seekable_trait_object_seek_from_start_and_end() {
     let mut input = BufferedInput::with_capacity(reader, 4);
     assert!(input.fill_more().expect("initial refill should succeed"));
 
-    let position = <BufferedInput<TrackingSeekReader> as Seekable>::seek_to(
-        &mut input,
-        SeekFrom::End(-1),
-    )
-    .expect("trait seek end should call underlying source");
+    let position =
+        <BufferedInput<TrackingSeekReader> as Seekable>::seek_to(&mut input, SeekFrom::End(-1))
+            .expect("trait seek end should call underlying source");
 
     assert_eq!(5, position);
     assert_eq!(0, input.unread_len());
@@ -1517,9 +1470,8 @@ fn test_seekable_ufcs_methods_cover_trait_impl() {
     assert_eq!(2, input.inner().seek_calls);
     assert_eq!(0, input.unread_len());
 
-    Seekable::seek_to(&mut input, SeekFrom::Current(6)).expect(
-        "trait seek_relative outside buffer should delegate to inner seek",
-    );
+    Seekable::seek_to(&mut input, SeekFrom::Current(6))
+        .expect("trait seek_relative outside buffer should delegate to inner seek");
     assert_eq!(3, input.inner().seek_calls);
     assert_eq!(0, input.unread_len());
 
@@ -1543,8 +1495,7 @@ fn test_seek_to_current_error_from_inner_seek() {
 
 #[test]
 fn test_ensure_available_u16_reader_consumes_partial_on_eof() {
-    let mut input =
-        BufferedInput::with_capacity(U16Input::new(vec![vec![42]]), 4);
+    let mut input = BufferedInput::with_capacity(U16Input::new(vec![vec![42]]), 4);
 
     let error = input
         .ensure_available(2)

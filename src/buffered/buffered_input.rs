@@ -6,25 +6,12 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Error,
-    ErrorKind,
-    Result,
-    SeekFrom,
-};
+use std::io::{Error, ErrorKind, Result, SeekFrom};
 
-use crate::buffered::{
-    DEFAULT_BUFFER_CAPACITY,
-    EnsuredBufferedInput,
-};
+use crate::buffered::{DEFAULT_BUFFER_CAPACITY, EnsuredBufferedInput};
 use crate::traits::validate_read_count;
 use crate::util::UncheckedSlice;
-use crate::{
-    Buffer,
-    Input,
-    Seekable,
-    SeekableInput,
-};
+use crate::{Buffer, Input, Seekable, SeekableInput};
 
 /// Buffered item input over a wrapped input source.
 ///
@@ -259,12 +246,7 @@ where
     /// `count <= self.unread_len()`, and that the destination range does not
     /// overlap with the unread range stored inside this buffer.
     #[inline]
-    pub unsafe fn copy_unread_to(
-        &self,
-        output: &mut [I::Item],
-        output_index: usize,
-        count: usize,
-    ) {
+    pub unsafe fn copy_unread_to(&self, output: &mut [I::Item], output_index: usize, count: usize) {
         debug_assert!(
             UncheckedSlice::range_fits(output.len(), output_index, count),
             "unchecked unread copy output range exceeds destination buffer",
@@ -446,9 +428,7 @@ where
             self.discard_buffer();
             if count >= self.buffer.capacity() {
                 // SAFETY: The caller guarantees that the target range is valid.
-                let read = unsafe {
-                    self.inner.read_unchecked(output, output_index, count)
-                }?;
+                let read = unsafe { self.inner.read_unchecked(output, output_index, count) }?;
                 validate_read_count(read, count)?;
                 return Ok(read);
             }
@@ -553,11 +533,8 @@ where
                 // range is valid; `remaining` is its suffix after `total`
                 // copied items.
                 match unsafe {
-                    self.inner.read_fully_unchecked(
-                        output,
-                        output_index + total,
-                        remaining,
-                    )
+                    self.inner
+                        .read_fully_unchecked(output, output_index + total, remaining)
                 } {
                     Ok(read) => {
                         validate_read_count(read, remaining)?;
@@ -575,9 +552,7 @@ where
             let remaining = count - total;
             // SAFETY: The caller guarantees the original destination range is
             // valid; `total < count`, so this suffix remains inside it.
-            match unsafe {
-                self.read_unchecked(output, output_index + total, remaining)
-            } {
+            match unsafe { self.read_unchecked(output, output_index + total, remaining) } {
                 Ok(0) => break,
                 Ok(read) => {
                     total += read;
@@ -673,8 +648,7 @@ where
     where
         I: SeekableInput,
     {
-        let position =
-            Seekable::seek_to(&mut self.inner, SeekFrom::Current(0))?;
+        let position = Seekable::seek_to(&mut self.inner, SeekFrom::Current(0))?;
         let unread = self.unread_len() as u64;
         position.checked_sub(unread).ok_or_else(|| {
             Error::new(
@@ -853,9 +827,7 @@ where
         count: usize,
     ) -> Result<usize> {
         // SAFETY: Forwarded from the trait caller.
-        unsafe {
-            BufferedInput::read_unchecked(self, output, output_index, count)
-        }
+        unsafe { BufferedInput::read_unchecked(self, output, output_index, count) }
     }
 
     /// Reads items into the full output slice.
@@ -874,9 +846,7 @@ where
         count: usize,
     ) -> Result<usize> {
         // SAFETY: Forwarded from the trait caller.
-        unsafe {
-            BufferedInput::read_fully_unchecked(self, output, index, count)
-        }
+        unsafe { BufferedInput::read_fully_unchecked(self, output, index, count) }
     }
 
     /// Reads items into the full output slice through the internal buffer.

@@ -33,36 +33,15 @@ mod util;
 mod wrappers;
 
 pub use buffered::{
-    Buffer,
-    BufferedInput,
-    BufferedOutput,
-    EnsuredBufferedInput,
-    EnsuredBufferedOutput,
+    Buffer, BufferedInput, BufferedOutput, EnsuredBufferedInput, EnsuredBufferedOutput,
 };
 pub use capacity_const::{
-    DEFAULT_BUFFER_CAPACITY,
-    DEFAULT_COMPARE_BUFFER_SIZE,
-    DEFAULT_COPY_BUFFER_SIZE,
+    DEFAULT_BUFFER_CAPACITY, DEFAULT_COMPARE_BUFFER_SIZE, DEFAULT_COPY_BUFFER_SIZE,
 };
-pub use ext::{
-    BufReadExt,
-    ReadExt,
-    ReadSeekExt,
-    SeekExt,
-    WriteExt,
-    WriteSeekExt,
-};
+pub use ext::{BufReadExt, ReadExt, ReadSeekExt, SeekExt, WriteExt, WriteSeekExt};
 pub use traits::{
-    BufReadSeek,
-    Input,
-    Output,
-    ReadSeek,
-    ReadWrite,
-    ReadWriteSeek,
-    Seekable,
-    SeekableInput,
-    SeekableOutput,
-    WriteSeek,
+    BufReadSeek, Input, Output, ReadSeek, ReadWrite, ReadWriteSeek, Seekable, SeekableInput,
+    SeekableOutput, WriteSeek,
 };
 pub use util::Streams;
 #[allow(unused_imports)]
@@ -70,32 +49,14 @@ pub use util::UncheckedSlice;
 #[cfg(coverage)]
 #[doc(hidden)]
 pub use util::{
-    coverage_add_item_count_overflow,
-    coverage_fail_next_add_item_count,
-    coverage_fail_next_reserve,
-    coverage_fail_next_string_reserve,
-    coverage_fail_reserve_after,
-    coverage_reset_add_item_count_hooks,
-    coverage_reset_reserve_hooks,
+    coverage_add_item_count_overflow, coverage_fail_next_add_item_count,
+    coverage_fail_next_reserve, coverage_fail_next_string_reserve, coverage_fail_reserve_after,
+    coverage_reset_add_item_count_hooks, coverage_reset_reserve_hooks,
 };
 #[allow(unused_imports)]
-pub use util::{
-    nz,
-    nz_const,
-};
-pub use util::{
-    try_reserve_string,
-    try_reserve_vec,
-};
+pub use util::{nz, nz_const};
+pub use util::{try_reserve_string, try_reserve_vec};
 pub use wrappers::{
-    ChecksumReader,
-    ChecksumWriter,
-    CountingReader,
-    CountingWriter,
-    LimitReader,
-    LimitWriter,
-    PositionGuard,
-    SyncSeekTeeReader,
-    TeeReader,
-    TeeWriter,
+    ChecksumReader, ChecksumWriter, CountingReader, CountingWriter, LimitReader, LimitWriter,
+    PositionGuard, SyncSeekTeeReader, TeeReader, TeeWriter,
 };

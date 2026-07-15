@@ -5,10 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use std::io::{
-    BufRead,
-    Seek,
-};
+use std::io::{BufRead, Seek};
 
 /// Object-safe capability trait for values that can be buffered-read and
 /// repositioned.

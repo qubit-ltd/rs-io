@@ -5,10 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use std::io::{
-    Seek,
-    Write,
-};
+use std::io::{Seek, Write};
 
 /// Object-safe capability trait for values that can be written and
 /// repositioned.

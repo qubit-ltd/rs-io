@@ -9,29 +9,15 @@
 #[cfg(coverage)]
 use std::cell::Cell;
 use std::cmp::Ordering;
-use std::io::{
-    Error,
-    ErrorKind,
-    Read,
-    Result,
-    Write,
-};
+use std::io::{Error, ErrorKind, Read, Result, Write};
 
 use crate::ReadExt;
 use crate::capacity_const::{
-    DEFAULT_BUFFER_CAPACITY,
-    DEFAULT_COMPARE_BUFFER_SIZE,
-    DEFAULT_COPY_BUFFER_SIZE,
+    DEFAULT_BUFFER_CAPACITY, DEFAULT_COMPARE_BUFFER_SIZE, DEFAULT_COPY_BUFFER_SIZE,
 };
 use crate::traits::validate_read_count;
-use crate::util::{
-    create_vec,
-    try_reserve_vec,
-};
-use crate::{
-    Input,
-    Output,
-};
+use crate::util::{create_vec, try_reserve_vec};
+use crate::{Input, Output};
 
 /// Stream utility namespace.
 ///
@@ -100,11 +86,7 @@ impl Streams {
     /// Returns the first non-interrupted read error or write error reported by
     /// the underlying streams. Interrupted reads are retried.
     #[inline]
-    pub fn copy_at_most<R, W>(
-        reader: &mut R,
-        writer: &mut W,
-        max_bytes: u64,
-    ) -> Result<u64>
+    pub fn copy_at_most<R, W>(reader: &mut R, writer: &mut W, max_bytes: u64) -> Result<u64>
     where
         R: Read + ?Sized,
         W: Write + ?Sized,
@@ -185,11 +167,7 @@ impl Streams {
     /// write error reported by the underlying streams. Interrupted reads are
     /// retried.
     #[inline]
-    pub fn copy_to_end_limited<R, W>(
-        reader: &mut R,
-        writer: &mut W,
-        max_bytes: u64,
-    ) -> Result<u64>
+    pub fn copy_to_end_limited<R, W>(reader: &mut R, writer: &mut W, max_bytes: u64) -> Result<u64>
     where
         R: Read + ?Sized,
         W: Write + ?Sized,
@@ -212,9 +190,7 @@ impl Streams {
                 Ok(_) => {
                     return Err(Error::new(
                         ErrorKind::InvalidData,
-                        format!(
-                            "input exceeds maximum length of {max_bytes} bytes"
-                        ),
+                        format!("input exceeds maximum length of {max_bytes} bytes"),
                     ));
                 }
                 Err(error) => {
@@ -243,17 +219,13 @@ impl Streams {
     /// Returns the first non-interrupted read error or output error reported by
     /// the underlying streams. Returns [`ErrorKind::InvalidData`] if an input
     /// or output reports an impossible item count.
-    pub fn copy_input_to_output<I, O>(
-        input: &mut I,
-        output: &mut O,
-    ) -> Result<u64>
+    pub fn copy_input_to_output<I, O>(input: &mut I, output: &mut O) -> Result<u64>
     where
         I: Input + ?Sized,
         O: Output<Item = I::Item> + ?Sized,
         I::Item: Copy + Default,
     {
-        let mut buffer =
-            create_vec(DEFAULT_BUFFER_CAPACITY, I::Item::default())?;
+        let mut buffer = create_vec(DEFAULT_BUFFER_CAPACITY, I::Item::default())?;
         let mut copied = 0_u64;
         loop {
             let read = input.read_fully(&mut buffer)?;
@@ -299,16 +271,13 @@ impl Streams {
         if max_items == 0 {
             return Ok(0);
         }
-        let mut buffer =
-            create_vec(DEFAULT_BUFFER_CAPACITY, I::Item::default())?;
+        let mut buffer = create_vec(DEFAULT_BUFFER_CAPACITY, I::Item::default())?;
         let mut remaining = max_items;
         let mut copied = 0_u64;
         while remaining > 0 {
             let requested = remaining.min(buffer.len() as u64) as usize;
             // SAFETY: `requested` is a valid prefix length inside `buffer`.
-            let read = unsafe {
-                input.read_fully_unchecked(&mut buffer, 0, requested)?
-            };
+            let read = unsafe { input.read_fully_unchecked(&mut buffer, 0, requested)? };
             validate_read_count(read, requested)?;
             if read == 0 {
                 break;
@@ -360,18 +329,14 @@ impl Streams {
         O: Output<Item = I::Item> + ?Sized,
         I::Item: Copy + Default,
     {
-        let mut buffer =
-            create_vec(DEFAULT_BUFFER_CAPACITY, I::Item::default())?;
+        let mut buffer = create_vec(DEFAULT_BUFFER_CAPACITY, I::Item::default())?;
         let mut collected = Vec::new();
         let mut remaining = max_items;
         let mut copied = 0_u64;
         loop {
-            let requested =
-                remaining.saturating_add(1).min(buffer.len() as u64) as usize;
+            let requested = remaining.saturating_add(1).min(buffer.len() as u64) as usize;
             // SAFETY: `requested` is a valid prefix length inside `buffer`.
-            let read = unsafe {
-                input.read_fully_unchecked(&mut buffer, 0, requested)?
-            };
+            let read = unsafe { input.read_fully_unchecked(&mut buffer, 0, requested)? };
             validate_read_count(read, requested)?;
             if read == 0 {
                 let count = collected.len();
@@ -387,9 +352,7 @@ impl Streams {
             if (read as u64) > remaining {
                 return Err(Error::new(
                     ErrorKind::InvalidData,
-                    format!(
-                        "input exceeds maximum length of {max_items} items"
-                    ),
+                    format!("input exceeds maximum length of {max_items} items"),
                 ));
             }
             try_reserve_vec(&mut collected, read)?;
@@ -417,10 +380,7 @@ impl Streams {
     /// # Errors
     /// Returns the first read error reported by either stream.
     #[inline]
-    pub fn content_eq(
-        left: &mut dyn Read,
-        right: &mut dyn Read,
-    ) -> Result<bool> {
+    pub fn content_eq(left: &mut dyn Read, right: &mut dyn Read) -> Result<bool> {
         Ok(Self::compare_content(left, right)? == Ordering::Equal)
     }
 
@@ -441,15 +401,8 @@ impl Streams {
     ///
     /// # Errors
     /// Returns the first read error reported by either stream.
-    pub fn compare_content(
-        left: &mut dyn Read,
-        right: &mut dyn Read,
-    ) -> Result<Ordering> {
-        Self::compare_content_with_buffer_size(
-            left,
-            right,
-            DEFAULT_COMPARE_BUFFER_SIZE,
-        )
+    pub fn compare_content(left: &mut dyn Read, right: &mut dyn Read) -> Result<Ordering> {
+        Self::compare_content_with_buffer_size(left, right, DEFAULT_COMPARE_BUFFER_SIZE)
     }
 
     /// Lexicographically compares the remaining contents of two readable
@@ -491,10 +444,7 @@ impl Streams {
             right_buffer.len(),
             "compare buffers must have identical lengths",
         );
-        debug_assert!(
-            !left_buffer.is_empty(),
-            "compare buffers must not be empty",
-        );
+        debug_assert!(!left_buffer.is_empty(), "compare buffers must not be empty",);
         loop {
             let left_count = left.read_exact_or_eof(&mut left_buffer)?;
             let right_count = right.read_exact_or_eof(&mut right_buffer)?;
@@ -615,9 +565,9 @@ fn add_item_count(copied: u64, count: usize) -> Result<u64> {
             "copied item count overflows u64",
         ));
     }
-    copied.checked_add(count as u64).ok_or_else(|| {
-        Error::new(ErrorKind::InvalidData, "copied item count overflows u64")
-    })
+    copied
+        .checked_add(count as u64)
+        .ok_or_else(|| Error::new(ErrorKind::InvalidData, "copied item count overflows u64"))
 }
 
 /// Exercises the copied-item overflow branch in coverage builds.

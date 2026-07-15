@@ -6,12 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Error,
-    ErrorKind,
-    Read,
-    Result,
-};
+use std::io::{Error, ErrorKind, Read, Result};
 
 use crate::util::UncheckedSlice;
 
@@ -138,9 +133,7 @@ pub trait Input {
             let remaining = count - total;
             // SAFETY: The caller guarantees the original destination range is
             // valid; `total < count`, so this suffix remains inside it.
-            match unsafe {
-                self.read_unchecked(output, index + total, remaining)
-            } {
+            match unsafe { self.read_unchecked(output, index + total, remaining) } {
                 Ok(0) => break,
                 Ok(read) => {
                     validate_read_count(read, remaining)?;
@@ -193,8 +186,7 @@ where
         );
         // SAFETY: The caller guarantees that the range is valid inside
         // `output`.
-        let target =
-            unsafe { UncheckedSlice::subslice_mut(output, index, count) };
+        let target = unsafe { UncheckedSlice::subslice_mut(output, index, count) };
         Read::read(self, target)
     }
 
@@ -221,9 +213,7 @@ pub fn validate_read_count(read: usize, requested: usize) -> Result<()> {
     if read > requested {
         return Err(Error::new(
             ErrorKind::InvalidData,
-            format!(
-                "reader reported {read} items for a {requested}-item buffer"
-            ),
+            format!("reader reported {read} items for a {requested}-item buffer"),
         ));
     }
     Ok(())

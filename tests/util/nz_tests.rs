@@ -8,10 +8,7 @@
 
 use core::num::NonZeroUsize;
 
-use qubit_io::{
-    nz,
-    nz_const,
-};
+use qubit_io::{nz, nz_const};
 
 #[test]
 fn nz_returns_non_zero() {
