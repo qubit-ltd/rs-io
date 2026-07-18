@@ -1,200 +1,113 @@
 # Qubit IO 用户指南
 
-当代码需要可复用的 `std::io` helper，但不应该绑定到具体二进制或文本编码格式时，
-使用 `qubit-io`。本 crate 只保留通用 I/O 层能力。
+## 1. 边界与目标
 
-## 能力地图
+`qubit-io` 是一个小型 item 传输抽象。它让上层可以组合缓冲与 codec，而不必
+把公开 API 固定到 `std::io`、Tokio 或 `futures-io`。
 
-| 领域 | API | 适用场景 |
-| --- | --- | --- |
-| Buffered unit I/O | `Buffer`、`BufferedInput`、`BufferedOutput` | 上层 adapter 需要 format-agnostic 的 unit window |
-| 组合 trait | `ReadSeek`、`ReadWrite`、`ReadWriteSeek`、`BufReadSeek`、`WriteSeek` | API 需要组合 I/O 能力的 trait object |
-| Read helper | `ReadExt` | exact-or-EOF 读取、有界读取和复制 helper |
-| BufRead helper | `BufReadExt` | 有界 delimiter / line 读取 |
-| Seek helper | `SeekExt`、`ReadSeekExt`、`WriteSeekExt` | 查询 stream 大小、保留位置的读写 |
-| Stream 工具 | `Streams` | 命名空间式复制和内容比较 |
-| Wrapper | `CountingReader`、`LimitReader`、`TeeReader`、`SyncSeekTeeReader`、checksum wrapper、`PositionGuard` | 为现有 stream 组合小型行为 |
+该抽象有意停留在传输层：
 
-## 安装
+- `Input` 与 `AsyncInput` 产生 item；
+- `Output` 与 `AsyncOutput` 接受 item，并可 flush 传输缓冲；
+- 传输错误统一使用 `std::io::Error`；
+- 文件路径、metadata、publication、commit 和 abort 不属于这一层。
 
-```toml
-[dependencies]
-qubit-io = "0.11"
-```
+## 2. 同步 trait
 
-## Buffered Unit I/O
-
-`BufferedInput` 和 `BufferedOutput` 是面向 unit 的缓冲原语。它们不解码
-binary value、不解码文本，也不解析 record；这些能力应该由兄弟 crate 基于这些
-unit window 组合出来。
+`Input` 与 `Output` 使用关联类型 `Item`。unchecked indexed 方法是实现边界，
+safe 方法负责检查范围和实现返回的数量。
 
 ```rust
-use std::io::Cursor;
+use qubit_io::{Input, Output};
 
-use qubit_io::BufferedInput;
-
-let mut input = BufferedInput::with_capacity(
-    Cursor::new(b"abcdef".to_vec()),
-    4,
-);
-
-input.ensure_available(4)?;
-assert_eq!(b"abcd", input.unread());
-unsafe {
-    input.consume(2);
-}
-
-let (inner, unread) = input.into_parts();
-assert_eq!(4, inner.position());
-assert_eq!(b"cd", unread.readable());
-# Ok::<(), std::io::Error>(())
-```
-
-`BufferedOutput::into_parts` 不执行 I/O，会返回被包装的 writer 和保存 pending
-unit 的 buffer。成功结束时，先调用 `flush`，再用 `into_parts` 验证 pending buffer 为空。
-如果 flush 失败，调用方仍然持有 buffered output，可以自行重试或拆解。
-
-```rust
-use std::io::Cursor;
-
-use qubit_io::BufferedOutput;
-
-let mut output =
-    BufferedOutput::with_capacity(Cursor::new(Vec::<u8>::new()), 4);
-output.ensure_spare_capacity(3)?;
+fn copy_once<I, O>(input: &mut I, output: &mut O) -> std::io::Result<usize>
+where
+    I: Input<Item = u8>,
+    O: Output<Item = u8>,
 {
-    let (buffer, index, count) = output.spare_raw_parts_mut();
-    assert!(count >= 3);
-    buffer[index..index + 3].copy_from_slice(b"xyz");
+    let mut buffer = [0_u8; 1024];
+    let read = input.read(&mut buffer)?;
+    output.write_fully(&buffer[..read])?;
+    Ok(read)
 }
-unsafe {
-    output.advance(3);
-}
-
-output.flush()?;
-let (cursor, pending) = output.into_parts();
-assert!(pending.is_empty());
-assert_eq!(b"xyz", cursor.into_inner().as_slice());
-# Ok::<(), std::io::Error>(())
 ```
 
-hot path adapter 可以在校验 range 后使用 `copy_unread_to`、`advance` 等 unsafe
-方法。通用 byte stream 调用应优先使用标准 `Read`、`BufRead` 和 `Write`
-trait 方法；unit-oriented 调用应优先使用 `Input::read`、`Input::read_fully`、
-`Output::write` 与 `Output::write_fully` 等安全 helper。
+标准库 `Read` 与 `Write` 字节流通过 blanket impl 自动适配。这并不表示任意
+`Input<u8>` 都是文件，它只表示该对象是字节来源。
 
-## Extension Trait
+## 3. 异步 trait
 
-导入需要的方法 trait 后即可调用扩展方法。
+异步核心不依赖 executor：
 
-```rust
-use std::io::Cursor;
-
-use qubit_io::ReadExt;
-
-let mut input = Cursor::new(b"abc".to_vec());
-let mut bytes = [0_u8; 8];
-
-let read = input.read_exact_or_eof(&mut bytes)?;
-
-assert_eq!(3, read);
-assert_eq!(b"abc", &bytes[..read]);
-# Ok::<(), std::io::Error>(())
+```text
+AsyncInput::poll_read_unchecked
+AsyncOutput::poll_write_unchecked
+AsyncOutput::poll_flush
 ```
 
-`ReadExt` 包含 `read_to_end_limited` 和 `read_exact_vec_limited` 等有界 helper。
-在协议和文件格式边界，使用这些方法可以避免不受控分配。
+底层 poll trait 支持 `!Unpin` 实现。便利扩展方法要求 `Unpin` 并返回具名
+Future：
 
-`BufReadExt` 提供有界 delimiter 操作：
+- `read_async`：执行一次读取；
+- `read_fully_async`：填满目标，或在 EOF 停止；
+- `write_async`：执行一次写入；
+- `write_fully_async`：接受全部来源，否则报告 `WriteZero`；
+- `flush_async`：flush 输出。
 
-```rust
-use std::io::Cursor;
+多次操作的进度保存在 Future 对象中。poll 实现不得在返回 `Poll::Pending` 的
+同时暗中报告调用方无法观察的传输进度。
 
-use qubit_io::BufReadExt;
+## 4. 缓冲
 
-let mut input = Cursor::new(b"first\nsecond".to_vec());
-let line = input.read_line_limited(16)?;
+`Buffer<T>` 持有已初始化的标量存储，并跟踪 `position..limit` readable window。
 
-assert_eq!("first\n", line);
-# Ok::<(), std::io::Error>(())
-```
+同步缓冲：
 
-## 保留位置的 I/O
+- `BufferedInput<I>` 保留预读 item，并通过 `unread()` 暴露它们；
+- `BufferedOutput<O>` 聚合小写入并向 `O` flush；
+- `EnsuredBufferedInput` 与 `EnsuredBufferedOutput` 避免重复套缓冲。
 
-`ReadSeekExt` 和 `WriteSeekExt` 适合临时随机访问，但不希望改变调用方可见当前位置的场景。
+异步缓冲：
 
-```rust
-use std::io::Cursor;
+- `AsyncBufferedInput<I>` 跨 `Pending` 保留已预读 item；
+- `AsyncBufferedOutput<O>` 保留已接受 item 和部分 flush 进度。
 
-use qubit_io::ReadSeekExt;
+异步 `Drop` 不能 await，因此 `AsyncBufferedOutput` 不会伪装 drop-time 送达成功。
+丢弃前应完成 `flush_async()`，或者用 `into_parts()` 取回内部 output 和 pending
+`Buffer`。
 
-let mut input = Cursor::new(b"abcdef".to_vec());
-let mut header = [0_u8; 2];
+## 5. 限量、计数与 checksum
 
-input.read_exact_or_eof_at(2, &mut header)?;
+异步 wrapper 直接实现 poll trait，并允许内部 stream 为 `!Unpin`：
 
-assert_eq!(b"cd", &header);
-assert_eq!(0, input.position());
-# Ok::<(), std::io::Error>(())
-```
+- `AsyncLimitInput` / `AsyncLimitOutput` 最多放行指定数量的 item；
+- `AsyncCountingInput` / `AsyncCountingOutput` 只统计成功的 ready 结果；
+- `AsyncChecksumInput` / `AsyncChecksumOutput` 对成功传输的字节计算 hash。
 
-## Streams
+`Pending` 和错误都不会改变计数或 hash。checksum wrapper 只处理底层实际报告
+成功的前缀。
 
-`Streams` 是不可实例化的 stream 操作命名空间。
+当 API 明确要求 `Read`、`Write`、`BufRead` 或 `Seek` 时，原有标准库 wrapper
+仍然适用，包括 `LimitReader`、`CountingReader`、`ChecksumReader`、tee wrapper
+及对应 writer。
 
-```rust
-use std::io::Cursor;
+## 6. Tokio 与 futures-io 桥接
 
-use qubit_io::Streams;
+两个方向都使用显式 newtype：
 
-let mut input = Cursor::new(b"abcdef".to_vec());
-let mut output = Vec::new();
-
-let copied = Streams::copy_to_end_limited(&mut input, &mut output, 8)?;
-
-assert_eq!(6, copied);
-assert_eq!(b"abcdef", output.as_slice());
-# Ok::<(), std::io::Error>(())
-```
-
-比较两个 stream 从当前位置开始的剩余内容时，使用 `Streams::content_eq` 或
-`Streams::compare_content`。
-
-## Wrapper
-
-Wrapper 可以在不改变底层资源类型的情况下组合小型 stream 行为。
-
-```rust
-use std::io::Read;
-
-use qubit_io::CountingReader;
-
-let inner = std::io::Cursor::new(b"abc".to_vec());
-let mut reader = CountingReader::new(inner);
-let mut bytes = [0_u8; 2];
-
-reader.read_exact(&mut bytes)?;
-
-assert_eq!(2, reader.bytes_read());
-# Ok::<(), std::io::Error>(())
-```
-
-常用 wrapper：
-
-| Wrapper | 用途 |
+| 外部生态到 Qubit | Qubit 到外部生态 |
 | --- | --- |
-| `CountingReader`、`CountingWriter` | 统计成功读写的字节数 |
-| `LimitReader`、`LimitWriter` | 限制可通过的字节数 |
-| `TeeReader`、`SyncSeekTeeReader`、`TeeWriter` | 将成功读写的字节复制到分支 sink |
-| `ChecksumReader`、`ChecksumWriter` | 用调用方提供的 hasher 统计成功字节 |
-| `PositionGuard` | 除非 dismiss，否则恢复 seek 位置 |
+| `TokioInput`、`TokioOutput` | `TokioAsyncRead`、`TokioAsyncWrite` |
+| `FuturesInput`、`FuturesOutput` | `FuturesAsyncRead`、`FuturesAsyncWrite` |
 
-## 不包含的能力
+显式 wrapper 避免重叠 blanket impl。默认 feature 不启用任何异步生态依赖。
 
-`qubit-io` 不再包含 binary scalar codec、LEB128、ZigZag 或 text charset adapter。
-这些能力由兄弟 crate 提供：
+## 7. 分层建议
 
-- `qubit-codec-binary`：缓冲区级 binary codec；
-- `qubit-io-binary`：二进制 stream extension trait 和 wrapper；
-- `qubit-codec-text`：文本 codec；
-- `qubit-io-text`：文本 stream adapter。
+- 通用传输与缓冲使用 `qubit-io`；
+- typed binary value 使用 `qubit-io-binary`；
+- Unicode 文本和 charset 转换使用 `qubit-io-text`；
+- 字节流还需要文件身份与 commit/abort 生命周期时使用 `qubit-fs`。
+
+codec 状态应独立于同步或异步驱动。同一套 codec 应分别由 `Input`/`Output`
+或 `AsyncInput`/`AsyncOutput` 驱动，而不是复制两套算法。

@@ -6,7 +6,12 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{Error, ErrorKind, Result, Write};
+use std::io::{
+    Error,
+    ErrorKind,
+    Result,
+    Write,
+};
 
 use crate::util::UncheckedSlice;
 
@@ -182,7 +187,9 @@ pub trait Output {
             let remaining = count - written;
             // SAFETY: The caller guarantees the original source range is valid;
             // `written < count`, so this suffix remains inside it.
-            match unsafe { self.write_unchecked(input, index + written, remaining) } {
+            match unsafe {
+                self.write_unchecked(input, index + written, remaining)
+            } {
                 Ok(0) => {
                     return Err(Error::new(
                         ErrorKind::WriteZero,
@@ -250,7 +257,9 @@ where
     /// Writes items into the full output slice.
     #[inline(always)]
     fn write(&mut self, input: &[Self::Item]) -> Result<usize> {
-        Write::write(self, input)
+        let written = Write::write(self, input)?;
+        validate_write_count(written, input.len())?;
+        Ok(written)
     }
 
     /// Flushes a standard [`Write`] value.
@@ -276,7 +285,9 @@ pub fn validate_write_count(written: usize, requested: usize) -> Result<()> {
     if written > requested {
         return Err(Error::new(
             ErrorKind::InvalidData,
-            format!("writer reported {written} items for a {requested}-item buffer"),
+            format!(
+                "writer reported {written} items for a {requested}-item buffer"
+            ),
         ));
     }
     Ok(())

@@ -5,9 +5,17 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use std::io::{Read, Result, Seek, SeekFrom};
+use std::io::{
+    Read,
+    Result,
+    Seek,
+    SeekFrom,
+};
 
-use crate::ext::internal::read_ext_impl;
+use crate::{
+    ReadSeek,
+    ext::internal::read_ext_impl,
+};
 
 /// Extension methods for values that implement both [`Read`] and [`Seek`].
 ///
@@ -51,7 +59,45 @@ pub trait ReadSeekExt: Read + Seek {
     /// Returns an error when reading the current position, seeking to `offset`,
     /// reading bytes, or restoring the original position fails. If restoration
     /// fails, the restoration error is returned.
-    fn read_exact_or_eof_at(&mut self, offset: u64, buffer: &mut [u8]) -> Result<usize>;
+    fn read_exact_or_eof_at(
+        &mut self,
+        offset: u64,
+        buffer: &mut [u8],
+    ) -> Result<usize>;
+}
+
+/// Implements a position-preserving read through a type-erased stream.
+fn peek_exact_or_eof_impl(
+    reader: &mut dyn ReadSeek,
+    buffer: &mut [u8],
+) -> Result<usize> {
+    let position = reader.stream_position()?;
+    let read_result = read_ext_impl::read_exact_or_eof(reader, buffer);
+    let restore_result = reader.seek(SeekFrom::Start(position));
+    match (read_result, restore_result) {
+        (Ok(count), Ok(_)) => Ok(count),
+        (Err(error), Ok(_)) => Err(error),
+        (_, Err(error)) => Err(error),
+    }
+}
+
+/// Implements an offset read through a type-erased stream.
+fn read_exact_or_eof_at_impl(
+    reader: &mut dyn ReadSeek,
+    offset: u64,
+    buffer: &mut [u8],
+) -> Result<usize> {
+    let position = reader.stream_position()?;
+    let read_result = match reader.seek(SeekFrom::Start(offset)) {
+        Ok(_) => read_ext_impl::read_exact_or_eof(reader, buffer),
+        Err(error) => Err(error),
+    };
+    let restore_result = reader.seek(SeekFrom::Start(position));
+    match (read_result, restore_result) {
+        (Ok(count), Ok(_)) => Ok(count),
+        (Err(error), Ok(_)) => Err(error),
+        (_, Err(error)) => Err(error),
+    }
 }
 
 impl<T> ReadSeekExt for T
@@ -61,29 +107,16 @@ where
     #[inline]
     fn peek_exact_or_eof(&mut self, buffer: &mut [u8]) -> Result<usize> {
         let mut reader = self;
-        let position = reader.stream_position()?;
-        let read_result = read_ext_impl::read_exact_or_eof(&mut reader, buffer);
-        let restore_result = reader.seek(SeekFrom::Start(position));
-        match (read_result, restore_result) {
-            (Ok(count), Ok(_)) => Ok(count),
-            (Err(error), Ok(_)) => Err(error),
-            (_, Err(error)) => Err(error),
-        }
+        peek_exact_or_eof_impl(&mut reader, buffer)
     }
 
     #[inline]
-    fn read_exact_or_eof_at(&mut self, offset: u64, buffer: &mut [u8]) -> Result<usize> {
+    fn read_exact_or_eof_at(
+        &mut self,
+        offset: u64,
+        buffer: &mut [u8],
+    ) -> Result<usize> {
         let mut reader = self;
-        let position = reader.stream_position()?;
-        let read_result = match reader.seek(SeekFrom::Start(offset)) {
-            Ok(_) => read_ext_impl::read_exact_or_eof(&mut reader, buffer),
-            Err(error) => Err(error),
-        };
-        let restore_result = reader.seek(SeekFrom::Start(position));
-        match (read_result, restore_result) {
-            (Ok(count), Ok(_)) => Ok(count),
-            (Err(error), Ok(_)) => Err(error),
-            (_, Err(error)) => Err(error),
-        }
+        read_exact_or_eof_at_impl(&mut reader, offset, buffer)
     }
 }

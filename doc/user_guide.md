@@ -1,207 +1,121 @@
 # Qubit IO User Guide
 
-Use `qubit-io` when code needs reusable `std::io` helpers without choosing a
-binary or text encoding format. The crate stays at the generic I/O layer.
+## 1. Boundary and purpose
 
-## Capability Map
+`qubit-io` is a small item-transfer abstraction. It exists so higher layers can
+compose buffering and codecs without committing their public APIs to
+`std::io`, Tokio, or `futures-io`.
 
-| Area | API | Use when |
-| --- | --- | --- |
-| Buffered unit I/O | `Buffer`, `BufferedInput`, `BufferedOutput` | higher-level adapters need format-agnostic unit windows |
-| Composition traits | `ReadSeek`, `ReadWrite`, `ReadWriteSeek`, `BufReadSeek`, `WriteSeek` | an API needs a trait object for combined I/O capabilities |
-| Read helpers | `ReadExt` | exact-or-EOF reads, bounded reads, and copy helpers |
-| Buffered helpers | `BufReadExt` | bounded delimiter and line reads |
-| Seek helpers | `SeekExt`, `ReadSeekExt`, `WriteSeekExt` | stream-size queries and position-preserving reads or writes |
-| Stream utilities | `Streams` | namespaced copy and content comparison |
-| Wrappers | `CountingReader`, `LimitReader`, `TeeReader`, `SyncSeekTeeReader`, checksum wrappers, `PositionGuard` | small behavior adapters around existing streams |
+The abstraction intentionally stops at transfer:
 
-## Installation
+- `Input` and `AsyncInput` produce items.
+- `Output` and `AsyncOutput` accept items and can flush transport buffers.
+- `std::io::Error` remains the transport error type.
+- File paths, metadata, publication, commit, and abort do not belong here.
 
-```toml
-[dependencies]
-qubit-io = "0.11"
-```
+## 2. Synchronous traits
 
-## Buffered Unit I/O
-
-`BufferedInput` and `BufferedOutput` are unit-oriented buffering
-primitives. They do not decode binary values, decode text, or parse records.
-Those layers should be built in sibling crates on top of these unit windows.
+`Input` and `Output` use an associated `Item` type. Their unchecked indexed
+methods are the implementation boundary; safe methods validate ranges and
+reported counts.
 
 ```rust
-use std::io::Cursor;
+use qubit_io::{Input, Output};
 
-use qubit_io::BufferedInput;
-
-let mut input = BufferedInput::with_capacity(
-    Cursor::new(b"abcdef".to_vec()),
-    4,
-);
-
-input.ensure_available(4)?;
-assert_eq!(b"abcd", input.unread());
-unsafe {
-    input.consume(2);
-}
-
-let (inner, unread) = input.into_parts();
-assert_eq!(4, inner.position());
-assert_eq!(b"cd", unread.readable());
-# Ok::<(), std::io::Error>(())
-```
-
-`BufferedOutput::into_parts` performs no I/O and returns the wrapped writer
-plus the buffer that holds any pending units. To finish successfully, call
-`flush` first and then verify that `into_parts` returns an empty pending
-buffer. If flushing fails, the caller still owns the buffered output and can
-retry or dismantle it.
-
-```rust
-use std::io::Cursor;
-
-use qubit_io::BufferedOutput;
-
-let mut output =
-    BufferedOutput::with_capacity(Cursor::new(Vec::<u8>::new()), 4);
-output.ensure_spare_capacity(3)?;
+fn copy_once<I, O>(input: &mut I, output: &mut O) -> std::io::Result<usize>
+where
+    I: Input<Item = u8>,
+    O: Output<Item = u8>,
 {
-    let (buffer, index, count) = output.spare_raw_parts_mut();
-    assert!(count >= 3);
-    buffer[index..index + 3].copy_from_slice(b"xyz");
+    let mut buffer = [0_u8; 1024];
+    let read = input.read(&mut buffer)?;
+    output.write_fully(&buffer[..read])?;
+    Ok(read)
 }
-unsafe {
-    output.advance(3);
-}
-
-output.flush()?;
-let (cursor, pending) = output.into_parts();
-assert!(pending.is_empty());
-assert_eq!(b"xyz", cursor.into_inner().as_slice());
-# Ok::<(), std::io::Error>(())
 ```
 
-Hot-path adapters can use unsafe methods such as `copy_unread_to` and
-`advance` after validating their ranges. General-purpose byte-stream code
-should prefer standard `Read`, `BufRead`, and `Write` trait methods where
-possible; unit-oriented code should prefer safe helpers such as `Input::read`,
-`Input::read_fully`, `Output::write`, and `Output::write_fully`.
+Blanket implementations adapt standard `Read` and `Write` byte streams. This
+does not mean every `Input<u8>` is a file; it only means it is a byte source.
 
-## Extension Traits
+## 3. Asynchronous traits
 
-Import the trait whose methods you want to call.
+The asynchronous core is executor-independent:
 
-```rust
-use std::io::Cursor;
-
-use qubit_io::ReadExt;
-
-let mut input = Cursor::new(b"abc".to_vec());
-let mut bytes = [0_u8; 8];
-
-let read = input.read_exact_or_eof(&mut bytes)?;
-
-assert_eq!(3, read);
-assert_eq!(b"abc", &bytes[..read]);
-# Ok::<(), std::io::Error>(())
+```text
+AsyncInput::poll_read_unchecked
+AsyncOutput::poll_write_unchecked
+AsyncOutput::poll_flush
 ```
 
-`ReadExt` includes bounded helpers such as `read_to_end_limited` and
-`read_exact_vec_limited`. These are useful at protocol and file-format
-boundaries where unbounded allocation would be a bug.
+Core poll methods support `!Unpin` implementations. Convenience extension
+methods require `Unpin` and return named futures:
 
-`BufReadExt` provides bounded delimiter operations:
+- `read_async`: one input operation;
+- `read_fully_async`: fill a destination or stop at EOF;
+- `write_async`: one output operation;
+- `write_fully_async`: accept the complete source or report `WriteZero`;
+- `flush_async`: flush the output.
 
-```rust
-use std::io::Cursor;
+Progress for multi-operation futures is stored in the future object. A poll
+implementation must never report transfer progress together with
+`Poll::Pending`.
 
-use qubit_io::BufReadExt;
+## 4. Buffering
 
-let mut input = Cursor::new(b"first\nsecond".to_vec());
-let line = input.read_line_limited(16)?;
+`Buffer<T>` owns initialized scalar storage and tracks a readable
+`position..limit` window. It is shared conceptually by all buffered drivers.
 
-assert_eq!("first\n", line);
-# Ok::<(), std::io::Error>(())
-```
+Synchronous buffering:
 
-## Position-Preserving I/O
+- `BufferedInput<I>` retains prefetched items and exposes `unread()`.
+- `BufferedOutput<O>` accumulates small writes and flushes them to `O`.
+- `EnsuredBufferedInput` and `EnsuredBufferedOutput` avoid redundant wrapping.
 
-`ReadSeekExt` and `WriteSeekExt` are for APIs that need temporary random access
-without changing the caller-visible position.
+Asynchronous buffering:
 
-```rust
-use std::io::Cursor;
+- `AsyncBufferedInput<I>` retains prefetched items across `Pending`.
+- `AsyncBufferedOutput<O>` retains accepted items and partial-flush progress.
 
-use qubit_io::ReadSeekExt;
+An asynchronous `Drop` cannot await. `AsyncBufferedOutput` therefore never
+pretends drop-time delivery succeeded. Complete `flush_async()` before drop, or
+use `into_parts()` to recover the inner output and pending `Buffer`.
 
-let mut input = Cursor::new(b"abcdef".to_vec());
-let mut header = [0_u8; 2];
+## 5. Limit, counting, and checksum wrappers
 
-input.read_exact_or_eof_at(2, &mut header)?;
+The asynchronous wrappers implement the poll traits directly and can contain a
+`!Unpin` inner stream:
 
-assert_eq!(b"cd", &header);
-assert_eq!(0, input.position());
-# Ok::<(), std::io::Error>(())
-```
+- `AsyncLimitInput` / `AsyncLimitOutput` expose at most a configured item count.
+- `AsyncCountingInput` / `AsyncCountingOutput` count successful ready results.
+- `AsyncChecksumInput` / `AsyncChecksumOutput` hash successful byte transfers.
 
-## Streams
+Counts and hashes do not change on `Pending` or errors. Checksum wrappers hash
+only the prefix actually reported by the inner stream.
 
-`Streams` is an uninstantiable namespace for operations involving one or more
-streams.
+The legacy standard-library wrappers remain useful around APIs that explicitly
+require `Read`, `Write`, `BufRead`, or `Seek`: `LimitReader`, `CountingReader`,
+`ChecksumReader`, tee wrappers, and their writer counterparts.
 
-```rust
-use std::io::Cursor;
+## 6. Tokio and futures-io bridges
 
-use qubit_io::Streams;
+Async bridges are explicit newtypes in both directions:
 
-let mut input = Cursor::new(b"abcdef".to_vec());
-let mut output = Vec::new();
-
-let copied = Streams::copy_to_end_limited(&mut input, &mut output, 8)?;
-
-assert_eq!(6, copied);
-assert_eq!(b"abcdef", output.as_slice());
-# Ok::<(), std::io::Error>(())
-```
-
-Use `Streams::content_eq` or `Streams::compare_content` when comparing remaining
-stream contents from their current positions.
-
-## Wrappers
-
-Wrappers compose small stream behaviors without owning the underlying resource
-type.
-
-```rust
-use std::io::Read;
-
-use qubit_io::CountingReader;
-
-let inner = std::io::Cursor::new(b"abc".to_vec());
-let mut reader = CountingReader::new(inner);
-let mut bytes = [0_u8; 2];
-
-reader.read_exact(&mut bytes)?;
-
-assert_eq!(2, reader.bytes_read());
-# Ok::<(), std::io::Error>(())
-```
-
-Common wrappers include:
-
-| Wrapper | Purpose |
+| External ecosystem to Qubit | Qubit to external ecosystem |
 | --- | --- |
-| `CountingReader`, `CountingWriter` | count successfully read or written bytes |
-| `LimitReader`, `LimitWriter` | cap how many bytes can pass through |
-| `TeeReader`, `SyncSeekTeeReader`, `TeeWriter` | copy successful reads or writes to a branch sink |
-| `ChecksumReader`, `ChecksumWriter` | hash successful bytes through a caller-supplied hasher |
-| `PositionGuard` | restore a seek position unless dismissed |
+| `TokioInput`, `TokioOutput` | `TokioAsyncRead`, `TokioAsyncWrite` |
+| `FuturesInput`, `FuturesOutput` | `FuturesAsyncRead`, `FuturesAsyncWrite` |
 
-## What This Crate Does Not Contain
+Explicit wrappers avoid overlapping blanket implementations. The runtime-
+neutral core has no optional dependency enabled by default.
 
-`qubit-io` deliberately does not contain binary scalar codecs, LEB128, ZigZag,
-or text charset adapters. Use the sibling crates for those layers:
+## 7. Layering guidance
 
-- `qubit-codec-binary` for buffer-level binary codecs;
-- `qubit-io-binary` for binary stream extension traits and wrappers;
-- `qubit-codec-text` for text codecs;
-- `qubit-io-text` for text stream adapters.
+- Use `qubit-io` for transport and generic buffering.
+- Use `qubit-io-binary` for typed binary values.
+- Use `qubit-io-text` for Unicode text and charset conversion.
+- Use `qubit-fs` when a byte stream must also carry file identity and a
+  commit/abort lifecycle.
+
+Keep codecs independent from the synchronous or asynchronous driver. The same
+codec state should be driven by `Input`/`Output` or
+`AsyncInput`/`AsyncOutput`, not implemented twice.
