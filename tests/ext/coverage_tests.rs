@@ -162,7 +162,7 @@ mod coverage_tests {
             "compare should propagate second buffer allocation failures",
         );
 
-        assert_eq!(ErrorKind::Other, error.kind());
+        assert_eq!(ErrorKind::OutOfMemory, error.kind());
     }
 
     #[test]
@@ -175,7 +175,7 @@ mod coverage_tests {
         let error = Streams::copy_input_to_output(&mut input, &mut output)
             .expect_err("copy should propagate buffer allocation failures");
 
-        assert_eq!(ErrorKind::Other, error.kind());
+        assert_eq!(ErrorKind::OutOfMemory, error.kind());
         assert!(output.values.is_empty());
     }
 
@@ -192,7 +192,7 @@ mod coverage_tests {
                     "bounded copy should propagate buffer allocation failures",
                 );
 
-        assert_eq!(ErrorKind::Other, error.kind());
+        assert_eq!(ErrorKind::OutOfMemory, error.kind());
         assert!(output.values.is_empty());
     }
 
@@ -213,7 +213,7 @@ mod coverage_tests {
             "end-limited copy should propagate buffer allocation failures",
         );
 
-        assert_eq!(ErrorKind::Other, error.kind());
+        assert_eq!(ErrorKind::OutOfMemory, error.kind());
         assert!(output.values.is_empty());
     }
 
@@ -231,7 +231,7 @@ mod coverage_tests {
         )
         .expect_err("end-limited copy should propagate reserve failures");
 
-        assert_eq!(ErrorKind::Other, error.kind());
+        assert_eq!(ErrorKind::OutOfMemory, error.kind());
         assert!(output.values.is_empty());
     }
 
@@ -248,7 +248,7 @@ mod coverage_tests {
                 "read_to_string_limited_into should propagate reserve failures",
             );
 
-        assert_eq!(ErrorKind::Other, error.kind());
+        assert_eq!(ErrorKind::OutOfMemory, error.kind());
         assert_eq!("seed-", output);
     }
 
@@ -262,7 +262,7 @@ mod coverage_tests {
             "read_to_end_limited should propagate reserve failures",
         );
 
-        assert_eq!(ErrorKind::Other, error.kind());
+        assert_eq!(ErrorKind::OutOfMemory, error.kind());
         assert_eq!(0, reader.position());
     }
 
@@ -277,7 +277,7 @@ mod coverage_tests {
             "read_to_end_limited_into should propagate reserve failures",
         );
 
-        assert_eq!(ErrorKind::Other, error.kind());
+        assert_eq!(ErrorKind::OutOfMemory, error.kind());
         assert_eq!(b"seed-", output.as_slice());
         assert_eq!(5, reader.position());
     }

@@ -5,12 +5,10 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-mod async_buffered_input_tests;
-mod async_buffered_output_tests;
-mod async_buffered_tests;
-mod buffer_tests;
-mod buffered_input_tests;
-mod buffered_output_tests;
-mod ensured_buffered_input_tests;
-mod ensured_buffered_output_tests;
-mod support_tests;
+
+use qubit_io::UncheckedSlice;
+
+#[test]
+fn test_unchecked_slice_range_validation_rejects_overflow() {
+    assert!(!UncheckedSlice::range_fits(4, usize::MAX, 1));
+}

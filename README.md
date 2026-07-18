@@ -87,7 +87,7 @@ because `std::hash::Hasher` consumes bytes.
 
 ```toml
 [dependencies]
-qubit-io = "0.13"
+qubit-io = "0.14"
 ```
 
 - Default features: runtime-neutral core only.

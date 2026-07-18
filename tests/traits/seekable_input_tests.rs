@@ -5,12 +5,12 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-mod async_buffered_input_tests;
-mod async_buffered_output_tests;
-mod async_buffered_tests;
-mod buffer_tests;
-mod buffered_input_tests;
-mod buffered_output_tests;
-mod ensured_buffered_input_tests;
-mod ensured_buffered_output_tests;
-mod support_tests;
+
+use qubit_io::SeekableInput;
+use std::io::Cursor;
+
+#[test]
+fn test_cursor_implements_seekable_input() {
+    fn assert_seekable_input<T: SeekableInput>() {}
+    assert_seekable_input::<Cursor<Vec<u8>>>();
+}

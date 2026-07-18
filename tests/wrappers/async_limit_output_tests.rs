@@ -5,12 +5,12 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-mod async_buffered_input_tests;
-mod async_buffered_output_tests;
-mod async_buffered_tests;
-mod buffer_tests;
-mod buffered_input_tests;
-mod buffered_output_tests;
-mod ensured_buffered_input_tests;
-mod ensured_buffered_output_tests;
-mod support_tests;
+
+use super::support_tests::TestStream;
+use qubit_io::AsyncLimitOutput;
+
+#[test]
+fn test_async_limit_output_exposes_initial_limit() {
+    let output = AsyncLimitOutput::new(TestStream, 7);
+    assert_eq!(7, output.remaining());
+}

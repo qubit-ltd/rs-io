@@ -11,7 +11,10 @@ mod nz;
 mod streams;
 mod unchecked_slice;
 
-pub(crate) use allocation::create_vec;
+pub(crate) use allocation::{
+    allocation_error,
+    create_vec,
+};
 #[cfg(coverage)]
 #[doc(hidden)]
 pub use allocation::{

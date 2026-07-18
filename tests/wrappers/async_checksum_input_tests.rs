@@ -1,0 +1,20 @@
+// =============================================================================
+//    Copyright (c) 2026 Haixing Hu.
+//
+//    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
+// =============================================================================
+
+use super::support_tests::TestStream;
+use qubit_io::AsyncChecksumInput;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::Hasher;
+
+#[test]
+fn test_async_checksum_input_starts_with_hasher_checksum() {
+    let hasher = DefaultHasher::new();
+    let expected = hasher.finish();
+    let input = AsyncChecksumInput::new(TestStream, hasher);
+    assert_eq!(expected, input.checksum());
+}

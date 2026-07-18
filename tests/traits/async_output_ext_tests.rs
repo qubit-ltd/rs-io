@@ -5,12 +5,12 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-mod async_buffered_input_tests;
-mod async_buffered_output_tests;
-mod async_buffered_tests;
-mod buffer_tests;
-mod buffered_input_tests;
-mod buffered_output_tests;
-mod ensured_buffered_input_tests;
-mod ensured_buffered_output_tests;
-mod support_tests;
+
+use super::support_tests::TestOutput;
+use qubit_io::AsyncOutputExt;
+
+#[test]
+fn test_async_output_ext_has_blanket_implementation() {
+    fn assert_ext<T: AsyncOutputExt>() {}
+    assert_ext::<TestOutput>();
+}

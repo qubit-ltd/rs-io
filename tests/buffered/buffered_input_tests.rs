@@ -878,7 +878,7 @@ fn test_new_and_accessors_expose_inner_reader() {
 }
 
 #[test]
-fn test_into_inner_discards_unread_bytes() {
+fn test_into_parts_preserves_inner_position_and_unread_bytes() {
     let cursor = Cursor::new(b"abcdef".to_vec());
     let mut input = BufferedInput::with_capacity(cursor, 4);
     assert!(input.fill_more().expect("initial refill should succeed"));
@@ -887,9 +887,10 @@ fn test_into_inner_discards_unread_bytes() {
         input.consume(1);
     }
 
-    let cursor = input.into_inner();
+    let (cursor, unread) = input.into_parts();
 
     assert_eq!(4, cursor.position());
+    assert_eq!(b"bcd", unread.readable());
 }
 
 #[test]
@@ -897,6 +898,38 @@ fn test_capacity_returns_internal_buffer_capacity() {
     let cursor = Cursor::new(b"abc".to_vec());
     let input = BufferedInput::with_capacity(cursor, 4);
 
+    assert_eq!(4, input.capacity());
+}
+
+#[test]
+fn test_try_reserve_capacity_preserves_unread_bytes() {
+    let cursor = Cursor::new(b"abcdef".to_vec());
+    let mut input = BufferedInput::with_capacity(cursor, 4);
+    assert!(input.fill_more().expect("initial refill should succeed"));
+    // SAFETY: Four bytes are buffered, so consuming one is valid.
+    unsafe {
+        input.consume(1);
+    }
+
+    input
+        .try_reserve_capacity(8)
+        .expect("input buffer growth should succeed");
+
+    assert_eq!(8, input.capacity());
+    assert_eq!(3, input.unread_len());
+    assert_eq!(b"bcd", input.unread());
+}
+
+#[test]
+fn test_try_reserve_capacity_preserves_allocation_error() {
+    let cursor = Cursor::new(Vec::<u8>::new());
+    let mut input = BufferedInput::with_capacity(cursor, 4);
+
+    let error = input
+        .try_reserve_capacity(usize::MAX)
+        .expect_err("oversized input buffer growth should fail");
+
+    assert!(!error.to_string().is_empty());
     assert_eq!(4, input.capacity());
 }
 

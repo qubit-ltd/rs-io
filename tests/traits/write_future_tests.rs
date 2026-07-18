@@ -5,12 +5,14 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-mod async_buffered_input_tests;
-mod async_buffered_output_tests;
-mod async_buffered_tests;
-mod buffer_tests;
-mod buffered_input_tests;
-mod buffered_output_tests;
-mod ensured_buffered_input_tests;
-mod ensured_buffered_output_tests;
-mod support_tests;
+
+use super::support_tests::TestOutput;
+use qubit_io::WriteFuture;
+
+#[test]
+fn test_write_future_type_is_public() {
+    assert!(
+        std::any::type_name::<WriteFuture<'static, TestOutput>>()
+            .contains("WriteFuture")
+    );
+}

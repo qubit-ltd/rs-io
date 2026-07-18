@@ -403,21 +403,6 @@ where
         &mut self.inner
     }
 
-    /// Consumes this buffered input and returns the wrapped input object.
-    ///
-    /// This method performs no I/O. Units that have already been read from the
-    /// wrapped input but not consumed by this buffered input are discarded. Use
-    /// [`Self::into_parts`] when the unread buffer must be preserved.
-    ///
-    /// # Returns
-    ///
-    /// The wrapped input object.
-    #[inline(always)]
-    #[must_use]
-    pub fn into_inner(self) -> I {
-        self.inner
-    }
-
     /// Consumes this buffered input and returns the wrapped input object plus
     /// its buffer.
     ///
@@ -444,6 +429,21 @@ where
     #[must_use]
     pub fn capacity(&self) -> usize {
         self.buffer.capacity()
+    }
+
+    /// Tries to ensure that the internal buffer has at least `capacity` items.
+    ///
+    /// Buffered unread items are preserved and this method performs no I/O.
+    ///
+    /// # Errors
+    ///
+    /// Returns the original allocation error when the buffer cannot grow.
+    #[inline]
+    pub fn try_reserve_capacity(
+        &mut self,
+        capacity: usize,
+    ) -> std::result::Result<(), std::collections::TryReserveError> {
+        self.buffer.try_reserve_capacity(capacity)
     }
 
     /// Returns the number of unread items currently buffered.

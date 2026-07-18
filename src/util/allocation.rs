@@ -11,6 +11,7 @@ use std::cell::Cell;
 use std::collections::TryReserveError;
 use std::io::{
     Error,
+    ErrorKind,
     Result,
 };
 
@@ -22,9 +23,11 @@ use std::io::{
 ///
 /// # Returns
 ///
-/// Returns an [`std::io::ErrorKind::Other`] error carrying allocation context.
-fn allocation_error(error: TryReserveError) -> Error {
-    Error::other(format!("failed to reserve output buffer capacity: {error}"))
+/// Returns an [`ErrorKind::OutOfMemory`] error that preserves the allocation
+/// error as its source.
+#[inline]
+pub(crate) fn allocation_error(error: TryReserveError) -> Error {
+    Error::new(ErrorKind::OutOfMemory, error)
 }
 
 #[cfg(coverage)]
@@ -69,8 +72,18 @@ pub fn coverage_reset_reserve_hooks() {
     COVERAGE_FAIL_NEXT_STRING_RESERVE.with(|state| state.set(false));
 }
 
+/// Creates a deterministic allocation error for coverage-only failure hooks.
 #[cfg(coverage)]
-fn coverage_maybe_fail_reserve<T>() -> Option<Result<T>> {
+fn coverage_reserve_error() -> TryReserveError {
+    Vec::<u8>::new()
+        .try_reserve(usize::MAX)
+        .expect_err("reserving usize::MAX bytes must exceed Vec capacity")
+}
+
+/// Returns a synthetic reserve failure when requested by a coverage hook.
+#[cfg(coverage)]
+fn coverage_maybe_fail_reserve<T>()
+-> Option<std::result::Result<T, TryReserveError>> {
     COVERAGE_RESERVE_FAIL_AFTER.with(|state| {
         let remaining = state.get();
         if remaining == usize::MAX {
@@ -78,17 +91,14 @@ fn coverage_maybe_fail_reserve<T>() -> Option<Result<T>> {
         }
         if remaining == 0 {
             state.set(usize::MAX);
-            return Some(Err(Error::other(
-                "failed to reserve output buffer capacity: coverage reserve failure",
-            )));
+            return Some(Err(coverage_reserve_error()));
         }
         state.set(remaining - 1);
         None
     })
 }
 
-/// Reserves capacity in a vector and reports allocation failure as an I/O
-/// error.
+/// Reserves capacity in a vector without converting allocation failures.
 ///
 /// # Parameters
 ///
@@ -97,20 +107,21 @@ fn coverage_maybe_fail_reserve<T>() -> Option<Result<T>> {
 ///
 /// # Errors
 ///
-/// Returns [`std::io::ErrorKind::Other`] if the allocation request fails.
+/// Returns the [`TryReserveError`] reported by [`Vec::try_reserve`] if the
+/// allocation request fails or the resulting capacity would overflow.
+#[inline]
 pub fn try_reserve_vec<T>(
     output: &mut Vec<T>,
     additional: usize,
-) -> Result<()> {
+) -> std::result::Result<(), TryReserveError> {
     #[cfg(coverage)]
     if let Some(result) = coverage_maybe_fail_reserve::<()>() {
         return result;
     }
-    output.try_reserve(additional).map_err(allocation_error)
+    output.try_reserve(additional)
 }
 
-/// Reserves capacity in a string and reports allocation failure as an I/O
-/// error.
+/// Reserves capacity in a string without converting allocation failures.
 ///
 /// # Parameters
 ///
@@ -119,11 +130,13 @@ pub fn try_reserve_vec<T>(
 ///
 /// # Errors
 ///
-/// Returns [`std::io::ErrorKind::Other`] if the allocation request fails.
+/// Returns the [`TryReserveError`] reported by [`String::try_reserve`] if the
+/// allocation request fails or the resulting capacity would overflow.
+#[inline]
 pub fn try_reserve_string(
     output: &mut String,
     additional: usize,
-) -> Result<()> {
+) -> std::result::Result<(), TryReserveError> {
     #[cfg(coverage)]
     if COVERAGE_FAIL_NEXT_STRING_RESERVE.with(|state| {
         let fail = state.get();
@@ -132,15 +145,13 @@ pub fn try_reserve_string(
         }
         fail
     }) {
-        return Err(Error::other(
-            "failed to reserve output buffer capacity: coverage reserve failure",
-        ));
+        return Err(coverage_reserve_error());
     }
     #[cfg(coverage)]
     if let Some(result) = coverage_maybe_fail_reserve::<()>() {
         return result;
     }
-    output.try_reserve(additional).map_err(allocation_error)
+    output.try_reserve(additional)
 }
 
 /// Creates a vector with the requested length and initial value.
@@ -152,13 +163,15 @@ pub fn try_reserve_string(
 ///
 /// # Errors
 ///
-/// Returns [`std::io::ErrorKind::Other`] if the allocation request fails.
+/// Returns [`ErrorKind::OutOfMemory`] if the allocation request fails or the
+/// requested vector length exceeds the supported capacity.
+#[inline]
 pub(crate) fn create_vec<T>(len: usize, fill: T) -> Result<Vec<T>>
 where
     T: Copy,
 {
     let mut buffer = Vec::new();
-    try_reserve_vec(&mut buffer, len)?;
+    try_reserve_vec(&mut buffer, len).map_err(allocation_error)?;
     buffer.resize(len, fill);
     Ok(buffer)
 }
