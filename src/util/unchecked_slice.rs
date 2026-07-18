@@ -2,6 +2,8 @@
 //    Copyright (c) 2026 Haixing Hu.
 //
 //    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 //! Low-level unchecked slice helpers in a dedicated namespace.
 //!
@@ -9,7 +11,11 @@
 //! already validate bounds in their own protocol.
 
 use core::mem;
-use std::io::{Error, ErrorKind, Result};
+use std::io::{
+    Error,
+    ErrorKind,
+    Result,
+};
 
 /// Namespace for low-level slice operations without bound checks.
 ///
@@ -31,7 +37,11 @@ impl UncheckedSlice {
     /// `Some(end)` if `start + count <= len` and no overflow occurs, or
     /// `None` when the requested range does not fit inside the slice.
     #[inline(always)]
-    pub const fn range_end(len: usize, start: usize, count: usize) -> Option<usize> {
+    pub const fn range_end(
+        len: usize,
+        start: usize,
+        count: usize,
+    ) -> Option<usize> {
         match start.checked_add(count) {
             Some(end) if len >= end => Some(end),
             _ => None,
@@ -190,14 +200,23 @@ impl UncheckedSlice {
     /// The caller must guarantee that `start + count <= output.len()` and that
     /// the addition does not overflow.
     #[inline(always)]
-    pub unsafe fn subslice_mut<T>(output: &mut [T], start: usize, count: usize) -> &mut [T] {
+    pub unsafe fn subslice_mut<T>(
+        output: &mut [T],
+        start: usize,
+        count: usize,
+    ) -> &mut [T] {
         debug_assert!(
             Self::range_fits(output.len(), start, count),
             "subslice range exceeds output buffer"
         );
         // SAFETY: The caller guarantees that the range is valid inside
         // `output`.
-        unsafe { core::slice::from_raw_parts_mut(output.as_mut_ptr().add(start), count) }
+        unsafe {
+            core::slice::from_raw_parts_mut(
+                output.as_mut_ptr().add(start),
+                count,
+            )
+        }
     }
 
     /// Copies `count` values between unchecked slice offsets.
@@ -336,7 +355,11 @@ impl UncheckedSlice {
     /// bytewise representation. Types containing padding, references, or
     /// pointers require additional justification from the caller.
     #[inline(always)]
-    pub unsafe fn write_ne_unaligned<T: Copy>(output: &mut [u8], index: usize, value: T) {
+    pub unsafe fn write_ne_unaligned<T: Copy>(
+        output: &mut [u8],
+        index: usize,
+        value: T,
+    ) {
         debug_assert!(
             Self::range_fits(output.len(), index, mem::size_of::<T>()),
             "unchecked output range exceeds destination buffer"

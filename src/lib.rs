@@ -8,23 +8,25 @@
 
 //! # Qubit IO
 //!
-//! Unit-oriented buffering and small I/O trait utilities for Rust.
+//! Runtime-neutral synchronous and asynchronous item-stream I/O for Rust.
 //!
-//! This crate provides named, object-safe composition traits for common
-//! [`std::io`] capability combinations and small extension traits for recurring
-//! standard-library I/O patterns.
+//! [`Input`] and [`Output`] model synchronous item transfer. [`AsyncInput`] and
+//! [`AsyncOutput`] expose the same boundary through `Pin` and `Poll` without
+//! selecting an executor. Standard-library byte streams implement the
+//! synchronous traits automatically; optional newtypes bridge Tokio and
+//! `futures-io` asynchronous streams without overlapping blanket impls.
 //!
-//! It also provides item-oriented buffering primitives in [`buffered`]:
-//! [`Buffer`], [`BufferedInput`], [`BufferedOutput`],
-//! [`EnsuredBufferedInput`], and [`EnsuredBufferedOutput`]. These types are
-//! intentionally format-agnostic. Binary and text stream adapters live in
-//! sibling crates and build their codec-specific behavior on top of these item
-//! windows.
+//! Item-oriented buffering includes [`BufferedInput`], [`BufferedOutput`],
+//! [`AsyncBufferedInput`], and [`AsyncBufferedOutput`]. Limit, counting, and
+//! checksum wrappers are available for both operation modes. Binary and text
+//! codecs remain in sibling crates.
 //!
 //! The concrete trait definitions and wrapper types live in dedicated modules
 //! and are re-exported from the crate root for ergonomic use.
 // qubit-style: allow coverage-cfg
 
+mod adapters;
+mod async_io;
 pub mod buffered;
 mod capacity_const;
 pub mod ext;
@@ -32,16 +34,64 @@ mod traits;
 mod util;
 mod wrappers;
 
+#[cfg(feature = "futures-io")]
+pub use adapters::{
+    FuturesAsyncRead,
+    FuturesAsyncWrite,
+    FuturesInput,
+    FuturesOutput,
+};
+#[cfg(feature = "tokio")]
+pub use adapters::{
+    TokioAsyncRead,
+    TokioAsyncWrite,
+    TokioInput,
+    TokioOutput,
+};
+pub use async_io::{
+    FlushFuture,
+    ReadFullyFuture,
+    ReadFuture,
+    WriteFullyFuture,
+    WriteFuture,
+};
 pub use buffered::{
-    Buffer, BufferedInput, BufferedOutput, EnsuredBufferedInput, EnsuredBufferedOutput,
+    AsyncBufferedInput,
+    AsyncBufferedOutput,
+    Buffer,
+    BufferedInput,
+    BufferedOutput,
+    EnsuredBufferedInput,
+    EnsuredBufferedOutput,
 };
 pub use capacity_const::{
-    DEFAULT_BUFFER_CAPACITY, DEFAULT_COMPARE_BUFFER_SIZE, DEFAULT_COPY_BUFFER_SIZE,
+    DEFAULT_BUFFER_CAPACITY,
+    DEFAULT_COMPARE_BUFFER_SIZE,
+    DEFAULT_COPY_BUFFER_SIZE,
 };
-pub use ext::{BufReadExt, ReadExt, ReadSeekExt, SeekExt, WriteExt, WriteSeekExt};
+pub use ext::{
+    BufReadExt,
+    ReadExt,
+    ReadSeekExt,
+    SeekExt,
+    WriteExt,
+    WriteSeekExt,
+};
 pub use traits::{
-    BufReadSeek, Input, Output, ReadSeek, ReadWrite, ReadWriteSeek, Seekable, SeekableInput,
-    SeekableOutput, WriteSeek,
+    AsyncInput,
+    AsyncInputExt,
+    AsyncOutput,
+    AsyncOutputExt,
+    BufReadSeek,
+    Input,
+    Output,
+    ReadSeek,
+    ReadWrite,
+    ReadWriteSeek,
+    Seekable,
+    SeekableInput,
+    SeekableOutput,
+    WriteSeek,
 };
 pub use util::Streams;
 #[allow(unused_imports)]
@@ -49,14 +99,38 @@ pub use util::UncheckedSlice;
 #[cfg(coverage)]
 #[doc(hidden)]
 pub use util::{
-    coverage_add_item_count_overflow, coverage_fail_next_add_item_count,
-    coverage_fail_next_reserve, coverage_fail_next_string_reserve, coverage_fail_reserve_after,
-    coverage_reset_add_item_count_hooks, coverage_reset_reserve_hooks,
+    coverage_add_item_count_overflow,
+    coverage_fail_next_add_item_count,
+    coverage_fail_next_reserve,
+    coverage_fail_next_string_reserve,
+    coverage_fail_reserve_after,
+    coverage_reset_add_item_count_hooks,
+    coverage_reset_reserve_hooks,
 };
 #[allow(unused_imports)]
-pub use util::{nz, nz_const};
-pub use util::{try_reserve_string, try_reserve_vec};
+pub use util::{
+    nz,
+    nz_const,
+};
+pub use util::{
+    try_reserve_string,
+    try_reserve_vec,
+};
 pub use wrappers::{
-    ChecksumReader, ChecksumWriter, CountingReader, CountingWriter, LimitReader, LimitWriter,
-    PositionGuard, SyncSeekTeeReader, TeeReader, TeeWriter,
+    AsyncChecksumInput,
+    AsyncChecksumOutput,
+    AsyncCountingInput,
+    AsyncCountingOutput,
+    AsyncLimitInput,
+    AsyncLimitOutput,
+    ChecksumReader,
+    ChecksumWriter,
+    CountingReader,
+    CountingWriter,
+    LimitReader,
+    LimitWriter,
+    PositionGuard,
+    SyncSeekTeeReader,
+    TeeReader,
+    TeeWriter,
 };

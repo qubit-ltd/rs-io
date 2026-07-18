@@ -6,12 +6,25 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{Error, ErrorKind, Result, SeekFrom};
+use std::io::{
+    Error,
+    ErrorKind,
+    Result,
+    SeekFrom,
+};
 
-use crate::buffered::{DEFAULT_BUFFER_CAPACITY, EnsuredBufferedInput};
+use crate::buffered::{
+    DEFAULT_BUFFER_CAPACITY,
+    EnsuredBufferedInput,
+};
 use crate::traits::validate_read_count;
 use crate::util::UncheckedSlice;
-use crate::{Buffer, Input, Seekable, SeekableInput};
+use crate::{
+    Buffer,
+    Input,
+    Seekable,
+    SeekableInput,
+};
 
 /// Buffered item input over a wrapped input source.
 ///
@@ -33,6 +46,249 @@ where
 {
     inner: I,
     buffer: Buffer<I::Item>,
+}
+
+/// Appends one chunk from a type-erased input to a buffer.
+#[inline(always)]
+fn read_more_impl<T>(
+    inner: &mut dyn Input<Item = T>,
+    buffer: &mut Buffer<T>,
+) -> Result<bool>
+where
+    T: Copy + Default,
+{
+    let count = buffer.spare_capacity();
+    debug_assert!(count > 0, "buffer has no tail capacity");
+    loop {
+        let limit = buffer.limit();
+        // SAFETY: `limit` is within `buffer`, and `count` is the remaining
+        // capacity from `limit` to the end of `buffer`.
+        match unsafe { inner.read_unchecked(buffer.data_mut(), limit, count) } {
+            Ok(0) => return Ok(false),
+            Ok(read) => {
+                validate_read_count(read, count)?;
+                // SAFETY: The validated count fits the spare buffer range.
+                unsafe {
+                    buffer.advance(read);
+                }
+                return Ok(true);
+            }
+            Err(error) if error.kind() == ErrorKind::Interrupted => continue,
+            Err(error) => return Err(error),
+        }
+    }
+}
+
+/// Preserves unread items and appends one chunk from a type-erased input.
+#[inline(always)]
+fn fill_more_impl<T>(
+    inner: &mut dyn Input<Item = T>,
+    buffer: &mut Buffer<T>,
+) -> Result<bool>
+where
+    T: Copy + Default,
+{
+    if buffer.available() == 0 {
+        buffer.clear();
+    } else if buffer.spare_capacity() == 0 {
+        buffer.compact();
+        if buffer.spare_capacity() == 0 {
+            return Err(Error::new(
+                ErrorKind::InvalidInput,
+                "buffered input is full; consume buffered items before refilling",
+            ));
+        }
+    }
+    read_more_impl(inner, buffer)
+}
+
+/// Refills a buffer to a requested unread item count.
+#[inline(always)]
+fn fill_until_impl<T>(
+    inner: &mut dyn Input<Item = T>,
+    buffer: &mut Buffer<T>,
+    count: usize,
+) -> Result<bool>
+where
+    T: Copy + Default,
+{
+    if count > buffer.capacity() {
+        return Err(Error::new(
+            ErrorKind::InvalidInput,
+            "requested available items exceed buffered input capacity",
+        ));
+    }
+    while buffer.available() < count {
+        let available = buffer.available();
+        if available == 0 {
+            buffer.clear();
+        } else {
+            let missing = count - available;
+            if buffer.spare_capacity() < missing {
+                buffer.compact();
+            }
+        }
+        if !read_more_impl(inner, buffer)? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+/// Ensures a requested unread item count through a type-erased input.
+#[inline(always)]
+fn ensure_available_impl<T>(
+    inner: &mut dyn Input<Item = T>,
+    buffer: &mut Buffer<T>,
+    count: usize,
+) -> Result<()>
+where
+    T: Copy + Default,
+{
+    if fill_until_impl(inner, buffer, count)? {
+        return Ok(());
+    }
+    let available = buffer.available();
+    // SAFETY: `available` is the current readable item count.
+    unsafe {
+        buffer.consume(available);
+    }
+    Err(Error::new(
+        ErrorKind::UnexpectedEof,
+        "failed to fill whole buffer",
+    ))
+}
+
+/// Reads an indexed range through a type-erased input and retained buffer.
+///
+/// # Safety
+///
+/// The caller must guarantee that `output_index..output_index + count` is a
+/// valid range inside `output` and that the addition does not overflow.
+#[inline(always)]
+unsafe fn read_unchecked_impl<T>(
+    inner: &mut dyn Input<Item = T>,
+    buffer: &mut Buffer<T>,
+    output: &mut [T],
+    output_index: usize,
+    count: usize,
+) -> Result<usize>
+where
+    T: Copy + Default,
+{
+    debug_assert!(
+        UncheckedSlice::range_fits(output.len(), output_index, count),
+        "unchecked read output range exceeds destination buffer"
+    );
+    if count == 0 {
+        return Ok(0);
+    }
+    if buffer.available() == 0 {
+        buffer.clear();
+        if count >= buffer.capacity() {
+            // SAFETY: Forwarded from the caller.
+            let read =
+                unsafe { inner.read_unchecked(output, output_index, count) }?;
+            validate_read_count(read, count)?;
+            return Ok(read);
+        }
+        if !read_more_impl(inner, buffer)? {
+            return Ok(0);
+        }
+    }
+    let read_count = count.min(buffer.available());
+    // SAFETY: The count fits the output range and readable buffer window.
+    unsafe {
+        buffer.copy_to(output, output_index, read_count);
+    }
+    Ok(read_count)
+}
+
+/// Fills an indexed range through a type-erased input and retained buffer.
+///
+/// # Safety
+///
+/// The caller must guarantee that `output_index..output_index + count` is a
+/// valid range inside `output` and that the addition does not overflow.
+#[inline(always)]
+unsafe fn read_fully_unchecked_impl<T>(
+    inner: &mut dyn Input<Item = T>,
+    buffer: &mut Buffer<T>,
+    output: &mut [T],
+    output_index: usize,
+    count: usize,
+) -> Result<usize>
+where
+    T: Copy + Default,
+{
+    debug_assert!(
+        UncheckedSlice::range_fits(output.len(), output_index, count),
+        "unchecked read-fully output range exceeds destination buffer"
+    );
+    if count == 0 {
+        return Ok(0);
+    }
+
+    let available = buffer.available();
+    if available >= count {
+        // SAFETY: Enough unread items and destination space are available.
+        unsafe {
+            buffer.copy_to(output, output_index, count);
+        }
+        return Ok(count);
+    }
+
+    let mut total = 0;
+    if available > 0 {
+        // SAFETY: The available items fit the caller's destination range.
+        unsafe {
+            buffer.copy_to(output, output_index, available);
+        }
+        total = available;
+    }
+
+    let remaining = count - total;
+    if remaining >= buffer.capacity() {
+        buffer.clear();
+        loop {
+            // SAFETY: The remaining suffix is inside the caller's range.
+            match unsafe {
+                inner.read_fully_unchecked(
+                    output,
+                    output_index + total,
+                    remaining,
+                )
+            } {
+                Ok(read) => {
+                    validate_read_count(read, remaining)?;
+                    return Ok(total + read);
+                }
+                Err(error) if error.kind() == ErrorKind::Interrupted => {
+                    continue;
+                }
+                Err(error) => return Err(error),
+            }
+        }
+    }
+
+    while total < count {
+        let remaining = count - total;
+        // SAFETY: The remaining suffix is inside the caller's range.
+        match unsafe {
+            read_unchecked_impl(
+                inner,
+                buffer,
+                output,
+                output_index + total,
+                remaining,
+            )
+        } {
+            Ok(0) => break,
+            Ok(read) => total += read,
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(total)
 }
 
 impl<I> BufferedInput<I>
@@ -246,7 +502,12 @@ where
     /// `count <= self.unread_len()`, and that the destination range does not
     /// overlap with the unread range stored inside this buffer.
     #[inline]
-    pub unsafe fn copy_unread_to(&self, output: &mut [I::Item], output_index: usize, count: usize) {
+    pub unsafe fn copy_unread_to(
+        &self,
+        output: &mut [I::Item],
+        output_index: usize,
+        count: usize,
+    ) {
         debug_assert!(
             UncheckedSlice::range_fits(output.len(), output_index, count),
             "unchecked unread copy output range exceeds destination buffer",
@@ -285,18 +546,7 @@ where
     /// no unread items have been consumed; callers must consume buffered items
     /// before refilling in that state.
     pub fn fill_more(&mut self) -> Result<bool> {
-        if self.unread_len() == 0 {
-            self.discard_buffer();
-        } else if self.tail_capacity() == 0 {
-            self.backshift();
-            if self.tail_capacity() == 0 {
-                return Err(Error::new(
-                    ErrorKind::InvalidInput,
-                    "buffered input is full; consume buffered items before refilling",
-                ));
-            }
-        }
-        self.read_more()
+        fill_more_impl(&mut self.inner, &mut self.buffer)
     }
 
     /// Refills the buffer until at least `count` unread items are available.
@@ -322,27 +572,7 @@ where
     /// Returns any non-interrupted I/O error produced by the wrapped reader
     /// while refilling the buffer.
     pub fn fill_until(&mut self, count: usize) -> Result<bool> {
-        if count > self.capacity() {
-            return Err(Error::new(
-                ErrorKind::InvalidInput,
-                "requested available items exceed buffered input capacity",
-            ));
-        }
-        while self.unread_len() < count {
-            let available = self.unread_len();
-            if available == 0 {
-                self.discard_buffer();
-            } else {
-                let missing = count - available;
-                if self.tail_capacity() < missing {
-                    self.backshift();
-                }
-            }
-            if !self.read_more()? {
-                return Ok(false);
-            }
-        }
-        Ok(true)
+        fill_until_impl(&mut self.inner, &mut self.buffer, count)
     }
 
     /// Ensures that at least `count` unread items are available.
@@ -365,18 +595,7 @@ where
     /// could hold. Returns any non-interrupted I/O error produced by the
     /// wrapped reader while refilling the buffer.
     pub fn ensure_available(&mut self, count: usize) -> Result<()> {
-        if self.fill_until(count)? {
-            return Ok(());
-        }
-        let available = self.unread_len();
-        // SAFETY: `available` is the current readable item count.
-        unsafe {
-            self.consume(available);
-        }
-        Err(Error::new(
-            ErrorKind::UnexpectedEof,
-            "failed to fill whole buffer",
-        ))
+        ensure_available_impl(&mut self.inner, &mut self.buffer, count)
     }
 
     /// Reads items through the internal buffer into an indexed output range.
@@ -417,32 +636,16 @@ where
         output_index: usize,
         count: usize,
     ) -> Result<usize> {
-        debug_assert!(
-            UncheckedSlice::range_fits(output.len(), output_index, count),
-            "unchecked read output range exceeds destination buffer"
-        );
-        if count == 0 {
-            return Ok(0);
-        }
-        if self.unread_len() == 0 {
-            self.discard_buffer();
-            if count >= self.buffer.capacity() {
-                // SAFETY: The caller guarantees that the target range is valid.
-                let read = unsafe { self.inner.read_unchecked(output, output_index, count) }?;
-                validate_read_count(read, count)?;
-                return Ok(read);
-            }
-            if !self.read_more()? {
-                return Ok(0);
-            }
-        }
-        let read_count = count.min(self.unread_len());
-        // SAFETY: `read_count` is bounded by the caller-provided output range
-        // and the available input range.
+        // SAFETY: Forwarded from the caller.
         unsafe {
-            self.buffer.copy_to(output, output_index, read_count);
+            read_unchecked_impl(
+                &mut self.inner,
+                &mut self.buffer,
+                output,
+                output_index,
+                count,
+            )
         }
-        Ok(read_count)
     }
 
     /// Reads items into the full output slice.
@@ -496,71 +699,16 @@ where
         output_index: usize,
         count: usize,
     ) -> Result<usize> {
-        debug_assert!(
-            UncheckedSlice::range_fits(output.len(), output_index, count),
-            "unchecked read-fully output range exceeds destination buffer"
-        );
-        if count == 0 {
-            return Ok(0);
+        // SAFETY: Forwarded from the caller.
+        unsafe {
+            read_fully_unchecked_impl(
+                &mut self.inner,
+                &mut self.buffer,
+                output,
+                output_index,
+                count,
+            )
         }
-
-        let available = self.unread_len();
-        if available >= count {
-            // SAFETY: The branch proves that enough unread items are
-            // available, and the caller guarantees that the destination range
-            // is valid.
-            unsafe {
-                self.buffer.copy_to(output, output_index, count);
-            }
-            return Ok(count);
-        }
-
-        let mut total = 0;
-        if available > 0 {
-            // SAFETY: `available` is the current readable item count, and the
-            // caller guarantees that the destination range is valid.
-            unsafe {
-                self.buffer.copy_to(output, output_index, available);
-            }
-            total = available;
-        }
-
-        let remaining = count - total;
-        if remaining >= self.buffer.capacity() {
-            self.discard_buffer();
-            loop {
-                // SAFETY: The caller guarantees the original destination
-                // range is valid; `remaining` is its suffix after `total`
-                // copied items.
-                match unsafe {
-                    self.inner
-                        .read_fully_unchecked(output, output_index + total, remaining)
-                } {
-                    Ok(read) => {
-                        validate_read_count(read, remaining)?;
-                        return Ok(total + read);
-                    }
-                    Err(error) if error.kind() == ErrorKind::Interrupted => {
-                        continue;
-                    }
-                    Err(error) => return Err(error),
-                }
-            }
-        }
-
-        while total < count {
-            let remaining = count - total;
-            // SAFETY: The caller guarantees the original destination range is
-            // valid; `total < count`, so this suffix remains inside it.
-            match unsafe { self.read_unchecked(output, output_index + total, remaining) } {
-                Ok(0) => break,
-                Ok(read) => {
-                    total += read;
-                }
-                Err(error) => return Err(error),
-            }
-        }
-        Ok(total)
     }
 
     /// Reads items into the full output slice until it is full or EOF is
@@ -648,7 +796,8 @@ where
     where
         I: SeekableInput,
     {
-        let position = Seekable::seek_to(&mut self.inner, SeekFrom::Current(0))?;
+        let position =
+            Seekable::seek_to(&mut self.inner, SeekFrom::Current(0))?;
         let unread = self.unread_len() as u64;
         position.checked_sub(unread).ok_or_else(|| {
             Error::new(
@@ -731,16 +880,6 @@ where
         false
     }
 
-    /// Returns the unused capacity at the end of the buffer.
-    ///
-    /// # Returns
-    ///
-    /// The number of writable items in `buffer[limit..]`.
-    #[inline(always)]
-    fn tail_capacity(&self) -> usize {
-        self.buffer.spare_capacity()
-    }
-
     /// Invalidates all buffered items.
     ///
     /// After this call, the buffer is considered empty and subsequent reads
@@ -748,60 +887,6 @@ where
     #[inline(always)]
     fn discard_buffer(&mut self) {
         self.buffer.clear();
-    }
-
-    /// Moves unread items to the front of the buffer.
-    ///
-    /// This preserves the unread range while reclaiming tail capacity for
-    /// future reads. If there are no unread items, the buffer is discarded.
-    #[inline(always)]
-    fn backshift(&mut self) {
-        self.buffer.compact();
-    }
-
-    /// Appends one more chunk from the wrapped reader to the internal buffer.
-    ///
-    /// This method reads into `buffer[limit..]` and advances `limit` by the
-    /// number of items read. It retries automatically when the wrapped reader
-    /// returns [`ErrorKind::Interrupted`].
-    ///
-    /// # Returns
-    ///
-    /// `Ok(true)` if at least one item was appended, or `Ok(false)` if the
-    /// wrapped reader reached EOF.
-    ///
-    /// # Errors
-    ///
-    /// Returns any non-interrupted I/O error produced by the wrapped reader.
-    /// Returns [`ErrorKind::InvalidData`] if the wrapped reader reports more
-    /// items than the spare buffer range could hold.
-    fn read_more(&mut self) -> Result<bool> {
-        let count = self.tail_capacity();
-        debug_assert!(count > 0, "buffer has no tail capacity");
-        loop {
-            let limit = self.buffer.limit();
-            // SAFETY: `limit` is always within `buffer`, and `count` is the
-            // remaining capacity from `limit` to the end of `buffer`.
-            match unsafe {
-                self.inner
-                    .read_unchecked(self.buffer.data_mut(), limit, count)
-            } {
-                Ok(0) => return Ok(false),
-                Ok(read) => {
-                    validate_read_count(read, count)?;
-                    // SAFETY: `read` returns a count in
-                    // `0..=count`, and `count` was the spare capacity.
-                    unsafe {
-                        self.buffer.advance(read);
-                    }
-                    return Ok(true);
-                }
-                Err(error) if error.kind() == ErrorKind::Interrupted => {
-                    continue;
-                }
-                Err(error) => return Err(error),
-            }
-        }
     }
 }
 
@@ -827,7 +912,9 @@ where
         count: usize,
     ) -> Result<usize> {
         // SAFETY: Forwarded from the trait caller.
-        unsafe { BufferedInput::read_unchecked(self, output, output_index, count) }
+        unsafe {
+            BufferedInput::read_unchecked(self, output, output_index, count)
+        }
     }
 
     /// Reads items into the full output slice.
@@ -846,7 +933,9 @@ where
         count: usize,
     ) -> Result<usize> {
         // SAFETY: Forwarded from the trait caller.
-        unsafe { BufferedInput::read_fully_unchecked(self, output, index, count) }
+        unsafe {
+            BufferedInput::read_fully_unchecked(self, output, index, count)
+        }
     }
 
     /// Reads items into the full output slice through the internal buffer.

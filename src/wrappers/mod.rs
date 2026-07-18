@@ -5,6 +5,12 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
+mod async_checksum_input;
+mod async_checksum_output;
+mod async_counting_input;
+mod async_counting_output;
+mod async_limit_input;
+mod async_limit_output;
 mod checksum_reader;
 mod checksum_writer;
 mod counting_reader;
@@ -16,6 +22,12 @@ mod sync_seek_tee_reader;
 mod tee_reader;
 mod tee_writer;
 
+pub use async_checksum_input::AsyncChecksumInput;
+pub use async_checksum_output::AsyncChecksumOutput;
+pub use async_counting_input::AsyncCountingInput;
+pub use async_counting_output::AsyncCountingOutput;
+pub use async_limit_input::AsyncLimitInput;
+pub use async_limit_output::AsyncLimitOutput;
 pub use checksum_reader::ChecksumReader;
 pub use checksum_writer::ChecksumWriter;
 pub use counting_reader::CountingReader;

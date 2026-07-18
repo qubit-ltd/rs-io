@@ -12,7 +12,13 @@
 //! [`crate::BufReadExt`]. The functions are public within the crate so sibling
 //! modules and tests can call them, but they are not re-exported from the crate
 //! root and are intended for internal use only.
-use std::io::{BufRead, Error, ErrorKind, Read, Result};
+use std::io::{
+    BufRead,
+    Error,
+    ErrorKind,
+    Read,
+    Result,
+};
 use std::string::FromUtf8Error;
 
 use crate::util::try_reserve_vec;
@@ -31,7 +37,10 @@ pub const READ_TO_END_BUFFER_SIZE: usize = 8 * 1024;
 ///
 /// # Errors
 /// Returns the first non-interrupted read error reported by `reader`.
-pub fn read_exact_or_eof(reader: &mut dyn Read, buffer: &mut [u8]) -> Result<usize> {
+pub fn read_exact_or_eof(
+    reader: &mut dyn Read,
+    buffer: &mut [u8],
+) -> Result<usize> {
     let mut total = 0;
     while total < buffer.len() {
         match reader.read(&mut buffer[total..]) {
@@ -122,7 +131,10 @@ pub fn validate_exact_read_len(len: usize, max_len: usize) -> Result<()> {
 /// more than `max_len` bytes and truncates `output` back to its original
 /// length. Returns the first non-interrupted read error reported by `reader`
 /// after the same rollback.
-pub fn read_to_end_limited(reader: &mut dyn Read, max_len: usize) -> Result<Vec<u8>> {
+pub fn read_to_end_limited(
+    reader: &mut dyn Read,
+    max_len: usize,
+) -> Result<Vec<u8>> {
     let mut output = Vec::new();
     try_reserve_vec(&mut output, max_len.min(READ_TO_END_BUFFER_SIZE))?;
     read_to_end_limited_into(reader, &mut output, max_len)?;
@@ -155,7 +167,8 @@ pub fn read_to_end_limited_into(
         let remaining = max_len.saturating_sub(appended);
         // The extra byte is intentional, even when `max_len == 0`, so EOF can
         // be distinguished from input that exceeds the configured limit.
-        let requested = remaining.saturating_add(1).min(READ_TO_END_BUFFER_SIZE);
+        let requested =
+            remaining.saturating_add(1).min(READ_TO_END_BUFFER_SIZE);
         match reader.read(&mut buffer[..requested]) {
             Ok(count) => {
                 if count == 0 {
@@ -171,7 +184,9 @@ pub fn read_to_end_limited_into(
                     output.truncate(original_len);
                     return Err(Error::new(
                         ErrorKind::InvalidData,
-                        format!("input exceeds maximum length of {max_len} bytes"),
+                        format!(
+                            "input exceeds maximum length of {max_len} bytes"
+                        ),
                     ));
                 }
             }
@@ -249,8 +264,10 @@ where
             return Ok(appended);
         }
 
-        let delimiter_position = available.iter().position(|byte| *byte == delimiter);
-        let requested = delimiter_position.map_or(available.len(), |position| position + 1);
+        let delimiter_position =
+            available.iter().position(|byte| *byte == delimiter);
+        let requested =
+            delimiter_position.map_or(available.len(), |position| position + 1);
         let remaining = max_len.saturating_sub(appended);
         if requested > remaining {
             if remaining > 0 {
@@ -280,6 +297,8 @@ where
 fn limit_exceeded_error(max_len: usize, delimiter: u8) -> Error {
     Error::new(
         ErrorKind::InvalidData,
-        format!("input exceeds maximum length of {max_len} bytes before delimiter {delimiter}"),
+        format!(
+            "input exceeds maximum length of {max_len} bytes before delimiter {delimiter}"
+        ),
     )
 }

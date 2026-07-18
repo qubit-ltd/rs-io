@@ -6,11 +6,11 @@ rust-version = "1.94"
 authors = ["Haixing Hu <starfish.hu@gmail.com>"]
 license = "Apache-2.0"
 repository = "https://github.com/qubit-ltd/rs-io"
-description = "Byte-stream buffering and std::io utilities for Rust"
+description = "Runtime-neutral synchronous and asynchronous item-stream I/O for Rust"
 homepage = "https://github.com/qubit-ltd/rs-io"
 documentation = "https://docs.rs/qubit-io"
 readme = "README.md"
-keywords = ["io", "read", "write", "seek", "qubit"]
+keywords = ["io", "async", "stream", "buffer", "qubit"]
 categories = ["rust-patterns"]
 include = [
     "/Cargo.toml",
@@ -34,3 +34,12 @@ doctest = true
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage)'] }
+
+[features]
+default = []
+futures-io = ["dep:futures-io"]
+tokio = ["dep:tokio"]
+
+[dependencies]
+futures-io = { version = "0.3", optional = true }
+tokio = { version = "1", features = ["io-util"], optional = true }

@@ -5,7 +5,14 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use std::io::{Result, Seek, SeekFrom, Write};
+use std::io::{
+    Result,
+    Seek,
+    SeekFrom,
+    Write,
+};
+
+use crate::WriteSeek;
 
 /// Extension methods for values that implement both [`Write`] and [`Seek`].
 ///
@@ -26,7 +33,30 @@ pub trait WriteSeekExt: Write + Seek {
     /// Returns an error when reading the current position, seeking to `offset`,
     /// writing bytes, or restoring the original position fails. If restoration
     /// fails, the restoration error is returned.
-    fn write_all_at_preserving_position(&mut self, offset: u64, buffer: &[u8]) -> Result<()>;
+    fn write_all_at_preserving_position(
+        &mut self,
+        offset: u64,
+        buffer: &[u8],
+    ) -> Result<()>;
+}
+
+/// Implements a position-preserving write through a type-erased stream.
+fn write_all_at_preserving_position_impl(
+    output: &mut dyn WriteSeek,
+    offset: u64,
+    buffer: &[u8],
+) -> Result<()> {
+    let position = output.stream_position()?;
+    let write_result = match output.seek(SeekFrom::Start(offset)) {
+        Ok(_) => output.write_all(buffer),
+        Err(error) => Err(error),
+    };
+    let restore_result = output.seek(SeekFrom::Start(position));
+    match (write_result, restore_result) {
+        (Ok(()), Ok(_)) => Ok(()),
+        (Err(error), Ok(_)) => Err(error),
+        (_, Err(error)) => Err(error),
+    }
 }
 
 impl<T> WriteSeekExt for T
@@ -34,17 +64,12 @@ where
     T: Write + Seek + ?Sized,
 {
     #[inline]
-    fn write_all_at_preserving_position(&mut self, offset: u64, buffer: &[u8]) -> Result<()> {
-        let position = self.stream_position()?;
-        let write_result = match self.seek(SeekFrom::Start(offset)) {
-            Ok(_) => self.write_all(buffer),
-            Err(error) => Err(error),
-        };
-        let restore_result = self.seek(SeekFrom::Start(position));
-        match (write_result, restore_result) {
-            (Ok(()), Ok(_)) => Ok(()),
-            (Err(error), Ok(_)) => Err(error),
-            (_, Err(error)) => Err(error),
-        }
+    fn write_all_at_preserving_position(
+        &mut self,
+        offset: u64,
+        buffer: &[u8],
+    ) -> Result<()> {
+        let mut output = self;
+        write_all_at_preserving_position_impl(&mut output, offset, buffer)
     }
 }

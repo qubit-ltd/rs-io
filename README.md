@@ -1,339 +1,113 @@
 # Qubit IO
 
 [![Rust CI](https://github.com/qubit-ltd/rs-io/actions/workflows/ci.yml/badge.svg)](https://github.com/qubit-ltd/rs-io/actions/workflows/ci.yml)
-[![Coverage](https://img.shields.io/endpoint?url=https://qubit-ltd.github.io/rs-io/coverage-badge.json)](https://qubit-ltd.github.io/rs-io/coverage/)
 [![Crates.io](https://img.shields.io/crates/v/qubit-io.svg?color=blue)](https://crates.io/crates/qubit-io)
 [![Rust](https://img.shields.io/badge/rust-1.94+-blue.svg?logo=rust)](https://www.rust-lang.org)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Chinese Document](https://img.shields.io/badge/Document-Chinese-blue.svg)](README.zh_CN.md)
+[![中文文档](https://img.shields.io/badge/文档-中文版-blue.svg)](README.zh_CN.md)
 
-Generic unit buffering, byte-stream buffering, and small `std::io` trait
-utilities for Rust.
+Qubit IO provides runtime-neutral synchronous and asynchronous item streams.
+It is the transport layer shared by Qubit filesystem, binary, and text crates.
 
-## Overview
+The central traits are deliberately smaller than a filesystem abstraction:
+they move items and report `std::io::Error`; they do not imply file identity,
+paths, commit, abort, or persistence semantics.
 
-`qubit-io` provides:
+## Core API
 
-- minimal indexed I/O traits: `Input` and `Output`, with blanket
-  byte implementations for `Read` and `Write`;
-- unit-oriented buffering primitives: `Buffer<T>`, `BufferedInput`, and
-  `BufferedOutput`;
-- object-safe composition traits such as `ReadSeek`, `ReadWrite`, and
-  `ReadWriteSeek`;
-- extension traits for recurring `Read`, `BufRead`, `Seek`, `Read + Seek`,
-  `Write`, and `Write + Seek` patterns;
-- `Streams` utility functions for copy and content comparison operations;
-- lightweight reader and writer wrappers such as `CountingReader`,
-  `LimitReader`, `PositionGuard`, `TeeReader`, `SyncSeekTeeReader`, and
-  checksum wrappers.
+| Concern | Synchronous | Asynchronous |
+| --- | --- | --- |
+| Input | `Input<Item = T>` | `AsyncInput<Item = T>` |
+| Output | `Output<Item = T>` | `AsyncOutput<Item = T>` |
+| Convenience | `read_fully`, `write_fully` | `AsyncInputExt`, `AsyncOutputExt` |
+| Buffering | `BufferedInput`, `BufferedOutput` | `AsyncBufferedInput`, `AsyncBufferedOutput` |
+| Limits | `LimitReader`, `LimitWriter` for std streams | `AsyncLimitInput`, `AsyncLimitOutput` |
+| Counters | `CountingReader`, `CountingWriter` | `AsyncCountingInput`, `AsyncCountingOutput` |
+| Checksums | `ChecksumReader`, `ChecksumWriter` | `AsyncChecksumInput`, `AsyncChecksumOutput` |
 
-Binary scalar, LEB128, and ZigZag codecs are no longer part of this crate. Use
-`qubit-codec-binary` for buffer-level binary codecs and `qubit-io-binary` for
-binary stream readers, writers, and extension traits.
+`AsyncInput` and `AsyncOutput` use `Pin`, `Context`, and `Poll`. They do not
+depend on Tokio, `futures-io`, or an executor. Multi-poll operations are named
+futures such as `ReadFullyFuture` and `WriteFullyFuture`, so progress survives
+`Pending`.
 
-Detailed usage is documented in the [user guide](doc/user_guide.md). API
-reference documentation is available on [docs.rs](https://docs.rs/qubit-io).
+## Synchronous example
 
-## Design Goals
+All `std::io::Read` byte streams implement `Input<Item = u8>`, and all
+`std::io::Write` byte streams implement `Output<Item = u8>`.
 
-- **Generic I/O Only**: keep this crate focused on reusable `std::io` helpers.
-- **Unit-Oriented Core**: provide low-level indexed input and output contracts
-  for hot paths that have already validated ranges.
-- **Format-Agnostic Buffering**: provide efficient unit buffering without
-  embedding binary codec, text codec, or record-format knowledge.
-- **Explicit Low-Level Contracts**: expose hot-path APIs such as `Buffer` and
-  unchecked range helpers with clear caller responsibilities.
-- **Object-Safe Composition**: make common trait combinations easy to name and
-  pass around.
-- **Predictable Extension Traits**: provide recurring read, write, seek, and
-  copy patterns without hiding allocation or error behavior.
-- **Layer Separation**: keep binary and text codec stream adapters in sibling
-  crates.
-- **Small Dependency Graph**: provide useful I/O tools without runtime
-  dependencies.
+```rust
+use std::io::Cursor;
+use qubit_io::{Input, Output};
+
+let mut input = Cursor::new(b"qubit".to_vec());
+let mut bytes = [0_u8; 5];
+assert_eq!(5, input.read_fully(&mut bytes)?);
+
+let mut output = Vec::new();
+output.write_fully(&bytes)?;
+assert_eq!(b"qubit", output.as_slice());
+# Ok::<(), std::io::Error>(())
+```
+
+`Input` and `Output` remain generic over the item type, so codecs can also use
+`u16`, `char`, or another cheap scalar unit without converting through bytes.
+
+## Asynchronous example
+
+The optional Tokio adapter is an explicit newtype. This avoids coherence
+conflicts when a stream implements more than one async ecosystem trait.
+
+```rust,ignore
+use qubit_io::{AsyncInputExt, TokioInput};
+
+let socket = /* a tokio::io::AsyncRead value */;
+let mut input = TokioInput::new(socket);
+let mut header = [0_u8; 16];
+let read = input.read_fully_async(&mut header).await?;
+```
+
+Reverse adapters are also available: `TokioAsyncRead` and `TokioAsyncWrite`
+expose Qubit streams to Tokio, while `FuturesAsyncRead` and
+`FuturesAsyncWrite` expose them to `futures-io`.
+
+## Buffering and composition
+
+`Buffer<T>` is a low-level readable-window container. The synchronous and
+asynchronous buffered wrappers build on the same position/limit model.
+
+`AsyncBufferedOutput` owns every accepted item until the inner output accepts
+it. A partial flush updates retained progress before returning `Pending`.
+Dropping an asynchronous buffer cannot perform I/O; call `flush_async()` or use
+`into_parts()` to recover pending items.
+
+Limit and counting wrappers are item-oriented. Checksum wrappers are byte-only
+because `std::hash::Hasher` consumes bytes.
 
 ## Features
-
-### Indexed I/O
-
-- **`Input`**: minimal unchecked indexed read contract with an associated
-  `Item` type for copying units into `output[index..index + count]`; every
-  `Read` value implements `Input<Item = u8>`. Safe full-slice reads are
-  available through `Input::read` and `Input::read_fully`.
-- **`Output`**: minimal unchecked indexed write contract for copying
-  units of its associated `Item` type from `input[index..index + count]` plus
-  explicit flushing; every `Write` value implements `Output<Item = u8>`. Safe
-  full-slice writes are available through `Output::write` and
-  `Output::write_fully`.
-
-### Buffered I/O
-
-- **`Buffer<T>`**: low-level position/limit storage with a readable window and
-  spare tail capacity.
-- **`BufferedInput<I>`**: buffered unit input over `Input`,
-  with unread-window inspection, count-aware refilling, `into_parts`, and
-  indexed unchecked reads for validated output ranges. It implements `Input`
-  directly and supports logical unit-space seeking when the wrapped input
-  implements `Seekable<Unit = I::Item>`.
-- **`BufferedOutput<O>`**: buffered unit output over `Output`,
-  with spare-window access, unsafe advancing for validated spare ranges, explicit
-  flushing, best-effort drop-time flushing, non-flushing `into_parts`, and
-  large-write bypass paths. It implements `Output` directly and supports
-  unit-space seeking when the
-  wrapped output implements `Seekable<Unit = O::Item>`; position queries and
-  `SeekFrom::Current(0)` preserve pending buffered units without flushing.
-- **`DEFAULT_BUFFER_CAPACITY`**: shared default capacity for input and output
-  buffering.
-
-### Seekability Coherency
-
-`Input` and `Output` use associated item types. Every `Read` value automatically
-implements `Input<Item = u8>`, and every `Write` value automatically implements
-`Output<Item = u8>`. Because the item type is associated with the trait impl, a
-type that already implements `Read` or `Write` cannot also provide a different
-direct `Input` or `Output` impl. Use a wrapper/newtype when a byte stream needs
-a second item interpretation.
-
-`Seekable` is unit-oriented, and the stable rule is one implementation per
-`(type, unit)` pair. If a type implements `std::io::Seek`, the blanket impl
-already gives `Seekable<Unit = u8>`, so another `Seekable` impl for the same
-type with `Unit = u8` will trigger a coherence conflict.
-
-For custom units (for example `u16`), keep byte-sized seeking on the original
-type and expose unit-space seeking via a dedicated adapter/newtype that implements
-`Seekable` for that unit type.
-
-### Composition Traits
-
-- **`ReadSeek`**: names `Read + Seek`.
-- **`BufReadSeek`**: names `BufRead + Seek`.
-- **`ReadWrite`**: names `Read + Write`.
-- **`ReadWriteSeek`**: names `Read + Write + Seek`.
-- **`WriteSeek`**: names `Write + Seek`.
-
-### Extension Traits
-
-- **`ReadExt`**: exact reads, partial EOF reads, limited reads, and copy helpers.
-- **`BufReadExt`**: bounded line and delimiter reads.
-- **`SeekExt`**: stream size helpers that preserve position.
-- **`ReadSeekExt`**: peek/read-at helpers that restore position.
-- **`WriteExt`**: unchecked write helpers for validated ranges.
-- **`WriteSeekExt`**: write-at helpers that preserve position.
-
-### Utility Functions and Wrappers
-
-- **`Streams`**: copy, bounded copy, equality, and lexicographic comparison.
-- **Counting wrappers**: `CountingReader` and `CountingWriter`.
-- **Limit wrappers**: `LimitReader` and `LimitWriter`.
-- **Tee wrappers**: `TeeReader`, `SyncSeekTeeReader`, and `TeeWriter`.
-- **Checksum wrappers**: `ChecksumReader` and `ChecksumWriter`.
-- **Position guard**: `PositionGuard` restores stream position on drop unless
-  dismissed.
-
-## Documentation
-
-- [User Guide](doc/user_guide.md)
-- [API Reference](https://docs.rs/qubit-io)
-- [Chinese README](README.zh_CN.md)
-
-## Installation
-
-Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
 qubit-io = "0.13"
 ```
 
-## Quick Start
+- Default features: runtime-neutral core only.
+- `tokio`: adapters in both directions for Tokio I/O traits.
+- `futures-io`: adapters in both directions for `futures-io` traits.
 
-```rust
-use std::io::Cursor;
+## Documentation and checks
 
-use qubit_io::{
-    BufferedInput,
-    BufferedOutput,
-    ReadExt,
-    Streams,
-};
-
-let mut input = Cursor::new(b"abcdef".to_vec());
-let mut prefix = [0_u8; 3];
-
-let read = input.read_exact_or_eof(&mut prefix)?;
-assert_eq!(3, read);
-assert_eq!(b"abc", &prefix);
-
-let mut source = Cursor::new(b"payload".to_vec());
-let mut output = Vec::new();
-let copied = Streams::copy_at_most(&mut source, &mut output, 4)?;
-
-assert_eq!(4, copied);
-assert_eq!(b"payl", output.as_slice());
-
-let mut buffered_input = BufferedInput::with_capacity(
-    Cursor::new(b"abcdef".to_vec()),
-    3,
-);
-buffered_input.ensure_available(3)?;
-let mut unread = [0_u8; 3];
-unsafe {
-    buffered_input.copy_unread_to(&mut unread, 0, 3);
-}
-assert_eq!(b"abc", &unread);
-unsafe {
-    buffered_input.consume(3);
-}
-
-let mut buffered_output =
-    BufferedOutput::with_capacity(Cursor::new(Vec::<u8>::new()), 4);
-buffered_output.ensure_spare_capacity(3)?;
-{
-    let (buffer, index, count) = buffered_output.spare_raw_parts_mut();
-    assert!(count >= 3);
-    buffer[index..index + 3].copy_from_slice(b"xyz");
-}
-unsafe {
-    buffered_output.advance(3);
-}
-buffered_output.flush()?;
-let (cursor, pending) = buffered_output.into_parts();
-assert!(pending.is_empty());
-assert_eq!(b"xyz", cursor.into_inner().as_slice());
-# Ok::<(), std::io::Error>(())
-```
-
-## API Reference
-
-### Indexed I/O Traits
-
-| Trait | Purpose |
-|-------|---------|
-| `Input` | Reads units into caller-validated indexed output ranges |
-| `Output` | Writes units from caller-validated indexed input ranges and flushes pending units |
-
-### Trait Aliases
-
-| Trait | Equivalent Bounds |
-|-------|-------------------|
-| `ReadSeek` | `Read + Seek` |
-| `BufReadSeek` | `BufRead + Seek` |
-| `ReadWrite` | `Read + Write` |
-| `ReadWriteSeek` | `Read + Write + Seek` |
-| `WriteSeek` | `Write + Seek` |
-
-### Utility Types
-
-| Type | Purpose |
-|------|---------|
-| `Buffer` | Low-level position/limit storage for hot-path buffering |
-| `BufferedInput` | Buffered unit input over an `Input` source |
-| `BufferedOutput` | Buffered unit output over an `Output` sink |
-| `Streams` | Static helpers for copying and comparing streams |
-| `CountingReader` / `CountingWriter` | Count successful bytes read or written |
-| `LimitReader` / `LimitWriter` | Cap bytes read or written through a wrapper |
-| `TeeReader` / `SyncSeekTeeReader` / `TeeWriter` | Mirror bytes into a secondary sink |
-| `ChecksumReader` / `ChecksumWriter` | Feed successful bytes into a caller-provided hasher |
-| `PositionGuard` | Restore a seek position unless explicitly dismissed |
-
-### Constants
-
-| Constant | Purpose |
-|----------|---------|
-| `DEFAULT_BUFFER_CAPACITY` | Shared default capacity for buffered input and output |
-
-## Crate Split
-
-The codec and stream stack is intentionally split:
-
-- `qubit-codec`: core byte order, codec, transcoder, encoder, and decoder traits;
-- `qubit-codec-binary`: buffer-level binary, LEB128, and ZigZag codecs;
-- `qubit-io`: generic `std::io` helpers;
-- `qubit-io-binary`: binary stream readers, writers, and extension traits;
-- `qubit-codec-text` and `qubit-io-text`: text codecs and text stream adapters.
-
-## Performance Considerations
-
-Most helpers operate directly on caller-provided buffers and delegate to the
-underlying `Read`, `Write`, or `Seek` implementation. Wrapper types avoid hidden
-allocation; any buffering policy remains explicit at the call site.
-
-`Input::read_unchecked`, `Output::write_unchecked`, `Buffer<T>`,
-`BufferedInput::unread`, `BufferedInput::copy_unread_to`, and
-`BufferedOutput::spare_raw_parts_mut` are low-level APIs for callers that have
-already validated ranges. They are intended for hot paths such as binary and
-text stream adapters where avoiding repeated slicing and bounds checks matters.
-General-purpose byte-stream code should prefer standard `Read`, `BufRead`, and
-`Write` trait methods where possible; unit-oriented code should prefer safe
-helpers such as `Input::read`, `Input::read_fully`, `Output::write`, and
-`Output::write_fully`.
-
-## Testing & Code Coverage
-
-This project keeps generic I/O behavior covered by integration tests under
-`tests/`.
-
-### Running Tests
+- [User guide](doc/user_guide.md)
+- [用户指南](doc/user_guide.zh_CN.md)
 
 ```bash
-# Run all tests
-cargo test
-
-# Run with coverage report
-./coverage.sh
-
-# Generate text format report
-./coverage.sh text
-
-# Align code with CI requirements
+cargo test --no-default-features
+cargo test --all-features
 ./align-ci.sh
-
-# Run CI checks (format, clippy, test, coverage, audit)
-RS_CI_SKIP_TOOLCHAIN_UPDATE=1 ./ci-check.sh
+./ci-check.sh
 ```
-
-## Dependencies
-
-`qubit-io` has no runtime dependencies.
 
 ## License
 
-Copyright (c) 2026. Haixing Hu.
+Copyright (c) 2025 - 2026. Haixing Hu. All rights reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-
-See [LICENSE](LICENSE) for the full license text.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-### Development Guidelines
-
-- Keep this crate generic and independent of concrete codec formats.
-- Maintain deterministic tests for I/O edge cases.
-- Document public APIs and error behavior.
-- Ensure all checks pass before submitting a PR.
-
-## Author
-
-**Haixing Hu**
-
-## Related Projects
-
-More Rust libraries from Qubit are available under the
-[qubit-ltd](https://github.com/qubit-ltd) GitHub organization.
-
----
-
-Repository: [https://github.com/qubit-ltd/rs-io](https://github.com/qubit-ltd/rs-io)
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).

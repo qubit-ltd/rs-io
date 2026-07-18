@@ -7,11 +7,32 @@
 // =============================================================================
 
 use std::collections::VecDeque;
-use std::io::{Cursor, Error, ErrorKind};
+use std::io::{
+    Cursor,
+    Error,
+    ErrorKind,
+    Read,
+};
 
 use qubit_io::Input;
 
 struct OverreportingInput;
+
+struct OverreportingStdReader;
+
+struct FailingStdReader;
+
+impl Read for FailingStdReader {
+    fn read(&mut self, _output: &mut [u8]) -> std::io::Result<usize> {
+        Err(Error::new(ErrorKind::PermissionDenied, "read failed"))
+    }
+}
+
+impl Read for OverreportingStdReader {
+    fn read(&mut self, output: &mut [u8]) -> std::io::Result<usize> {
+        Ok(output.len() + 1)
+    }
+}
 
 impl Input for OverreportingInput {
     type Item = u8;
@@ -60,7 +81,9 @@ impl Input for ScriptedInput {
                 output[index..index + read].copy_from_slice(&data[..read]);
                 Ok(read)
             }
-            ReadStep::Interrupted => Err(Error::new(ErrorKind::Interrupted, "interrupted")),
+            ReadStep::Interrupted => {
+                Err(Error::new(ErrorKind::Interrupted, "interrupted"))
+            }
             ReadStep::Error(kind, message) => Err(Error::new(kind, message)),
             ReadStep::Eof => Ok(0),
         }
@@ -97,6 +120,21 @@ fn test_input_read_returns_successful_count() {
 
     assert_eq!(2, read);
     assert_eq!([1, 2, 0, 0], output);
+}
+
+#[test]
+fn test_input_read_propagates_implementation_error() {
+    let mut input = ScriptedInput::new(vec![ReadStep::Error(
+        ErrorKind::PermissionDenied,
+        "read failed",
+    )]);
+    let mut output = [0_u8; 4];
+
+    let error = input
+        .read(&mut output)
+        .expect_err("default read should propagate implementation errors");
+
+    assert_eq!(ErrorKind::PermissionDenied, error.kind());
 }
 
 #[test]
@@ -150,7 +188,8 @@ fn test_read_blanket_impl_exposes_input_read_and_read_unchecked() {
     let mut cursor = Cursor::new(b"ab".to_vec());
     let mut output = [0_u8; 4];
 
-    let read = Input::read(&mut cursor, &mut output).expect("read should succeed");
+    let read =
+        Input::read(&mut cursor, &mut output).expect("read should succeed");
     assert_eq!(2, read);
     assert_eq!(b"ab\x00\x00", &output);
 
@@ -163,4 +202,26 @@ fn test_read_blanket_impl_exposes_input_read_and_read_unchecked() {
     };
     assert_eq!(2, read);
     assert_eq!(b".cd.", &output);
+}
+
+#[test]
+fn test_read_blanket_impl_rejects_overreported_count() {
+    let mut reader = OverreportingStdReader;
+    let mut output = [0_u8; 3];
+
+    let error = Input::read(&mut reader, &mut output)
+        .expect_err("blanket input should validate the Read count");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+}
+
+#[test]
+fn test_read_blanket_impl_propagates_std_read_error() {
+    let mut reader = FailingStdReader;
+    let mut output = [0_u8; 3];
+
+    let error = Input::read(&mut reader, &mut output)
+        .expect_err("blanket input should propagate Read errors");
+
+    assert_eq!(ErrorKind::PermissionDenied, error.kind());
 }

@@ -7,7 +7,12 @@
 // =============================================================================
 
 use std::collections::VecDeque;
-use std::io::{Cursor, Error, ErrorKind, Write};
+use std::io::{
+    Cursor,
+    Error,
+    ErrorKind,
+    Write,
+};
 
 use qubit_io::Output;
 
@@ -48,7 +53,9 @@ impl Output for ScriptedOutput {
                     .extend_from_slice(&input[index..index + written]);
                 Ok(written)
             }
-            WriteStep::Interrupted => Err(Error::new(ErrorKind::Interrupted, "interrupted")),
+            WriteStep::Interrupted => {
+                Err(Error::new(ErrorKind::Interrupted, "interrupted"))
+            }
             WriteStep::Error(kind, message) => Err(Error::new(kind, message)),
             WriteStep::Zero => Ok(0),
         }
@@ -60,6 +67,30 @@ impl Output for ScriptedOutput {
 }
 
 struct OverreportingOutput;
+
+struct OverreportingStdWriter;
+
+struct FailingStdWriter;
+
+impl Write for FailingStdWriter {
+    fn write(&mut self, _input: &[u8]) -> std::io::Result<usize> {
+        Err(Error::new(ErrorKind::BrokenPipe, "write failed"))
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl Write for OverreportingStdWriter {
+    fn write(&mut self, input: &[u8]) -> std::io::Result<usize> {
+        Ok(input.len() + 1)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
 
 impl Output for OverreportingOutput {
     type Item = u16;
@@ -98,8 +129,23 @@ fn test_output_write_returns_successful_count() {
 }
 
 #[test]
+fn test_output_write_propagates_implementation_error() {
+    let mut output = ScriptedOutput::new(vec![WriteStep::Error(
+        ErrorKind::BrokenPipe,
+        "write failed",
+    )]);
+
+    let error = output
+        .write(&[10, 20, 30])
+        .expect_err("default write should propagate implementation errors");
+
+    assert_eq!(ErrorKind::BrokenPipe, error.kind());
+}
+
+#[test]
 fn test_output_write_fully_writes_until_range_is_complete() {
-    let mut output = ScriptedOutput::new(vec![WriteStep::Accept(2), WriteStep::Accept(2)]);
+    let mut output =
+        ScriptedOutput::new(vec![WriteStep::Accept(2), WriteStep::Accept(2)]);
     let input = [10, 20, 30, 40, 50];
 
     // SAFETY: `input[1..5]` is a valid source range.
@@ -114,7 +160,8 @@ fn test_output_write_fully_writes_until_range_is_complete() {
 
 #[test]
 fn test_output_write_fully_writes_full_slice() {
-    let mut output = ScriptedOutput::new(vec![WriteStep::Accept(1), WriteStep::Accept(2)]);
+    let mut output =
+        ScriptedOutput::new(vec![WriteStep::Accept(1), WriteStep::Accept(2)]);
 
     output
         .write_fully(&[1, 2, 3])
@@ -125,7 +172,8 @@ fn test_output_write_fully_writes_full_slice() {
 
 #[test]
 fn test_output_write_fully_retries_interrupted_writes() {
-    let mut output = ScriptedOutput::new(vec![WriteStep::Interrupted, WriteStep::Accept(3)]);
+    let mut output =
+        ScriptedOutput::new(vec![WriteStep::Interrupted, WriteStep::Accept(3)]);
 
     // SAFETY: The full input range is valid.
     unsafe {
@@ -200,7 +248,8 @@ fn test_write_blanket_impl_exposes_output_methods() {
 
     // SAFETY: `b"bc"` is a valid source range inside `b"abc"`.
     let written = unsafe {
-        Output::write_unchecked(&mut cursor, b"abc", 1, 2).expect("write_unchecked should succeed")
+        Output::write_unchecked(&mut cursor, b"abc", 1, 2)
+            .expect("write_unchecked should succeed")
     };
     assert_eq!(2, written);
     assert_eq!(b"bc", cursor.into_inner().as_slice());
@@ -214,4 +263,24 @@ fn test_write_blanket_impl_exposes_output_methods() {
     let mut cursor = Cursor::new(Vec::new());
     Write::write_all(&mut cursor, b"z").expect("seed bytes for flush");
     Output::flush(&mut cursor).expect("flush should succeed");
+}
+
+#[test]
+fn test_write_blanket_impl_rejects_overreported_count() {
+    let mut writer = OverreportingStdWriter;
+
+    let error = Output::write(&mut writer, b"abc")
+        .expect_err("blanket output should validate the Write count");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+}
+
+#[test]
+fn test_write_blanket_impl_propagates_std_write_error() {
+    let mut writer = FailingStdWriter;
+
+    let error = Output::write(&mut writer, b"abc")
+        .expect_err("blanket output should propagate Write errors");
+
+    assert_eq!(ErrorKind::BrokenPipe, error.kind());
 }
