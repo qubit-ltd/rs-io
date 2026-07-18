@@ -198,9 +198,7 @@ fn test_buffered_output_ensure_wraps_unbuffered_output() {
         .expect("ensured buffered output should flush items");
 
     let inner = match output {
-        EnsuredBufferedOutput::Buffered(output) => output
-            .into_inner()
-            .expect("buffered output should flush on into_inner"),
+        EnsuredBufferedOutput::Buffered(output) => flush_into_inner(output),
         EnsuredBufferedOutput::AlreadyBuffered(_) => {
             panic!("unbuffered output should have been wrapped")
         }
@@ -229,9 +227,7 @@ fn test_buffered_output_ensure_keeps_buffered_output() {
         .flush()
         .expect("already buffered output should still flush");
 
-    let inner = output
-        .into_inner()
-        .expect("buffered output should flush on into_inner");
+    let inner = flush_into_inner(output);
 
     assert_eq!(inner.values, vec![1, 2, 3]);
 }
@@ -598,9 +594,10 @@ impl Write for ScriptedWriter {
     }
 }
 
-fn flush_into_inner<W>(mut output: BufferedOutput<W>) -> W
+fn flush_into_inner<O>(mut output: BufferedOutput<O>) -> O
 where
-    W: Write,
+    O: Output,
+    O::Item: Copy + Default,
 {
     output.flush().expect("flush should succeed");
     let (inner, pending) = output.into_parts();
@@ -1181,16 +1178,45 @@ fn test_into_parts_returns_inner_and_pending_bytes_without_flushing() {
 }
 
 #[test]
-fn test_into_inner_flushes_pending_bytes_and_returns_inner() {
+fn test_try_reserve_capacity_preserves_pending_bytes() {
     let cursor = Cursor::new(Vec::new());
     let mut output = BufferedOutput::with_capacity(cursor, 4);
     output
         .write_fully(b"ab")
         .expect("buffered write should succeed");
 
-    let cursor = output
-        .into_inner()
-        .expect("into_inner should flush pending bytes");
+    output
+        .try_reserve_capacity(8)
+        .expect("output buffer growth should succeed");
+
+    assert_eq!(8, output.capacity());
+    let (cursor, pending) = output.into_parts();
+    assert!(cursor.into_inner().is_empty());
+    assert_eq!(b"ab", pending.readable());
+}
+
+#[test]
+fn test_try_reserve_capacity_preserves_allocation_error() {
+    let cursor = Cursor::new(Vec::new());
+    let mut output = BufferedOutput::with_capacity(cursor, 4);
+
+    let error = output
+        .try_reserve_capacity(usize::MAX)
+        .expect_err("oversized output buffer growth should fail");
+
+    assert!(!error.to_string().is_empty());
+    assert_eq!(4, output.capacity());
+}
+
+#[test]
+fn test_flush_then_into_parts_returns_inner() {
+    let cursor = Cursor::new(Vec::new());
+    let mut output = BufferedOutput::with_capacity(cursor, 4);
+    output
+        .write_fully(b"ab")
+        .expect("buffered write should succeed");
+
+    let cursor = flush_into_inner(output);
 
     assert_eq!(b"ab", cursor.into_inner().as_slice());
 }
@@ -1316,7 +1342,7 @@ fn test_buffered_output_write_rejects_overreported_count_via_trait() {
 }
 
 #[test]
-fn test_buffered_output_into_inner_flushes_generic_items() {
+fn test_buffered_output_flush_then_into_parts_returns_generic_inner() {
     let mut output = BufferedOutput::with_capacity(U16Output::default(), 4);
 
     // SAFETY: The source range is valid for u16 items.
@@ -1326,9 +1352,7 @@ fn test_buffered_output_into_inner_flushes_generic_items() {
             .expect("buffered write should succeed");
     }
 
-    let inner = output
-        .into_inner()
-        .expect("into_inner should flush pending generic items");
+    let inner = flush_into_inner(output);
 
     assert_eq!(&[1, 2], inner.values.as_slice());
     assert!(inner.flushed);

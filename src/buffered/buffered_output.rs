@@ -42,7 +42,8 @@ use crate::{
 /// validating the range they initialized.
 /// Callers that need to recover the wrapped writer should call
 /// [`Self::flush`] first, then use [`Self::into_parts`], or call
-/// [`Self::into_inner`] to flush and return the wrapped writer in one step.
+/// Call [`Self::flush`] before [`Self::into_parts`] when pending items must be
+/// written before recovering the wrapped writer.
 /// Dropping a `BufferedOutput` makes a best-effort attempt to write pending
 /// buffered items, but drop-time errors are ignored. For arbitrary item types,
 /// `BufferedOutput` also supports [`Seekable`]-based seeking in item offsets.
@@ -171,24 +172,6 @@ where
         &mut self.inner
     }
 
-    /// Consumes this buffered output after flushing pending items.
-    ///
-    /// # Returns
-    ///
-    /// The wrapped output after all buffered items have been written.
-    ///
-    /// # Errors
-    ///
-    /// Returns any error produced while flushing pending items or flushing the
-    /// wrapped output. If an error is returned, this value is dropped and any
-    /// remaining pending items are flushed only on a best-effort basis.
-    #[inline]
-    pub fn into_inner(mut self) -> Result<O> {
-        self.flush()?;
-        let (inner, _) = self.into_parts();
-        Ok(inner)
-    }
-
     /// Consumes this buffered output without flushing pending items.
     ///
     /// This method performs no I/O. Pending items that have been accepted into
@@ -221,6 +204,21 @@ where
     #[must_use]
     pub fn capacity(&self) -> usize {
         self.buffer.capacity()
+    }
+
+    /// Tries to ensure that the internal buffer has at least `capacity` items.
+    ///
+    /// Pending items are preserved and this method performs no I/O.
+    ///
+    /// # Errors
+    ///
+    /// Returns the original allocation error when the buffer cannot grow.
+    #[inline]
+    pub fn try_reserve_capacity(
+        &mut self,
+        capacity: usize,
+    ) -> std::result::Result<(), std::collections::TryReserveError> {
+        self.buffer.try_reserve_capacity(capacity)
     }
 
     /// Returns the unused capacity in the internal buffer.

@@ -5,12 +5,12 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-mod async_buffered_input_tests;
-mod async_buffered_output_tests;
-mod async_buffered_tests;
-mod buffer_tests;
-mod buffered_input_tests;
-mod buffered_output_tests;
-mod ensured_buffered_input_tests;
-mod ensured_buffered_output_tests;
-mod support_tests;
+
+use super::support_tests::TestInput;
+use qubit_io::AsyncBufferedInput;
+
+#[test]
+fn test_async_buffered_input_uses_requested_capacity() {
+    let input = AsyncBufferedInput::with_capacity(TestInput, 3);
+    assert_eq!(3, input.capacity());
+}

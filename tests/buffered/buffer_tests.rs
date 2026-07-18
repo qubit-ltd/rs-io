@@ -67,6 +67,54 @@ fn test_with_capacity_initializes_empty_window() {
 }
 
 #[test]
+fn test_try_with_capacity_initializes_empty_window() {
+    let buffer = Buffer::<u8>::try_with_capacity(0)
+        .expect("fallible buffer allocation should succeed");
+
+    assert_eq!(1, buffer.capacity());
+    assert!(buffer.is_empty());
+}
+
+#[test]
+fn test_try_with_capacity_preserves_allocation_error() {
+    let error = Buffer::<u8>::try_with_capacity(usize::MAX)
+        .expect_err("oversized buffer allocation should fail");
+
+    assert!(!error.to_string().is_empty());
+}
+
+#[test]
+fn test_try_reserve_capacity_preserves_window() {
+    let mut buffer = Buffer::<u8>::with_capacity(4);
+    // SAFETY: The source and spare windows both contain four elements.
+    unsafe {
+        buffer.copy_from(b"abcd", 0, 4);
+        buffer.consume(1);
+    }
+
+    buffer
+        .try_reserve_capacity(8)
+        .expect("buffer growth should succeed");
+
+    assert_eq!(8, buffer.capacity());
+    assert_eq!(1, buffer.position());
+    assert_eq!(4, buffer.limit());
+    assert_eq!(b"bcd", buffer.readable());
+    assert_eq!(4, buffer.spare_capacity());
+}
+
+#[test]
+fn test_try_reserve_capacity_is_noop_for_existing_capacity() {
+    let mut buffer = Buffer::<u8>::with_capacity(4);
+
+    buffer
+        .try_reserve_capacity(2)
+        .expect("existing capacity should require no allocation");
+
+    assert_eq!(4, buffer.capacity());
+}
+
+#[test]
 fn test_copy_from_appends_to_spare_window() {
     let mut buffer = Buffer::<u8>::with_capacity(6);
     let input = b"abcdef";

@@ -14,6 +14,7 @@ use std::io::{
 
 use crate::ext::internal::read_ext_impl;
 use crate::util::{
+    allocation_error,
     try_reserve_string,
     try_reserve_vec,
 };
@@ -151,7 +152,8 @@ where
         max_len: usize,
     ) -> Result<Vec<u8>> {
         let mut output = Vec::new();
-        try_reserve_vec(&mut output, max_len.min(8192))?;
+        try_reserve_vec(&mut output, max_len.min(8192))
+            .map_err(allocation_error)?;
         read_ext_impl::read_until_limited_into(
             self,
             delimiter,
@@ -185,7 +187,8 @@ where
     ) -> Result<usize> {
         let original_len = output.len();
         let mut bytes = Vec::new();
-        try_reserve_vec(&mut bytes, max_len.min(8192))?;
+        try_reserve_vec(&mut bytes, max_len.min(8192))
+            .map_err(allocation_error)?;
         let result = (|| {
             let count = read_ext_impl::read_until_limited_into(
                 self, b'\n', &mut bytes, max_len,
@@ -196,7 +199,7 @@ where
                     format!("limited line is not valid UTF-8: {error}"),
                 )
             })?;
-            try_reserve_string(output, line.len())?;
+            try_reserve_string(output, line.len()).map_err(allocation_error)?;
             output.push_str(&line);
             Ok(count)
         })();

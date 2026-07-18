@@ -21,7 +21,10 @@ use std::io::{
 };
 use std::string::FromUtf8Error;
 
-use crate::util::try_reserve_vec;
+use crate::util::{
+    allocation_error,
+    try_reserve_vec,
+};
 
 /// Default stack buffer size used by bounded read operations.
 pub const READ_TO_END_BUFFER_SIZE: usize = 8 * 1024;
@@ -87,7 +90,7 @@ pub fn read_exact_vec_limited_into(
             ));
         }
     };
-    try_reserve_vec(output, len)?;
+    try_reserve_vec(output, len).map_err(allocation_error)?;
     output.resize(new_len, 0);
     match reader.read_exact(&mut output[original_len..]) {
         Ok(()) => Ok(()),
@@ -136,7 +139,8 @@ pub fn read_to_end_limited(
     max_len: usize,
 ) -> Result<Vec<u8>> {
     let mut output = Vec::new();
-    try_reserve_vec(&mut output, max_len.min(READ_TO_END_BUFFER_SIZE))?;
+    try_reserve_vec(&mut output, max_len.min(READ_TO_END_BUFFER_SIZE))
+        .map_err(allocation_error)?;
     read_to_end_limited_into(reader, &mut output, max_len)?;
     Ok(output)
 }
@@ -176,7 +180,7 @@ pub fn read_to_end_limited_into(
                 } else if count <= remaining {
                     if let Err(error) = try_reserve_vec(output, count) {
                         output.truncate(original_len);
-                        return Err(error);
+                        return Err(allocation_error(error));
                     }
                     output.extend_from_slice(&buffer[..count]);
                     appended += count;
@@ -276,7 +280,7 @@ where
             return Err(limit_exceeded_error(max_len, delimiter));
         }
 
-        try_reserve_vec(output, requested)?;
+        try_reserve_vec(output, requested).map_err(allocation_error)?;
         output.extend_from_slice(&available[..requested]);
         reader.consume(requested);
         appended += requested;

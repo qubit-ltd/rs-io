@@ -1098,7 +1098,7 @@ fn test_compare_content_with_buffer_size_returns_allocation_error() {
     )
     .expect_err("absurd compare buffers should fail allocation");
 
-    assert_eq!(ErrorKind::Other, error.kind());
+    assert_eq!(ErrorKind::OutOfMemory, error.kind());
 }
 
 #[test]
@@ -1114,5 +1114,5 @@ fn test_copy_at_most_with_buffer_size_returns_allocation_error() {
     )
     .expect_err("absurd copy buffers should fail allocation");
 
-    assert_eq!(ErrorKind::Other, error.kind());
+    assert_eq!(ErrorKind::OutOfMemory, error.kind());
 }

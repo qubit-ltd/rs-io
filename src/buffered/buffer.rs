@@ -6,6 +6,9 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
+use std::collections::TryReserveError;
+
+use crate::try_reserve_vec;
 use crate::util::UncheckedSlice;
 
 /// Low-level contiguous storage with a readable window and spare tail capacity.
@@ -92,6 +95,49 @@ where
             position: 0,
             limit: 0,
         }
+    }
+
+    /// Tries to create an empty buffer with at least the requested capacity.
+    ///
+    /// A requested capacity of `0` is raised to `1`.
+    ///
+    /// # Errors
+    ///
+    /// Returns the original allocation error when the backing storage cannot
+    /// reserve the requested capacity.
+    #[inline]
+    pub fn try_with_capacity(capacity: usize) -> Result<Self, TryReserveError> {
+        let capacity = capacity.max(1);
+        let mut data = Vec::new();
+        try_reserve_vec(&mut data, capacity)?;
+        data.resize(capacity, T::default());
+        Ok(Self {
+            data,
+            position: 0,
+            limit: 0,
+        })
+    }
+
+    /// Tries to ensure that the total element capacity is at least `capacity`.
+    ///
+    /// Existing consumed, readable, and spare windows retain their positions.
+    ///
+    /// # Errors
+    ///
+    /// Returns the original allocation error when the backing storage cannot
+    /// reserve the additional capacity.
+    #[inline]
+    pub fn try_reserve_capacity(
+        &mut self,
+        capacity: usize,
+    ) -> Result<(), TryReserveError> {
+        if capacity <= self.data.len() {
+            return Ok(());
+        }
+        let additional = capacity - self.data.len();
+        try_reserve_vec(&mut self.data, additional)?;
+        self.data.resize(capacity, T::default());
+        Ok(())
     }
 
     /// Returns the total element capacity.

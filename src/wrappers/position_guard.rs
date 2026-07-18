@@ -42,6 +42,7 @@ use std::io::{
 /// assert_eq!(2, stream.position());
 /// # Ok::<(), std::io::Error>(())
 /// ```
+#[must_use = "dropping an unused guard restores the captured position immediately"]
 pub struct PositionGuard<'a, S>
 where
     S: Seek + ?Sized,

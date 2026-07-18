@@ -17,6 +17,7 @@ use crate::Streams;
 use crate::ext::internal::read_ext_impl;
 use crate::util::{
     UncheckedSlice,
+    allocation_error,
     try_reserve_string,
 };
 
@@ -502,7 +503,7 @@ fn read_to_string_limited_into_impl(
     let text =
         String::from_utf8(bytes).map_err(read_ext_impl::invalid_utf8_error)?;
     let count = text.len();
-    try_reserve_string(output, count)?;
+    try_reserve_string(output, count).map_err(allocation_error)?;
     output.push_str(&text);
     Ok(count)
 }

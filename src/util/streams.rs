@@ -25,6 +25,7 @@ use crate::capacity_const::{
 };
 use crate::traits::validate_read_count;
 use crate::util::{
+    allocation_error,
     create_vec,
     try_reserve_vec,
 };
@@ -355,7 +356,7 @@ impl Streams {
                     ),
                 ));
             }
-            try_reserve_vec(&mut collected, read)?;
+            try_reserve_vec(&mut collected, read).map_err(allocation_error)?;
             collected.extend_from_slice(&buffer[..read]);
             let read = read as u64;
             remaining -= read;

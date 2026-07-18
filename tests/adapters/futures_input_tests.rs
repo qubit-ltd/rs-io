@@ -5,12 +5,14 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-mod async_buffered_input_tests;
-mod async_buffered_output_tests;
-mod async_buffered_tests;
-mod buffer_tests;
-mod buffered_input_tests;
-mod buffered_output_tests;
-mod ensured_buffered_input_tests;
-mod ensured_buffered_output_tests;
-mod support_tests;
+
+use qubit_io::FuturesInput;
+use std::io::Cursor;
+
+#[test]
+fn test_futures_input_type_is_public() {
+    assert!(
+        std::any::type_name::<FuturesInput<Cursor<Vec<u8>>>>()
+            .contains("FuturesInput")
+    );
+}

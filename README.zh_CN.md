@@ -84,7 +84,7 @@ limit 和 counting wrapper 面向任意 item；checksum wrapper 只面向字节�
 
 ```toml
 [dependencies]
-qubit-io = "0.13"
+qubit-io = "0.14"
 ```
 
 - 默认 feature：仅运行时中立的核心层。
