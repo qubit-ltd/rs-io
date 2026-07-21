@@ -5,9 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-mod async_input_ext_tests;
 mod async_input_tests;
-mod async_output_ext_tests;
 mod async_output_tests;
 mod buf_read_seek_tests;
 mod flush_future_tests;

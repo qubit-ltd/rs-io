@@ -154,9 +154,7 @@ use qubit_io::{
     AsyncBufferedInput,
     AsyncBufferedOutput,
     AsyncInput,
-    AsyncInputExt,
     AsyncOutput,
-    AsyncOutputExt,
 };
 
 fn complete<F>(future: F) -> F::Output
