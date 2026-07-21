@@ -13,6 +13,10 @@ use std::task::{
     Poll,
 };
 
+use crate::{
+    ReadFullyFuture,
+    ReadFuture,
+};
 use crate::traits::validate_read_count;
 
 /// Minimal runtime-independent asynchronous input interface over items.
@@ -94,5 +98,48 @@ pub trait AsyncInput {
             Poll::Ready(Err(error)) => Poll::Ready(Err(error)),
             Poll::Pending => Poll::Pending,
         }
+    }
+
+    /// Creates a future that performs one asynchronous read operation.
+    ///
+    /// # Parameters
+    ///
+    /// * `output` - Destination storage.
+    ///
+    /// # Returns
+    ///
+    /// A future that resolves with the number of items read.
+    #[inline(always)]
+    fn read_async<'a>(
+        &'a mut self,
+        output: &'a mut [Self::Item],
+    ) -> ReadFuture<'a, Self>
+    where
+        Self: Sized + Unpin,
+    {
+        ReadFuture::new(Pin::new(self), output)
+    }
+
+    /// Creates a future that fills a destination as far as possible.
+    ///
+    /// The returned future retries interrupted operations and stops when the
+    /// destination is full or the input reports EOF.
+    ///
+    /// # Parameters
+    ///
+    /// * `output` - Destination storage.
+    ///
+    /// # Returns
+    ///
+    /// A future that resolves with the total number of items read.
+    #[inline(always)]
+    fn read_fully_async<'a>(
+        &'a mut self,
+        output: &'a mut [Self::Item],
+    ) -> ReadFullyFuture<'a, Self>
+    where
+        Self: Sized + Unpin,
+    {
+        ReadFullyFuture::new(Pin::new(self), output)
     }
 }

@@ -79,9 +79,7 @@ pub use ext::{
 };
 pub use traits::{
     AsyncInput,
-    AsyncInputExt,
     AsyncOutput,
-    AsyncOutputExt,
     BufReadSeek,
     Input,
     Output,

@@ -169,11 +169,9 @@ use qubit_io::{
     AsyncCountingInput,
     AsyncCountingOutput,
     AsyncInput,
-    AsyncInputExt,
     AsyncLimitInput,
     AsyncLimitOutput,
     AsyncOutput,
-    AsyncOutputExt,
 };
 
 struct ByteInput {

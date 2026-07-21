@@ -22,7 +22,6 @@ use std::task::{
 
 use qubit_io::{
     AsyncOutput,
-    AsyncOutputExt,
     WriteFullyFuture,
 };
 
@@ -200,7 +199,7 @@ fn test_write_fully_async_returns_non_interrupted_error() {
 }
 
 #[test]
-fn test_write_fully_async_extension_method_writes_all_items() {
+fn test_write_fully_async_default_method_writes_all_items() {
     struct Output(Vec<u8>);
 
     impl AsyncOutput for Output {
@@ -238,7 +237,7 @@ fn test_write_fully_async_extension_method_writes_all_items() {
 }
 
 #[test]
-fn test_async_output_extension_methods_support_write_and_flush() {
+fn test_async_output_default_methods_support_write_and_flush() {
     struct Output {
         values: Vec<u8>,
         pending_flush: bool,

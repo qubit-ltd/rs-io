@@ -22,7 +22,6 @@ use std::task::{
 
 use qubit_io::{
     AsyncInput,
-    AsyncInputExt,
     ReadFullyFuture,
 };
 
@@ -164,7 +163,7 @@ fn test_read_fully_async_handles_pending_partial_interrupted_and_eof() {
 }
 
 #[test]
-fn test_read_fully_async_extension_method_reads_unpin_input() {
+fn test_read_fully_async_default_method_reads_unpin_input() {
     struct OneShotInput(bool);
 
     impl AsyncInput for OneShotInput {
@@ -200,7 +199,7 @@ fn test_read_fully_async_extension_method_reads_unpin_input() {
 }
 
 #[test]
-fn test_read_async_extension_method_performs_one_read() {
+fn test_read_async_default_method_performs_one_read() {
     struct Input;
 
     impl AsyncInput for Input {
