@@ -18,7 +18,7 @@ Qubit IO 提供运行时中立的同步与异步 item stream，是 Qubit 文件�
 | --- | --- | --- |
 | 输入 | `Input<Item = T>` | `AsyncInput<Item = T>` |
 | 输出 | `Output<Item = T>` | `AsyncOutput<Item = T>` |
-| 便利操作 | `read_fully`、`write_fully` | `AsyncInputExt`、`AsyncOutputExt` |
+| 便利操作 | `read_fully`、`write_fully` | `AsyncInput`、`AsyncOutput` 的默认方法 |
 | 缓冲 | `BufferedInput`、`BufferedOutput` | `AsyncBufferedInput`、`AsyncBufferedOutput` |
 | 限量 | std stream 的 `LimitReader`、`LimitWriter` | `AsyncLimitInput`、`AsyncLimitOutput` |
 | 计数 | `CountingReader`、`CountingWriter` | `AsyncCountingInput`、`AsyncCountingOutput` |
@@ -56,7 +56,7 @@ Tokio 适配通过显式 newtype 完成，从而避免一个类型同时实现�
 时产生 coherence 冲突。
 
 ```rust,ignore
-use qubit_io::{AsyncInputExt, TokioInput};
+use qubit_io::{AsyncInput, TokioInput};
 
 let socket = /* 某个 tokio::io::AsyncRead */;
 let mut input = TokioInput::new(socket);

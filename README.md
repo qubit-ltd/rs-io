@@ -19,7 +19,7 @@ paths, commit, abort, or persistence semantics.
 | --- | --- | --- |
 | Input | `Input<Item = T>` | `AsyncInput<Item = T>` |
 | Output | `Output<Item = T>` | `AsyncOutput<Item = T>` |
-| Convenience | `read_fully`, `write_fully` | `AsyncInputExt`, `AsyncOutputExt` |
+| Convenience | `read_fully`, `write_fully` | Defaults on `AsyncInput`, `AsyncOutput` |
 | Buffering | `BufferedInput`, `BufferedOutput` | `AsyncBufferedInput`, `AsyncBufferedOutput` |
 | Limits | `LimitReader`, `LimitWriter` for std streams | `AsyncLimitInput`, `AsyncLimitOutput` |
 | Counters | `CountingReader`, `CountingWriter` | `AsyncCountingInput`, `AsyncCountingOutput` |
@@ -58,7 +58,7 @@ The optional Tokio adapter is an explicit newtype. This avoids coherence
 conflicts when a stream implements more than one async ecosystem trait.
 
 ```rust,ignore
-use qubit_io::{AsyncInputExt, TokioInput};
+use qubit_io::{AsyncInput, TokioInput};
 
 let socket = /* a tokio::io::AsyncRead value */;
 let mut input = TokioInput::new(socket);
