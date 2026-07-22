@@ -9,6 +9,7 @@
 #[cfg(coverage)]
 use std::cell::Cell;
 use std::cmp::Ordering;
+use std::convert::Infallible;
 use std::io::{
     Error,
     ErrorKind,
@@ -55,7 +56,10 @@ use crate::{
 /// assert_eq!(b"abcd", output.as_slice());
 /// # Ok::<(), std::io::Error>(())
 /// ```
-pub enum Streams {}
+pub struct Streams {
+    /// Prevents construction of this namespace type.
+    _private: Infallible,
+}
 
 impl Streams {
     /// Copies all remaining bytes from `reader` to `writer`.

@@ -95,16 +95,6 @@ where
         &mut self.inner
     }
 
-    /// Consumes this wrapper and returns the wrapped input.
-    ///
-    /// # Returns
-    ///
-    /// Returns the input and discards unread buffered items.
-    #[must_use]
-    pub fn into_inner(self) -> I {
-        self.inner
-    }
-
     /// Consumes this wrapper and preserves its unread buffer.
     ///
     /// # Returns

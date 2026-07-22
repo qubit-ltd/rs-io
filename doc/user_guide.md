@@ -45,6 +45,7 @@ The asynchronous core is executor-independent:
 AsyncInput::poll_read_unchecked
 AsyncOutput::poll_write_unchecked
 AsyncOutput::poll_flush
+AsyncClose::poll_close
 ```
 
 Core poll methods support `!Unpin` implementations. Convenience extension
@@ -52,13 +53,23 @@ methods require `Unpin` and return named futures:
 
 - `read_async`: one input operation;
 - `read_fully_async`: fill a destination or stop at EOF;
+- `read_exact_async`: fill a destination or report `UnexpectedEof`;
 - `write_async`: one output operation;
 - `write_fully_async`: accept the complete source or report `WriteZero`;
 - `flush_async`: flush the output.
+- `close_async`: close an `AsyncClose` output.
 
-Progress for multi-operation futures is stored in the future object. A poll
-implementation must never report transfer progress together with
-`Poll::Pending`.
+Already pinned `!Unpin` implementations and trait objects use
+`PinnedAsyncInputExt` and `PinnedAsyncOutputExt` for the same operations.
+`ReadFullyFuture`, `ReadExactFuture`, and `WriteFullyFuture` expose completed
+item counts so callers can account for progress after cancellation.
+
+The poll contract is strict: zero-length transfers complete immediately
+without polling the inner stream; `Pending` and errors transfer no items;
+`Pending` registers the current waker; and `WouldBlock` or `Interrupted` never
+cross the async trait boundary. A zero result for a non-empty read is EOF. A
+zero result during a full write becomes `WriteZero`. Polling a completed named
+future is a caller error and panics.
 
 ## 4. Buffering
 
@@ -75,6 +86,10 @@ Asynchronous buffering:
 
 - `AsyncBufferedInput<I>` retains prefetched items across `Pending`.
 - `AsyncBufferedOutput<O>` retains accepted items and partial-flush progress.
+
+`AsyncBufferedInput` exposes `into_parts()` rather than an `into_inner()` that
+could silently discard unread prefetched items. When its inner output supports
+`AsyncClose`, `AsyncBufferedOutput` drains its own buffer before closing it.
 
 An asynchronous `Drop` cannot await. `AsyncBufferedOutput` therefore never
 pretends drop-time delivery succeeded. Complete `flush_async()` before drop, or
@@ -107,6 +122,10 @@ Async bridges are explicit newtypes in both directions:
 
 Explicit wrappers avoid overlapping blanket implementations. The runtime-
 neutral core has no optional dependency enabled by default.
+
+Closing is never emulated by flushing. `TokioOutput` delegates to
+`poll_shutdown`, `FuturesOutput` delegates to `poll_close`, and reverse write
+adapters require `AsyncClose<Item = u8>`.
 
 ## 7. Layering guidance
 

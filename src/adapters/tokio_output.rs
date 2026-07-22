@@ -15,8 +15,10 @@ use std::task::{
 use tokio::io::AsyncWrite;
 
 use crate::{
+    AsyncClose,
     AsyncOutput,
     UncheckedSlice,
+    traits::validate_async_error,
 };
 
 /// Adapts a Tokio [`AsyncWrite`] value to Qubit's [`AsyncOutput`].
@@ -87,6 +89,7 @@ where
         // SAFETY: The caller guarantees that the source range is valid.
         let source = unsafe { UncheckedSlice::subslice(input, index, count) };
         AsyncWrite::poll_write(self.get_pin_mut(), cx, source)
+            .map(|result| result.map_err(validate_async_error))
     }
 
     fn poll_flush(
@@ -94,5 +97,19 @@ where
         cx: &mut Context<'_>,
     ) -> Poll<std::io::Result<()>> {
         AsyncWrite::poll_flush(self.get_pin_mut(), cx)
+            .map(|result| result.map_err(validate_async_error))
+    }
+}
+
+impl<T> AsyncClose for TokioOutput<T>
+where
+    T: AsyncWrite,
+{
+    fn poll_close(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        AsyncWrite::poll_shutdown(self.get_pin_mut(), cx)
+            .map(|result| result.map_err(validate_async_error))
     }
 }

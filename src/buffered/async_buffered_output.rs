@@ -16,6 +16,7 @@ use std::{
 };
 
 use crate::{
+    AsyncClose,
     AsyncOutput,
     Buffer,
     buffered::DEFAULT_BUFFER_CAPACITY,
@@ -163,8 +164,6 @@ where
                         this.buffer.consume(written);
                     }
                 }
-                Poll::Ready(Err(error))
-                    if error.kind() == io::ErrorKind::Interrupted => {}
                 Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
                 Poll::Pending => return Poll::Pending,
             }
@@ -253,5 +252,26 @@ where
         let this = unsafe { self.get_unchecked_mut() };
         // SAFETY: `inner` remains pinned in place for this call.
         unsafe { Pin::new_unchecked(&mut this.inner) }.poll_flush(cx)
+    }
+}
+
+impl<O> AsyncClose for AsyncBufferedOutput<O>
+where
+    O: AsyncClose,
+    O::Item: Copy + Default,
+{
+    fn poll_close(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<io::Result<()>> {
+        match self.as_mut().poll_drain_buffer(cx) {
+            Poll::Ready(Ok(())) => {}
+            Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
+            Poll::Pending => return Poll::Pending,
+        }
+        // SAFETY: The pinned wrapper never moves `inner`.
+        let this = unsafe { self.get_unchecked_mut() };
+        // SAFETY: `inner` remains pinned in place for this call.
+        unsafe { Pin::new_unchecked(&mut this.inner) }.poll_close(cx)
     }
 }

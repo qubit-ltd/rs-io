@@ -14,9 +14,17 @@ use std::io::{
 };
 use std::marker::PhantomPinned;
 use std::pin::Pin;
+use std::sync::{
+    Arc,
+    atomic::{
+        AtomicBool,
+        Ordering,
+    },
+};
 use std::task::{
     Context,
     Poll,
+    Wake,
     Waker,
 };
 
@@ -28,7 +36,6 @@ use qubit_io::{
 enum WriteStep {
     Accept(usize),
     Error(ErrorKind),
-    Interrupted,
     Pending,
     Zero,
 }
@@ -36,6 +43,8 @@ enum WriteStep {
 struct ScriptedAsyncOutput {
     values: Vec<u8>,
     write_steps: VecDeque<WriteStep>,
+    poll_count: usize,
+    registered_waker: Option<Waker>,
     flush_pending: bool,
     _pinned: PhantomPinned,
 }
@@ -45,6 +54,8 @@ impl ScriptedAsyncOutput {
         Self {
             values: Vec::new(),
             write_steps: VecDeque::from(write_steps),
+            poll_count: 0,
+            registered_waker: None,
             flush_pending: false,
             _pinned: PhantomPinned,
         }
@@ -56,13 +67,14 @@ impl AsyncOutput for ScriptedAsyncOutput {
 
     unsafe fn poll_write_unchecked(
         self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
+        cx: &mut Context<'_>,
         input: &[u8],
         index: usize,
         count: usize,
     ) -> Poll<std::io::Result<usize>> {
         // SAFETY: This implementation does not move the pinned value.
         let this = unsafe { self.get_unchecked_mut() };
+        this.poll_count += 1;
         match this
             .write_steps
             .pop_front()
@@ -77,11 +89,10 @@ impl AsyncOutput for ScriptedAsyncOutput {
             WriteStep::Error(kind) => {
                 Poll::Ready(Err(Error::new(kind, "write failed")))
             }
-            WriteStep::Interrupted => Poll::Ready(Err(Error::new(
-                ErrorKind::Interrupted,
-                "interrupted",
-            ))),
-            WriteStep::Pending => Poll::Pending,
+            WriteStep::Pending => {
+                this.registered_waker = Some(cx.waker().clone());
+                Poll::Pending
+            }
             WriteStep::Zero => Poll::Ready(Ok(0)),
         }
     }
@@ -151,17 +162,70 @@ fn test_async_output_poll_write_rejects_overreported_count() {
 }
 
 #[test]
-fn test_write_fully_async_handles_pending_partial_and_interrupted() {
+fn test_async_output_zero_length_write_does_not_poll_inner() {
+    let mut output = Box::pin(ScriptedAsyncOutput::new(vec![]));
+    let mut cx = context();
+
+    let result = AsyncOutput::poll_write(output.as_mut(), &mut cx, &[]);
+
+    assert!(matches!(result, Poll::Ready(Ok(0))));
+    assert_eq!(0, output.poll_count);
+}
+
+#[test]
+fn test_async_output_poll_write_rejects_forbidden_error_kinds() {
+    for kind in [ErrorKind::WouldBlock, ErrorKind::Interrupted] {
+        let mut output =
+            Box::pin(ScriptedAsyncOutput::new(vec![WriteStep::Error(kind)]));
+        let mut cx = context();
+
+        let error = AsyncOutput::poll_write(output.as_mut(), &mut cx, &[1])
+            .expect_ready("forbidden write error should be ready")
+            .expect_err("forbidden write error should fail");
+
+        assert_eq!(ErrorKind::InvalidData, error.kind());
+        assert!(output.values.is_empty());
+    }
+}
+
+#[test]
+fn test_async_output_pending_registers_waker_without_progress() {
+    struct TestWake(AtomicBool);
+
+    impl Wake for TestWake {
+        fn wake(self: Arc<Self>) {
+            self.0.store(true, Ordering::Relaxed);
+        }
+    }
+
+    let mut output =
+        Box::pin(ScriptedAsyncOutput::new(vec![WriteStep::Pending]));
+    let waker = Waker::from(Arc::new(TestWake(AtomicBool::new(false))));
+    let mut cx = Context::from_waker(&waker);
+
+    let result = AsyncOutput::poll_write(output.as_mut(), &mut cx, &[1]);
+
+    assert!(result.is_pending());
+    assert!(output.values.is_empty());
+    let registered_waker = output
+        .registered_waker
+        .as_ref()
+        .expect("pending write should register the current waker");
+    assert!(registered_waker.will_wake(&waker));
+}
+
+#[test]
+fn test_write_fully_async_handles_pending_and_partial_writes() {
     let mut output = Box::pin(ScriptedAsyncOutput::new(vec![
         WriteStep::Accept(2),
         WriteStep::Pending,
-        WriteStep::Interrupted,
         WriteStep::Accept(2),
     ]));
     let mut future = WriteFullyFuture::new(output.as_mut(), &[1, 2, 3, 4]);
     let mut cx = context();
 
     assert!(Future::poll(Pin::new(&mut future), &mut cx).is_pending());
+    assert_eq!(2, future.items_written());
     Future::poll(Pin::new(&mut future), &mut cx)
         .expect_ready("second poll should complete")
         .expect("write_fully should succeed");

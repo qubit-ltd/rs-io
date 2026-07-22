@@ -11,6 +11,7 @@
 //! already validate bounds in their own protocol.
 
 use core::mem;
+use std::convert::Infallible;
 use std::io::{
     Error,
     ErrorKind,
@@ -21,7 +22,10 @@ use std::io::{
 ///
 /// All functions are unsafe and assume the caller has already validated their
 /// preconditions. Safety requirements in each method are explicit.
-pub enum UncheckedSlice {}
+pub struct UncheckedSlice {
+    /// Prevents construction of this namespace type.
+    _private: Infallible,
+}
 
 impl UncheckedSlice {
     /// Returns the exclusive end index of a checked slice range.

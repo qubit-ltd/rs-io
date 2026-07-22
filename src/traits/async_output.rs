@@ -13,12 +13,15 @@ use std::task::{
     Poll,
 };
 
+use crate::traits::{
+    validate_async_error,
+    validate_write_count,
+};
 use crate::{
     FlushFuture,
     WriteFullyFuture,
     WriteFuture,
 };
-use crate::traits::validate_write_count;
 
 /// Minimal runtime-independent asynchronous output interface over items.
 ///
@@ -53,7 +56,15 @@ pub trait AsyncOutput {
     /// # Returns
     ///
     /// [`Poll::Pending`] when no result is currently available, or a ready I/O
-    /// result containing a count in `0..=count`.
+    /// result containing a count in `0..=count`. A zero `count` must
+    /// immediately return `Poll::Ready(Ok(0))`.
+    ///
+    /// Before returning [`Poll::Pending`], the implementation must arrange for
+    /// `cx`'s waker to be notified when progress may be possible. Neither
+    /// `Poll::Pending` nor `Poll::Ready(Err(_))` may accept items.
+    /// `WouldBlock` and `Interrupted` must not cross this asynchronous
+    /// boundary; implementations must respectively register readiness or retry
+    /// internally.
     ///
     /// # Safety
     ///
@@ -89,13 +100,18 @@ pub trait AsyncOutput {
         cx: &mut Context<'_>,
         input: &[Self::Item],
     ) -> Poll<Result<usize>> {
+        if input.is_empty() {
+            return Poll::Ready(Ok(0));
+        }
         let requested = input.len();
         // SAFETY: The full input slice is a valid source range.
         match unsafe { self.poll_write_unchecked(cx, input, 0, requested) } {
             Poll::Ready(Ok(written)) => Poll::Ready(
                 validate_write_count(written, requested).map(|()| written),
             ),
-            Poll::Ready(Err(error)) => Poll::Ready(Err(error)),
+            Poll::Ready(Err(error)) => {
+                Poll::Ready(Err(validate_async_error(error)))
+            }
             Poll::Pending => Poll::Pending,
         }
     }
@@ -110,6 +126,10 @@ pub trait AsyncOutput {
     /// # Returns
     ///
     /// [`Poll::Pending`] or the ready flush result.
+    ///
+    /// Before returning [`Poll::Pending`], the implementation must arrange for
+    /// `cx`'s waker to be notified when flushing may progress. `WouldBlock` and
+    /// `Interrupted` must not cross this asynchronous boundary.
     fn poll_flush(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -137,8 +157,8 @@ pub trait AsyncOutput {
 
     /// Creates a future that writes the entire source slice.
     ///
-    /// The returned future retries interrupted operations and reports
-    /// [`std::io::ErrorKind::WriteZero`] when output makes no progress.
+    /// The returned future reports [`std::io::ErrorKind::WriteZero`] when
+    /// output makes no progress.
     ///
     /// # Parameters
     ///

@@ -7,7 +7,6 @@
 // =============================================================================
 // qubit-style: allow coverage-cfg
 mod allocation;
-mod nz;
 mod streams;
 mod unchecked_slice;
 
@@ -26,11 +25,6 @@ pub use allocation::{
 pub use allocation::{
     try_reserve_string,
     try_reserve_vec,
-};
-#[allow(unused_imports)]
-pub use nz::{
-    nz,
-    nz_const,
 };
 pub use streams::Streams;
 #[cfg(coverage)]

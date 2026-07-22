@@ -6,13 +6,17 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
+mod close_future;
 mod flush_future;
+mod read_exact_future;
 mod read_fully_future;
 mod read_future;
 mod write_fully_future;
 mod write_future;
 
+pub use close_future::CloseFuture;
 pub use flush_future::FlushFuture;
+pub use read_exact_future::ReadExactFuture;
 pub use read_fully_future::ReadFullyFuture;
 pub use read_future::ReadFuture;
 pub use write_fully_future::WriteFullyFuture;

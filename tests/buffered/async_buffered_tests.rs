@@ -71,7 +71,6 @@ impl AsyncInput for ScriptedInput {
 enum WriteStep {
     Accept(usize),
     Error(ErrorKind),
-    Interrupted,
     Pending,
     Zero,
 }
@@ -87,6 +86,7 @@ struct ScriptedOutput {
     write_steps: VecDeque<WriteStep>,
     flush_steps: VecDeque<FlushStep>,
     marker: usize,
+    closed: bool,
 }
 
 impl ScriptedOutput {
@@ -99,7 +99,18 @@ impl ScriptedOutput {
             write_steps: write_steps.into_iter().collect(),
             flush_steps: flush_steps.into_iter().collect(),
             marker: 0,
+            closed: false,
         }
+    }
+}
+
+impl AsyncClose for ScriptedOutput {
+    fn poll_close(
+        mut self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<io::Result<()>> {
+        self.closed = true;
+        Poll::Ready(Ok(()))
     }
 }
 
@@ -127,10 +138,6 @@ impl AsyncOutput for ScriptedOutput {
             WriteStep::Error(kind) => {
                 Poll::Ready(Err(Error::new(kind, "scripted write failure")))
             }
-            WriteStep::Interrupted => Poll::Ready(Err(Error::new(
-                ErrorKind::Interrupted,
-                "scripted interruption",
-            ))),
             WriteStep::Pending => Poll::Pending,
             WriteStep::Zero => Poll::Ready(Ok(0)),
         }
@@ -153,6 +160,7 @@ impl AsyncOutput for ScriptedOutput {
 use qubit_io::{
     AsyncBufferedInput,
     AsyncBufferedOutput,
+    AsyncClose,
     AsyncInput,
     AsyncOutput,
 };
@@ -240,8 +248,9 @@ fn async_buffered_input_exposes_owned_parts_and_accessors() -> io::Result<()> {
         0,
     );
     assert_eq!(1, input.capacity());
-    let inner = input.into_inner();
+    let (inner, buffer) = input.into_parts();
     assert_eq!(0, inner.marker);
+    assert!(buffer.is_empty());
     Ok(())
 }
 
@@ -351,12 +360,11 @@ fn async_buffered_output_exposes_pending_parts_and_direct_writes()
 }
 
 #[test]
-fn async_buffered_output_retries_pending_interrupted_and_partial_drains()
--> io::Result<()> {
+fn async_buffered_output_handles_pending_and_partial_drains() -> io::Result<()>
+{
     let inner = ScriptedOutput::new(
         [
             WriteStep::Pending,
-            WriteStep::Interrupted,
             WriteStep::Accept(1),
             WriteStep::Accept(1),
             WriteStep::Accept(1),
@@ -425,6 +433,22 @@ fn async_buffered_output_reports_drain_and_flush_failures() -> io::Result<()> {
     let error = complete(failing_inner_flush.flush_async())
         .expect_err("inner flush error should be preserved");
     assert_eq!(ErrorKind::Other, error.kind());
+    Ok(())
+}
+
+#[test]
+fn async_buffered_output_drains_before_closing_inner() -> io::Result<()> {
+    let inner = ScriptedOutput::new([WriteStep::Accept(2)], []);
+    let mut output = AsyncBufferedOutput::with_capacity(inner, 2);
+    assert_eq!(2, complete(output.write_async(&[1, 2]))?);
+    let mut cx = Context::from_waker(Waker::noop());
+
+    AsyncClose::poll_close(Pin::new(&mut output), &mut cx)
+        .expect_ready("close should complete")?;
+
+    assert_eq!(&[1, 2], output.inner().values.as_slice());
+    assert!(output.inner().closed);
+    assert_eq!(0, output.pending_len());
     Ok(())
 }
 

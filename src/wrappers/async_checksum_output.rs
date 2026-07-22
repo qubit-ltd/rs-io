@@ -16,7 +16,10 @@ use std::{
     },
 };
 
-use crate::AsyncOutput;
+use crate::{
+    AsyncClose,
+    AsyncOutput,
+};
 
 /// Asynchronous byte output that hashes successfully accepted bytes.
 ///
@@ -26,6 +29,22 @@ use crate::AsyncOutput;
 pub struct AsyncChecksumOutput<O, H> {
     inner: O,
     hasher: H,
+}
+
+impl<O, H> AsyncClose for AsyncChecksumOutput<O, H>
+where
+    O: AsyncClose<Item = u8>,
+    H: Hasher,
+{
+    fn poll_close(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<io::Result<()>> {
+        // SAFETY: `inner` is never moved while projecting this pinned wrapper.
+        let this = unsafe { self.get_unchecked_mut() };
+        // SAFETY: The pinned wrapper keeps `inner` at a stable address.
+        unsafe { Pin::new_unchecked(&mut this.inner) }.poll_close(cx)
+    }
 }
 
 impl<O, H> AsyncChecksumOutput<O, H>

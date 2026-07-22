@@ -15,6 +15,12 @@
 //! selecting an executor. Standard-library byte streams implement the
 //! synchronous traits automatically; optional newtypes bridge Tokio and
 //! `futures-io` asynchronous streams without overlapping blanket impls.
+//! [`AsyncClose`] represents a real close operation rather than a flush.
+//! Named futures preserve multi-poll progress, while [`PinnedAsyncInputExt`]
+//! and [`PinnedAsyncOutputExt`] support pinned `!Unpin` values and trait
+//! objects. Async implementations must register the current waker before
+//! returning `Pending`, transfer no items on `Pending` or errors, and prevent
+//! `WouldBlock` and `Interrupted` from crossing the trait boundary.
 //!
 //! Item-oriented buffering includes [`BufferedInput`], [`BufferedOutput`],
 //! [`AsyncBufferedInput`], and [`AsyncBufferedOutput`]. Limit, counting, and
@@ -49,7 +55,9 @@ pub use adapters::{
     TokioOutput,
 };
 pub use async_io::{
+    CloseFuture,
     FlushFuture,
+    ReadExactFuture,
     ReadFullyFuture,
     ReadFuture,
     WriteFullyFuture,
@@ -78,11 +86,14 @@ pub use ext::{
     WriteSeekExt,
 };
 pub use traits::{
+    AsyncClose,
     AsyncInput,
     AsyncOutput,
     BufReadSeek,
     Input,
     Output,
+    PinnedAsyncInputExt,
+    PinnedAsyncOutputExt,
     ReadSeek,
     ReadWrite,
     ReadWriteSeek,
@@ -104,11 +115,6 @@ pub use util::{
     coverage_fail_reserve_after,
     coverage_reset_add_item_count_hooks,
     coverage_reset_reserve_hooks,
-};
-#[allow(unused_imports)]
-pub use util::{
-    nz,
-    nz_const,
 };
 pub use util::{
     try_reserve_string,

@@ -100,6 +100,7 @@ struct ScriptedOutput {
     flush_steps: VecDeque<FlushStep>,
     buffered: bool,
     marker: usize,
+    closed: bool,
 }
 
 impl ScriptedOutput {
@@ -114,7 +115,18 @@ impl ScriptedOutput {
             flush_steps: flush_steps.into_iter().collect(),
             buffered,
             marker: 0,
+            closed: false,
         }
+    }
+}
+
+impl AsyncClose for ScriptedOutput {
+    fn poll_close(
+        mut self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<io::Result<()>> {
+        self.closed = true;
+        Poll::Ready(Ok(()))
     }
 }
 
@@ -166,6 +178,7 @@ impl AsyncOutput for ScriptedOutput {
 use qubit_io::{
     AsyncChecksumInput,
     AsyncChecksumOutput,
+    AsyncClose,
     AsyncCountingInput,
     AsyncCountingOutput,
     AsyncInput,
@@ -173,6 +186,24 @@ use qubit_io::{
     AsyncLimitOutput,
     AsyncOutput,
 };
+
+#[test]
+fn test_async_output_wrappers_propagate_close() {
+    let inner = ScriptedOutput::new([], [], false);
+    let output = AsyncLimitOutput::new(inner, 10);
+    let output = AsyncChecksumOutput::new(output, DefaultHasher::new());
+    let mut output = AsyncCountingOutput::new(output);
+    let mut cx = Context::from_waker(Waker::noop());
+
+    AsyncClose::poll_close(Pin::new(&mut output), &mut cx)
+        .expect_ready("close should complete")
+        .expect("close should succeed");
+
+    let output = output.into_inner();
+    let (output, _) = output.into_parts();
+    let inner = output.into_inner();
+    assert!(inner.closed);
+}
 
 struct ByteInput {
     bytes: Vec<u8>,
@@ -492,7 +523,7 @@ fn async_limit_output_bounds_writes_and_preserves_state_on_pending_or_error() {
         .poll_write(&mut cx, b"abcd")
         .expect_ready("limited write error should be ready")
         .expect_err("limited write should fail");
-    assert_eq!(ErrorKind::WouldBlock, error.kind());
+    assert_eq!(ErrorKind::InvalidData, error.kind());
     assert_eq!(2, output.remaining());
     assert_eq!(
         2,

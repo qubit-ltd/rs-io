@@ -1,10 +1,11 @@
 # Qubit IO
 
 [![Rust CI](https://github.com/qubit-ltd/rs-io/actions/workflows/ci.yml/badge.svg)](https://github.com/qubit-ltd/rs-io/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://qubit-ltd.github.io/rs-io/coverage-badge.json)](https://qubit-ltd.github.io/rs-io/coverage/)
 [![Crates.io](https://img.shields.io/crates/v/qubit-io.svg?color=blue)](https://crates.io/crates/qubit-io)
 [![Rust](https://img.shields.io/badge/rust-1.94+-blue.svg?logo=rust)](https://www.rust-lang.org)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![English](https://img.shields.io/badge/Document-English-blue.svg)](README.md)
+[![English Document](https://img.shields.io/badge/Document-English-blue.svg)](README.md)
 
 Qubit IO 提供运行时中立的同步与异步 item stream，是 Qubit 文件系统、二进制
 和文本 crate 共用的传输层。
@@ -18,6 +19,7 @@ Qubit IO 提供运行时中立的同步与异步 item stream，是 Qubit 文件�
 | --- | --- | --- |
 | 输入 | `Input<Item = T>` | `AsyncInput<Item = T>` |
 | 输出 | `Output<Item = T>` | `AsyncOutput<Item = T>` |
+| 关闭 | output 所有权 / drop | `AsyncClose` |
 | 便利操作 | `read_fully`、`write_fully` | `AsyncInput`、`AsyncOutput` 的默认方法 |
 | 缓冲 | `BufferedInput`、`BufferedOutput` | `AsyncBufferedInput`、`AsyncBufferedOutput` |
 | 限量 | std stream 的 `LimitReader`、`LimitWriter` | `AsyncLimitInput`、`AsyncLimitOutput` |
@@ -26,7 +28,13 @@ Qubit IO 提供运行时中立的同步与异步 item stream，是 Qubit 文件�
 
 `AsyncInput` 和 `AsyncOutput` 只使用 `Pin`、`Context` 与 `Poll`，不依赖
 Tokio、`futures-io` 或任何 executor。跨多次 `Pending` 的操作由
-`ReadFullyFuture`、`WriteFullyFuture` 等具名 Future 保存进度。
+`ReadExactFuture`、`ReadFullyFuture`、`WriteFullyFuture` 等具名 Future
+保存进度，并允许在取消后检查进度。已经 pinned 的 `!Unpin` 值和 trait object
+使用 `PinnedAsyncInputExt` 与 `PinnedAsyncOutputExt`。
+
+`Pending` 和错误不得传输 item；`Pending` 必须注册当前 waker。`WouldBlock` 与
+`Interrupted` 不会越过异步边界；非空读取成功返回零表示 EOF。`AsyncClose`
+与 flush 不同，并分别映射到 Tokio 原生 shutdown 和 futures-io close。
 
 ## 同步示例
 
@@ -61,7 +69,7 @@ use qubit_io::{AsyncInput, TokioInput};
 let socket = /* 某个 tokio::io::AsyncRead */;
 let mut input = TokioInput::new(socket);
 let mut header = [0_u8; 16];
-let read = input.read_fully_async(&mut header).await?;
+input.read_exact_async(&mut header).await?;
 ```
 
 反向适配器同样可用：`TokioAsyncRead`、`TokioAsyncWrite` 把 Qubit stream
@@ -77,6 +85,9 @@ position/limit 模型。
 在返回 `Pending` 前会先记录已完成进度。异步缓冲器在 `Drop` 中无法执行 I/O；
 需要保证送达时必须调用 `flush_async()`，或用 `into_parts()` 取回 pending 数据。
 
+当内部 output 实现 `AsyncClose` 时，`AsyncBufferedOutput` 会先排空自身 pending
+item，再把 close 委托给内部 output。
+
 limit 和 counting wrapper 面向任意 item；checksum wrapper 只面向字节，因为
 `std::hash::Hasher` 的输入是字节。
 
@@ -91,20 +102,43 @@ qubit-io = "0.14"
 - `tokio`：Qubit 与 Tokio I/O trait 的双向适配。
 - `futures-io`：Qubit 与 `futures-io` trait 的双向适配。
 
-## 文档与检查
+## 文档
 
 - [User guide](doc/user_guide.md)
 - [用户指南](doc/user_guide.zh_CN.md)
 
+docs.rs 上的 API 文档会启用项目声明的全部 feature 构建。
+
+## 测试
+
 ```bash
-cargo test --no-default-features
+# 使用默认 feature 集运行测试
+cargo test
+
+# 使用项目声明的全部 feature 运行测试
 cargo test --all-features
-./align-ci.sh
+
+# 运行项目 CI 检查
 ./ci-check.sh
+
+# 检查代码覆盖率
+./coverage.sh
 ```
 
 ## 许可证
 
 Copyright (c) 2025 - 2026. Haixing Hu. All rights reserved.
 
-本项目基于 Apache License 2.0 授权，详见 [LICENSE](LICENSE)。
+本项目基于 Apache License 2.0 授权。完整许可证文本请参阅
+[LICENSE](LICENSE)。
+
+## 贡献
+
+欢迎贡献。请遵循 Rust API 指南，及时更新公共 API 文档与测试，并在提交
+Pull Request 前运行 `./align-ci.sh`格式化代码，运行`./ci-check.sh`对齐CI要求。
+
+## 作者
+
+**Haixing Hu** - *Qubit Co. Ltd.*
+
+仓库地址：[https://github.com/qubit-ltd/rs-io](https://github.com/qubit-ltd/rs-io)
