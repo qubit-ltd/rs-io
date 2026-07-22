@@ -15,13 +15,31 @@ use std::{
     },
 };
 
-use crate::AsyncOutput;
+use crate::{
+    AsyncClose,
+    AsyncOutput,
+};
 
 /// Asynchronous output that counts successfully accepted items.
 #[derive(Debug)]
 pub struct AsyncCountingOutput<O> {
     inner: O,
     items_written: u64,
+}
+
+impl<O> AsyncClose for AsyncCountingOutput<O>
+where
+    O: AsyncClose,
+{
+    fn poll_close(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<io::Result<()>> {
+        // SAFETY: `inner` is never moved while projecting this pinned wrapper.
+        let this = unsafe { self.get_unchecked_mut() };
+        // SAFETY: The pinned wrapper keeps `inner` at a stable address.
+        unsafe { Pin::new_unchecked(&mut this.inner) }.poll_close(cx)
+    }
 }
 
 impl<O> AsyncCountingOutput<O> {

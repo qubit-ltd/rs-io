@@ -21,6 +21,9 @@ use std::task::{
 use crate::AsyncOutput;
 
 /// Future that writes every item from its source slice.
+///
+/// Items accepted before cancellation remain written. The accepted count is
+/// observable through [`Self::items_written`].
 #[must_use = "futures do nothing unless polled"]
 pub struct WriteFullyFuture<'a, O>
 where
@@ -55,6 +58,13 @@ where
             completed: false,
         }
     }
+
+    /// Returns the number of items written so far.
+    #[inline(always)]
+    #[must_use]
+    pub const fn items_written(&self) -> usize {
+        self.written
+    }
 }
 
 impl<O> Future for WriteFullyFuture<'_, O>
@@ -77,8 +87,6 @@ where
                     )));
                 }
                 Poll::Ready(Ok(written)) => this.written += written,
-                Poll::Ready(Err(error))
-                    if error.kind() == ErrorKind::Interrupted => {}
                 Poll::Ready(Err(error)) => {
                     this.completed = true;
                     return Poll::Ready(Err(error));

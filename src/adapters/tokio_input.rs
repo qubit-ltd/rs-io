@@ -20,6 +20,7 @@ use tokio::io::{
 use crate::{
     AsyncInput,
     UncheckedSlice,
+    traits::validate_async_error,
 };
 
 /// Adapts a Tokio [`AsyncRead`] value to Qubit's [`AsyncInput`].
@@ -96,7 +97,12 @@ where
         let target =
             unsafe { UncheckedSlice::subslice_mut(output, index, count) };
         let mut buffer = ReadBuf::new(target);
-        AsyncRead::poll_read(self.get_pin_mut(), cx, &mut buffer)
-            .map(|result| result.map(|()| buffer.filled().len()))
+        AsyncRead::poll_read(self.get_pin_mut(), cx, &mut buffer).map(
+            |result| {
+                result
+                    .map_err(validate_async_error)
+                    .map(|()| buffer.filled().len())
+            },
+        )
     }
 }

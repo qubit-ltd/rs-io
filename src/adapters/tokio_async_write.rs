@@ -14,9 +14,12 @@ use std::task::{
 
 use tokio::io::AsyncWrite;
 
-use crate::AsyncOutput;
+use crate::{
+    AsyncClose,
+    traits::validate_async_error,
+};
 
-/// Exposes a Qubit byte [`AsyncOutput`] as a Tokio [`AsyncWrite`].
+/// Exposes a Qubit byte [`crate::AsyncOutput`] as a Tokio [`AsyncWrite`].
 #[repr(transparent)]
 pub struct TokioAsyncWrite<O> {
     inner: O,
@@ -63,7 +66,7 @@ impl<O> TokioAsyncWrite<O> {
 
 impl<O> AsyncWrite for TokioAsyncWrite<O>
 where
-    O: AsyncOutput<Item = u8>,
+    O: AsyncClose<Item = u8>,
 {
     fn poll_write(
         self: Pin<&mut Self>,
@@ -77,13 +80,17 @@ where
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<std::io::Result<()>> {
-        self.get_pin_mut().poll_flush(cx)
+        self.get_pin_mut()
+            .poll_flush(cx)
+            .map(|result| result.map_err(validate_async_error))
     }
 
     fn poll_shutdown(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<std::io::Result<()>> {
-        self.get_pin_mut().poll_flush(cx)
+        self.get_pin_mut()
+            .poll_close(cx)
+            .map(|result| result.map_err(validate_async_error))
     }
 }

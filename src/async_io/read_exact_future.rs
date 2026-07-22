@@ -1,5 +1,5 @@
 // =============================================================================
-//    Copyright (c) 2026 Haixing Hu.
+//    Copyright (c) 2025 - 2026 Haixing Hu.
 //
 //    SPDX-License-Identifier: Apache-2.0
 //
@@ -7,7 +7,11 @@
 // =============================================================================
 
 use std::future::Future;
-use std::io::Result;
+use std::io::{
+    Error,
+    ErrorKind,
+    Result,
+};
 use std::pin::Pin;
 use std::task::{
     Context,
@@ -16,35 +20,30 @@ use std::task::{
 
 use crate::AsyncInput;
 
-/// Future that reads until its destination is full or EOF is reached.
+/// Future that reads until its destination is full.
 ///
 /// Progress is retained in the destination and is observable through
 /// [`Self::items_read`] if the future is cancelled.
 #[must_use = "futures do nothing unless polled"]
-pub struct ReadFullyFuture<'a, I>
+pub struct ReadExactFuture<'a, I>
 where
     I: AsyncInput + ?Sized,
 {
+    /// Input being read.
     input: Pin<&'a mut I>,
+    /// Destination that must be filled.
     output: &'a mut [I::Item],
+    /// Number of items read so far.
     read: usize,
+    /// Whether the exact-read operation has completed.
     completed: bool,
 }
 
-impl<'a, I> ReadFullyFuture<'a, I>
+impl<'a, I> ReadExactFuture<'a, I>
 where
     I: AsyncInput + ?Sized,
 {
-    /// Creates a read-fully future from a pinned input.
-    ///
-    /// # Parameters
-    ///
-    /// * `input` - Pinned asynchronous input.
-    /// * `output` - Destination storage.
-    ///
-    /// # Returns
-    ///
-    /// A future that resolves with the total number of items read.
+    /// Creates an exact-read future from a pinned input.
     #[inline(always)]
     pub const fn new(input: Pin<&'a mut I>, output: &'a mut [I::Item]) -> Self {
         Self {
@@ -63,21 +62,24 @@ where
     }
 }
 
-impl<I> Future for ReadFullyFuture<'_, I>
+impl<I> Future for ReadExactFuture<'_, I>
 where
     I: AsyncInput + ?Sized,
 {
-    type Output = Result<usize>;
+    type Output = Result<()>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
-        assert!(!this.completed, "ReadFullyFuture polled after completion");
+        assert!(!this.completed, "ReadExactFuture polled after completion");
         while this.read < this.output.len() {
             let remaining = &mut this.output[this.read..];
             match this.input.as_mut().poll_read(cx, remaining) {
                 Poll::Ready(Ok(0)) => {
                     this.completed = true;
-                    return Poll::Ready(Ok(this.read));
+                    return Poll::Ready(Err(Error::new(
+                        ErrorKind::UnexpectedEof,
+                        "failed to fill whole input range",
+                    )));
                 }
                 Poll::Ready(Ok(read)) => this.read += read,
                 Poll::Ready(Err(error)) => {
@@ -88,6 +90,6 @@ where
             }
         }
         this.completed = true;
-        Poll::Ready(Ok(this.read))
+        Poll::Ready(Ok(()))
     }
 }

@@ -13,11 +13,15 @@ use std::task::{
     Poll,
 };
 
+use crate::traits::{
+    validate_async_error,
+    validate_read_count,
+};
 use crate::{
+    ReadExactFuture,
     ReadFullyFuture,
     ReadFuture,
 };
-use crate::traits::validate_read_count;
 
 /// Minimal runtime-independent asynchronous input interface over items.
 ///
@@ -53,7 +57,15 @@ pub trait AsyncInput {
     ///
     /// [`Poll::Pending`] when no result is currently available, or a ready I/O
     /// result containing a count in `0..=count`. A ready zero count denotes
-    /// end of input when `count` is nonzero.
+    /// end of input when `count` is nonzero. A zero `count` must immediately
+    /// return `Poll::Ready(Ok(0))`.
+    ///
+    /// Before returning [`Poll::Pending`], the implementation must arrange for
+    /// `cx`'s waker to be notified when progress may be possible. Neither
+    /// `Poll::Pending` nor `Poll::Ready(Err(_))` may transfer items.
+    /// `WouldBlock` and `Interrupted` must not cross this asynchronous
+    /// boundary; implementations must respectively register readiness or retry
+    /// internally.
     ///
     /// # Safety
     ///
@@ -89,13 +101,18 @@ pub trait AsyncInput {
         cx: &mut Context<'_>,
         output: &mut [Self::Item],
     ) -> Poll<Result<usize>> {
+        if output.is_empty() {
+            return Poll::Ready(Ok(0));
+        }
         let requested = output.len();
         // SAFETY: The full output slice is a valid destination range.
         match unsafe { self.poll_read_unchecked(cx, output, 0, requested) } {
             Poll::Ready(Ok(read)) => {
                 Poll::Ready(validate_read_count(read, requested).map(|()| read))
             }
-            Poll::Ready(Err(error)) => Poll::Ready(Err(error)),
+            Poll::Ready(Err(error)) => {
+                Poll::Ready(Err(validate_async_error(error)))
+            }
             Poll::Pending => Poll::Pending,
         }
     }
@@ -122,8 +139,8 @@ pub trait AsyncInput {
 
     /// Creates a future that fills a destination as far as possible.
     ///
-    /// The returned future retries interrupted operations and stops when the
-    /// destination is full or the input reports EOF.
+    /// The returned future stops when the destination is full or the input
+    /// reports EOF.
     ///
     /// # Parameters
     ///
@@ -141,5 +158,20 @@ pub trait AsyncInput {
         Self: Sized + Unpin,
     {
         ReadFullyFuture::new(Pin::new(self), output)
+    }
+
+    /// Creates a future that fills the entire destination.
+    ///
+    /// The returned future reports [`std::io::ErrorKind::UnexpectedEof`] if
+    /// the input ends before the destination is full.
+    #[inline(always)]
+    fn read_exact_async<'a>(
+        &'a mut self,
+        output: &'a mut [Self::Item],
+    ) -> ReadExactFuture<'a, Self>
+    where
+        Self: Sized + Unpin,
+    {
+        ReadExactFuture::new(Pin::new(self), output)
     }
 }

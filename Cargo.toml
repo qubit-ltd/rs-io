@@ -14,7 +14,6 @@ keywords = ["io", "async", "stream", "buffer", "qubit"]
 categories = ["rust-patterns"]
 include = [
     "/Cargo.toml",
-    "/CHANGELOG.md",
     "/LICENSE",
     "/README.md",
     "/README.zh_CN.md",
@@ -31,6 +30,9 @@ include = [
 [lib]
 name = "qubit_io"
 doctest = true
+
+[package.metadata.docs.rs]
+all-features = true
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage)'] }

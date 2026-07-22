@@ -1,6 +1,7 @@
 # Qubit IO
 
 [![Rust CI](https://github.com/qubit-ltd/rs-io/actions/workflows/ci.yml/badge.svg)](https://github.com/qubit-ltd/rs-io/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://qubit-ltd.github.io/rs-io/coverage-badge.json)](https://qubit-ltd.github.io/rs-io/coverage/)
 [![Crates.io](https://img.shields.io/crates/v/qubit-io.svg?color=blue)](https://crates.io/crates/qubit-io)
 [![Rust](https://img.shields.io/badge/rust-1.94+-blue.svg?logo=rust)](https://www.rust-lang.org)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
@@ -19,6 +20,7 @@ paths, commit, abort, or persistence semantics.
 | --- | --- | --- |
 | Input | `Input<Item = T>` | `AsyncInput<Item = T>` |
 | Output | `Output<Item = T>` | `AsyncOutput<Item = T>` |
+| Close | Output ownership / drop | `AsyncClose` |
 | Convenience | `read_fully`, `write_fully` | Defaults on `AsyncInput`, `AsyncOutput` |
 | Buffering | `BufferedInput`, `BufferedOutput` | `AsyncBufferedInput`, `AsyncBufferedOutput` |
 | Limits | `LimitReader`, `LimitWriter` for std streams | `AsyncLimitInput`, `AsyncLimitOutput` |
@@ -27,8 +29,15 @@ paths, commit, abort, or persistence semantics.
 
 `AsyncInput` and `AsyncOutput` use `Pin`, `Context`, and `Poll`. They do not
 depend on Tokio, `futures-io`, or an executor. Multi-poll operations are named
-futures such as `ReadFullyFuture` and `WriteFullyFuture`, so progress survives
-`Pending`.
+futures such as `ReadExactFuture`, `ReadFullyFuture`, and `WriteFullyFuture`, so
+progress survives `Pending` and can be inspected after cancellation. Already
+pinned `!Unpin` values and trait objects use `PinnedAsyncInputExt` and
+`PinnedAsyncOutputExt`.
+
+`Pending` and errors transfer no items. `Pending` must register the current
+waker. `WouldBlock` and `Interrupted` never cross the async boundary, and a
+non-empty successful read of zero items means EOF. `AsyncClose` is distinct
+from flushing and maps to the native Tokio shutdown or futures-io close.
 
 ## Synchronous example
 
@@ -63,7 +72,7 @@ use qubit_io::{AsyncInput, TokioInput};
 let socket = /* a tokio::io::AsyncRead value */;
 let mut input = TokioInput::new(socket);
 let mut header = [0_u8; 16];
-let read = input.read_fully_async(&mut header).await?;
+input.read_exact_async(&mut header).await?;
 ```
 
 Reverse adapters are also available: `TokioAsyncRead` and `TokioAsyncWrite`
@@ -80,6 +89,9 @@ it. A partial flush updates retained progress before returning `Pending`.
 Dropping an asynchronous buffer cannot perform I/O; call `flush_async()` or use
 `into_parts()` to recover pending items.
 
+When the inner output implements `AsyncClose`, `AsyncBufferedOutput` drains its
+own pending items before delegating close to the inner output.
+
 Limit and counting wrappers are item-oriented. Checksum wrappers are byte-only
 because `std::hash::Hasher` consumes bytes.
 
@@ -94,20 +106,44 @@ qubit-io = "0.14"
 - `tokio`: adapters in both directions for Tokio I/O traits.
 - `futures-io`: adapters in both directions for `futures-io` traits.
 
-## Documentation and checks
+## Documentation
 
 - [User guide](doc/user_guide.md)
 - [用户指南](doc/user_guide.zh_CN.md)
 
+API documentation on docs.rs is built with all declared features enabled.
+
+## Testing
+
 ```bash
-cargo test --no-default-features
+# Run tests with the default feature set
+cargo test
+
+# Run tests with all declared features
 cargo test --all-features
-./align-ci.sh
+
+# Project CI checks
 ./ci-check.sh
+
+# Check code coverage
+./coverage.sh
 ```
 
 ## License
 
 Copyright (c) 2025 - 2026. Haixing Hu. All rights reserved.
 
-Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for the
+full license text.
+
+## Contributing
+
+Contributions are welcome. Please follow the Rust API guidelines, keep public
+API documentation and tests current, and run `./align-ci.sh` to format code and
+`./ci-check.sh` to satisfy CI requirements before submitting a pull request.
+
+## Author
+
+**Haixing Hu** - *Qubit Co. Ltd.*
+
+Repository: [https://github.com/qubit-ltd/rs-io](https://github.com/qubit-ltd/rs-io)

@@ -22,6 +22,7 @@ use futures_io::{
     AsyncWrite,
 };
 use qubit_io::{
+    AsyncClose,
     AsyncInput,
     AsyncOutput,
     FuturesAsyncRead,
@@ -76,6 +77,7 @@ impl AsyncRead for FuturesReader {
 #[derive(Default)]
 struct FuturesWriter {
     data: Vec<u8>,
+    closed: bool,
 }
 
 impl AsyncWrite for FuturesWriter {
@@ -96,9 +98,10 @@ impl AsyncWrite for FuturesWriter {
     }
 
     fn poll_close(
-        self: Pin<&mut Self>,
+        mut self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
     ) -> Poll<std::io::Result<()>> {
+        self.closed = true;
         Poll::Ready(Ok(()))
     }
 }
@@ -129,6 +132,17 @@ impl AsyncInput for QubitInput {
 #[derive(Default)]
 struct QubitOutput {
     data: Vec<u8>,
+    closed: bool,
+}
+
+impl AsyncClose for QubitOutput {
+    fn poll_close(
+        mut self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        self.closed = true;
+        Poll::Ready(Ok(()))
+    }
 }
 
 impl AsyncOutput for QubitOutput {
@@ -179,6 +193,11 @@ fn test_futures_types_adapt_to_qubit_async_io() {
             .expect("futures write should succeed");
     assert_eq!(2, written);
     assert_eq!(&[4, 5], output.get_ref().data.as_slice());
+
+    AsyncClose::poll_close(Pin::new(&mut output), &mut cx)
+        .expect_ready("close should complete")
+        .expect("close should succeed");
+    assert!(output.get_ref().closed);
 }
 
 #[test]
@@ -246,6 +265,7 @@ fn test_futures_adapter_accessors_and_flush_operations() {
     AsyncWrite::poll_close(Pin::new(&mut output), &mut cx)
         .expect_ready("close should complete")
         .expect("close should succeed");
+    assert!(output.get_ref().closed);
     assert_eq!(vec![4, 5], output.into_inner().data);
 }
 

@@ -17,6 +17,7 @@ use futures_io::AsyncRead;
 use crate::{
     AsyncInput,
     UncheckedSlice,
+    traits::validate_async_error,
 };
 
 /// Adapts a futures-io [`AsyncRead`] value to Qubit's [`AsyncInput`].
@@ -88,5 +89,6 @@ where
         let target =
             unsafe { UncheckedSlice::subslice_mut(output, index, count) };
         AsyncRead::poll_read(self.get_pin_mut(), cx, target)
+            .map(|result| result.map_err(validate_async_error))
     }
 }

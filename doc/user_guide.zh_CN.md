@@ -43,6 +43,7 @@ where
 AsyncInput::poll_read_unchecked
 AsyncOutput::poll_write_unchecked
 AsyncOutput::poll_flush
+AsyncClose::poll_close
 ```
 
 底层 poll trait 支持 `!Unpin` 实现。便利扩展方法要求 `Unpin` 并返回具名
@@ -50,12 +51,20 @@ Future：
 
 - `read_async`：执行一次读取；
 - `read_fully_async`：填满目标，或在 EOF 停止；
+- `read_exact_async`：填满目标，否则报告 `UnexpectedEof`；
 - `write_async`：执行一次写入；
 - `write_fully_async`：接受全部来源，否则报告 `WriteZero`；
 - `flush_async`：flush 输出。
+- `close_async`：关闭实现了 `AsyncClose` 的输出。
 
-多次操作的进度保存在 Future 对象中。poll 实现不得在返回 `Poll::Pending` 的
-同时暗中报告调用方无法观察的传输进度。
+已经 pinned 的 `!Unpin` 实现和 trait object 通过 `PinnedAsyncInputExt`、
+`PinnedAsyncOutputExt` 使用同名操作。`ReadFullyFuture`、`ReadExactFuture` 和
+`WriteFullyFuture` 会暴露已完成 item 数，便于取消后核算进度。
+
+poll 契约是严格的：零长度传输立即完成且不轮询内部 stream；`Pending` 和错误
+不得传输 item；`Pending` 必须注册当前 waker；`WouldBlock`、`Interrupted`
+不得跨越异步 trait 边界。非空读取返回零表示 EOF；完整写入中返回零会转换为
+`WriteZero`。具名 Future 完成后再次 poll 属于调用错误并会 panic。
 
 ## 4. 缓冲
 
@@ -71,6 +80,10 @@ Future：
 
 - `AsyncBufferedInput<I>` 跨 `Pending` 保留已预读 item；
 - `AsyncBufferedOutput<O>` 保留已接受 item 和部分 flush 进度。
+
+`AsyncBufferedInput` 仅提供 `into_parts()`，避免 `into_inner()` 静默丢弃预读但
+未消费的 item。内部 output 支持 `AsyncClose` 时，`AsyncBufferedOutput` 会先
+排空自身缓冲区，再关闭内部 output。
 
 异步 `Drop` 不能 await，因此 `AsyncBufferedOutput` 不会伪装 drop-time 送达成功。
 丢弃前应完成 `flush_async()`，或者用 `into_parts()` 取回内部 output 和 pending
@@ -101,6 +114,10 @@ Future：
 | `FuturesInput`、`FuturesOutput` | `FuturesAsyncRead`、`FuturesAsyncWrite` |
 
 显式 wrapper 避免重叠 blanket impl。默认 feature 不启用任何异步生态依赖。
+
+close 不会用 flush 冒充：`TokioOutput` 委托给 `poll_shutdown`，
+`FuturesOutput` 委托给 `poll_close`，反向 write adapter 则要求
+`AsyncClose<Item = u8>`。
 
 ## 7. 分层建议
 

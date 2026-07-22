@@ -18,6 +18,7 @@ use std::task::{
 };
 
 use qubit_io::{
+    AsyncClose,
     AsyncInput,
     AsyncOutput,
     TokioAsyncRead,
@@ -77,6 +78,7 @@ impl AsyncRead for TokioReader {
 #[derive(Default)]
 struct TokioWriter {
     data: Vec<u8>,
+    closed: bool,
 }
 
 impl AsyncWrite for TokioWriter {
@@ -97,9 +99,10 @@ impl AsyncWrite for TokioWriter {
     }
 
     fn poll_shutdown(
-        self: Pin<&mut Self>,
+        mut self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
     ) -> Poll<std::io::Result<()>> {
+        self.closed = true;
         Poll::Ready(Ok(()))
     }
 }
@@ -162,6 +165,17 @@ impl AsyncInput for ErrorQubitInput {
 #[derive(Default)]
 struct QubitOutput {
     data: Vec<u8>,
+    closed: bool,
+}
+
+impl AsyncClose for QubitOutput {
+    fn poll_close(
+        mut self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        self.closed = true;
+        Poll::Ready(Ok(()))
+    }
 }
 
 impl AsyncOutput for QubitOutput {
@@ -213,6 +227,11 @@ fn test_tokio_types_adapt_to_qubit_async_io() {
             .expect("Tokio write should succeed");
     assert_eq!(2, written);
     assert_eq!(&[4, 5], output.get_ref().data.as_slice());
+
+    AsyncClose::poll_close(Pin::new(&mut output), &mut cx)
+        .expect_ready("close should complete")
+        .expect("close should succeed");
+    assert!(output.get_ref().closed);
 }
 
 #[test]
@@ -342,6 +361,7 @@ fn test_tokio_adapter_accessors_and_flush_operations() {
     AsyncWrite::poll_shutdown(Pin::new(&mut output), &mut cx)
         .expect_ready("shutdown should complete")
         .expect("shutdown should succeed");
+    assert!(output.get_ref().closed);
     assert_eq!(vec![4, 5], output.into_inner().data);
 }
 
