@@ -85,6 +85,9 @@ impl<O> AsyncCountingOutput<O> {
 
     /// Returns a mutable reference to the wrapped output.
     ///
+    /// Writes performed directly on the returned output are not included in
+    /// this wrapper's item count.
+    ///
     /// # Returns
     ///
     /// Returns the wrapped asynchronous output.

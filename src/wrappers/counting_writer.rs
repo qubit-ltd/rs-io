@@ -71,6 +71,9 @@ impl<W> CountingWriter<W> {
 
     /// Returns a mutable reference to the wrapped writer.
     ///
+    /// Writes performed directly on the returned writer are not included in
+    /// this wrapper's byte count.
+    ///
     /// # Returns
     /// The wrapped writer reference.
     #[inline]

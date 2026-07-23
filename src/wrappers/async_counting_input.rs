@@ -64,6 +64,9 @@ impl<I> AsyncCountingInput<I> {
 
     /// Returns a mutable reference to the wrapped input.
     ///
+    /// Reads performed directly on the returned input are not included in this
+    /// wrapper's item count.
+    ///
     /// # Returns
     ///
     /// Returns the wrapped asynchronous input.

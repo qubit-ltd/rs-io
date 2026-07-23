@@ -86,6 +86,9 @@ impl<O> AsyncLimitOutput<O> {
 
     /// Returns a mutable reference to the wrapped output.
     ///
+    /// Writes performed directly on the returned output bypass this wrapper's
+    /// remaining-item limit.
+    ///
     /// # Returns
     ///
     /// Returns the wrapped asynchronous output.

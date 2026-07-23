@@ -65,6 +65,9 @@ impl<I> AsyncLimitInput<I> {
 
     /// Returns a mutable reference to the wrapped input.
     ///
+    /// Reads performed directly on the returned input bypass this wrapper's
+    /// remaining-item limit.
+    ///
     /// # Returns
     ///
     /// Returns the wrapped asynchronous input.

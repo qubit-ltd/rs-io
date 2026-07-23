@@ -91,6 +91,9 @@ where
 
     /// Returns a mutable reference to the wrapped output.
     ///
+    /// Writes performed directly on the returned output do not update this
+    /// wrapper's hasher.
+    ///
     /// # Returns
     ///
     /// Returns the wrapped asynchronous byte output.
@@ -109,6 +112,9 @@ where
     }
 
     /// Returns a mutable reference to the hasher.
+    ///
+    /// Mutating the returned hasher changes the checksum independently of
+    /// bytes written through this wrapper.
     ///
     /// # Returns
     ///

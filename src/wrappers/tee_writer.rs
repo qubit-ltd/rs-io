@@ -91,6 +91,9 @@ impl<P, B> TeeWriter<P, B> {
 
     /// Returns a mutable reference to the primary writer.
     ///
+    /// Writes performed directly on the returned writer are not mirrored to the
+    /// branch writer.
+    ///
     /// # Returns
     /// The primary writer reference.
     #[inline]
@@ -108,6 +111,9 @@ impl<P, B> TeeWriter<P, B> {
     }
 
     /// Returns a mutable reference to the branch writer.
+    ///
+    /// Writing directly to the returned branch can desynchronize it from the
+    /// primary writer.
     ///
     /// # Returns
     /// The branch writer reference.
