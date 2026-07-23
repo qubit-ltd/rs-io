@@ -17,6 +17,11 @@ use std::task::{
 use crate::AsyncInput;
 
 /// Future for one [`AsyncInput`] read operation.
+///
+/// # Panics
+///
+/// [`Future::poll`] panics when called again after this future has returned
+/// [`Poll::Ready`].
 #[must_use = "futures do nothing unless polled"]
 pub struct ReadFuture<'a, I>
 where

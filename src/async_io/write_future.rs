@@ -17,6 +17,11 @@ use std::task::{
 use crate::AsyncOutput;
 
 /// Future for one [`AsyncOutput`] write operation.
+///
+/// # Panics
+///
+/// [`Future::poll`] panics when called again after this future has returned
+/// [`Poll::Ready`].
 #[must_use = "futures do nothing unless polled"]
 pub struct WriteFuture<'a, O>
 where

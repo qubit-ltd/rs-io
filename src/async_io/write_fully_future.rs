@@ -24,6 +24,11 @@ use crate::AsyncOutput;
 ///
 /// Items accepted before cancellation remain written. The accepted count is
 /// observable through [`Self::items_written`].
+///
+/// # Panics
+///
+/// [`Future::poll`] panics when called again after this future has returned
+/// [`Poll::Ready`].
 #[must_use = "futures do nothing unless polled"]
 pub struct WriteFullyFuture<'a, O>
 where
