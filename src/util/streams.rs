@@ -125,18 +125,17 @@ impl Streams {
     }
 
     /// Copies at most `max_bytes` bytes from `reader` to `writer` using a
-    /// caller-selected heap buffer.
+    /// caller-selected maximum heap-buffer size.
     ///
     /// This method has the same copy semantics as [`Self::copy_at_most`], but
-    /// allocates a buffer on the heap with `buffer_size` bytes. Use it when
-    /// the default chunk size is too large for the caller's stack budget or
-    /// when a smaller copy window is desirable.
+    /// allocates up to `buffer_size` bytes, capped by `max_bytes`. Use it to
+    /// control temporary heap usage and read granularity.
     ///
     /// # Parameters
     /// - `reader`: Source reader.
     /// - `writer`: Destination writer.
     /// - `max_bytes`: Maximum number of bytes to copy.
-    /// - `buffer_size`: Number of bytes in the copy buffer.
+    /// - `buffer_size`: Maximum number of bytes in the copy buffer.
     ///
     /// # Returns
     /// The number of bytes copied.
@@ -271,7 +270,10 @@ impl Streams {
         if max_items == 0 {
             return Ok(0);
         }
-        let mut buffer = create_vec(DEFAULT_BUFFER_CAPACITY, T::default())?;
+        let buffer_size = usize::try_from(max_items)
+            .unwrap_or(usize::MAX)
+            .min(DEFAULT_BUFFER_CAPACITY);
+        let mut buffer = create_vec(buffer_size, T::default())?;
         let mut remaining = max_items;
         let mut copied = 0_u64;
         while remaining > 0 {
@@ -307,6 +309,8 @@ impl Streams {
     /// flushing leave `output` unchanged. Once EOF is reached and collected
     /// items are written to `output`, a write error may leave partial items
     /// accepted by `output` because [`Output`] has no rollback operation.
+    /// Preserving this behavior requires retaining all accepted items until EOF
+    /// is observed, so temporary memory usage can grow to `max_items` elements.
     ///
     /// # Parameters
     /// - `input`: Source item input.
@@ -329,7 +333,10 @@ impl Streams {
     where
         T: Copy + Default,
     {
-        let mut buffer = create_vec(DEFAULT_BUFFER_CAPACITY, T::default())?;
+        let buffer_size = usize::try_from(max_items.saturating_add(1))
+            .unwrap_or(usize::MAX)
+            .min(DEFAULT_BUFFER_CAPACITY);
+        let mut buffer = create_vec(buffer_size, T::default())?;
         let mut collected = Vec::new();
         let mut remaining = max_items;
         let mut copied = 0_u64;
@@ -425,9 +432,8 @@ impl Streams {
     ///
     /// This method has the same comparison and stream-advance semantics as
     /// [`Self::compare_content`], but allocates two buffers on the heap with
-    /// `buffer_size` bytes each. Use it when the default chunk size is too
-    /// large for the caller's stack budget or when a smaller comparison window
-    /// is desirable.
+    /// `buffer_size` bytes each. Use it to control temporary heap usage and
+    /// read granularity.
     ///
     /// # Parameters
     /// - `left`: First stream.
@@ -510,6 +516,12 @@ fn copy_at_most_impl(
             "copy buffer size must be greater than zero",
         ));
     }
+    if max_bytes == 0 {
+        return Ok(0);
+    }
+    let buffer_size = usize::try_from(max_bytes)
+        .unwrap_or(usize::MAX)
+        .min(buffer_size);
     let mut buffer = create_vec(buffer_size, 0)?;
     let mut remaining = max_bytes;
     let mut copied = 0;

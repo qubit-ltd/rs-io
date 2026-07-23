@@ -23,6 +23,7 @@ mod coverage_tests {
         coverage_fail_next_add_item_count,
         coverage_fail_next_reserve,
         coverage_fail_next_string_reserve,
+        coverage_fail_reserve_above,
         coverage_fail_reserve_after,
         coverage_reset_add_item_count_hooks,
         coverage_reset_reserve_hooks,
@@ -197,6 +198,23 @@ mod coverage_tests {
     }
 
     #[test]
+    fn test_copy_input_to_output_at_most_bounds_temporary_buffer() {
+        reset_coverage_hooks();
+        let mut input = ChunkInput::new(vec![vec![1]]);
+        let mut output = CollectOutput::default();
+
+        coverage_fail_reserve_above(1);
+        let result =
+            Streams::copy_input_to_output_at_most(&mut input, &mut output, 1);
+        reset_coverage_hooks();
+        let copied =
+            result.expect("one-item copy should allocate one temporary item");
+
+        assert_eq!(1, copied);
+        assert_eq!(&[1], output.values.as_slice());
+    }
+
+    #[test]
     fn test_input_ext_copy_to_end_limited_reports_create_vec_allocation_failure()
      {
         reset_coverage_hooks();
@@ -214,6 +232,26 @@ mod coverage_tests {
         );
 
         assert_eq!(ErrorKind::OutOfMemory, error.kind());
+        assert!(output.values.is_empty());
+    }
+
+    #[test]
+    fn test_copy_input_to_output_end_limited_bounds_temporary_buffer() {
+        reset_coverage_hooks();
+        let mut input = ChunkInput::new(Vec::new());
+        let mut output = CollectOutput::default();
+
+        coverage_fail_reserve_above(1);
+        let result = Streams::copy_input_to_output_end_limited(
+            &mut input,
+            &mut output,
+            0,
+        );
+        reset_coverage_hooks();
+        let copied =
+            result.expect("zero-item limit should allocate one probe item");
+
+        assert_eq!(0, copied);
         assert!(output.values.is_empty());
     }
 

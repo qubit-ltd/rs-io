@@ -414,6 +414,40 @@ fn test_copy_at_most_with_buffer_size_copies_at_most_requested_bytes() {
 }
 
 #[test]
+fn test_copy_at_most_with_large_buffer_allocates_only_active_limit() {
+    let mut input = Cursor::new(b"a".to_vec());
+    let mut output = Vec::new();
+
+    let copied = Streams::copy_at_most_with_buffer_size(
+        &mut input,
+        &mut output,
+        1,
+        usize::MAX,
+    )
+    .expect("copy should allocate only the active one-byte limit");
+
+    assert_eq!(1, copied);
+    assert_eq!(b"a", output.as_slice());
+}
+
+#[test]
+fn test_copy_at_most_zero_limit_skips_large_buffer_allocation() {
+    let mut input = PanicOnRead;
+    let mut output = Vec::new();
+
+    let copied = Streams::copy_at_most_with_buffer_size(
+        &mut input,
+        &mut output,
+        0,
+        usize::MAX,
+    )
+    .expect("zero-byte copy should not allocate its copy buffer");
+
+    assert_eq!(0, copied);
+    assert!(output.is_empty());
+}
+
+#[test]
 fn test_copy_at_most_with_buffer_size_rejects_zero_size() {
     let mut input = Cursor::new(b"abc".to_vec());
     let mut output = Vec::new();
@@ -1109,7 +1143,7 @@ fn test_copy_at_most_with_buffer_size_returns_allocation_error() {
     let error = Streams::copy_at_most_with_buffer_size(
         &mut input,
         &mut output,
-        3,
+        u64::MAX,
         usize::MAX,
     )
     .expect_err("absurd copy buffers should fail allocation");
