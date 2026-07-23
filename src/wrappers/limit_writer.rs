@@ -73,6 +73,9 @@ impl<W> LimitWriter<W> {
 
     /// Returns a mutable reference to the wrapped writer.
     ///
+    /// Writes performed directly on the returned writer bypass this wrapper's
+    /// remaining-byte limit.
+    ///
     /// # Returns
     /// The wrapped writer reference.
     #[inline]

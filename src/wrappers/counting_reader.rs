@@ -76,6 +76,9 @@ impl<R> CountingReader<R> {
 
     /// Returns a mutable reference to the wrapped reader.
     ///
+    /// Reads performed directly on the returned reader are not included in
+    /// this wrapper's byte count.
+    ///
     /// # Returns
     /// The wrapped reader reference.
     #[inline]

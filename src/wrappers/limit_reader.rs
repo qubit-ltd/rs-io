@@ -78,6 +78,9 @@ impl<R> LimitReader<R> {
 
     /// Returns a mutable reference to the wrapped reader.
     ///
+    /// Reads performed directly on the returned reader bypass this wrapper's
+    /// remaining-byte limit.
+    ///
     /// # Returns
     /// The wrapped reader reference.
     #[inline]
@@ -123,6 +126,11 @@ where
         Ok(&buffer[..limit])
     }
 
+    /// Consumes bytes previously exposed by [`BufRead::fill_buf`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if `amount` exceeds this wrapper's remaining-byte limit.
     fn consume(&mut self, amount: usize) {
         let amount = u64::try_from(amount)
             .expect("cannot consume more than u64::MAX bytes");

@@ -128,6 +128,9 @@ impl<R, W> TeeReader<R, W> {
 
     /// Returns a mutable reference to the source reader.
     ///
+    /// Reads performed directly on the returned reader are not mirrored to the
+    /// branch writer.
+    ///
     /// # Returns
     /// The source reader reference.
     #[inline]
@@ -145,6 +148,9 @@ impl<R, W> TeeReader<R, W> {
     }
 
     /// Returns a mutable reference to the branch writer.
+    ///
+    /// Writing directly to the returned branch can desynchronize it from the
+    /// source reader.
     ///
     /// # Returns
     /// The branch writer reference.

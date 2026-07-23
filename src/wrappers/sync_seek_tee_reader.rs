@@ -82,6 +82,9 @@ impl<R, W> SyncSeekTeeReader<R, W> {
 
     /// Returns a mutable reference to the source reader.
     ///
+    /// Reads and seeks performed directly on the returned reader are not
+    /// mirrored to the branch writer.
+    ///
     /// # Returns
     /// The source reader reference.
     #[inline]
@@ -99,6 +102,9 @@ impl<R, W> SyncSeekTeeReader<R, W> {
     }
 
     /// Returns a mutable reference to the branch writer.
+    ///
+    /// Mutating the returned writer independently can desynchronize it from the
+    /// source reader.
     ///
     /// # Returns
     /// The branch writer reference.

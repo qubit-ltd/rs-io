@@ -40,8 +40,6 @@ use crate::{
 /// use the [`Output`] implementation or write directly into
 /// [`Self::spare_raw_parts_mut`] and then call [`Self::advance`] after
 /// validating the range they initialized.
-/// Callers that need to recover the wrapped writer should call
-/// [`Self::flush`] first, then use [`Self::into_parts`], or call
 /// Call [`Self::flush`] before [`Self::into_parts`] when pending items must be
 /// written before recovering the wrapped writer.
 /// Dropping a `BufferedOutput` makes a best-effort attempt to write pending
@@ -162,7 +160,8 @@ where
     /// Returns an exclusive reference to the wrapped writer.
     ///
     /// Pending items may still be present in the internal buffer and are not
-    /// flushed by this method.
+    /// flushed by this method. Writing through the returned reference can place
+    /// new items before those pending items.
     ///
     /// # Returns
     ///

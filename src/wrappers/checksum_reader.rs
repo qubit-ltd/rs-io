@@ -102,6 +102,9 @@ where
 
     /// Returns a mutable reference to the wrapped reader.
     ///
+    /// Reads performed directly on the returned reader do not update this
+    /// wrapper's hasher.
+    ///
     /// # Returns
     /// The wrapped reader reference.
     #[inline]
@@ -119,6 +122,9 @@ where
     }
 
     /// Returns a mutable reference to the wrapped hasher.
+    ///
+    /// Mutating the returned hasher changes the checksum independently of
+    /// bytes read through this wrapper.
     ///
     /// # Returns
     /// The wrapped hasher reference.

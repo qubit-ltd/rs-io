@@ -86,6 +86,9 @@ where
 
     /// Returns a mutable reference to the wrapped writer.
     ///
+    /// Writes performed directly on the returned writer do not update this
+    /// wrapper's hasher.
+    ///
     /// # Returns
     /// The wrapped writer reference.
     #[inline]
@@ -103,6 +106,9 @@ where
     }
 
     /// Returns a mutable reference to the wrapped hasher.
+    ///
+    /// Mutating the returned hasher changes the checksum independently of
+    /// bytes written through this wrapper.
     ///
     /// # Returns
     /// The wrapped hasher reference.
