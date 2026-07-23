@@ -19,6 +19,7 @@ pub(crate) use allocation::{
 pub use allocation::{
     coverage_fail_next_reserve,
     coverage_fail_next_string_reserve,
+    coverage_fail_reserve_above,
     coverage_fail_reserve_after,
     coverage_reset_reserve_hooks,
 };

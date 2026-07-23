@@ -33,6 +33,7 @@ pub(crate) fn allocation_error(error: TryReserveError) -> Error {
 #[cfg(coverage)]
 thread_local! {
     static COVERAGE_RESERVE_FAIL_AFTER: Cell<usize> = const { Cell::new(usize::MAX) };
+    static COVERAGE_RESERVE_MAX_ADDITIONAL: Cell<usize> = const { Cell::new(usize::MAX) };
     static COVERAGE_FAIL_NEXT_STRING_RESERVE: Cell<bool> = const { Cell::new(false) };
 }
 
@@ -56,6 +57,16 @@ pub fn coverage_fail_reserve_after(successful_attempts: usize) {
     COVERAGE_RESERVE_FAIL_AFTER.with(|state| state.set(successful_attempts));
 }
 
+/// Fails reserve calls that request more than `max_additional` elements.
+///
+/// Coverage-only helper for verifying that bounded operations size temporary
+/// allocations from their active limits.
+#[cfg(coverage)]
+#[doc(hidden)]
+pub fn coverage_fail_reserve_above(max_additional: usize) {
+    COVERAGE_RESERVE_MAX_ADDITIONAL.with(|state| state.set(max_additional));
+}
+
 /// Makes the next [`try_reserve_string`] call fail without affecting vector
 /// reserve calls.
 #[cfg(coverage)]
@@ -69,6 +80,7 @@ pub fn coverage_fail_next_string_reserve() {
 #[doc(hidden)]
 pub fn coverage_reset_reserve_hooks() {
     COVERAGE_RESERVE_FAIL_AFTER.with(|state| state.set(usize::MAX));
+    COVERAGE_RESERVE_MAX_ADDITIONAL.with(|state| state.set(usize::MAX));
     COVERAGE_FAIL_NEXT_STRING_RESERVE.with(|state| state.set(false));
 }
 
@@ -82,8 +94,12 @@ fn coverage_reserve_error() -> TryReserveError {
 
 /// Returns a synthetic reserve failure when requested by a coverage hook.
 #[cfg(coverage)]
-fn coverage_maybe_fail_reserve<T>()
--> Option<std::result::Result<T, TryReserveError>> {
+fn coverage_maybe_fail_reserve<T>(
+    additional: usize,
+) -> Option<std::result::Result<T, TryReserveError>> {
+    if COVERAGE_RESERVE_MAX_ADDITIONAL.with(|state| additional > state.get()) {
+        return Some(Err(coverage_reserve_error()));
+    }
     COVERAGE_RESERVE_FAIL_AFTER.with(|state| {
         let remaining = state.get();
         if remaining == usize::MAX {
@@ -115,7 +131,7 @@ pub fn try_reserve_vec<T>(
     additional: usize,
 ) -> std::result::Result<(), TryReserveError> {
     #[cfg(coverage)]
-    if let Some(result) = coverage_maybe_fail_reserve::<()>() {
+    if let Some(result) = coverage_maybe_fail_reserve::<()>(additional) {
         return result;
     }
     output.try_reserve(additional)
@@ -148,7 +164,7 @@ pub fn try_reserve_string(
         return Err(coverage_reserve_error());
     }
     #[cfg(coverage)]
-    if let Some(result) = coverage_maybe_fail_reserve::<()>() {
+    if let Some(result) = coverage_maybe_fail_reserve::<()>(additional) {
         return result;
     }
     output.try_reserve(additional)
