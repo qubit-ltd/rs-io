@@ -22,11 +22,12 @@ use std::io::{
 /// The return value of [`Seekable::seek_to`] is the new absolute position from
 /// the start of the stream, in items.
 ///
-/// # Method name overlap
+/// # Byte- and item-oriented seeking
 ///
-/// `Seekable::seek_to` has the same method name as [`Seek::seek`]. In generic
-/// code where both traits are in scope for the same value, use fully qualified
-/// syntax to choose item-oriented seeking or byte-oriented seeking explicitly:
+/// [`Seekable::seek_to`] expresses positions in `Self::Unit`, while
+/// [`Seek::seek`] always expresses positions in bytes. In generic code where
+/// both traits are implemented for the same value, fully qualified syntax can
+/// make the selected unit semantics explicit:
 ///
 /// ```
 /// use std::io::{
@@ -62,8 +63,10 @@ use std::io::{
 ///
 /// For example, this is rejected by the compiler:
 ///
-/// ```rust,compile_fail
+/// ```rust,compile_fail,E0119
 /// use std::io::{Result, Seek, SeekFrom};
+///
+/// use qubit_io::Seekable;
 ///
 /// struct LegacyStream;
 ///
@@ -73,7 +76,7 @@ use std::io::{
 ///     }
 /// }
 ///
-/// impl crate::Seekable for LegacyStream {
+/// impl Seekable for LegacyStream {
 ///     type Unit = u8;
 ///     fn seek_to(&mut self, _pos: SeekFrom) -> Result<u64> {
 ///         Ok(0)
@@ -82,7 +85,7 @@ use std::io::{
 /// ```
 ///
 /// ```text
-/// error[E0119]: conflicting implementations of trait `crate::Seekable`
+/// error[E0119]: conflicting implementations of trait `Seekable`
 /// for type `LegacyStream`
 /// ```
 ///
