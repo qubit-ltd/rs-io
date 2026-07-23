@@ -14,7 +14,10 @@ use std::task::{
     Poll,
 };
 
-use crate::AsyncClose;
+use crate::{
+    AsyncClose,
+    traits::validate_async_error,
+};
 
 /// Future that closes an [`AsyncClose`] output.
 #[must_use = "futures do nothing unless polled"]
@@ -59,7 +62,11 @@ where
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
         assert!(!this.completed, "CloseFuture polled after completion");
-        let result = this.output.as_mut().poll_close(cx);
+        let result = this
+            .output
+            .as_mut()
+            .poll_close(cx)
+            .map(|result| result.map_err(validate_async_error));
         if result.is_ready() {
             this.completed = true;
         }

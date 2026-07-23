@@ -101,6 +101,7 @@ struct ScriptedOutput {
     buffered: bool,
     marker: usize,
     closed: bool,
+    close_error: Option<ErrorKind>,
 }
 
 impl ScriptedOutput {
@@ -116,7 +117,13 @@ impl ScriptedOutput {
             buffered,
             marker: 0,
             closed: false,
+            close_error: None,
         }
+    }
+
+    fn with_close_error(mut self, kind: ErrorKind) -> Self {
+        self.close_error = Some(kind);
+        self
     }
 }
 
@@ -125,6 +132,12 @@ impl AsyncClose for ScriptedOutput {
         mut self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
     ) -> Poll<io::Result<()>> {
+        if let Some(kind) = self.close_error.take() {
+            return Poll::Ready(Err(Error::new(
+                kind,
+                "scripted close failure",
+            )));
+        }
         self.closed = true;
         Poll::Ready(Ok(()))
     }
@@ -203,6 +216,75 @@ fn test_async_output_wrappers_propagate_close() {
     let (output, _) = output.into_parts();
     let inner = output.into_inner();
     assert!(inner.closed);
+}
+
+#[test]
+fn test_async_output_wrappers_reject_forbidden_flush_error_kinds() {
+    for kind in [ErrorKind::WouldBlock, ErrorKind::Interrupted] {
+        let mut counting = AsyncCountingOutput::new(ScriptedOutput::new(
+            [],
+            [FlushStep::Error(kind)],
+            false,
+        ));
+        let mut limit = AsyncLimitOutput::new(
+            ScriptedOutput::new([], [FlushStep::Error(kind)], false),
+            1,
+        );
+        let mut checksum = AsyncChecksumOutput::new(
+            ScriptedOutput::new([], [FlushStep::Error(kind)], false),
+            DefaultHasher::new(),
+        );
+        let mut cx = Context::from_waker(Waker::noop());
+
+        for error in [
+            Pin::new(&mut counting)
+                .poll_flush(&mut cx)
+                .expect_ready("counting flush error should be ready")
+                .expect_err("counting flush should reject a forbidden error"),
+            Pin::new(&mut limit)
+                .poll_flush(&mut cx)
+                .expect_ready("limit flush error should be ready")
+                .expect_err("limit flush should reject a forbidden error"),
+            Pin::new(&mut checksum)
+                .poll_flush(&mut cx)
+                .expect_ready("checksum flush error should be ready")
+                .expect_err("checksum flush should reject a forbidden error"),
+        ] {
+            assert_eq!(ErrorKind::InvalidData, error.kind());
+        }
+    }
+}
+
+#[test]
+fn test_async_output_wrappers_reject_forbidden_close_error_kinds() {
+    for kind in [ErrorKind::WouldBlock, ErrorKind::Interrupted] {
+        let mut counting = AsyncCountingOutput::new(
+            ScriptedOutput::new([], [], false).with_close_error(kind),
+        );
+        let mut limit = AsyncLimitOutput::new(
+            ScriptedOutput::new([], [], false).with_close_error(kind),
+            1,
+        );
+        let mut checksum = AsyncChecksumOutput::new(
+            ScriptedOutput::new([], [], false).with_close_error(kind),
+            DefaultHasher::new(),
+        );
+        let mut cx = Context::from_waker(Waker::noop());
+
+        for error in [
+            AsyncClose::poll_close(Pin::new(&mut counting), &mut cx)
+                .expect_ready("counting close error should be ready")
+                .expect_err("counting close should reject a forbidden error"),
+            AsyncClose::poll_close(Pin::new(&mut limit), &mut cx)
+                .expect_ready("limit close error should be ready")
+                .expect_err("limit close should reject a forbidden error"),
+            AsyncClose::poll_close(Pin::new(&mut checksum), &mut cx)
+                .expect_ready("checksum close error should be ready")
+                .expect_err("checksum close should reject a forbidden error"),
+        ] {
+            assert_eq!(ErrorKind::InvalidData, error.kind());
+        }
+    }
 }
 
 struct ByteInput {

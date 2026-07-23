@@ -14,7 +14,10 @@ use std::task::{
     Poll,
 };
 
-use crate::AsyncOutput;
+use crate::{
+    AsyncOutput,
+    traits::validate_async_error,
+};
 
 /// Future that flushes an [`AsyncOutput`].
 #[must_use = "futures do nothing unless polled"]
@@ -57,7 +60,11 @@ where
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
         assert!(!this.completed, "FlushFuture polled after completion");
-        let result = this.output.as_mut().poll_flush(cx);
+        let result = this
+            .output
+            .as_mut()
+            .poll_flush(cx)
+            .map(|result| result.map_err(validate_async_error));
         if result.is_ready() {
             this.completed = true;
         }
