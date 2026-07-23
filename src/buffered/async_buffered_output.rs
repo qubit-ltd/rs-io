@@ -200,10 +200,13 @@ where
         }
 
         // SAFETY: This projection only inspects the unpinned buffer field.
-        let spare = unsafe {
-            self.as_mut().get_unchecked_mut().buffer.spare_capacity()
+        let (spare, capacity) = unsafe {
+            let this = self.as_mut().get_unchecked_mut();
+            (this.buffer.spare_capacity(), this.buffer.capacity())
         };
-        if count <= spare {
+        // Keep exact remaining-space writes buffered, but let a full-capacity
+        // write into an empty buffer take the direct path below.
+        if count <= spare && count < capacity {
             // SAFETY: The caller guarantees the source range and the branch
             // proves that the destination spare range is large enough.
             unsafe {
@@ -224,7 +227,7 @@ where
         // SAFETY: `inner` is never moved after projecting from this pinned
         // wrapper.
         let this = unsafe { self.as_mut().get_unchecked_mut() };
-        if count > this.buffer.capacity() {
+        if count >= capacity {
             let source = &input[index..index + count];
             // SAFETY: The pinned wrapper never moves `inner`.
             let inner = unsafe { Pin::new_unchecked(&mut this.inner) };

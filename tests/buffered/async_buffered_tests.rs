@@ -373,6 +373,31 @@ fn async_buffered_output_exposes_pending_parts_and_direct_writes()
 }
 
 #[test]
+fn test_async_buffered_output_writes_exact_capacity_directly_when_empty()
+-> io::Result<()> {
+    let mut output =
+        AsyncBufferedOutput::with_capacity(ScriptedOutput::new([], []), 2);
+
+    assert_eq!(2, complete(output.write_async(&[1, 2]))?);
+    assert_eq!(&[1, 2], output.inner().values.as_slice());
+    assert_eq!(0, output.pending_len());
+    Ok(())
+}
+
+#[test]
+fn test_async_buffered_output_buffers_write_that_exactly_fills_remaining_capacity()
+-> io::Result<()> {
+    let mut output =
+        AsyncBufferedOutput::with_capacity(ScriptedOutput::new([], []), 2);
+
+    assert_eq!(1, complete(output.write_async(&[1]))?);
+    assert_eq!(1, complete(output.write_async(&[2]))?);
+    assert!(output.inner().values.is_empty());
+    assert_eq!(&[1, 2], output.pending());
+    Ok(())
+}
+
+#[test]
 fn async_buffered_output_handles_pending_and_partial_drains() -> io::Result<()>
 {
     let inner = ScriptedOutput::new(
@@ -385,7 +410,8 @@ fn async_buffered_output_handles_pending_and_partial_drains() -> io::Result<()>
         [FlushStep::Pending, FlushStep::Ready],
     );
     let mut output = AsyncBufferedOutput::with_capacity(inner, 2);
-    assert_eq!(2, complete(output.write_async(&[1, 2]))?);
+    assert_eq!(1, complete(output.write_async(&[1]))?);
+    assert_eq!(1, complete(output.write_async(&[2]))?);
 
     let mut cx = Context::from_waker(Waker::noop());
     let input = [3];
@@ -413,26 +439,26 @@ fn async_buffered_output_handles_pending_and_partial_drains() -> io::Result<()>
 fn async_buffered_output_reports_drain_and_flush_failures() -> io::Result<()> {
     let mut zero = AsyncBufferedOutput::with_capacity(
         ScriptedOutput::new([WriteStep::Zero], []),
-        1,
+        2,
     );
     assert_eq!(1, complete(zero.write_async(&[1]))?);
-    let error = complete(zero.write_async(&[2]))
+    let error = complete(zero.write_async(&[2, 3]))
         .expect_err("zero-length drain should fail");
     assert_eq!(ErrorKind::WriteZero, error.kind());
     assert_eq!(&[1], zero.pending());
 
     let mut failing_write = AsyncBufferedOutput::with_capacity(
         ScriptedOutput::new([WriteStep::Error(ErrorKind::BrokenPipe)], []),
-        1,
+        2,
     );
     assert_eq!(1, complete(failing_write.write_async(&[1]))?);
-    let error = complete(failing_write.write_async(&[2]))
+    let error = complete(failing_write.write_async(&[2, 3]))
         .expect_err("drain error should be preserved");
     assert_eq!(ErrorKind::BrokenPipe, error.kind());
 
     let mut failing_drain_flush = AsyncBufferedOutput::with_capacity(
         ScriptedOutput::new([WriteStep::Error(ErrorKind::ConnectionReset)], []),
-        1,
+        2,
     );
     assert_eq!(1, complete(failing_drain_flush.write_async(&[1]))?);
     let error = complete(failing_drain_flush.flush_async())
@@ -478,7 +504,7 @@ fn async_buffered_output_rejects_forbidden_flush_and_close_error_kinds() {
 #[test]
 fn async_buffered_output_drains_before_closing_inner() -> io::Result<()> {
     let inner = ScriptedOutput::new([WriteStep::Accept(2)], []);
-    let mut output = AsyncBufferedOutput::with_capacity(inner, 2);
+    let mut output = AsyncBufferedOutput::with_capacity(inner, 3);
     assert_eq!(2, complete(output.write_async(&[1, 2]))?);
     let mut cx = Context::from_waker(Waker::noop());
 
