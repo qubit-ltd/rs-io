@@ -467,11 +467,9 @@ impl Streams {
             let left_count = left.read_exact_or_eof(&mut left_buffer)?;
             let right_count = right.read_exact_or_eof(&mut right_buffer)?;
             let n = left_count.min(right_count);
-            for index in 0..n {
-                match left_buffer[index].cmp(&right_buffer[index]) {
-                    Ordering::Equal => {}
-                    ordering => return Ok(ordering),
-                }
+            match left_buffer[..n].cmp(&right_buffer[..n]) {
+                Ordering::Equal => {}
+                ordering => return Ok(ordering),
             }
             match left_count.cmp(&right_count) {
                 Ordering::Equal if left_count == 0 => {
