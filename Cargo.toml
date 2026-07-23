@@ -34,6 +34,10 @@ doctest = true
 [package.metadata.docs.rs]
 all-features = true
 
+[package.metadata.rs-ci]
+miri = true
+sanitizers = ["address"]
+
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage)'] }
 
