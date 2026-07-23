@@ -299,8 +299,9 @@ impl UncheckedSlice {
         // SAFETY: The caller guarantees both ranges are valid; `copy` supports
         // overlapping regions within the same allocation.
         unsafe {
-            let source = buffer.as_ptr().add(source_index);
-            let destination = buffer.as_mut_ptr().add(destination_index);
+            let base = buffer.as_mut_ptr();
+            let source = base.add(source_index);
+            let destination = base.add(destination_index);
             core::ptr::copy(source, destination, count);
         }
     }
