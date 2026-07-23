@@ -174,7 +174,8 @@ fn test_async_input_pending_registers_waker_without_progress() {
 
     let mut input = Box::pin(ScriptedAsyncInput::new(vec![ReadStep::Pending]));
     let mut output = [0_u8; 1];
-    let waker = Waker::from(Arc::new(TestWake(AtomicBool::new(false))));
+    let wake_state = Arc::new(TestWake(AtomicBool::new(false)));
+    let waker = Waker::from(Arc::clone(&wake_state));
     let mut cx = Context::from_waker(&waker);
 
     let result = AsyncInput::poll_read(input.as_mut(), &mut cx, &mut output);
@@ -185,7 +186,8 @@ fn test_async_input_pending_registers_waker_without_progress() {
         .registered_waker
         .as_ref()
         .expect("pending read should register the current waker");
-    assert!(registered_waker.will_wake(&waker));
+    registered_waker.wake_by_ref();
+    assert!(wake_state.0.load(Ordering::Relaxed));
 }
 
 #[test]
