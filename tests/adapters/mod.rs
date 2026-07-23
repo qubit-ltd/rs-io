@@ -6,6 +6,8 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
+mod box_input_tests;
+mod box_output_tests;
 #[cfg(feature = "futures-io")]
 mod futures_async_read_tests;
 #[cfg(feature = "futures-io")]
@@ -16,6 +18,8 @@ mod futures_input_tests;
 mod futures_io_tests;
 #[cfg(feature = "futures-io")]
 mod futures_output_tests;
+mod input_ref_tests;
+mod output_ref_tests;
 #[cfg(feature = "tokio")]
 mod tokio_async_read_tests;
 #[cfg(feature = "tokio")]

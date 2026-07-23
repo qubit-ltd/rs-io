@@ -40,6 +40,12 @@ mod traits;
 mod util;
 mod wrappers;
 
+pub use adapters::{
+    BoxInput,
+    BoxOutput,
+    InputRef,
+    OutputRef,
+};
 #[cfg(feature = "futures-io")]
 pub use adapters::{
     FuturesAsyncRead,
