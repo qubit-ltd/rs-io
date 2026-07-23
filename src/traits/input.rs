@@ -171,6 +171,30 @@ pub trait Input {
         // SAFETY: The full output slice is a valid destination range.
         unsafe { self.read_fully_unchecked(output, 0, output.len()) }
     }
+
+    /// Reads items until the full output slice is filled.
+    ///
+    /// # Parameters
+    ///
+    /// * `output` - Destination storage that must be filled completely.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ErrorKind::UnexpectedEof`] if the input ends before filling
+    /// `output`. Returns the first non-interrupted input error, or
+    /// [`ErrorKind::InvalidData`] if the implementation reports an impossible
+    /// item count.
+    #[inline(always)]
+    fn read_exactly(&mut self, output: &mut [Self::Item]) -> Result<()> {
+        if self.read_fully(output)? == output.len() {
+            Ok(())
+        } else {
+            Err(Error::new(
+                ErrorKind::UnexpectedEof,
+                "failed to fill whole input buffer",
+            ))
+        }
+    }
 }
 
 impl<R> Input for R

@@ -282,7 +282,7 @@ fn test_read_exact_async_empty_destination_and_repoll_contract() {
 }
 
 #[test]
-fn test_read_exact_async_default_method_fills_destination() {
+fn test_read_exactly_async_default_method_fills_destination() {
     struct Input;
 
     impl AsyncInput for Input {
@@ -302,7 +302,7 @@ fn test_read_exact_async_default_method_fills_destination() {
 
     let mut input = Input;
     let mut output = [0_u8; 2];
-    let mut future = input.read_exact_async(&mut output);
+    let mut future = input.read_exactly_async(&mut output);
     let mut cx = context();
 
     Future::poll(Pin::new(&mut future), &mut cx)

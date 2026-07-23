@@ -56,7 +56,7 @@ fn test_pinned_async_input_ext_supports_non_unpin_trait_object() {
         assert!(Future::poll(Pin::new(&mut future), &mut cx).is_ready());
     }
     {
-        let mut future = input.read_exact_async(&mut output);
+        let mut future = input.read_exactly_async(&mut output);
         match Future::poll(Pin::new(&mut future), &mut cx) {
             Poll::Ready(result) => result.expect("exact read should succeed"),
             Poll::Pending => panic!("exact read should complete"),

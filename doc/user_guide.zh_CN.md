@@ -34,6 +34,8 @@ where
 
 标准库 `Read` 与 `Write` 字节流通过 blanket impl 自动适配。这并不表示任意
 `Input<u8>` 都是文件，它只表示该对象是字节来源。
+`Input::read_fully` 返回 EOF 前实际可读的 item 数；`Input::read_exactly`
+则要求填满整个目标，否则报告 `UnexpectedEof`。
 
 ## 3. 异步 trait
 
@@ -51,7 +53,7 @@ Future：
 
 - `read_async`：执行一次读取；
 - `read_fully_async`：填满目标，或在 EOF 停止；
-- `read_exact_async`：填满目标，否则报告 `UnexpectedEof`；
+- `read_exactly_async`：填满目标，否则报告 `UnexpectedEof`；
 - `write_async`：执行一次写入；
 - `write_fully_async`：接受全部来源，否则报告 `WriteZero`；
 - `flush_async`：flush 输出。

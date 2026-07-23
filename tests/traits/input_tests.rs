@@ -184,6 +184,36 @@ fn test_input_read_fully_rejects_overreported_count() {
 }
 
 #[test]
+fn test_input_read_exactly_fills_destination() {
+    let mut input = ScriptedInput::new(vec![
+        ReadStep::Data(vec![1, 2]),
+        ReadStep::Interrupted,
+        ReadStep::Data(vec![3]),
+    ]);
+    let mut output = [0_u8; 3];
+
+    input
+        .read_exactly(&mut output)
+        .expect("read_exactly should fill the destination");
+
+    assert_eq!([1, 2, 3], output);
+}
+
+#[test]
+fn test_input_read_exactly_reports_unexpected_eof() {
+    let mut input =
+        ScriptedInput::new(vec![ReadStep::Data(vec![1, 2]), ReadStep::Eof]);
+    let mut output = [0_u8; 3];
+
+    let error = input
+        .read_exactly(&mut output)
+        .expect_err("read_exactly should reject a short read");
+
+    assert_eq!(ErrorKind::UnexpectedEof, error.kind());
+    assert_eq!([1, 2, 0], output);
+}
+
+#[test]
 fn test_read_blanket_impl_exposes_input_read_and_read_unchecked() {
     let mut cursor = Cursor::new(b"ab".to_vec());
     let mut output = [0_u8; 4];

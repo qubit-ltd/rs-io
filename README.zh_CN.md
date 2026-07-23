@@ -47,7 +47,7 @@ use qubit_io::{Input, Output};
 
 let mut input = Cursor::new(b"qubit".to_vec());
 let mut bytes = [0_u8; 5];
-assert_eq!(5, input.read_fully(&mut bytes)?);
+input.read_exactly(&mut bytes)?;
 
 let mut output = Vec::new();
 output.write_fully(&bytes)?;
@@ -69,7 +69,7 @@ use qubit_io::{AsyncInput, TokioInput};
 let socket = /* 某个 tokio::io::AsyncRead */;
 let mut input = TokioInput::new(socket);
 let mut header = [0_u8; 16];
-input.read_exact_async(&mut header).await?;
+input.read_exactly_async(&mut header).await?;
 ```
 
 反向适配器同样可用：`TokioAsyncRead`、`TokioAsyncWrite` 把 Qubit stream
