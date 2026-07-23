@@ -20,6 +20,11 @@ use crate::{
 };
 
 /// Future that flushes an [`AsyncOutput`].
+///
+/// # Panics
+///
+/// [`Future::poll`] panics when called again after this future has returned
+/// [`Poll::Ready`].
 #[must_use = "futures do nothing unless polled"]
 pub struct FlushFuture<'a, O>
 where

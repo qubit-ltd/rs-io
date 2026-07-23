@@ -20,6 +20,11 @@ use crate::AsyncInput;
 ///
 /// Progress is retained in the destination and is observable through
 /// [`Self::items_read`] if the future is cancelled.
+///
+/// # Panics
+///
+/// [`Future::poll`] panics when called again after this future has returned
+/// [`Poll::Ready`].
 #[must_use = "futures do nothing unless polled"]
 pub struct ReadFullyFuture<'a, I>
 where
