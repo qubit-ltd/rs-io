@@ -33,7 +33,7 @@ pub trait PinnedAsyncInputExt {
     ) -> ReadFullyFuture<'a, Self::Input>;
 
     /// Creates a future that fills the entire destination.
-    fn read_exact_async<'a>(
+    fn read_exactly_async<'a>(
         &'a mut self,
         output: &'a mut [<Self::Input as AsyncInput>::Item],
     ) -> ReadExactFuture<'a, Self::Input>;
@@ -62,7 +62,7 @@ where
     }
 
     #[inline(always)]
-    fn read_exact_async<'a>(
+    fn read_exactly_async<'a>(
         &'a mut self,
         output: &'a mut [I::Item],
     ) -> ReadExactFuture<'a, Self::Input> {

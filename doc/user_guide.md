@@ -36,6 +36,9 @@ where
 
 Blanket implementations adapt standard `Read` and `Write` byte streams. This
 does not mean every `Input<u8>` is a file; it only means it is a byte source.
+`Input::read_fully` returns the number of items available before EOF, while
+`Input::read_exactly` either fills the complete destination or reports
+`UnexpectedEof`.
 
 ## 3. Asynchronous traits
 
@@ -53,7 +56,7 @@ methods require `Unpin` and return named futures:
 
 - `read_async`: one input operation;
 - `read_fully_async`: fill a destination or stop at EOF;
-- `read_exact_async`: fill a destination or report `UnexpectedEof`;
+- `read_exactly_async`: fill a destination or report `UnexpectedEof`;
 - `write_async`: one output operation;
 - `write_fully_async`: accept the complete source or report `WriteZero`;
 - `flush_async`: flush the output.

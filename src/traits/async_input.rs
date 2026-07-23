@@ -165,7 +165,7 @@ pub trait AsyncInput {
     /// The returned future reports [`std::io::ErrorKind::UnexpectedEof`] if
     /// the input ends before the destination is full.
     #[inline(always)]
-    fn read_exact_async<'a>(
+    fn read_exactly_async<'a>(
         &'a mut self,
         output: &'a mut [Self::Item],
     ) -> ReadExactFuture<'a, Self>
