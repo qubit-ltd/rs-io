@@ -20,6 +20,7 @@ use crate::{
     AsyncOutput,
     Buffer,
     buffered::DEFAULT_BUFFER_CAPACITY,
+    traits::validate_async_error,
 };
 
 /// Buffered asynchronous item output.
@@ -251,7 +252,9 @@ where
         // SAFETY: The pinned wrapper never moves `inner`.
         let this = unsafe { self.get_unchecked_mut() };
         // SAFETY: `inner` remains pinned in place for this call.
-        unsafe { Pin::new_unchecked(&mut this.inner) }.poll_flush(cx)
+        unsafe { Pin::new_unchecked(&mut this.inner) }
+            .poll_flush(cx)
+            .map(|result| result.map_err(validate_async_error))
     }
 }
 
@@ -272,6 +275,8 @@ where
         // SAFETY: The pinned wrapper never moves `inner`.
         let this = unsafe { self.get_unchecked_mut() };
         // SAFETY: `inner` remains pinned in place for this call.
-        unsafe { Pin::new_unchecked(&mut this.inner) }.poll_close(cx)
+        unsafe { Pin::new_unchecked(&mut this.inner) }
+            .poll_close(cx)
+            .map(|result| result.map_err(validate_async_error))
     }
 }

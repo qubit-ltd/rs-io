@@ -87,6 +87,7 @@ struct ScriptedOutput {
     flush_steps: VecDeque<FlushStep>,
     marker: usize,
     closed: bool,
+    close_error: Option<ErrorKind>,
 }
 
 impl ScriptedOutput {
@@ -100,7 +101,13 @@ impl ScriptedOutput {
             flush_steps: flush_steps.into_iter().collect(),
             marker: 0,
             closed: false,
+            close_error: None,
         }
+    }
+
+    fn with_close_error(mut self, kind: ErrorKind) -> Self {
+        self.close_error = Some(kind);
+        self
     }
 }
 
@@ -109,6 +116,12 @@ impl AsyncClose for ScriptedOutput {
         mut self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
     ) -> Poll<io::Result<()>> {
+        if let Some(kind) = self.close_error.take() {
+            return Poll::Ready(Err(Error::new(
+                kind,
+                "scripted close failure",
+            )));
+        }
         self.closed = true;
         Poll::Ready(Ok(()))
     }
@@ -434,6 +447,32 @@ fn async_buffered_output_reports_drain_and_flush_failures() -> io::Result<()> {
         .expect_err("inner flush error should be preserved");
     assert_eq!(ErrorKind::Other, error.kind());
     Ok(())
+}
+
+#[test]
+fn async_buffered_output_rejects_forbidden_flush_and_close_error_kinds() {
+    for kind in [ErrorKind::WouldBlock, ErrorKind::Interrupted] {
+        let mut flushing = AsyncBufferedOutput::new(ScriptedOutput::new(
+            [],
+            [FlushStep::Error(kind)],
+        ));
+        let mut closing = AsyncBufferedOutput::new(
+            ScriptedOutput::new([], []).with_close_error(kind),
+        );
+        let mut cx = Context::from_waker(Waker::noop());
+
+        let flush_error = Pin::new(&mut flushing)
+            .poll_flush(&mut cx)
+            .expect_ready("buffered flush error should be ready")
+            .expect_err("buffered flush should reject a forbidden error");
+        let close_error =
+            AsyncClose::poll_close(Pin::new(&mut closing), &mut cx)
+                .expect_ready("buffered close error should be ready")
+                .expect_err("buffered close should reject a forbidden error");
+
+        assert_eq!(ErrorKind::InvalidData, flush_error.kind());
+        assert_eq!(ErrorKind::InvalidData, close_error.kind());
+    }
 }
 
 #[test]

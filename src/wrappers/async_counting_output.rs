@@ -18,6 +18,7 @@ use std::{
 use crate::{
     AsyncClose,
     AsyncOutput,
+    traits::validate_async_error,
 };
 
 /// Asynchronous output that counts successfully accepted items.
@@ -38,7 +39,9 @@ where
         // SAFETY: `inner` is never moved while projecting this pinned wrapper.
         let this = unsafe { self.get_unchecked_mut() };
         // SAFETY: The pinned wrapper keeps `inner` at a stable address.
-        unsafe { Pin::new_unchecked(&mut this.inner) }.poll_close(cx)
+        unsafe { Pin::new_unchecked(&mut this.inner) }
+            .poll_close(cx)
+            .map(|result| result.map_err(validate_async_error))
     }
 }
 
@@ -159,6 +162,8 @@ where
         // SAFETY: `inner` is never moved while projecting this pinned wrapper.
         let this = unsafe { self.get_unchecked_mut() };
         // SAFETY: The pinned wrapper keeps `inner` at a stable address.
-        unsafe { Pin::new_unchecked(&mut this.inner) }.poll_flush(cx)
+        unsafe { Pin::new_unchecked(&mut this.inner) }
+            .poll_flush(cx)
+            .map(|result| result.map_err(validate_async_error))
     }
 }
