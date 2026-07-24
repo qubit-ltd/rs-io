@@ -20,11 +20,11 @@ include = [
     "/RUST_CODING_STYLE.md",
     "/RUST_CODING_STYLE.zh_CN.md",
     "/doc/**/user_guide*.md",
+    "/benches/**",
     "/examples/**",
     "/resources/**",
     "/src/**",
     "/tests/**",
-    "!/tests/ext/internal/**",
 ]
 
 [lib]
@@ -49,3 +49,10 @@ tokio = ["dep:tokio"]
 [dependencies]
 futures-io = { version = "0.3", optional = true }
 tokio = { version = "1", features = ["io-util"], optional = true }
+
+[dev-dependencies]
+criterion = { version = "0.8", default-features = false }
+
+[[bench]]
+name = "buffered"
+harness = false
