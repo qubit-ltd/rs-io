@@ -81,6 +81,14 @@ input.read_exactly_async(&mut header).await?;
 `Buffer<T>` 是底层 readable-window 容器，同步和异步缓冲器共用相同的
 position/limit 模型。
 
+消费同步缓冲器时，其生命周期语义是显式的。`BufferedInput::into_inner()`
+会丢弃未消费的预读 item，`try_into_inner()` 会报告这些 item，
+`into_parts()` 则可将其取回。`BufferedOutput::into_inner()` 及其兼容别名
+`try_into_inner()` 在 flush 失败时通过 `IntoInnerError` 保留整个缓冲 output；
+`into_parts()` 不执行 I/O。丢弃 `BufferedOutput` 会尝试 best-effort flush，
+包括调用 `IntoInnerError::into_error()` 丢弃其中 output 的情形；若 pending
+数据必须由调用方控制，应使用 `into_parts()`。
+
 `AsyncBufferedOutput` 会一直持有已接受但尚未被底层接受的 item。部分 flush
 在返回 `Pending` 前会先记录已完成进度。异步缓冲器在 `Drop` 中无法执行 I/O；
 需要保证送达时必须调用 `flush_async()`，或用 `into_parts()` 取回 pending 数据。

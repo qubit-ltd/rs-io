@@ -90,6 +90,19 @@ Asynchronous buffering:
 - `AsyncBufferedInput<I>` retains prefetched items across `Pending`.
 - `AsyncBufferedOutput<O>` retains accepted items and partial-flush progress.
 
+Consuming synchronous buffers requires an explicit choice:
+
+- `BufferedInput::into_inner()` discards unread prefetched items.
+  `try_into_inner()` reports them, while `into_parts()` recovers them.
+- `BufferedOutput::into_inner()` flushes and returns `IntoInnerError<Self>` on
+  failure, retaining pending items. `try_into_inner()` is a compatibility alias.
+  `into_parts()` performs no I/O.
+
+Dropping `BufferedOutput` makes a best-effort flush. Calling
+`IntoInnerError::into_error()` drops its retained output and can therefore
+trigger that attempt; recover the output with `into_inner()`, `into_writer()`,
+or `into_parts()` when pending data must stay under caller control.
+
 `AsyncBufferedInput` exposes `into_parts()` rather than an `into_inner()` that
 could silently discard unread prefetched items. When its inner output supports
 `AsyncClose`, `AsyncBufferedOutput` drains its own buffer before closing it.
