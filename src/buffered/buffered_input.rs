@@ -436,7 +436,9 @@ where
     /// Returns an [`IntoInnerError`] carrying [`ErrorKind::InvalidInput`] and
     /// this buffered input when unread items would be discarded.
     #[inline(always)]
-    pub fn try_into_inner(self) -> std::result::Result<I, IntoInnerError<Self>> {
+    pub fn try_into_inner(
+        self,
+    ) -> std::result::Result<I, IntoInnerError<Self>> {
         if self.buffer.is_empty() {
             Ok(self.into_inner())
         } else {
