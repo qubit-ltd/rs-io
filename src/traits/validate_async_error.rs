@@ -11,6 +11,8 @@ use std::io::{
     ErrorKind,
 };
 
+use super::internal::AsyncContractError;
+
 /// Converts error kinds forbidden by the asynchronous I/O contract.
 ///
 /// # Parameters
@@ -26,11 +28,17 @@ pub(crate) fn validate_async_error(error: Error) -> Error {
     match error.kind() {
         ErrorKind::WouldBlock => Error::new(
             ErrorKind::InvalidData,
-            "asynchronous I/O implementation returned WouldBlock",
+            AsyncContractError::new(
+                "asynchronous I/O implementation returned WouldBlock",
+                error,
+            ),
         ),
         ErrorKind::Interrupted => Error::new(
             ErrorKind::InvalidData,
-            "asynchronous I/O implementation returned Interrupted",
+            AsyncContractError::new(
+                "asynchronous I/O implementation returned Interrupted",
+                error,
+            ),
         ),
         _ => error,
     }

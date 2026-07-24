@@ -10,6 +10,7 @@ mod async_input;
 mod async_output;
 mod buf_read_seek;
 mod input;
+mod internal;
 mod output;
 mod pinned_async_input_ext;
 mod pinned_async_output_ext;
