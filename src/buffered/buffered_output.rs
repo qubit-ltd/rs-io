@@ -23,6 +23,7 @@ use crate::traits::validate_write_count;
 use crate::util::UncheckedSlice;
 use crate::{
     Buffer,
+    IntoInnerError,
     Output,
     Seekable,
     SeekableOutput,
@@ -169,6 +170,45 @@ where
     #[inline(always)]
     pub fn inner_mut(&mut self) -> &mut O {
         &mut self.inner
+    }
+
+    /// Flushes this buffered output and returns the wrapped output.
+    ///
+    /// # Returns
+    ///
+    /// Returns the wrapped output after every buffered item and the wrapped
+    /// output itself have been flushed.
+    ///
+    /// # Errors
+    ///
+    /// Returns the flush error and discards this buffered output. Use
+    /// [`Self::try_into_inner`] when a caller must retain pending state after
+    /// a transient failure.
+    #[inline(always)]
+    pub fn into_inner(self) -> Result<O> {
+        self.try_into_inner().map_err(IntoInnerError::into_error)
+    }
+
+    /// Tries to flush this buffered output and return the wrapped output.
+    ///
+    /// # Returns
+    ///
+    /// Returns the wrapped output after every buffered item and the wrapped
+    /// output itself have been flushed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`IntoInnerError`] carrying the flush error and this
+    /// buffered output, preserving any unwritten suffix for a later retry.
+    #[inline]
+    pub fn try_into_inner(
+        mut self,
+    ) -> std::result::Result<O, IntoInnerError<Self>> {
+        if let Err(error) = self.flush() {
+            return Err(IntoInnerError::new(error, self));
+        }
+        let (inner, _) = self.into_parts();
+        Ok(inner)
     }
 
     /// Consumes this buffered output without flushing pending items.

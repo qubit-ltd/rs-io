@@ -22,6 +22,7 @@ use crate::util::UncheckedSlice;
 use crate::{
     Buffer,
     Input,
+    IntoInnerError,
     Seekable,
     SeekableInput,
 };
@@ -401,6 +402,52 @@ where
     #[inline(always)]
     pub fn inner_mut(&mut self) -> &mut I {
         &mut self.inner
+    }
+
+    /// Consumes this buffered input and returns the wrapped input object.
+    ///
+    /// This method performs no I/O and discards unread items already buffered
+    /// from the wrapped input. Use [`Self::try_into_inner`] when unread items
+    /// must be retained on extraction failure, or [`Self::into_parts`] to
+    /// recover them explicitly.
+    ///
+    /// # Returns
+    ///
+    /// Returns the wrapped input object.
+    #[inline(always)]
+    #[must_use]
+    pub fn into_inner(self) -> I {
+        let (inner, _) = self.into_parts();
+        inner
+    }
+
+    /// Tries to return the wrapped input without discarding unread items.
+    ///
+    /// This method performs no I/O. It succeeds only when the internal buffer
+    /// is empty; otherwise it retains this buffered input in the error so
+    /// callers can continue consuming the unread items.
+    ///
+    /// # Returns
+    ///
+    /// Returns the wrapped input when no unread items remain.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`IntoInnerError`] carrying [`ErrorKind::InvalidInput`] and
+    /// this buffered input when unread items would be discarded.
+    #[inline(always)]
+    pub fn try_into_inner(self) -> std::result::Result<I, IntoInnerError<Self>> {
+        if self.buffer.is_empty() {
+            Ok(self.into_inner())
+        } else {
+            Err(IntoInnerError::new(
+                Error::new(
+                    ErrorKind::InvalidInput,
+                    "cannot extract inner input while unread items remain",
+                ),
+                self,
+            ))
+        }
     }
 
     /// Consumes this buffered input and returns the wrapped input object plus

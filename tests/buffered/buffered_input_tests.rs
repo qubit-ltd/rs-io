@@ -894,6 +894,52 @@ fn test_into_parts_preserves_inner_position_and_unread_bytes() {
 }
 
 #[test]
+fn test_into_inner_discards_unread_items() {
+    let cursor = Cursor::new(b"abcdef".to_vec());
+    let mut input = BufferedInput::with_capacity(cursor, 4);
+    assert!(input.fill_more().expect("initial refill should succeed"));
+    // SAFETY: Four items are buffered, so consuming one is valid.
+    unsafe {
+        input.consume(1);
+    }
+
+    let cursor = input.into_inner();
+
+    assert_eq!(4, cursor.position());
+}
+
+#[test]
+fn test_try_into_inner_retains_input_when_unread_items_remain() {
+    let cursor = Cursor::new(b"abcdef".to_vec());
+    let mut input = BufferedInput::with_capacity(cursor, 4);
+    assert!(input.fill_more().expect("initial refill should succeed"));
+    // SAFETY: Four items are buffered, so consuming one is valid.
+    unsafe {
+        input.consume(1);
+    }
+
+    let error = input
+        .try_into_inner()
+        .expect_err("unread items should prevent recoverable extraction");
+
+    assert_eq!(ErrorKind::InvalidInput, error.error().kind());
+    assert_eq!(b"bcd", error.writer().unread());
+    let input = error.into_writer();
+    assert_eq!(b"bcd", input.unread());
+}
+
+#[test]
+fn test_try_into_inner_returns_inner_when_buffer_is_empty() {
+    let input = BufferedInput::new(Cursor::new(b"abc".to_vec()));
+
+    let cursor = input
+        .try_into_inner()
+        .expect("empty buffered input should release its inner input");
+
+    assert_eq!(0, cursor.position());
+}
+
+#[test]
 fn test_capacity_returns_internal_buffer_capacity() {
     let cursor = Cursor::new(b"abc".to_vec());
     let input = BufferedInput::with_capacity(cursor, 4);
