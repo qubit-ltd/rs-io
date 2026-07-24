@@ -181,15 +181,20 @@ where
     ///
     /// # Errors
     ///
-    /// Returns the flush error and discards this buffered output. Use
-    /// [`Self::try_into_inner`] when a caller must retain pending state after
-    /// a transient failure.
-    #[inline(always)]
-    pub fn into_inner(self) -> Result<O> {
-        self.try_into_inner().map_err(IntoInnerError::into_error)
+    /// Returns an [`IntoInnerError`] carrying the flush error and this
+    /// buffered output, preserving any unwritten suffix for a later retry.
+    #[inline]
+    pub fn into_inner(
+        mut self,
+    ) -> std::result::Result<O, IntoInnerError<Self>> {
+        if let Err(error) = self.flush() {
+            return Err(IntoInnerError::new(error, self));
+        }
+        let (inner, _) = self.into_parts();
+        Ok(inner)
     }
 
-    /// Tries to flush this buffered output and return the wrapped output.
+    /// Compatibility alias for [`Self::into_inner`].
     ///
     /// # Returns
     ///
@@ -200,15 +205,11 @@ where
     ///
     /// Returns an [`IntoInnerError`] carrying the flush error and this
     /// buffered output, preserving any unwritten suffix for a later retry.
-    #[inline]
+    #[inline(always)]
     pub fn try_into_inner(
-        mut self,
+        self,
     ) -> std::result::Result<O, IntoInnerError<Self>> {
-        if let Err(error) = self.flush() {
-            return Err(IntoInnerError::new(error, self));
-        }
-        let (inner, _) = self.into_parts();
-        Ok(inner)
+        self.into_inner()
     }
 
     /// Consumes this buffered output without flushing pending items.
