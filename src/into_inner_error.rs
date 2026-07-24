@@ -117,7 +117,9 @@ impl<T> IntoInnerError<T> {
     ///
     /// # Returns
     ///
-    /// Returns the retained I/O error and discards the buffered object.
+    /// Returns the retained I/O error and drops the buffered object. If that
+    /// object's destructor performs best-effort I/O, dropping it can attempt
+    /// another write. Use [`Self::into_parts`] to control its lifecycle.
     #[must_use]
     #[inline(always)]
     pub fn into_error(self) -> io::Error {

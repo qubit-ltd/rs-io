@@ -1033,6 +1033,25 @@ fn test_into_inner_flushes_and_returns_inner() {
 }
 
 #[test]
+fn test_into_inner_retains_output_after_flush_error() {
+    let writer = ScriptedWriter::new(vec![WriteStep::Zero]);
+    let mut output = BufferedOutput::with_capacity(writer, 4);
+    output
+        .write_fully(b"abc")
+        .expect("buffered write should succeed");
+
+    let error = output
+        .into_inner()
+        .expect_err("flush failure should retain the buffered output");
+
+    assert_eq!(ErrorKind::WriteZero, error.error().kind());
+    let output = error.into_writer();
+    let (writer, pending) = output.into_parts();
+    assert_eq!(b"", writer.output.as_slice());
+    assert_eq!(b"abc", pending.readable());
+}
+
+#[test]
 fn test_write_fully_accepts_full_input_slice() {
     let cursor = Cursor::new(Vec::new());
     let mut output = BufferedOutput::with_capacity(cursor, 4);
