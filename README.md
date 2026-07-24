@@ -84,6 +84,16 @@ expose Qubit streams to Tokio, while `FuturesAsyncRead` and
 `Buffer<T>` is a low-level readable-window container. The synchronous and
 asynchronous buffered wrappers build on the same position/limit model.
 
+Consuming a synchronous buffer has explicit lifecycle semantics.
+`BufferedInput::into_inner()` discards unread prefetched items, while
+`try_into_inner()` reports them and `into_parts()` recovers them.
+`BufferedOutput::into_inner()` and its compatibility alias
+`try_into_inner()` retain the buffered output in `IntoInnerError` when
+flushing fails; `into_parts()` performs no I/O. Dropping a
+`BufferedOutput` makes a best-effort flush, including when
+`IntoInnerError::into_error()` discards the retained output, so use
+`into_parts()` when the pending data must remain under caller control.
+
 `AsyncBufferedOutput` owns every accepted item until the inner output accepts
 it. A partial flush updates retained progress before returning `Pending`.
 Dropping an asynchronous buffer cannot perform I/O; call `flush_async()` or use

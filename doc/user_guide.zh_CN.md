@@ -83,6 +83,19 @@ poll 契约是严格的：零长度传输立即完成且不轮询内部 stream�
 - `AsyncBufferedInput<I>` 跨 `Pending` 保留已预读 item；
 - `AsyncBufferedOutput<O>` 保留已接受 item 和部分 flush 进度。
 
+消费同步缓冲器时需要显式选择：
+
+- `BufferedInput::into_inner()` 会丢弃未消费的预读 item；
+  `try_into_inner()` 会报告这些 item，`into_parts()` 则可将其取回。
+- `BufferedOutput::into_inner()` 会先 flush；失败时返回
+  `IntoInnerError<Self>` 并保留 pending item。`try_into_inner()` 是兼容别名，
+  `into_parts()` 不执行 I/O。
+
+丢弃 `BufferedOutput` 会尝试 best-effort flush。调用
+`IntoInnerError::into_error()` 会丢弃其中保留的 output，因此也可能触发该尝试；
+若 pending 数据必须由调用方控制，应通过 `into_inner()`、`into_writer()` 或
+`into_parts()` 取回 output。
+
 `AsyncBufferedInput` 仅提供 `into_parts()`，避免 `into_inner()` 静默丢弃预读但
 未消费的 item。内部 output 支持 `AsyncClose` 时，`AsyncBufferedOutput` 会先
 排空自身缓冲区，再关闭内部 output。
