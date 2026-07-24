@@ -5,5 +5,4 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-
-mod read_ext_impl_tests;
+//! The internal implementation is exercised through the public extension tests.
