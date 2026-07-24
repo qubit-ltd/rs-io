@@ -985,6 +985,54 @@ fn test_flush_returns_inner_flush_error() {
 }
 
 #[test]
+fn test_try_into_inner_flushes_and_returns_inner() {
+    let mut output = BufferedOutput::with_capacity(Cursor::new(Vec::new()), 4);
+    output
+        .write_fully(b"abc")
+        .expect("buffered write should succeed");
+
+    let cursor = output
+        .try_into_inner()
+        .expect("recoverable extraction should flush pending bytes");
+
+    assert_eq!(b"abc", cursor.into_inner().as_slice());
+}
+
+#[test]
+fn test_try_into_inner_retains_output_after_flush_error() {
+    let writer = ScriptedWriter::new(vec![WriteStep::Zero]);
+    let mut output = BufferedOutput::with_capacity(writer, 4);
+    output
+        .write_fully(b"abc")
+        .expect("buffered write should succeed");
+
+    let error = output
+        .try_into_inner()
+        .expect_err("flush failure should retain the buffered output");
+
+    assert_eq!(ErrorKind::WriteZero, error.error().kind());
+    assert_eq!(b"", error.writer().inner().output.as_slice());
+    let output = error.into_writer();
+    let (writer, pending) = output.into_parts();
+    assert_eq!(b"", writer.output.as_slice());
+    assert_eq!(b"abc", pending.readable());
+}
+
+#[test]
+fn test_into_inner_flushes_and_returns_inner() {
+    let mut output = BufferedOutput::with_capacity(Cursor::new(Vec::new()), 4);
+    output
+        .write_fully(b"abc")
+        .expect("buffered write should succeed");
+
+    let cursor = output
+        .into_inner()
+        .expect("consuming extraction should flush pending bytes");
+
+    assert_eq!(b"abc", cursor.into_inner().as_slice());
+}
+
+#[test]
 fn test_write_fully_accepts_full_input_slice() {
     let cursor = Cursor::new(Vec::new());
     let mut output = BufferedOutput::with_capacity(cursor, 4);

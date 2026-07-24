@@ -36,6 +36,7 @@ mod async_io;
 pub mod buffered;
 mod capacity_const;
 pub mod ext;
+mod into_inner_error;
 mod traits;
 mod util;
 mod wrappers;
@@ -91,6 +92,7 @@ pub use ext::{
     WriteExt,
     WriteSeekExt,
 };
+pub use into_inner_error::IntoInnerError;
 pub use traits::{
     AsyncClose,
     AsyncInput,
