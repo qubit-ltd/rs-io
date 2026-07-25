@@ -33,6 +33,10 @@ pub trait AsyncClose: AsyncOutput {
     /// # Returns
     ///
     /// [`Poll::Pending`] or the ready close result.
+    ///
+    /// # Errors
+    ///
+    /// Returns the close error reported by the implementation.
     fn poll_close(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,

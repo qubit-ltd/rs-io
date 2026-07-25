@@ -40,7 +40,7 @@ impl UncheckedSlice {
     ///
     /// `Some(end)` if `start + count <= len` and no overflow occurs, or
     /// `None` when the requested range does not fit inside the slice.
-    #[inline(always)]
+    #[inline]
     pub const fn range_end(
         len: usize,
         start: usize,
@@ -64,6 +64,7 @@ impl UncheckedSlice {
     /// # Returns
     ///
     /// `true` if `start + count <= len` and no overflow occurs.
+    #[must_use]
     #[inline(always)]
     pub const fn range_fits(len: usize, start: usize, count: usize) -> bool {
         Self::range_end(len, start, count).is_some()
@@ -100,14 +101,23 @@ impl UncheckedSlice {
 
     /// Reads one value from an unchecked slice index.
     ///
+    /// # Type Parameters
+    ///
+    /// - `T`: Copyable element type read from the slice.
+    ///
     /// # Parameters
     ///
     /// - `input`: Source slice.
     /// - `index`: Start index that must be valid for reading one item.
     ///
+    /// # Returns
+    ///
+    /// A copy of the value stored at `index`.
+    ///
     /// # Safety
     ///
     /// The caller must guarantee that `index < input.len()`.
+    #[must_use]
     #[inline(always)]
     pub unsafe fn read<T: Copy>(input: &[T], index: usize) -> T {
         // SAFETY: The caller guarantees that `index` is in-bounds.
@@ -118,6 +128,10 @@ impl UncheckedSlice {
     ///
     /// This replaces the existing initialized element at `index`. The previous
     /// value is dropped before `value` is moved into the slot.
+    ///
+    /// # Type Parameters
+    ///
+    /// - `T`: Element type stored by the slice.
     ///
     /// # Parameters
     ///
@@ -138,14 +152,23 @@ impl UncheckedSlice {
 
     /// Returns an immutable reference to one value at an unchecked slice index.
     ///
+    /// # Type Parameters
+    ///
+    /// - `T`: Element type stored by the slice.
+    ///
     /// # Parameters
     ///
     /// - `input`: Source slice.
     /// - `index`: Start index that must be valid for reading one item.
     ///
+    /// # Returns
+    ///
+    /// A shared reference to the value at `index`.
+    ///
     /// # Safety
     ///
     /// The caller must guarantee that `index < input.len()`.
+    #[must_use]
     #[inline(always)]
     pub unsafe fn get<T>(input: &[T], index: usize) -> &T {
         // SAFETY: The caller guarantees that `index` is in-bounds.
@@ -155,14 +178,23 @@ impl UncheckedSlice {
     /// Returns a mutable reference to one value at an unchecked mutable slice
     /// index.
     ///
+    /// # Type Parameters
+    ///
+    /// - `T`: Element type stored by the slice.
+    ///
     /// # Parameters
     ///
     /// - `output`: Destination slice.
     /// - `index`: Start index that must be valid for writing one item.
     ///
+    /// # Returns
+    ///
+    /// An exclusive reference to the value at `index`.
+    ///
     /// # Safety
     ///
     /// The caller must guarantee that `index < output.len()`.
+    #[must_use]
     #[inline(always)]
     pub unsafe fn get_mut<T>(output: &mut [T], index: usize) -> &mut T {
         // SAFETY: The caller guarantees that `index` is in-bounds.
@@ -171,16 +203,29 @@ impl UncheckedSlice {
 
     /// Returns an immutable subslice at an unchecked offset and length.
     ///
+    /// # Type Parameters
+    ///
+    /// - `T`: Element type stored by the slice.
+    ///
     /// # Parameters
     ///
     /// - `input`: Source slice.
     /// - `start`: Start index in `input`.
     /// - `count`: Number of items in the returned subslice.
     ///
+    /// # Returns
+    ///
+    /// The shared subslice spanning the requested range.
+    ///
+    /// # Panics
+    ///
+    /// Panics in debug builds if the requested range does not fit.
+    ///
     /// # Safety
     ///
     /// The caller must guarantee that `start + count <= input.len()` and that
     /// the addition does not overflow.
+    #[must_use]
     #[inline(always)]
     pub unsafe fn subslice<T>(input: &[T], start: usize, count: usize) -> &[T] {
         debug_assert!(
@@ -193,16 +238,29 @@ impl UncheckedSlice {
 
     /// Returns a mutable subslice at an unchecked offset and length.
     ///
+    /// # Type Parameters
+    ///
+    /// - `T`: Element type stored by the slice.
+    ///
     /// # Parameters
     ///
     /// - `output`: Destination slice.
     /// - `start`: Start index in `output`.
     /// - `count`: Number of items in the returned subslice.
     ///
+    /// # Returns
+    ///
+    /// The exclusive subslice spanning the requested range.
+    ///
+    /// # Panics
+    ///
+    /// Panics in debug builds if the requested range does not fit.
+    ///
     /// # Safety
     ///
     /// The caller must guarantee that `start + count <= output.len()` and that
     /// the addition does not overflow.
+    #[must_use]
     #[inline(always)]
     pub unsafe fn subslice_mut<T>(
         output: &mut [T],
@@ -225,6 +283,10 @@ impl UncheckedSlice {
 
     /// Copies `count` values between unchecked slice offsets.
     ///
+    /// # Type Parameters
+    ///
+    /// - `T`: Copyable element type stored by both slices.
+    ///
     /// # Parameters
     ///
     /// - `source`: Source slice.
@@ -233,6 +295,10 @@ impl UncheckedSlice {
     /// - `destination_index`: Destination offset, must be valid for `count`
     ///   items.
     /// - `count`: Number of items to copy.
+    ///
+    /// # Panics
+    ///
+    /// Panics in debug builds if either requested range does not fit.
     ///
     /// # Safety
     ///
@@ -268,6 +334,10 @@ impl UncheckedSlice {
     ///
     /// Overlapping source and destination ranges are supported.
     ///
+    /// # Type Parameters
+    ///
+    /// - `T`: Copyable element type stored by the buffer.
+    ///
     /// # Parameters
     ///
     /// - `buffer`: Buffer containing both ranges.
@@ -275,6 +345,10 @@ impl UncheckedSlice {
     /// - `destination_index`: Destination offset, must be valid for `count`
     ///   items.
     /// - `count`: Number of values to copy.
+    ///
+    /// # Panics
+    ///
+    /// Panics in debug builds if either requested range does not fit.
     ///
     /// # Safety
     ///
@@ -308,10 +382,22 @@ impl UncheckedSlice {
 
     /// Reads one value from an unchecked unaligned byte slice offset.
     ///
+    /// # Type Parameters
+    ///
+    /// - `T`: Copyable value type represented by the source bytes.
+    ///
     /// # Parameters
     ///
     /// - `input`: Source byte buffer.
     /// - `index`: Byte offset in `input`.
+    ///
+    /// # Returns
+    ///
+    /// The value reconstructed from the bytes at `index`.
+    ///
+    /// # Panics
+    ///
+    /// Panics in debug builds if the requested byte range does not fit.
     ///
     /// # Safety
     ///
@@ -326,6 +412,7 @@ impl UncheckedSlice {
     /// representation requirement; types with restricted bit patterns,
     /// references, or pointers require additional justification from the
     /// caller.
+    #[must_use]
     #[inline(always)]
     pub unsafe fn read_ne_unaligned<T: Copy>(input: &[u8], index: usize) -> T {
         debug_assert!(
@@ -342,11 +429,19 @@ impl UncheckedSlice {
 
     /// Writes one value to an unchecked unaligned byte slice offset.
     ///
+    /// # Type Parameters
+    ///
+    /// - `T`: Copyable value type whose object representation is written.
+    ///
     /// # Parameters
     ///
     /// - `output`: Destination byte buffer.
     /// - `index`: Byte offset in `output`.
     /// - `value`: Value to write.
+    ///
+    /// # Panics
+    ///
+    /// Panics in debug builds if the requested byte range does not fit.
     ///
     /// # Safety
     ///

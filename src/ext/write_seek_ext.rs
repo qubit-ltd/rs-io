@@ -29,6 +29,9 @@ pub trait WriteSeekExt: Write + Seek {
     /// - `offset`: Absolute byte offset from the start of the stream.
     /// - `buffer`: Bytes to write.
     ///
+    /// # Returns
+    /// `Ok(())` after all bytes have been written and the position restored.
+    ///
     /// # Errors
     /// Returns an error when reading the current position, seeking to `offset`,
     /// writing bytes, or restoring the original position fails. If restoration
@@ -41,6 +44,18 @@ pub trait WriteSeekExt: Write + Seek {
 }
 
 /// Implements a position-preserving write through a type-erased stream.
+///
+/// # Parameters
+/// - `output`: Stream to seek, write, and restore.
+/// - `offset`: Absolute byte offset to write at.
+/// - `buffer`: Bytes to write.
+///
+/// # Returns
+/// `Ok(())` after all bytes have been written and the position restored.
+///
+/// # Errors
+/// Returns an error when querying, changing, or restoring the stream position,
+/// or when writing fails.
 fn write_all_at_preserving_position_impl(
     output: &mut dyn WriteSeek,
     offset: u64,
@@ -63,7 +78,19 @@ impl<T> WriteSeekExt for T
 where
     T: Write + Seek + ?Sized,
 {
-    #[inline]
+    /// Writes at an absolute offset and restores the original position.
+    ///
+    /// # Parameters
+    /// - `offset`: Absolute byte offset to write at.
+    /// - `buffer`: Bytes to write.
+    ///
+    /// # Returns
+    /// `Ok(())` after all bytes have been written and the position restored.
+    ///
+    /// # Errors
+    /// Returns an error when querying, changing, or restoring the stream
+    /// position, or when writing fails.
+    #[inline(always)]
     fn write_all_at_preserving_position(
         &mut self,
         offset: u64,

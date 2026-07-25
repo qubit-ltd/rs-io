@@ -39,6 +39,9 @@ pub trait WriteExt: Write {
     /// # Errors
     /// Returns the error reported by [`Write::write`].
     ///
+    /// # Panics
+    /// Panics in debug builds if the requested source range does not fit.
+    ///
     /// # Safety
     /// The caller must guarantee that `start_index..start_index + count` is a
     /// valid range within `buffer` and that `start_index + count` does not
@@ -74,8 +77,14 @@ pub trait WriteExt: Write {
     /// - `start_index`: Start offset inside `buffer`.
     /// - `count`: Number of bytes to write.
     ///
+    /// # Returns
+    /// `Ok(())` after the requested range has been written.
+    ///
     /// # Errors
     /// Returns the error reported by [`Write::write_all`].
+    ///
+    /// # Panics
+    /// Panics in debug builds if the requested source range does not fit.
     ///
     /// # Safety
     /// The caller must guarantee that `start_index..start_index + count` is a

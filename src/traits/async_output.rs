@@ -66,6 +66,10 @@ pub trait AsyncOutput {
     /// boundary; implementations must respectively register readiness or retry
     /// internally.
     ///
+    /// # Errors
+    ///
+    /// Returns the output error reported by the implementation.
+    ///
     /// # Safety
     ///
     /// The caller must guarantee that `index..index + count` is a valid range
@@ -94,7 +98,7 @@ pub trait AsyncOutput {
     /// Returns the implementation's output error. Returns
     /// [`std::io::ErrorKind::InvalidData`] if the implementation reports more
     /// items than requested.
-    #[inline(always)]
+    #[inline]
     fn poll_write(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -130,12 +134,20 @@ pub trait AsyncOutput {
     /// Before returning [`Poll::Pending`], the implementation must arrange for
     /// `cx`'s waker to be notified when flushing may progress. `WouldBlock` and
     /// `Interrupted` must not cross this asynchronous boundary.
+    ///
+    /// # Errors
+    ///
+    /// Returns the flush error reported by the implementation.
     fn poll_flush(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<()>>;
 
     /// Creates a future that performs one asynchronous write operation.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `'a` - Shared lifetime of the output borrow and source slice.
     ///
     /// # Parameters
     ///
@@ -159,6 +171,10 @@ pub trait AsyncOutput {
     ///
     /// The returned future reports [`std::io::ErrorKind::WriteZero`] when
     /// output makes no progress.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `'a` - Shared lifetime of the output borrow and source slice.
     ///
     /// # Parameters
     ///

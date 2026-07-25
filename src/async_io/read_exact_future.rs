@@ -29,6 +29,11 @@ use crate::AsyncInput;
 ///
 /// [`Future::poll`] panics when called again after this future has returned
 /// [`Poll::Ready`].
+///
+/// # Type Parameters
+///
+/// - `'a`: Shared lifetime of the input borrow and destination slice.
+/// - `I`: Asynchronous input type.
 #[must_use = "futures do nothing unless polled"]
 pub struct ReadExactFuture<'a, I>
 where
@@ -49,6 +54,15 @@ where
     I: AsyncInput + ?Sized,
 {
     /// Creates an exact-read future from a pinned input.
+    ///
+    /// # Parameters
+    ///
+    /// - `input`: Pinned asynchronous input.
+    /// - `output`: Destination slice that must be filled.
+    ///
+    /// # Returns
+    ///
+    /// Returns a future that completes after filling `output`.
     #[inline(always)]
     pub const fn new(input: Pin<&'a mut I>, output: &'a mut [I::Item]) -> Self {
         Self {
@@ -60,6 +74,10 @@ where
     }
 
     /// Returns the number of items read so far.
+    ///
+    /// # Returns
+    ///
+    /// Returns the progress retained across polls.
     #[inline(always)]
     #[must_use]
     pub const fn items_read(&self) -> usize {
@@ -71,8 +89,28 @@ impl<I> Future for ReadExactFuture<'_, I>
 where
     I: AsyncInput + ?Sized,
 {
+    /// Result produced when the exact-read operation becomes ready.
     type Output = Result<()>;
 
+    /// Polls the exact-read operation.
+    ///
+    /// # Parameters
+    ///
+    /// - `cx`: Task context used to register a wake-up.
+    ///
+    /// # Returns
+    ///
+    /// Returns [`Poll::Pending`] while more input is needed, or
+    /// [`Poll::Ready`] after the destination is filled or an error occurs.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ErrorKind::UnexpectedEof`] when EOF is reached before the
+    /// destination is full. Other errors are propagated from the input.
+    ///
+    /// # Panics
+    ///
+    /// Panics when polled after returning [`Poll::Ready`].
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
         assert!(!this.completed, "ReadExactFuture polled after completion");

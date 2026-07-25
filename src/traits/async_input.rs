@@ -67,6 +67,10 @@ pub trait AsyncInput {
     /// boundary; implementations must respectively register readiness or retry
     /// internally.
     ///
+    /// # Errors
+    ///
+    /// Returns the input error reported by the implementation.
+    ///
     /// # Safety
     ///
     /// The caller must guarantee that `index..index + count` is a valid range
@@ -95,7 +99,7 @@ pub trait AsyncInput {
     /// Returns the implementation's input error. Returns
     /// [`std::io::ErrorKind::InvalidData`] if the implementation reports more
     /// items than requested.
-    #[inline(always)]
+    #[inline]
     fn poll_read(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -118,6 +122,10 @@ pub trait AsyncInput {
     }
 
     /// Creates a future that performs one asynchronous read operation.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `'a` - Shared lifetime of the input borrow and destination slice.
     ///
     /// # Parameters
     ///
@@ -142,6 +150,10 @@ pub trait AsyncInput {
     /// The returned future stops when the destination is full or the input
     /// reports EOF.
     ///
+    /// # Type Parameters
+    ///
+    /// * `'a` - Shared lifetime of the input borrow and destination slice.
+    ///
     /// # Parameters
     ///
     /// * `output` - Destination storage.
@@ -164,6 +176,18 @@ pub trait AsyncInput {
     ///
     /// The returned future reports [`std::io::ErrorKind::UnexpectedEof`] if
     /// the input ends before the destination is full.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `'a` - Shared lifetime of the input borrow and destination slice.
+    ///
+    /// # Parameters
+    ///
+    /// * `output` - Destination storage that must be filled completely.
+    ///
+    /// # Returns
+    ///
+    /// A future that resolves after filling `output` or encountering an error.
     #[inline(always)]
     fn read_exactly_async<'a>(
         &'a mut self,

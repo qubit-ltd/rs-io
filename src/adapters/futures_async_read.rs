@@ -17,20 +17,37 @@ use futures_io::AsyncRead;
 use crate::AsyncInput;
 
 /// Exposes a Qubit byte [`AsyncInput`] as a futures-io [`AsyncRead`].
+///
+/// # Type Parameters
+///
+/// - `I`: Qubit byte input type.
+#[must_use]
 #[repr(transparent)]
 pub struct FuturesAsyncRead<I> {
+    /// Qubit byte input exposed through futures-io.
     inner: I,
 }
 
 impl<I> FuturesAsyncRead<I> {
     /// Creates a futures-io reader around a Qubit byte input.
+    ///
+    /// # Parameters
+    ///
+    /// - `inner`: Qubit byte input to expose.
+    ///
+    /// # Returns
+    ///
+    /// Returns a futures-io reader adapter that owns `inner`.
     #[inline(always)]
-    #[must_use]
     pub const fn new(inner: I) -> Self {
         Self { inner }
     }
 
     /// Returns a shared reference to the wrapped input.
+    ///
+    /// # Returns
+    ///
+    /// Returns the wrapped Qubit input.
     #[inline(always)]
     #[must_use]
     pub const fn get_ref(&self) -> &I {
@@ -38,6 +55,10 @@ impl<I> FuturesAsyncRead<I> {
     }
 
     /// Returns a mutable reference to the wrapped input.
+    ///
+    /// # Returns
+    ///
+    /// Returns the wrapped Qubit input with mutable access.
     #[inline(always)]
     #[must_use]
     pub const fn get_mut(&mut self) -> &mut I {
@@ -45,6 +66,11 @@ impl<I> FuturesAsyncRead<I> {
     }
 
     /// Projects a pinned adapter to its pinned wrapped input.
+    ///
+    /// # Returns
+    ///
+    /// Returns a pinned mutable reference to the wrapped Qubit input without
+    /// moving it.
     #[inline(always)]
     #[must_use]
     pub fn get_pin_mut(self: Pin<&mut Self>) -> Pin<&mut I> {
@@ -54,6 +80,10 @@ impl<I> FuturesAsyncRead<I> {
     }
 
     /// Consumes the adapter and returns the wrapped input.
+    ///
+    /// # Returns
+    ///
+    /// Returns the owned Qubit input.
     #[inline(always)]
     #[must_use]
     pub fn into_inner(self) -> I {
@@ -65,6 +95,24 @@ impl<I> AsyncRead for FuturesAsyncRead<I>
 where
     I: AsyncInput<Item = u8>,
 {
+    /// Polls one futures-io read through the wrapped Qubit input.
+    ///
+    /// An empty destination completes immediately without polling `inner`.
+    ///
+    /// # Parameters
+    ///
+    /// - `cx`: Task context used to register a wake-up.
+    /// - `output`: Destination byte slice.
+    ///
+    /// # Returns
+    ///
+    /// Returns [`Poll::Pending`] when the input is not ready. A ready result
+    /// contains the number of bytes read.
+    ///
+    /// # Errors
+    ///
+    /// Returns an I/O error reported by the wrapped input.
+    #[inline]
     fn poll_read(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,

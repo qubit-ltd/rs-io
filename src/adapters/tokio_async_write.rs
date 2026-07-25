@@ -20,20 +20,37 @@ use crate::{
 };
 
 /// Exposes a Qubit byte [`crate::AsyncOutput`] as a Tokio [`AsyncWrite`].
+///
+/// # Type Parameters
+///
+/// - `O`: Qubit byte output type.
+#[must_use]
 #[repr(transparent)]
 pub struct TokioAsyncWrite<O> {
+    /// Qubit byte output exposed through Tokio.
     inner: O,
 }
 
 impl<O> TokioAsyncWrite<O> {
     /// Creates a Tokio writer around a Qubit byte output.
+    ///
+    /// # Parameters
+    ///
+    /// - `inner`: Qubit byte output to expose.
+    ///
+    /// # Returns
+    ///
+    /// Returns a Tokio writer adapter that owns `inner`.
     #[inline(always)]
-    #[must_use]
     pub const fn new(inner: O) -> Self {
         Self { inner }
     }
 
     /// Returns a shared reference to the wrapped output.
+    ///
+    /// # Returns
+    ///
+    /// Returns the wrapped Qubit output.
     #[inline(always)]
     #[must_use]
     pub const fn get_ref(&self) -> &O {
@@ -41,6 +58,10 @@ impl<O> TokioAsyncWrite<O> {
     }
 
     /// Returns a mutable reference to the wrapped output.
+    ///
+    /// # Returns
+    ///
+    /// Returns the wrapped Qubit output with mutable access.
     #[inline(always)]
     #[must_use]
     pub const fn get_mut(&mut self) -> &mut O {
@@ -48,6 +69,11 @@ impl<O> TokioAsyncWrite<O> {
     }
 
     /// Projects a pinned adapter to its pinned wrapped output.
+    ///
+    /// # Returns
+    ///
+    /// Returns a pinned mutable reference to the wrapped Qubit output without
+    /// moving it.
     #[inline(always)]
     #[must_use]
     pub fn get_pin_mut(self: Pin<&mut Self>) -> Pin<&mut O> {
@@ -57,6 +83,10 @@ impl<O> TokioAsyncWrite<O> {
     }
 
     /// Consumes the adapter and returns the wrapped output.
+    ///
+    /// # Returns
+    ///
+    /// Returns the owned Qubit output.
     #[inline(always)]
     #[must_use]
     pub fn into_inner(self) -> O {
@@ -68,6 +98,22 @@ impl<O> AsyncWrite for TokioAsyncWrite<O>
 where
     O: AsyncClose<Item = u8>,
 {
+    /// Polls one Tokio write through the wrapped Qubit output.
+    ///
+    /// # Parameters
+    ///
+    /// - `cx`: Task context used to register a wake-up.
+    /// - `input`: Source byte slice.
+    ///
+    /// # Returns
+    ///
+    /// Returns [`Poll::Pending`] when the output is not ready. A ready result
+    /// contains the number of bytes accepted.
+    ///
+    /// # Errors
+    ///
+    /// Returns an I/O error reported by the wrapped output.
+    #[inline(always)]
     fn poll_write(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -76,6 +122,23 @@ where
         self.get_pin_mut().poll_write(cx, input)
     }
 
+    /// Polls flushing through the wrapped Qubit output.
+    ///
+    /// # Parameters
+    ///
+    /// - `cx`: Task context used to register a wake-up.
+    ///
+    /// # Returns
+    ///
+    /// Returns [`Poll::Pending`] while flushing is incomplete, otherwise a
+    /// ready success result.
+    ///
+    /// # Errors
+    ///
+    /// Returns an I/O error reported by the wrapped output. Invalid
+    /// asynchronous error kinds are normalized to
+    /// [`std::io::ErrorKind::InvalidData`].
+    #[inline(always)]
     fn poll_flush(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -85,6 +148,23 @@ where
             .map(|result| result.map_err(validate_async_error))
     }
 
+    /// Polls closing through the wrapped Qubit output.
+    ///
+    /// # Parameters
+    ///
+    /// - `cx`: Task context used to register a wake-up.
+    ///
+    /// # Returns
+    ///
+    /// Returns [`Poll::Pending`] while closing is incomplete, otherwise a
+    /// ready success result.
+    ///
+    /// # Errors
+    ///
+    /// Returns an I/O error reported by the wrapped output. Invalid
+    /// asynchronous error kinds are normalized to
+    /// [`std::io::ErrorKind::InvalidData`].
+    #[inline(always)]
     fn poll_shutdown(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,

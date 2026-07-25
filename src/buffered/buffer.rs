@@ -61,13 +61,21 @@ use crate::util::UncheckedSlice;
 /// }
 /// assert_eq!(b"b", buffer.readable());
 /// ```
+///
+/// # Type Parameters
+///
+/// - `T`: Copyable item type used for initialized backing storage.
+#[must_use]
 #[derive(Clone, Debug)]
 pub struct Buffer<T>
 where
     T: Copy + Default,
 {
+    /// Fully initialized backing storage.
     data: Vec<T>,
+    /// Start index of the readable window.
     position: usize,
+    /// Exclusive end index of the readable window.
     limit: usize,
 }
 
@@ -81,13 +89,17 @@ where
     ///
     /// # Parameters
     ///
-    /// * `capacity` - Requested element capacity.
+    /// - `capacity`: Requested element capacity.
     ///
     /// # Returns
     ///
-    /// A buffer with `position == 0` and `limit == 0`.
-    #[inline(always)]
-    #[must_use]
+    /// Returns a buffer with `position == 0` and `limit == 0`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `T::default()` panics or the requested backing length exceeds
+    /// [`Vec`]'s supported capacity.
+    #[inline]
     pub fn with_capacity(capacity: usize) -> Self {
         let capacity = capacity.max(1);
         Self {
@@ -101,10 +113,22 @@ where
     ///
     /// A requested capacity of `0` is raised to `1`.
     ///
+    /// # Parameters
+    ///
+    /// - `capacity`: Requested element capacity.
+    ///
+    /// # Returns
+    ///
+    /// Returns an empty buffer with at least one element of capacity.
+    ///
     /// # Errors
     ///
     /// Returns the original allocation error when the backing storage cannot
     /// reserve the requested capacity.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `T::default()` panics.
     #[inline]
     pub fn try_with_capacity(capacity: usize) -> Result<Self, TryReserveError> {
         let capacity = capacity.max(1);
@@ -122,10 +146,23 @@ where
     ///
     /// Existing consumed, readable, and spare windows retain their positions.
     ///
+    /// # Parameters
+    ///
+    /// - `capacity`: Required total element capacity.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` after the requested capacity is available.
+    ///
     /// # Errors
     ///
     /// Returns the original allocation error when the backing storage cannot
     /// reserve the additional capacity.
+    ///
+    /// # Panics
+    ///
+    /// Panics if growing the backing storage requires `T::default()` and it
+    /// panics.
     #[inline]
     pub fn try_reserve_capacity(
         &mut self,
@@ -319,7 +356,11 @@ where
     ///
     /// # Parameters
     ///
-    /// * `count` - Number of readable elements to consume.
+    /// - `count`: Number of readable elements to consume.
+    ///
+    /// # Panics
+    ///
+    /// Panics in debug builds if `count > self.available()`.
     ///
     /// # Safety
     ///
@@ -333,29 +374,15 @@ where
         self.position += count;
     }
 
-    /// Moves the readable cursor backward without checking bounds.
-    ///
-    /// # Parameters
-    ///
-    /// * `count` - Number of already-consumed elements to make readable again.
-    ///
-    /// # Safety
-    ///
-    /// The caller must guarantee that `count <= self.position()`.
-    #[inline(always)]
-    pub(crate) unsafe fn rewind(&mut self, count: usize) {
-        debug_assert!(
-            count <= self.position,
-            "unchecked rewind exceeds consumed buffer prefix"
-        );
-        self.position -= count;
-    }
-
     /// Advances the readable limit without checking bounds.
     ///
     /// # Parameters
     ///
-    /// * `count` - Number of initialized spare elements to make readable.
+    /// - `count`: Number of initialized spare elements to make readable.
+    ///
+    /// # Panics
+    ///
+    /// Panics in debug builds if `count > self.spare_capacity()`.
     ///
     /// # Safety
     ///
@@ -402,9 +429,14 @@ where
     ///
     /// # Parameters
     ///
-    /// * `input` - Source storage.
-    /// * `input_index` - Start index inside `input`.
-    /// * `count` - Number of values to copy.
+    /// - `input`: Source storage.
+    /// - `input_index`: Start index inside `input`.
+    /// - `count`: Number of values to copy.
+    ///
+    /// # Panics
+    ///
+    /// Panics in debug builds if the requested input range does not fit or
+    /// `count > self.spare_capacity()`.
     ///
     /// # Safety
     ///
@@ -443,9 +475,14 @@ where
     ///
     /// # Parameters
     ///
-    /// * `output` - Destination storage.
-    /// * `output_index` - Start index inside `output`.
-    /// * `count` - Number of values to copy.
+    /// - `output`: Destination storage.
+    /// - `output_index`: Start index inside `output`.
+    /// - `count`: Number of values to copy.
+    ///
+    /// # Panics
+    ///
+    /// Panics in debug builds if the requested output range does not fit or
+    /// `count > self.available()`.
     ///
     /// # Safety
     ///
@@ -472,5 +509,27 @@ where
             );
             self.consume(count);
         }
+    }
+
+    /// Moves the readable cursor backward without checking bounds.
+    ///
+    /// # Parameters
+    ///
+    /// - `count`: Number of already-consumed elements to make readable again.
+    ///
+    /// # Panics
+    ///
+    /// Panics in debug builds if `count > self.position()`.
+    ///
+    /// # Safety
+    ///
+    /// The caller must guarantee that `count <= self.position()`.
+    #[inline(always)]
+    pub(crate) unsafe fn rewind(&mut self, count: usize) {
+        debug_assert!(
+            count <= self.position,
+            "unchecked rewind exceeds consumed buffer prefix"
+        );
+        self.position -= count;
     }
 }

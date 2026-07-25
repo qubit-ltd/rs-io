@@ -16,9 +16,12 @@ use std::io;
 /// # Type Parameters
 ///
 /// - `T`: Buffered object retained after the failed conversion.
+#[must_use]
 #[derive(Debug)]
 pub struct IntoInnerError<T> {
+    /// I/O error that prevented conversion.
     error: io::Error,
+    /// Buffered object retained after conversion failed.
     inner: T,
 }
 
@@ -33,7 +36,7 @@ impl<T> IntoInnerError<T> {
     /// # Returns
     ///
     /// Returns an error containing both supplied values.
-    #[must_use]
+    #[inline(always)]
     pub const fn new(error: io::Error, inner: T) -> Self {
         Self { error, inner }
     }
@@ -60,6 +63,16 @@ impl<T> IntoInnerError<T> {
         &self.inner
     }
 
+    /// Returns mutable access to the buffered object retained after failure.
+    ///
+    /// # Returns
+    ///
+    /// Returns a mutable reference to the retained buffered object.
+    #[inline(always)]
+    pub const fn inner_mut(&mut self) -> &mut T {
+        &mut self.inner
+    }
+
     /// Returns the buffered object retained after conversion failed.
     ///
     /// # Returns
@@ -69,16 +82,6 @@ impl<T> IntoInnerError<T> {
     #[inline(always)]
     pub const fn writer(&self) -> &T {
         self.inner()
-    }
-
-    /// Returns mutable access to the buffered object retained after failure.
-    ///
-    /// # Returns
-    ///
-    /// Returns a mutable reference to the retained buffered object.
-    #[inline(always)]
-    pub const fn inner_mut(&mut self) -> &mut T {
-        &mut self.inner
     }
 
     /// Returns mutable access to the buffered object retained after failure.
@@ -140,6 +143,19 @@ impl<T> IntoInnerError<T> {
 
 impl<T> fmt::Display for IntoInnerError<T> {
     /// Formats the retained I/O error.
+    ///
+    /// # Parameters
+    ///
+    /// - `formatter`: Destination formatter.
+    ///
+    /// # Returns
+    ///
+    /// Returns the formatter result.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the formatter cannot accept the output.
+    #[inline(always)]
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.error.fmt(formatter)
     }
@@ -150,6 +166,11 @@ where
     T: fmt::Debug,
 {
     /// Returns the retained I/O error as the source.
+    ///
+    /// # Returns
+    ///
+    /// Returns the retained error as a trait object.
+    #[inline(always)]
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         Some(&self.error)
     }

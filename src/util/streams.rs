@@ -68,6 +68,10 @@ impl Streams {
     /// the standard-library behavior, including platform-specific optimized
     /// copy paths when available.
     ///
+    /// # Type Parameters
+    /// - `R`: Source reader type.
+    /// - `W`: Destination writer type.
+    ///
     /// # Parameters
     /// - `reader`: Source reader.
     /// - `writer`: Destination writer.
@@ -78,7 +82,7 @@ impl Streams {
     /// # Errors
     /// Returns the first read or write error reported by the underlying
     /// streams, using the same error behavior as [`std::io::copy`].
-    #[inline]
+    #[inline(always)]
     pub fn copy<R, W>(reader: &mut R, writer: &mut W) -> Result<u64>
     where
         R: Read + ?Sized,
@@ -93,6 +97,10 @@ impl Streams {
     /// `max_bytes` bytes have been copied. It does not close or flush either
     /// stream.
     ///
+    /// # Type Parameters
+    /// - `R`: Source reader type.
+    /// - `W`: Destination writer type.
+    ///
     /// # Parameters
     /// - `reader`: Source reader.
     /// - `writer`: Destination writer.
@@ -102,9 +110,10 @@ impl Streams {
     /// The number of bytes copied.
     ///
     /// # Errors
-    /// Returns the first non-interrupted read error or write error reported by
-    /// the underlying streams. Interrupted reads are retried.
-    #[inline]
+    /// Returns [`ErrorKind::OutOfMemory`] if the temporary copy buffer cannot
+    /// be allocated. Returns the first non-interrupted read error or write
+    /// error reported by the underlying streams. Interrupted reads are retried.
+    #[inline(always)]
     pub fn copy_at_most<R, W>(
         reader: &mut R,
         writer: &mut W,
@@ -131,6 +140,10 @@ impl Streams {
     /// allocates up to `buffer_size` bytes, capped by `max_bytes`. Use it to
     /// control temporary heap usage and read granularity.
     ///
+    /// # Type Parameters
+    /// - `R`: Source reader type.
+    /// - `W`: Destination writer type.
+    ///
     /// # Parameters
     /// - `reader`: Source reader.
     /// - `writer`: Destination writer.
@@ -142,10 +155,10 @@ impl Streams {
     ///
     /// # Errors
     /// Returns [`ErrorKind::InvalidInput`] when `buffer_size == 0`. Returns an
-    /// allocation error if the copy buffer cannot be allocated. Returns the
-    /// first non-interrupted read error or write error reported by the
-    /// underlying streams. Interrupted reads are retried.
-    #[inline]
+    /// [`ErrorKind::OutOfMemory`] error if the copy buffer cannot be allocated.
+    /// Returns the first non-interrupted read error or write error reported by
+    /// the underlying streams. Interrupted reads are retried.
+    #[inline(always)]
     pub fn copy_at_most_with_buffer_size<R, W>(
         reader: &mut R,
         writer: &mut W,
@@ -175,6 +188,10 @@ impl Streams {
     /// [`std::io::ErrorKind::InvalidData`], up to `max_bytes` bytes may remain
     /// in `writer`.
     ///
+    /// # Type Parameters
+    /// - `R`: Source reader type.
+    /// - `W`: Destination writer type.
+    ///
     /// # Parameters
     /// - `reader`: Source reader.
     /// - `writer`: Destination writer.
@@ -185,10 +202,11 @@ impl Streams {
     ///
     /// # Errors
     /// Returns [`std::io::ErrorKind::InvalidData`] when the remaining input is
-    /// longer than `max_bytes`. Returns the first non-interrupted read error or
-    /// write error reported by the underlying streams. Interrupted reads are
-    /// retried.
-    #[inline]
+    /// longer than `max_bytes`. Returns [`ErrorKind::OutOfMemory`] if the
+    /// temporary copy buffer cannot be allocated. Returns the first
+    /// non-interrupted read error or write error reported by the underlying
+    /// streams. Interrupted reads are retried.
+    #[inline(always)]
     pub fn copy_to_end_limited<R, W>(
         reader: &mut R,
         writer: &mut W,
@@ -208,6 +226,9 @@ impl Streams {
     /// This method allocates a reusable item buffer and copies until EOF. It
     /// does not close or flush `output`.
     ///
+    /// # Type Parameters
+    /// - `T`: Copyable item type shared by the input and output.
+    ///
     /// # Parameters
     /// - `input`: Source item input.
     /// - `output`: Destination item output.
@@ -216,9 +237,14 @@ impl Streams {
     /// The number of items copied.
     ///
     /// # Errors
-    /// Returns the first non-interrupted read error or output error reported by
-    /// the underlying streams. Returns [`ErrorKind::InvalidData`] if an input
-    /// or output reports an impossible item count.
+    /// Returns [`ErrorKind::OutOfMemory`] if the reusable item buffer cannot be
+    /// allocated. Returns the first non-interrupted read error or output error
+    /// reported by the underlying streams. Returns [`ErrorKind::InvalidData`]
+    /// if an input or output reports an impossible item count or the
+    /// accumulated copied item count overflows `u64`.
+    ///
+    /// # Panics
+    /// Panics if `T::default()` panics.
     pub fn copy_input_to_output<T>(
         input: &mut dyn Input<Item = T>,
         output: &mut dyn Output<Item = T>,
@@ -247,6 +273,9 @@ impl Streams {
     /// This method stops successfully when either EOF is reached or `max_items`
     /// items have been copied. It does not close or flush `output`.
     ///
+    /// # Type Parameters
+    /// - `T`: Copyable item type shared by the input and output.
+    ///
     /// # Parameters
     /// - `input`: Source item input.
     /// - `output`: Destination item output.
@@ -256,9 +285,13 @@ impl Streams {
     /// The number of items copied.
     ///
     /// # Errors
-    /// Returns the first non-interrupted read error or output error reported by
-    /// the underlying streams. Returns [`ErrorKind::InvalidData`] if an input
-    /// or output reports an impossible item count.
+    /// Returns [`ErrorKind::OutOfMemory`] if the reusable item buffer cannot be
+    /// allocated. Returns the first non-interrupted read error or output error
+    /// reported by the underlying streams. Returns [`ErrorKind::InvalidData`]
+    /// if an input or output reports an impossible item count.
+    ///
+    /// # Panics
+    /// Panics if `max_items > 0` and `T::default()` panics.
     pub fn copy_input_to_output_at_most<T>(
         input: &mut dyn Input<Item = T>,
         output: &mut dyn Output<Item = T>,
@@ -312,6 +345,9 @@ impl Streams {
     /// Preserving this behavior requires retaining all accepted items until EOF
     /// is observed, so temporary memory usage can grow to `max_items` elements.
     ///
+    /// # Type Parameters
+    /// - `T`: Copyable item type shared by the input and output.
+    ///
     /// # Parameters
     /// - `input`: Source item input.
     /// - `output`: Destination item output.
@@ -323,8 +359,13 @@ impl Streams {
     /// # Errors
     /// Returns [`ErrorKind::InvalidData`] when the remaining input is longer
     /// than `max_items`, or when an input reports an impossible item count.
-    /// Returns the first non-interrupted read error or output error reported by
-    /// the underlying streams.
+    /// Returns [`ErrorKind::OutOfMemory`] if the temporary read buffer or
+    /// retained item collection cannot be allocated. Returns the first
+    /// non-interrupted read error or output error reported by the underlying
+    /// streams.
+    ///
+    /// # Panics
+    /// Panics if `T::default()` panics.
     pub fn copy_input_to_output_end_limited<T>(
         input: &mut dyn Input<Item = T>,
         output: &mut dyn Output<Item = T>,
@@ -390,8 +431,9 @@ impl Streams {
     /// `true` when both streams produce the same bytes until EOF.
     ///
     /// # Errors
-    /// Returns the first read error reported by either stream.
-    #[inline]
+    /// Returns [`ErrorKind::OutOfMemory`] if the comparison buffers cannot be
+    /// allocated. Returns the first read error reported by either stream.
+    #[inline(always)]
     pub fn content_eq(
         left: &mut dyn Read,
         right: &mut dyn Read,
@@ -415,7 +457,9 @@ impl Streams {
     /// The lexicographic ordering of the remaining bytes.
     ///
     /// # Errors
-    /// Returns the first read error reported by either stream.
+    /// Returns [`ErrorKind::OutOfMemory`] if the comparison buffers cannot be
+    /// allocated. Returns the first read error reported by either stream.
+    #[inline(always)]
     pub fn compare_content(
         left: &mut dyn Read,
         right: &mut dyn Read,
@@ -445,8 +489,12 @@ impl Streams {
     ///
     /// # Errors
     /// Returns [`ErrorKind::InvalidInput`] when `buffer_size == 0`. Returns an
-    /// allocation error if the comparison buffers cannot be allocated. Returns
-    /// the first read error reported by either stream.
+    /// [`ErrorKind::OutOfMemory`] error if the comparison buffers cannot be
+    /// allocated. Returns the first read error reported by either stream.
+    ///
+    /// # Panics
+    /// Panics in debug builds if the internally allocated comparison buffers
+    /// do not have the requested equal, nonzero length.
     pub fn compare_content_with_buffer_size(
         left: &mut dyn Read,
         right: &mut dyn Read,
@@ -501,9 +549,9 @@ impl Streams {
 ///
 /// # Errors
 /// Returns [`ErrorKind::InvalidInput`] when `buffer_size == 0`. Returns an
-/// allocation error if the copy buffer cannot be allocated. Returns the first
-/// non-interrupted read error or write error reported by the underlying
-/// streams. Interrupted reads are retried.
+/// [`ErrorKind::OutOfMemory`] error if the copy buffer cannot be allocated.
+/// Returns the first non-interrupted read error or write error reported by the
+/// underlying streams. Interrupted reads are retried.
 fn copy_at_most_impl(
     reader: &mut dyn Read,
     writer: &mut dyn Write,
@@ -547,6 +595,19 @@ fn copy_at_most_impl(
 }
 
 /// Copies an entire bounded byte stream through type-erased endpoints.
+///
+/// # Parameters
+/// - `reader`: Source reader.
+/// - `writer`: Destination writer.
+/// - `max_bytes`: Maximum accepted number of remaining bytes.
+///
+/// # Returns
+/// The number of bytes copied when EOF is reached within the limit.
+///
+/// # Errors
+/// Returns [`ErrorKind::OutOfMemory`] if the temporary copy buffer cannot be
+/// allocated, a read or write error, or [`ErrorKind::InvalidData`] when the
+/// remaining input exceeds `max_bytes`.
 fn copy_to_end_limited_impl(
     reader: &mut dyn Read,
     writer: &mut dyn Write,
@@ -581,6 +642,7 @@ fn copy_to_end_limited_impl(
 
 #[cfg(coverage)]
 thread_local! {
+    /// Whether the next copied-item count update should fail.
     static COVERAGE_FAIL_NEXT_ADD_ITEM_COUNT: Cell<bool> = const { Cell::new(false) };
 }
 
@@ -589,6 +651,7 @@ thread_local! {
 /// Coverage-only helper for exercising overflow propagation inside copy loops.
 #[cfg(coverage)]
 #[doc(hidden)]
+#[inline(always)]
 pub fn coverage_fail_next_add_item_count() {
     COVERAGE_FAIL_NEXT_ADD_ITEM_COUNT.with(|state| state.set(true));
 }
@@ -596,6 +659,7 @@ pub fn coverage_fail_next_add_item_count() {
 /// Clears coverage-only [`add_item_count`] hooks between tests.
 #[cfg(coverage)]
 #[doc(hidden)]
+#[inline(always)]
 pub fn coverage_reset_add_item_count_hooks() {
     COVERAGE_FAIL_NEXT_ADD_ITEM_COUNT.with(|state| state.set(false));
 }
@@ -611,7 +675,7 @@ pub fn coverage_reset_add_item_count_hooks() {
 ///
 /// # Errors
 /// Returns [`ErrorKind::InvalidData`] if the count overflows `u64`.
-#[inline(always)]
+#[inline]
 fn add_item_count(copied: u64, count: usize) -> Result<u64> {
     #[cfg(coverage)]
     if COVERAGE_FAIL_NEXT_ADD_ITEM_COUNT.with(|state| {
@@ -632,8 +696,17 @@ fn add_item_count(copied: u64, count: usize) -> Result<u64> {
 }
 
 /// Exercises the copied-item overflow branch in coverage builds.
+///
+/// # Returns
+///
+/// The overflow error returned by [`add_item_count`].
+///
+/// # Errors
+///
+/// Always returns [`ErrorKind::InvalidData`] for the forced overflow.
 #[cfg(coverage)]
 #[doc(hidden)]
+#[inline(always)]
 pub fn coverage_add_item_count_overflow() -> Result<u64> {
     add_item_count(u64::MAX, 1)
 }

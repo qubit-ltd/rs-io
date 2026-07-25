@@ -39,6 +39,16 @@ pub trait SeekExt: Seek {
 }
 
 /// Implements stream-size inspection through a type-erased stream.
+///
+/// # Parameters
+/// - `stream`: Stream to measure and restore.
+///
+/// # Returns
+/// The stream size in bytes.
+///
+/// # Errors
+/// Returns an error when querying, changing, or restoring the stream position
+/// fails.
 fn stream_size_impl(stream: &mut dyn Seek) -> Result<u64> {
     let position = stream.stream_position()?;
     let size_result = stream.seek(SeekFrom::End(0));
@@ -54,7 +64,15 @@ impl<T> SeekExt for T
 where
     T: Seek + ?Sized,
 {
-    #[inline]
+    /// Gets the stream size without changing its final position.
+    ///
+    /// # Returns
+    /// The stream size in bytes.
+    ///
+    /// # Errors
+    /// Returns an error when querying, changing, or restoring the stream
+    /// position fails.
+    #[inline(always)]
     fn stream_size(&mut self) -> Result<u64> {
         let mut stream = self;
         stream_size_impl(&mut stream)

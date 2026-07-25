@@ -26,14 +26,18 @@ use std::io::{
 /// Returns an [`ErrorKind::OutOfMemory`] error that preserves the allocation
 /// error as its source.
 #[inline]
+#[must_use]
 pub(crate) fn allocation_error(error: TryReserveError) -> Error {
     Error::new(ErrorKind::OutOfMemory, error)
 }
 
 #[cfg(coverage)]
 thread_local! {
+    /// Successful vector reserve calls allowed before the injected failure.
     static COVERAGE_RESERVE_FAIL_AFTER: Cell<usize> = const { Cell::new(usize::MAX) };
+    /// Largest vector reserve request allowed by the coverage hook.
     static COVERAGE_RESERVE_MAX_ADDITIONAL: Cell<usize> = const { Cell::new(usize::MAX) };
+    /// Whether the next string reserve request should fail.
     static COVERAGE_FAIL_NEXT_STRING_RESERVE: Cell<bool> = const { Cell::new(false) };
 }
 
@@ -43,6 +47,7 @@ thread_local! {
 /// are impractical to trigger with ordinary test inputs.
 #[cfg(coverage)]
 #[doc(hidden)]
+#[inline(always)]
 pub fn coverage_fail_next_reserve() {
     COVERAGE_RESERVE_FAIL_AFTER.with(|state| state.set(0));
 }
@@ -51,8 +56,14 @@ pub fn coverage_fail_next_reserve() {
 ///
 /// A value of `0` fails on the next reserve call. A value of `1` lets one
 /// reserve succeed and fails on the following call.
+///
+/// # Parameters
+///
+/// - `successful_attempts`: Number of reserve calls allowed to succeed before
+///   the injected failure.
 #[cfg(coverage)]
 #[doc(hidden)]
+#[inline(always)]
 pub fn coverage_fail_reserve_after(successful_attempts: usize) {
     COVERAGE_RESERVE_FAIL_AFTER.with(|state| state.set(successful_attempts));
 }
@@ -61,8 +72,13 @@ pub fn coverage_fail_reserve_after(successful_attempts: usize) {
 ///
 /// Coverage-only helper for verifying that bounded operations size temporary
 /// allocations from their active limits.
+///
+/// # Parameters
+///
+/// - `max_additional`: Largest additional capacity request allowed to succeed.
 #[cfg(coverage)]
 #[doc(hidden)]
+#[inline(always)]
 pub fn coverage_fail_reserve_above(max_additional: usize) {
     COVERAGE_RESERVE_MAX_ADDITIONAL.with(|state| state.set(max_additional));
 }
@@ -71,6 +87,7 @@ pub fn coverage_fail_reserve_above(max_additional: usize) {
 /// reserve calls.
 #[cfg(coverage)]
 #[doc(hidden)]
+#[inline(always)]
 pub fn coverage_fail_next_string_reserve() {
     COVERAGE_FAIL_NEXT_STRING_RESERVE.with(|state| state.set(true));
 }
@@ -78,6 +95,7 @@ pub fn coverage_fail_next_string_reserve() {
 /// Clears coverage-only reserve hooks between tests.
 #[cfg(coverage)]
 #[doc(hidden)]
+#[inline]
 pub fn coverage_reset_reserve_hooks() {
     COVERAGE_RESERVE_FAIL_AFTER.with(|state| state.set(usize::MAX));
     COVERAGE_RESERVE_MAX_ADDITIONAL.with(|state| state.set(usize::MAX));
@@ -85,7 +103,17 @@ pub fn coverage_reset_reserve_hooks() {
 }
 
 /// Creates a deterministic allocation error for coverage-only failure hooks.
+///
+/// # Returns
+///
+/// A synthetic capacity-overflow error.
+///
+/// # Panics
+///
+/// Panics if reserving `usize::MAX` bytes unexpectedly succeeds.
 #[cfg(coverage)]
+#[inline]
+#[must_use]
 fn coverage_reserve_error() -> TryReserveError {
     Vec::<u8>::new()
         .try_reserve(usize::MAX)
@@ -93,6 +121,19 @@ fn coverage_reserve_error() -> TryReserveError {
 }
 
 /// Returns a synthetic reserve failure when requested by a coverage hook.
+///
+/// # Type Parameters
+///
+/// - `T`: Successful result type expected by the calling reserve operation.
+///
+/// # Parameters
+///
+/// - `additional`: Additional capacity requested by the calling operation.
+///
+/// # Returns
+///
+/// `Some(Err(_))` when a hook injects a failure, or `None` when the real
+/// reserve operation should proceed.
 #[cfg(coverage)]
 fn coverage_maybe_fail_reserve<T>(
     additional: usize,
@@ -116,10 +157,18 @@ fn coverage_maybe_fail_reserve<T>(
 
 /// Reserves capacity in a vector without converting allocation failures.
 ///
+/// # Type Parameters
+///
+/// - `T`: Element type stored by the vector.
+///
 /// # Parameters
 ///
 /// - `output`: Vector that will receive additional elements.
 /// - `additional`: Number of additional elements to reserve.
+///
+/// # Returns
+///
+/// `Ok(())` after the requested capacity has been reserved.
 ///
 /// # Errors
 ///
@@ -143,6 +192,10 @@ pub fn try_reserve_vec<T>(
 ///
 /// - `output`: String that will receive additional bytes.
 /// - `additional`: Number of additional bytes to reserve.
+///
+/// # Returns
+///
+/// `Ok(())` after the requested capacity has been reserved.
 ///
 /// # Errors
 ///
@@ -172,10 +225,18 @@ pub fn try_reserve_string(
 
 /// Creates a vector with the requested length and initial value.
 ///
+/// # Type Parameters
+///
+/// - `T`: Copyable element type stored by the vector.
+///
 /// # Parameters
 ///
 /// - `len`: Target length of the returned vector.
 /// - `fill`: Value used to initialize every element.
+///
+/// # Returns
+///
+/// A vector of length `len` whose elements are initialized to `fill`.
 ///
 /// # Errors
 ///

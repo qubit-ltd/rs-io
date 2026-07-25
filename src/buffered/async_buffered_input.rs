@@ -26,13 +26,20 @@ use crate::{
 /// This wrapper preserves unread items across [`Poll::Pending`] and performs
 /// no runtime-specific work. The wrapped input can be `!Unpin`; pin projection
 /// is kept internal and the input is never moved while this wrapper is pinned.
+///
+/// # Type Parameters
+///
+/// - `I`: Asynchronous item input type.
+#[must_use]
 #[derive(Debug)]
 pub struct AsyncBufferedInput<I>
 where
     I: AsyncInput,
     I::Item: Copy + Default,
 {
+    /// Asynchronous input being buffered.
     inner: I,
+    /// Storage retaining fetched but unread items.
     buffer: Buffer<I::Item>,
 }
 
@@ -50,7 +57,12 @@ where
     /// # Returns
     ///
     /// Returns a buffered input with [`DEFAULT_BUFFER_CAPACITY`] items.
-    #[must_use]
+    ///
+    /// # Panics
+    ///
+    /// Panics if `I::Item::default()` panics or the default backing length
+    /// exceeds [`Vec`]'s supported capacity.
+    #[inline(always)]
     pub fn new(inner: I) -> Self {
         Self::with_capacity(inner, DEFAULT_BUFFER_CAPACITY)
     }
@@ -65,7 +77,12 @@ where
     /// # Returns
     ///
     /// Returns a buffered input whose actual capacity is at least one.
-    #[must_use]
+    ///
+    /// # Panics
+    ///
+    /// Panics if `I::Item::default()` panics or the requested backing length
+    /// exceeds [`Vec`]'s supported capacity.
+    #[inline]
     pub fn with_capacity(inner: I, capacity: usize) -> Self {
         Self {
             inner,
@@ -78,6 +95,7 @@ where
     /// # Returns
     ///
     /// Returns the wrapped asynchronous input.
+    #[inline(always)]
     #[must_use]
     pub const fn inner(&self) -> &I {
         &self.inner
@@ -91,6 +109,7 @@ where
     /// # Returns
     ///
     /// Returns the wrapped asynchronous input.
+    #[inline(always)]
     pub fn inner_mut(&mut self) -> &mut I {
         &mut self.inner
     }
@@ -101,7 +120,7 @@ where
     ///
     /// Returns the wrapped input and buffer. Unread items remain in the
     /// buffer's readable window.
-    #[must_use]
+    #[inline(always)]
     pub fn into_parts(self) -> (I, Buffer<I::Item>) {
         (self.inner, self.buffer)
     }
@@ -111,6 +130,7 @@ where
     /// # Returns
     ///
     /// Returns the total number of items in the backing buffer.
+    #[inline(always)]
     #[must_use]
     pub fn capacity(&self) -> usize {
         self.buffer.capacity()
@@ -121,6 +141,7 @@ where
     /// # Returns
     ///
     /// Returns the readable-window length.
+    #[inline(always)]
     #[must_use]
     pub const fn unread_len(&self) -> usize {
         self.buffer.available()
@@ -131,6 +152,7 @@ where
     /// # Returns
     ///
     /// Returns items already fetched but not yet returned to the caller.
+    #[inline(always)]
     #[must_use]
     pub fn unread(&self) -> &[I::Item] {
         self.buffer.readable()
@@ -142,15 +164,48 @@ where
     I: AsyncInput,
     I::Item: Copy + Default,
 {
+    /// Item type produced by the wrapped input.
     type Item = I::Item;
 
     /// Reports that this input already buffers items.
+    ///
+    /// # Returns
+    ///
+    /// Always returns `true`.
     #[inline(always)]
     fn is_buffered(&self) -> bool {
         true
     }
 
     /// Polls one read through the retained item buffer.
+    ///
+    /// A zero-length request completes immediately. Unread items are returned
+    /// before polling the wrapped input.
+    ///
+    /// # Parameters
+    ///
+    /// - `cx`: Task context used to register a wake-up.
+    /// - `output`: Destination item slice.
+    /// - `index`: Starting destination index.
+    /// - `count`: Maximum number of items to read.
+    ///
+    /// # Returns
+    ///
+    /// Returns [`Poll::Pending`] when the wrapped input is not ready. A ready
+    /// result contains the number of items read.
+    ///
+    /// # Errors
+    ///
+    /// Returns an I/O error reported by the wrapped input.
+    ///
+    /// # Panics
+    ///
+    /// May panic if a nonzero requested output range does not fit when the
+    /// method copies buffered or newly fetched items into `output`.
+    ///
+    /// # Safety
+    ///
+    /// The range `index..index + count` must be valid for `output`.
     unsafe fn poll_read_unchecked(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,

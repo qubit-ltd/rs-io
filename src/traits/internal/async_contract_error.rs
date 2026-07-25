@@ -10,6 +10,7 @@ use std::error::Error as StdError;
 use std::io;
 
 /// Describes an asynchronous I/O contract violation and its original error.
+#[must_use]
 #[derive(Debug)]
 pub(in crate::traits) struct AsyncContractError {
     /// Explanation of the violated asynchronous I/O contract.
@@ -29,7 +30,7 @@ impl AsyncContractError {
     /// # Returns
     ///
     /// Returns an error retaining both supplied values.
-    #[must_use]
+    #[inline(always)]
     pub(in crate::traits) const fn new(
         message: &'static str,
         source: io::Error,
@@ -40,6 +41,19 @@ impl AsyncContractError {
 
 impl fmt::Display for AsyncContractError {
     /// Formats the contract violation and original error.
+    ///
+    /// # Parameters
+    ///
+    /// - `formatter`: Destination formatter.
+    ///
+    /// # Returns
+    ///
+    /// Returns the formatter result.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the formatter cannot accept the output.
+    #[inline]
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(formatter, "{}: {}", self.message, self.source)
     }
@@ -47,6 +61,11 @@ impl fmt::Display for AsyncContractError {
 
 impl StdError for AsyncContractError {
     /// Returns the original I/O error as the source.
+    ///
+    /// # Returns
+    ///
+    /// Returns the original error as a trait object.
+    #[inline(always)]
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
         Some(&self.source)
     }

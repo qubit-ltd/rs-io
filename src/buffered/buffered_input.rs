@@ -39,18 +39,50 @@ use crate::{
 /// [`Self::copy_unread_to`], and [`Self::read_unchecked`]. The type also
 /// implements [`Input`] and [`Seekable`] directly, so it can be passed to
 /// item-oriented APIs without converting through standard byte traits.
+///
+/// # Type Parameters
+///
+/// - `I`: Wrapped item input type.
+#[must_use]
 #[derive(Debug)]
 pub struct BufferedInput<I>
 where
     I: Input,
     I::Item: Copy + Default,
 {
+    /// Input supplying items to the buffer.
     inner: I,
+    /// Storage retaining fetched but unread items.
     buffer: Buffer<I::Item>,
 }
 
 /// Appends one chunk from a type-erased input to a buffer.
-#[inline(always)]
+///
+/// Interrupted reads are retried until another outcome is observed.
+///
+/// # Type Parameters
+///
+/// - `T`: Copyable input item type.
+///
+/// # Parameters
+///
+/// - `inner`: Input that supplies the next chunk.
+/// - `buffer`: Buffer whose spare tail receives the chunk.
+///
+/// # Returns
+///
+/// Returns `Ok(true)` when at least one item is appended, or `Ok(false)` at
+/// EOF.
+///
+/// # Errors
+///
+/// Returns [`ErrorKind::InvalidData`] if the input reports more items than the
+/// spare tail can hold. Other non-interrupted errors are propagated from the
+/// input.
+///
+/// # Panics
+///
+/// Panics in debug builds if `buffer` has no spare capacity.
 fn read_more_impl<T>(
     inner: &mut dyn Input<Item = T>,
     buffer: &mut Buffer<T>,
@@ -81,7 +113,27 @@ where
 }
 
 /// Preserves unread items and appends one chunk from a type-erased input.
-#[inline(always)]
+///
+/// # Type Parameters
+///
+/// - `T`: Copyable input item type.
+///
+/// # Parameters
+///
+/// - `inner`: Input that supplies the next chunk.
+/// - `buffer`: Buffer whose unread items must be preserved.
+///
+/// # Returns
+///
+/// Returns `Ok(true)` when at least one item is appended, or `Ok(false)` at
+/// EOF.
+///
+/// # Errors
+///
+/// Returns [`ErrorKind::InvalidInput`] when the buffer is full and has no
+/// consumed prefix to reclaim. Returns [`ErrorKind::InvalidData`] for an
+/// invalid count reported by `inner`; other non-interrupted errors are
+/// propagated.
 fn fill_more_impl<T>(
     inner: &mut dyn Input<Item = T>,
     buffer: &mut Buffer<T>,
@@ -104,7 +156,27 @@ where
 }
 
 /// Refills a buffer to a requested unread item count.
-#[inline(always)]
+///
+/// # Type Parameters
+///
+/// - `T`: Copyable input item type.
+///
+/// # Parameters
+///
+/// - `inner`: Input that supplies additional items.
+/// - `buffer`: Buffer retaining unread items.
+/// - `count`: Required unread item count.
+///
+/// # Returns
+///
+/// Returns `Ok(true)` when `count` items are available, or `Ok(false)` when EOF
+/// is reached first.
+///
+/// # Errors
+///
+/// Returns [`ErrorKind::InvalidInput`] when `count` exceeds the buffer
+/// capacity. Returns [`ErrorKind::InvalidData`] for an invalid count reported
+/// by `inner`; other non-interrupted input errors are propagated.
 fn fill_until_impl<T>(
     inner: &mut dyn Input<Item = T>,
     buffer: &mut Buffer<T>,
@@ -137,7 +209,27 @@ where
 }
 
 /// Ensures a requested unread item count through a type-erased input.
-#[inline(always)]
+///
+/// # Type Parameters
+///
+/// - `T`: Copyable input item type.
+///
+/// # Parameters
+///
+/// - `inner`: Input that supplies additional items.
+/// - `buffer`: Buffer retaining unread items.
+/// - `count`: Required unread item count.
+///
+/// # Returns
+///
+/// Returns `Ok(())` when `count` unread items are available.
+///
+/// # Errors
+///
+/// Returns [`ErrorKind::UnexpectedEof`] when EOF is reached first,
+/// [`ErrorKind::InvalidInput`] when `count` exceeds the buffer capacity, or
+/// [`ErrorKind::InvalidData`] for an invalid count reported by `inner`. Other
+/// non-interrupted input errors are propagated.
 fn ensure_available_impl<T>(
     inner: &mut dyn Input<Item = T>,
     buffer: &mut Buffer<T>,
@@ -162,11 +254,35 @@ where
 
 /// Reads an indexed range through a type-erased input and retained buffer.
 ///
+/// # Type Parameters
+///
+/// - `T`: Copyable input item type.
+///
+/// # Parameters
+///
+/// - `inner`: Input that supplies items when the buffer is empty.
+/// - `buffer`: Buffer retaining unread items.
+/// - `output`: Destination item slice.
+/// - `output_index`: Starting destination index.
+/// - `count`: Maximum number of items to read.
+///
+/// # Returns
+///
+/// Returns the number of items copied or read.
+///
+/// # Errors
+///
+/// Returns [`ErrorKind::InvalidData`] if `inner` reports more than `count`
+/// items. Other errors are propagated from `inner`.
+///
+/// # Panics
+///
+/// Panics in debug builds if the requested output range does not fit.
+///
 /// # Safety
 ///
 /// The caller must guarantee that `output_index..output_index + count` is a
 /// valid range inside `output` and that the addition does not overflow.
-#[inline(always)]
 unsafe fn read_unchecked_impl<T>(
     inner: &mut dyn Input<Item = T>,
     buffer: &mut Buffer<T>,
@@ -207,11 +323,36 @@ where
 
 /// Fills an indexed range through a type-erased input and retained buffer.
 ///
+/// # Type Parameters
+///
+/// - `T`: Copyable input item type.
+///
+/// # Parameters
+///
+/// - `inner`: Input that supplies items after buffered items are consumed.
+/// - `buffer`: Buffer retaining unread items.
+/// - `output`: Destination item slice.
+/// - `output_index`: Starting destination index.
+/// - `count`: Number of items requested.
+///
+/// # Returns
+///
+/// Returns the number of items read before the range filled or EOF was
+/// reached.
+///
+/// # Errors
+///
+/// Returns [`ErrorKind::InvalidData`] if `inner` reports more items than
+/// requested. Other non-interrupted errors are propagated from `inner`.
+///
+/// # Panics
+///
+/// Panics in debug builds if the requested output range does not fit.
+///
 /// # Safety
 ///
 /// The caller must guarantee that `output_index..output_index + count` is a
 /// valid range inside `output` and that the addition does not overflow.
-#[inline(always)]
 unsafe fn read_fully_unchecked_impl<T>(
     inner: &mut dyn Input<Item = T>,
     buffer: &mut Buffer<T>,
@@ -299,16 +440,20 @@ where
 {
     /// Creates a buffered item input with the default capacity.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
-    /// * `inner` - The input object wrapped by this buffer.
+    /// - `inner`: Input object wrapped by this buffer.
     ///
     /// # Returns
     ///
-    /// A new buffered item input whose internal buffer has at least
+    /// Returns a new buffered item input whose internal buffer has at least
     /// `DEFAULT_BUFFER_CAPACITY` items.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `I::Item::default()` panics or the default backing length
+    /// exceeds [`Vec`]'s supported capacity.
     #[inline(always)]
-    #[must_use]
     pub fn new(inner: I) -> Self {
         Self::with_capacity(inner, DEFAULT_BUFFER_CAPACITY)
     }
@@ -317,17 +462,21 @@ where
     ///
     /// The actual capacity is raised to `1` when the requested value is `0`.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
-    /// * `inner` - The input object wrapped by this buffer.
-    /// * `capacity` - The requested internal buffer capacity, in items.
+    /// - `inner`: Input object wrapped by this buffer.
+    /// - `capacity`: Requested internal buffer capacity, in items.
     ///
     /// # Returns
     ///
-    /// A new buffered item input whose internal buffer capacity is
+    /// Returns a new buffered item input whose internal buffer capacity is
     /// `capacity.max(1)`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `I::Item::default()` panics or the requested backing length
+    /// exceeds [`Vec`]'s supported capacity.
     #[inline]
-    #[must_use]
     pub fn with_capacity(inner: I, capacity: usize) -> Self {
         Self {
             inner,
@@ -339,15 +488,19 @@ where
     ///
     /// # Parameters
     ///
-    /// * `input` - The input to keep or wrap.
+    /// - `input`: Input to keep or wrap.
     ///
     /// # Returns
     ///
     /// [`EnsuredBufferedInput::AlreadyBuffered`] when `input` already reports
     /// buffered status, or [`EnsuredBufferedInput::Buffered`] wrapping `input`
     /// in [`BufferedInput`] otherwise.
-    #[inline(always)]
-    #[must_use]
+    ///
+    /// # Panics
+    ///
+    /// Panics while wrapping an unbuffered input if `I::Item::default()` panics
+    /// or the default backing length exceeds [`Vec`]'s supported capacity.
+    #[inline]
     pub fn ensure(input: I) -> EnsuredBufferedInput<I> {
         if input.is_buffered() {
             EnsuredBufferedInput::AlreadyBuffered(input)
@@ -358,16 +511,25 @@ where
 
     /// Ensures that an input is buffered and boxes the resulting input.
     ///
+    /// # Type Parameters
+    ///
+    /// - `'a`: Lifetime required for the returned trait object.
+    ///
     /// # Parameters
     ///
-    /// * `input` - The concrete input to keep or wrap.
+    /// - `input`: Concrete input to keep or wrap.
     ///
     /// # Returns
     ///
     /// A boxed input trait object. The original input is boxed directly when it
     /// already reports buffered status; otherwise it is first wrapped in
     /// [`BufferedInput`].
-    #[inline(always)]
+    ///
+    /// # Panics
+    ///
+    /// Panics while wrapping an unbuffered input if `I::Item::default()` panics
+    /// or the default backing length exceeds [`Vec`]'s supported capacity.
+    #[inline]
     #[must_use]
     pub fn ensure_boxed<'a>(input: I) -> Box<dyn Input<Item = I::Item> + 'a>
     where
@@ -385,8 +547,9 @@ where
     ///
     /// # Returns
     ///
-    /// A shared reference to the inner input object.
+    /// Returns a shared reference to the inner input object.
     #[inline(always)]
+    #[must_use]
     pub const fn inner(&self) -> &I {
         &self.inner
     }
@@ -398,7 +561,7 @@ where
     ///
     /// # Returns
     ///
-    /// An exclusive reference to the wrapped input object.
+    /// Returns an exclusive reference to the wrapped input object.
     #[inline(always)]
     pub fn inner_mut(&mut self) -> &mut I {
         &mut self.inner
@@ -435,7 +598,7 @@ where
     ///
     /// Returns an [`IntoInnerError`] carrying [`ErrorKind::InvalidInput`] and
     /// this buffered input when unread items would be discarded.
-    #[inline(always)]
+    #[inline]
     pub fn try_into_inner(
         self,
     ) -> std::result::Result<I, IntoInnerError<Self>> {
@@ -461,10 +624,9 @@ where
     ///
     /// # Returns
     ///
-    /// The wrapped input object and the buffer holding unread items in logical
-    /// read order.
+    /// Returns the wrapped input object and the buffer holding unread items in
+    /// logical read order.
     #[inline(always)]
-    #[must_use]
     pub fn into_parts(self) -> (I, Buffer<I::Item>) {
         (self.inner, self.buffer)
     }
@@ -484,10 +646,23 @@ where
     ///
     /// Buffered unread items are preserved and this method performs no I/O.
     ///
+    /// # Parameters
+    ///
+    /// - `capacity`: Required total buffer capacity.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` after the requested capacity is available.
+    ///
     /// # Errors
     ///
     /// Returns the original allocation error when the buffer cannot grow.
-    #[inline]
+    ///
+    /// # Panics
+    ///
+    /// Panics if growing the buffer requires `I::Item::default()` and it
+    /// panics.
+    #[inline(always)]
     pub fn try_reserve_capacity(
         &mut self,
         capacity: usize,
@@ -499,7 +674,7 @@ where
     ///
     /// # Returns
     ///
-    /// The length of `buffer[position..limit]`, in items.
+    /// Returns the length of `buffer[position..limit]`, in items.
     #[inline(always)]
     #[must_use]
     pub fn unread_len(&self) -> usize {
@@ -510,8 +685,8 @@ where
     ///
     /// # Returns
     ///
-    /// The `buffer[position..limit]` unread item window. The slice may be empty
-    /// when no items are currently buffered.
+    /// Returns the `buffer[position..limit]` unread item window. The slice may
+    /// be empty when no items are currently buffered.
     #[inline(always)]
     #[must_use]
     pub fn unread(&self) -> &[I::Item] {
@@ -522,7 +697,11 @@ where
     ///
     /// # Parameters
     ///
-    /// * `count` - Number of currently unread items to consume.
+    /// - `count`: Number of currently unread items to consume.
+    ///
+    /// # Panics
+    ///
+    /// Panics in debug builds if `count > self.unread_len()`.
     ///
     /// # Safety
     ///
@@ -540,9 +719,14 @@ where
     ///
     /// # Parameters
     ///
-    /// * `output` - Destination storage that receives a copy of unread items.
-    /// * `output_index` - Start index inside `output`.
-    /// * `count` - Number of unread items to copy.
+    /// - `output`: Destination storage that receives a copy of unread items.
+    /// - `output_index`: Start index inside `output`.
+    /// - `count`: Number of unread items to copy.
+    ///
+    /// # Panics
+    ///
+    /// Panics in debug builds if the output range does not fit or `count`
+    /// exceeds the unread item count.
     ///
     /// # Safety
     ///
@@ -586,7 +770,8 @@ where
     ///
     /// # Returns
     ///
-    /// `Ok(true)` if at least one item was appended, or `Ok(false)` at EOF.
+    /// Returns `Ok(true)` if at least one item was appended, or `Ok(false)` at
+    /// EOF.
     ///
     /// # Errors
     ///
@@ -594,6 +779,7 @@ where
     /// Returns [`ErrorKind::InvalidInput`] when the buffer is already full and
     /// no unread items have been consumed; callers must consume buffered items
     /// before refilling in that state.
+    #[inline(always)]
     pub fn fill_more(&mut self) -> Result<bool> {
         fill_more_impl(&mut self.inner, &mut self.buffer)
     }
@@ -606,12 +792,13 @@ where
     ///
     /// # Parameters
     ///
-    /// * `count` - Minimum number of unread items required.
+    /// - `count`: Minimum number of unread items required.
     ///
     /// # Returns
     ///
-    /// `Ok(true)` if at least `count` unread items are buffered. `Ok(false)`
-    /// means EOF was reached before the requested item count became available.
+    /// Returns `Ok(true)` if at least `count` unread items are buffered.
+    /// `Ok(false)` means EOF was reached before the requested item count became
+    /// available.
     ///
     /// # Errors
     ///
@@ -620,6 +807,7 @@ where
     /// reader reports more items than the spare buffer range could hold.
     /// Returns any non-interrupted I/O error produced by the wrapped reader
     /// while refilling the buffer.
+    #[inline(always)]
     pub fn fill_until(&mut self, count: usize) -> Result<bool> {
         fill_until_impl(&mut self.inner, &mut self.buffer, count)
     }
@@ -633,7 +821,11 @@ where
     ///
     /// # Parameters
     ///
-    /// * `count` - Minimum number of unread items required.
+    /// - `count`: Minimum number of unread items required.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` once at least `count` unread items are available.
     ///
     /// # Errors
     ///
@@ -643,6 +835,7 @@ where
     /// if the wrapped reader reports more items than the spare buffer range
     /// could hold. Returns any non-interrupted I/O error produced by the
     /// wrapped reader while refilling the buffer.
+    #[inline(always)]
     pub fn ensure_available(&mut self, count: usize) -> Result<()> {
         ensure_available_impl(&mut self.inner, &mut self.buffer, count)
     }
@@ -654,17 +847,18 @@ where
     /// reader to avoid an unnecessary copy. Otherwise, items are served from
     /// the internal buffer.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
-    /// * `output` - Destination storage that receives items.
-    /// * `output_index` - Start index inside `output`.
-    /// * `count` - Maximum number of items to read.
+    /// - `output`: Destination storage that receives items.
+    /// - `output_index`: Start index inside `output`.
+    /// - `count`: Maximum number of items to read.
     ///
     /// # Returns
     ///
-    /// The number of items written into `output[output_index..output_index +
-    /// count]`. A return value of `0` means that `count` was zero or EOF was
-    /// reached before any items were read.
+    /// Returns the number of items written into
+    /// `output[output_index..output_index + count]`. A return value of `0`
+    /// means that `count` was zero or EOF was reached before any items were
+    /// read.
     ///
     /// # Errors
     ///
@@ -675,10 +869,15 @@ where
     /// `read_more`; direct delegated reads follow the wrapped input's own
     /// single-read behavior.
     ///
+    /// # Panics
+    ///
+    /// Panics in debug builds if the requested output range does not fit.
+    ///
     /// # Safety
     ///
     /// The caller must guarantee that `output_index..output_index + count` is
     /// a valid range inside `output` and that the addition does not overflow.
+    #[inline(always)]
     pub unsafe fn read_unchecked(
         &mut self,
         output: &mut [I::Item],
@@ -700,12 +899,15 @@ where
     /// Reads items into the full output slice.
     ///
     /// # Parameters
+    ///
     /// - `output`: Destination storage.
     ///
     /// # Returns
-    /// The number of items read into `output`.
+    ///
+    /// Returns the number of items read into `output`.
     ///
     /// # Errors
+    ///
     /// Returns the input error reported by the implementation.
     #[inline(always)]
     pub fn read(&mut self, output: &mut [I::Item]) -> Result<usize> {
@@ -723,14 +925,14 @@ where
     ///
     /// # Parameters
     ///
-    /// * `output` - Destination storage that receives items.
-    /// * `output_index` - Start index inside `output`.
-    /// * `count` - Maximum number of items to read.
+    /// - `output`: Destination storage that receives items.
+    /// - `output_index`: Start index inside `output`.
+    /// - `count`: Maximum number of items to read.
     ///
     /// # Returns
     ///
-    /// The number of items written into `output[output_index..output_index +
-    /// count]`.
+    /// Returns the number of items written into
+    /// `output[output_index..output_index + count]`.
     ///
     /// # Errors
     ///
@@ -738,10 +940,15 @@ where
     /// Returns [`ErrorKind::InvalidData`] if the wrapped reader reports more
     /// items than requested.
     ///
+    /// # Panics
+    ///
+    /// Panics in debug builds if the requested output range does not fit.
+    ///
     /// # Safety
     ///
     /// The caller must guarantee that `output_index..output_index + count` is a
     /// valid range inside `output` and that the addition does not overflow.
+    #[inline(always)]
     pub unsafe fn read_fully_unchecked(
         &mut self,
         output: &mut [I::Item],
@@ -765,11 +972,11 @@ where
     ///
     /// # Parameters
     ///
-    /// * `output` - Destination storage to fill as far as possible.
+    /// - `output`: Destination storage to fill as far as possible.
     ///
     /// # Returns
     ///
-    /// The number of items written into `output`.
+    /// Returns the number of items written into `output`.
     ///
     /// # Errors
     ///
@@ -786,14 +993,14 @@ where
     /// unread items already buffered, so seeking is relative to the logical
     /// position observed by callers of this buffered input.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
-    /// * `position` - The target seek position.
+    /// - `position`: Target seek position.
     ///
     /// # Returns
     ///
-    /// The new absolute stream position reported by the wrapped reader, in
-    /// items.
+    /// Returns the new absolute stream position reported by the wrapped reader,
+    /// in items.
     ///
     /// # Errors
     ///
@@ -834,13 +1041,14 @@ where
     ///
     /// # Returns
     ///
-    /// The logical stream position in input items.
+    /// Returns the logical stream position in input items.
     ///
     /// # Errors
     ///
     /// Returns any seek error produced while querying the wrapped input's
     /// current position. Returns [`ErrorKind::InvalidData`] if the wrapped
     /// input reports a position before the unread buffered window.
+    #[inline]
     pub fn stream_position(&mut self) -> Result<u64>
     where
         I: SeekableInput,
@@ -860,17 +1068,18 @@ where
     ///
     /// # Parameters
     ///
-    /// * `offset` - Relative offset in input items.
+    /// - `offset`: Relative offset in input items.
     ///
     /// # Returns
     ///
-    /// The new position reported by the wrapped input.
+    /// Returns the new position reported by the wrapped input.
     ///
     /// # Errors
     ///
     /// Returns [`ErrorKind::InvalidInput`] if `offset` cannot be adjusted by
     /// the unread buffered item count. Returns any seek error produced by
     /// the wrapped input.
+    #[inline]
     fn seek_relative_slow(&mut self, offset: i64) -> Result<u64>
     where
         I: SeekableInput,
@@ -896,12 +1105,13 @@ where
     ///
     /// # Parameters
     ///
-    /// * `offset` - Relative offset in input items.
+    /// - `offset`: Relative offset in input items.
     ///
     /// # Returns
     ///
-    /// `true` when the buffer cursor was moved. `false` when the caller must
-    /// delegate the seek to the wrapped input.
+    /// Returns `true` when the buffer cursor was moved. Returns `false` when
+    /// the caller must delegate the seek to the wrapped input.
+    #[must_use]
     fn seek_within_buffer(&mut self, offset: i64) -> bool {
         if offset >= 0 {
             let count = offset as u64;
@@ -944,15 +1154,44 @@ where
     I: Input,
     I::Item: Copy + Default,
 {
+    /// Item type produced by the buffered input.
     type Item = I::Item;
 
     /// Reports that this input already buffers items internally.
+    ///
+    /// # Returns
+    ///
+    /// Always returns `true`.
     #[inline(always)]
     fn is_buffered(&self) -> bool {
         true
     }
 
     /// Reads items through the internal buffer.
+    ///
+    /// # Parameters
+    ///
+    /// - `output`: Destination item slice.
+    /// - `output_index`: Starting destination index.
+    /// - `count`: Maximum number of items to read.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of items read.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ErrorKind::InvalidData`] if the wrapped input reports an
+    /// invalid count. Other errors are propagated from the wrapped input.
+    ///
+    /// # Panics
+    ///
+    /// Panics in debug builds if the requested output range does not fit.
+    ///
+    /// # Safety
+    ///
+    /// The range `output_index..output_index + count` must be valid for
+    /// `output`.
     #[inline(always)]
     unsafe fn read_unchecked(
         &mut self,
@@ -967,6 +1206,19 @@ where
     }
 
     /// Reads items into the full output slice.
+    ///
+    /// # Parameters
+    ///
+    /// - `output`: Destination item slice.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of items read.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ErrorKind::InvalidData`] if the wrapped input reports an
+    /// invalid count. Other errors are propagated from the wrapped input.
     #[inline(always)]
     fn read(&mut self, output: &mut [I::Item]) -> Result<usize> {
         BufferedInput::read(self, output)
@@ -974,6 +1226,31 @@ where
 
     /// Reads items through the internal buffer until the target range is full
     /// or EOF is reached.
+    ///
+    /// # Parameters
+    ///
+    /// - `output`: Destination item slice.
+    /// - `index`: Starting destination index.
+    /// - `count`: Number of items requested.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of items read before the range filled or EOF was
+    /// reached.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ErrorKind::InvalidData`] if the wrapped input reports an
+    /// invalid count. Other non-interrupted errors are propagated from the
+    /// wrapped input.
+    ///
+    /// # Panics
+    ///
+    /// Panics in debug builds if the requested output range does not fit.
+    ///
+    /// # Safety
+    ///
+    /// The range `index..index + count` must be valid for `output`.
     #[inline(always)]
     unsafe fn read_fully_unchecked(
         &mut self,
@@ -988,6 +1265,21 @@ where
     }
 
     /// Reads items into the full output slice through the internal buffer.
+    ///
+    /// # Parameters
+    ///
+    /// - `output`: Destination item slice.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of items read before the slice filled or EOF was
+    /// reached.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ErrorKind::InvalidData`] if the wrapped input reports an
+    /// invalid count. Other non-interrupted errors are propagated from the
+    /// wrapped input.
     #[inline(always)]
     fn read_fully(&mut self, output: &mut [Self::Item]) -> Result<usize> {
         BufferedInput::read_fully(self, output)
@@ -999,9 +1291,25 @@ where
     I: SeekableInput,
     <I as Input>::Item: Copy + Default,
 {
+    /// Item unit used for seek offsets.
     type Unit = <I as Input>::Item;
 
     /// Seeks the buffered input in item offsets.
+    ///
+    /// # Parameters
+    ///
+    /// - `position`: Target item offset.
+    ///
+    /// # Returns
+    ///
+    /// Returns the resulting absolute item position.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ErrorKind::InvalidInput`] if a relative offset cannot be
+    /// adjusted by the unread item count. Returns [`ErrorKind::InvalidData`] if
+    /// the wrapped position precedes the unread window. Other seek errors are
+    /// propagated from the wrapped input.
     #[inline(always)]
     fn seek_to(&mut self, position: SeekFrom) -> Result<u64> {
         BufferedInput::seek_to(self, position)

@@ -30,13 +30,20 @@ use crate::{
 /// flushing cancellation-safe. Dropping this type cannot perform asynchronous
 /// I/O; callers that need delivery guarantees must poll `flush` to completion
 /// or recover the pending buffer through [`Self::into_parts`].
+///
+/// # Type Parameters
+///
+/// - `O`: Asynchronous item output type.
+#[must_use]
 #[derive(Debug)]
 pub struct AsyncBufferedOutput<O>
 where
     O: AsyncOutput,
     O::Item: Copy + Default,
 {
+    /// Asynchronous output receiving buffered items.
     inner: O,
+    /// Storage retaining accepted but undelivered items.
     buffer: Buffer<O::Item>,
 }
 
@@ -54,7 +61,12 @@ where
     /// # Returns
     ///
     /// Returns a buffered output with [`DEFAULT_BUFFER_CAPACITY`] items.
-    #[must_use]
+    ///
+    /// # Panics
+    ///
+    /// Panics if `O::Item::default()` panics or the default backing length
+    /// exceeds [`Vec`]'s supported capacity.
+    #[inline(always)]
     pub fn new(inner: O) -> Self {
         Self::with_capacity(inner, DEFAULT_BUFFER_CAPACITY)
     }
@@ -69,7 +81,12 @@ where
     /// # Returns
     ///
     /// Returns a buffered output whose actual capacity is at least one.
-    #[must_use]
+    ///
+    /// # Panics
+    ///
+    /// Panics if `O::Item::default()` panics or the requested backing length
+    /// exceeds [`Vec`]'s supported capacity.
+    #[inline]
     pub fn with_capacity(inner: O, capacity: usize) -> Self {
         Self {
             inner,
@@ -82,6 +99,7 @@ where
     /// # Returns
     ///
     /// Returns the wrapped output. Items may still be pending in this wrapper.
+    #[inline(always)]
     #[must_use]
     pub const fn inner(&self) -> &O {
         &self.inner
@@ -94,6 +112,7 @@ where
     /// # Returns
     ///
     /// Returns the wrapped output.
+    #[inline(always)]
     pub fn inner_mut(&mut self) -> &mut O {
         &mut self.inner
     }
@@ -103,7 +122,7 @@ where
     /// # Returns
     ///
     /// Returns the wrapped output and pending item buffer.
-    #[must_use]
+    #[inline(always)]
     pub fn into_parts(self) -> (O, Buffer<O::Item>) {
         (self.inner, self.buffer)
     }
@@ -113,6 +132,7 @@ where
     /// # Returns
     ///
     /// Returns the total number of items in the backing buffer.
+    #[inline(always)]
     #[must_use]
     pub fn capacity(&self) -> usize {
         self.buffer.capacity()
@@ -123,6 +143,7 @@ where
     /// # Returns
     ///
     /// Returns the readable-window length awaiting delivery.
+    #[inline(always)]
     #[must_use]
     pub const fn pending_len(&self) -> usize {
         self.buffer.available()
@@ -134,12 +155,27 @@ where
     ///
     /// Returns items accepted by this wrapper but not yet accepted by the
     /// inner output.
+    #[inline(always)]
     #[must_use]
     pub fn pending(&self) -> &[O::Item] {
         self.buffer.readable()
     }
 
     /// Polls pending-item delivery without flushing the inner output.
+    ///
+    /// # Parameters
+    ///
+    /// - `cx`: Task context used to register a wake-up.
+    ///
+    /// # Returns
+    ///
+    /// Returns [`Poll::Pending`] while the inner output is not ready, or a
+    /// ready success after all pending items are delivered.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`io::ErrorKind::WriteZero`] if the inner output accepts no
+    /// pending item. Other errors are propagated from the inner output.
     fn poll_drain_buffer(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -179,15 +215,49 @@ where
     O: AsyncOutput,
     O::Item: Copy + Default,
 {
+    /// Item type accepted by the wrapped output.
     type Item = O::Item;
 
     /// Reports that this output already buffers items.
+    ///
+    /// # Returns
+    ///
+    /// Always returns `true`.
     #[inline(always)]
     fn is_buffered(&self) -> bool {
         true
     }
 
     /// Polls one write through the retained item buffer.
+    ///
+    /// A zero-length request completes immediately. The method first uses
+    /// spare buffer capacity, then drains pending items when necessary.
+    ///
+    /// # Parameters
+    ///
+    /// - `cx`: Task context used to register a wake-up.
+    /// - `input`: Source item slice.
+    /// - `index`: Starting source index.
+    /// - `count`: Maximum number of items to accept.
+    ///
+    /// # Returns
+    ///
+    /// Returns [`Poll::Pending`] when pending items cannot yet be delivered. A
+    /// ready success contains the number of newly accepted items.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`io::ErrorKind::WriteZero`] if draining makes no progress.
+    /// Other errors are propagated from the wrapped output.
+    ///
+    /// # Panics
+    ///
+    /// May panic if a nonzero requested input range does not fit. Debug builds
+    /// validate buffered-copy ranges before copying.
+    ///
+    /// # Safety
+    ///
+    /// The range `index..index + count` must be valid for `input`.
     unsafe fn poll_write_unchecked(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -243,6 +313,22 @@ where
     }
 
     /// Polls delivery of pending items followed by the inner flush operation.
+    ///
+    /// # Parameters
+    ///
+    /// - `cx`: Task context used to register a wake-up.
+    ///
+    /// # Returns
+    ///
+    /// Returns [`Poll::Pending`] while delivery or flushing is incomplete,
+    /// otherwise a ready success result.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`io::ErrorKind::WriteZero`] if draining makes no progress, or
+    /// an error reported by the wrapped output. Invalid asynchronous error
+    /// kinds from the flush operation are normalized to
+    /// [`io::ErrorKind::InvalidData`].
     fn poll_flush(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -266,6 +352,23 @@ where
     O: AsyncClose,
     O::Item: Copy + Default,
 {
+    /// Polls delivery of pending items followed by closing the inner output.
+    ///
+    /// # Parameters
+    ///
+    /// - `cx`: Task context used to register a wake-up.
+    ///
+    /// # Returns
+    ///
+    /// Returns [`Poll::Pending`] while delivery or closing is incomplete,
+    /// otherwise a ready success result.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`io::ErrorKind::WriteZero`] if draining makes no progress, or
+    /// an error reported by the wrapped output. Invalid asynchronous error
+    /// kinds from the close operation are normalized to
+    /// [`io::ErrorKind::InvalidData`].
     fn poll_close(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
