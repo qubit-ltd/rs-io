@@ -58,8 +58,16 @@ use std::io::{
 /// assert_eq!(b"abc", branch.as_slice());
 /// # Ok::<(), std::io::Error>(())
 /// ```
+///
+/// # Type Parameters
+///
+/// - `P`: Primary writer type.
+/// - `B`: Mirroring branch writer type.
+#[must_use]
 pub struct TeeWriter<P, B> {
+    /// Primary destination writer.
     inner: P,
+    /// Branch writer receiving mirrored bytes.
     branch: B,
 }
 
@@ -72,7 +80,7 @@ impl<P, B> TeeWriter<P, B> {
     ///
     /// # Returns
     /// A new tee writer.
-    #[inline]
+    #[inline(always)]
     pub fn new(primary: P, branch: B) -> Self {
         Self {
             inner: primary,
@@ -84,7 +92,8 @@ impl<P, B> TeeWriter<P, B> {
     ///
     /// # Returns
     /// The primary writer reference.
-    #[inline]
+    #[inline(always)]
+    #[must_use]
     pub fn inner(&self) -> &P {
         &self.inner
     }
@@ -96,7 +105,7 @@ impl<P, B> TeeWriter<P, B> {
     ///
     /// # Returns
     /// The primary writer reference.
-    #[inline]
+    #[inline(always)]
     pub fn inner_mut(&mut self) -> &mut P {
         &mut self.inner
     }
@@ -105,7 +114,8 @@ impl<P, B> TeeWriter<P, B> {
     ///
     /// # Returns
     /// The branch writer reference.
-    #[inline]
+    #[inline(always)]
+    #[must_use]
     pub fn branch(&self) -> &B {
         &self.branch
     }
@@ -117,7 +127,7 @@ impl<P, B> TeeWriter<P, B> {
     ///
     /// # Returns
     /// The branch writer reference.
-    #[inline]
+    #[inline(always)]
     pub fn branch_mut(&mut self) -> &mut B {
         &mut self.branch
     }
@@ -126,7 +136,8 @@ impl<P, B> TeeWriter<P, B> {
     ///
     /// # Returns
     /// A tuple containing the primary writer and branch writer.
-    #[inline]
+    #[inline(always)]
+    #[must_use]
     pub fn into_inner(self) -> (P, B) {
         (self.inner, self.branch)
     }
@@ -137,12 +148,38 @@ where
     P: Write,
     B: Write,
 {
+    /// Writes to the primary writer and mirrors its accepted prefix.
+    ///
+    /// # Parameters
+    ///
+    /// - `buffer`: Source byte slice.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of bytes accepted by both writers.
+    ///
+    /// # Errors
+    ///
+    /// Returns a primary write error, or a branch write error after the primary
+    /// writer has already accepted bytes.
+    #[inline]
     fn write(&mut self, buffer: &[u8]) -> Result<usize> {
         let count = self.inner.write(buffer)?;
         self.branch.write_all(&buffer[..count])?;
         Ok(count)
     }
 
+    /// Flushes the primary writer and then the branch writer.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` after both writers are flushed.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first flush error. A branch error can occur after the
+    /// primary writer has already flushed successfully.
+    #[inline]
     fn flush(&mut self) -> Result<()> {
         self.inner.flush()?;
         self.branch.flush()
@@ -165,6 +202,7 @@ where
     /// # Errors
     /// Returns the primary seek error, or the branch seek error after the
     /// primary writer has already moved.
+    #[inline]
     fn seek(&mut self, position: SeekFrom) -> Result<u64> {
         let primary_position = self.inner.seek(position)?;
         self.branch.seek(SeekFrom::Start(primary_position))?;
