@@ -42,13 +42,21 @@ use std::io::{
 /// assert_eq!(2, stream.position());
 /// # Ok::<(), std::io::Error>(())
 /// ```
+///
+/// # Type Parameters
+///
+/// - `'a`: Lifetime of the guarded stream borrow.
+/// - `S`: Seekable stream type.
 #[must_use = "dropping an unused guard restores the captured position immediately"]
 pub struct PositionGuard<'a, S>
 where
     S: Seek + ?Sized,
 {
+    /// Mutable stream borrow retained by the guard.
     stream: &'a mut S,
+    /// Position captured when the guard was created.
     position: u64,
+    /// Whether automatic restoration has been disabled.
     done: bool,
 }
 
@@ -81,7 +89,8 @@ where
     ///
     /// # Returns
     /// The position captured when this guard was created.
-    #[inline]
+    #[inline(always)]
+    #[must_use]
     pub fn position(&self) -> u64 {
         self.position
     }
@@ -90,7 +99,7 @@ where
     ///
     /// # Returns
     /// The guarded stream reference.
-    #[inline]
+    #[inline(always)]
     pub fn inner_mut(&mut self) -> &mut S {
         self.stream
     }
@@ -100,9 +109,14 @@ where
     /// After a successful restore, drop-time restoration is disabled. If
     /// restoring fails, drop will still make a best-effort restore attempt.
     ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` after restoring the captured position.
+    ///
     /// # Errors
     /// Returns the error reported by [`Seek::seek`] when the stream cannot seek
     /// back to the captured position.
+    #[inline(always)]
     pub fn restore(&mut self) -> Result<()> {
         self.stream.seek(SeekFrom::Start(self.position)).map(|_| {
             self.done = true;
@@ -113,7 +127,7 @@ where
     ///
     /// This is useful when the caller intentionally wants to keep the stream at
     /// its current position.
-    #[inline]
+    #[inline(always)]
     pub fn dismiss(mut self) {
         self.done = true;
     }
@@ -123,6 +137,9 @@ impl<S> Drop for PositionGuard<'_, S>
 where
     S: Seek + ?Sized,
 {
+    /// Attempts best-effort restoration when it remains enabled.
+    ///
+    /// Any seek error is ignored because destructors cannot report it.
     fn drop(&mut self) {
         if !self.done {
             drop(self.stream.seek(SeekFrom::Start(self.position)));

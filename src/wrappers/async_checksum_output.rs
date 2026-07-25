@@ -26,9 +26,17 @@ use crate::{
 ///
 /// Pending and failed writes do not change the hasher. The checksum algorithm
 /// and stability guarantees are those of the supplied [`Hasher`].
+///
+/// # Type Parameters
+///
+/// - `O`: Wrapped asynchronous byte output type.
+/// - `H`: Checksum hasher type.
+#[must_use]
 #[derive(Debug)]
 pub struct AsyncChecksumOutput<O, H> {
+    /// Output whose successful writes are hashed.
     inner: O,
+    /// Hasher tracking accepted bytes.
     hasher: H,
 }
 
@@ -37,6 +45,22 @@ where
     O: AsyncClose<Item = u8>,
     H: Hasher,
 {
+    /// Polls closing through the wrapped output.
+    ///
+    /// # Parameters
+    ///
+    /// - `cx`: Task context used to register a wake-up.
+    ///
+    /// # Returns
+    ///
+    /// Returns [`Poll::Pending`] while closing is incomplete, otherwise a
+    /// ready success result.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error reported by the wrapped output. Invalid asynchronous
+    /// error kinds are normalized to [`io::ErrorKind::InvalidData`].
+    #[inline(always)]
     fn poll_close(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -64,7 +88,7 @@ where
     /// # Returns
     ///
     /// Returns an output with the supplied initial hasher state.
-    #[must_use]
+    #[inline(always)]
     pub const fn new(inner: O, hasher: H) -> Self {
         Self { inner, hasher }
     }
@@ -74,6 +98,7 @@ where
     /// # Returns
     ///
     /// Returns [`Hasher::finish`] for the current state.
+    #[inline(always)]
     #[must_use]
     pub fn checksum(&self) -> u64 {
         self.hasher.finish()
@@ -84,6 +109,7 @@ where
     /// # Returns
     ///
     /// Returns the wrapped asynchronous byte output.
+    #[inline(always)]
     #[must_use]
     pub const fn inner(&self) -> &O {
         &self.inner
@@ -97,6 +123,7 @@ where
     /// # Returns
     ///
     /// Returns the wrapped asynchronous byte output.
+    #[inline(always)]
     pub fn inner_mut(&mut self) -> &mut O {
         &mut self.inner
     }
@@ -106,6 +133,7 @@ where
     /// # Returns
     ///
     /// Returns the current hasher state.
+    #[inline(always)]
     #[must_use]
     pub const fn hasher(&self) -> &H {
         &self.hasher
@@ -119,6 +147,7 @@ where
     /// # Returns
     ///
     /// Returns the current hasher state mutably.
+    #[inline(always)]
     pub fn hasher_mut(&mut self) -> &mut H {
         &mut self.hasher
     }
@@ -128,6 +157,7 @@ where
     /// # Returns
     ///
     /// Returns the wrapped output and final hasher state.
+    #[inline(always)]
     #[must_use]
     pub fn into_parts(self) -> (O, H) {
         (self.inner, self.hasher)
@@ -139,14 +169,41 @@ where
     O: AsyncOutput<Item = u8>,
     H: Hasher,
 {
+    /// Byte item hashed after successful writes.
     type Item = u8;
 
     /// Preserves the wrapped output's buffering declaration.
+    ///
+    /// # Returns
+    ///
+    /// Returns the wrapped output's buffering declaration.
+    #[inline(always)]
     fn is_buffered(&self) -> bool {
         self.inner.is_buffered()
     }
 
     /// Polls a write and hashes only bytes in a successful ready result.
+    ///
+    /// # Parameters
+    ///
+    /// - `cx`: Task context used to register a wake-up.
+    /// - `input`: Source byte slice.
+    /// - `index`: Starting source index.
+    /// - `count`: Maximum number of bytes to write.
+    ///
+    /// # Returns
+    ///
+    /// Returns [`Poll::Pending`] when the output is not ready. A ready success
+    /// contains the number of bytes accepted and hashed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an I/O error reported by the wrapped output without changing the
+    /// hasher.
+    ///
+    /// # Safety
+    ///
+    /// The range `index..index + count` must be valid for `input`.
     unsafe fn poll_write_unchecked(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -170,6 +227,21 @@ where
     }
 
     /// Polls the wrapped output's flush operation.
+    ///
+    /// # Parameters
+    ///
+    /// - `cx`: Task context used to register a wake-up.
+    ///
+    /// # Returns
+    ///
+    /// Returns [`Poll::Pending`] while flushing is incomplete, otherwise a
+    /// ready success result.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error reported by the wrapped output. Invalid asynchronous
+    /// error kinds are normalized to [`io::ErrorKind::InvalidData`].
+    #[inline(always)]
     fn poll_flush(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,

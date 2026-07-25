@@ -35,8 +35,15 @@ use std::io::{
 /// assert_eq!(3, reader.bytes_read());
 /// # Ok::<(), std::io::Error>(())
 /// ```
+///
+/// # Type Parameters
+///
+/// - `R`: Wrapped reader type.
+#[must_use]
 pub struct CountingReader<R> {
+    /// Reader whose successful reads are counted.
     inner: R,
+    /// Saturating count of returned bytes.
     bytes_read: u64,
 }
 
@@ -48,7 +55,7 @@ impl<R> CountingReader<R> {
     ///
     /// # Returns
     /// A new counting reader with a zero byte count.
-    #[inline]
+    #[inline(always)]
     pub fn new(inner: R) -> Self {
         Self {
             inner,
@@ -60,7 +67,8 @@ impl<R> CountingReader<R> {
     ///
     /// # Returns
     /// Total byte count. The value saturates at [`u64::MAX`].
-    #[inline]
+    #[inline(always)]
+    #[must_use]
     pub fn bytes_read(&self) -> u64 {
         self.bytes_read
     }
@@ -69,7 +77,8 @@ impl<R> CountingReader<R> {
     ///
     /// # Returns
     /// The wrapped reader reference.
-    #[inline]
+    #[inline(always)]
+    #[must_use]
     pub fn inner(&self) -> &R {
         &self.inner
     }
@@ -81,7 +90,7 @@ impl<R> CountingReader<R> {
     ///
     /// # Returns
     /// The wrapped reader reference.
-    #[inline]
+    #[inline(always)]
     pub fn inner_mut(&mut self) -> &mut R {
         &mut self.inner
     }
@@ -90,7 +99,8 @@ impl<R> CountingReader<R> {
     ///
     /// # Returns
     /// The wrapped reader.
-    #[inline]
+    #[inline(always)]
+    #[must_use]
     pub fn into_inner(self) -> R {
         self.inner
     }
@@ -100,6 +110,21 @@ impl<R> Read for CountingReader<R>
 where
     R: Read,
 {
+    /// Reads bytes and counts only the successfully returned prefix.
+    ///
+    /// # Parameters
+    ///
+    /// - `buffer`: Destination byte slice.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of bytes read and added to the saturating count.
+    ///
+    /// # Errors
+    ///
+    /// Returns the error reported by the wrapped reader without changing the
+    /// count.
+    #[inline]
     fn read(&mut self, buffer: &mut [u8]) -> Result<usize> {
         let count = self.inner.read(buffer)?;
         self.bytes_read = self.bytes_read.saturating_add(count as u64);
@@ -111,11 +136,25 @@ impl<R> BufRead for CountingReader<R>
 where
     R: BufRead,
 {
-    #[inline]
+    /// Returns the wrapped reader's currently buffered bytes.
+    ///
+    /// # Returns
+    ///
+    /// Returns the byte slice exposed by the wrapped reader.
+    ///
+    /// # Errors
+    ///
+    /// Returns the error reported by the wrapped reader.
+    #[inline(always)]
     fn fill_buf(&mut self) -> Result<&[u8]> {
         self.inner.fill_buf()
     }
 
+    /// Consumes buffered bytes and adds them to the saturating count.
+    ///
+    /// # Parameters
+    ///
+    /// - `amount`: Number of previously exposed bytes to consume.
     #[inline]
     fn consume(&mut self, amount: usize) {
         self.bytes_read = self.bytes_read.saturating_add(amount as u64);
@@ -127,7 +166,20 @@ impl<R> Seek for CountingReader<R>
 where
     R: Seek,
 {
-    #[inline]
+    /// Seeks the wrapped reader without changing the byte count.
+    ///
+    /// # Parameters
+    ///
+    /// - `position`: Target reader position.
+    ///
+    /// # Returns
+    ///
+    /// Returns the resulting absolute position.
+    ///
+    /// # Errors
+    ///
+    /// Returns the error reported by the wrapped reader.
+    #[inline(always)]
     fn seek(&mut self, position: SeekFrom) -> Result<u64> {
         self.inner.seek(position)
     }

@@ -30,8 +30,15 @@ use std::io::{
 /// assert_eq!(b"abc", writer.inner().as_slice());
 /// # Ok::<(), std::io::Error>(())
 /// ```
+///
+/// # Type Parameters
+///
+/// - `W`: Wrapped writer type.
+#[must_use]
 pub struct CountingWriter<W> {
+    /// Writer whose successful writes are counted.
     inner: W,
+    /// Saturating count of accepted bytes.
     bytes_written: u64,
 }
 
@@ -43,7 +50,7 @@ impl<W> CountingWriter<W> {
     ///
     /// # Returns
     /// A new counting writer with a zero byte count.
-    #[inline]
+    #[inline(always)]
     pub fn new(inner: W) -> Self {
         Self {
             inner,
@@ -55,7 +62,8 @@ impl<W> CountingWriter<W> {
     ///
     /// # Returns
     /// Total byte count. The value saturates at [`u64::MAX`].
-    #[inline]
+    #[inline(always)]
+    #[must_use]
     pub fn bytes_written(&self) -> u64 {
         self.bytes_written
     }
@@ -64,7 +72,8 @@ impl<W> CountingWriter<W> {
     ///
     /// # Returns
     /// The wrapped writer reference.
-    #[inline]
+    #[inline(always)]
+    #[must_use]
     pub fn inner(&self) -> &W {
         &self.inner
     }
@@ -76,7 +85,7 @@ impl<W> CountingWriter<W> {
     ///
     /// # Returns
     /// The wrapped writer reference.
-    #[inline]
+    #[inline(always)]
     pub fn inner_mut(&mut self) -> &mut W {
         &mut self.inner
     }
@@ -85,7 +94,8 @@ impl<W> CountingWriter<W> {
     ///
     /// # Returns
     /// The wrapped writer.
-    #[inline]
+    #[inline(always)]
+    #[must_use]
     pub fn into_inner(self) -> W {
         self.inner
     }
@@ -95,13 +105,37 @@ impl<W> Write for CountingWriter<W>
 where
     W: Write,
 {
+    /// Writes bytes and counts only the successfully accepted prefix.
+    ///
+    /// # Parameters
+    ///
+    /// - `buffer`: Source byte slice.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of bytes written and added to the saturating count.
+    ///
+    /// # Errors
+    ///
+    /// Returns the error reported by the wrapped writer without changing the
+    /// count.
+    #[inline]
     fn write(&mut self, buffer: &[u8]) -> Result<usize> {
         let count = self.inner.write(buffer)?;
         self.bytes_written = self.bytes_written.saturating_add(count as u64);
         Ok(count)
     }
 
-    #[inline]
+    /// Flushes the wrapped writer.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` after the wrapped writer is flushed.
+    ///
+    /// # Errors
+    ///
+    /// Returns the error reported by the wrapped writer.
+    #[inline(always)]
     fn flush(&mut self) -> Result<()> {
         self.inner.flush()
     }
@@ -111,7 +145,20 @@ impl<W> Seek for CountingWriter<W>
 where
     W: Seek,
 {
-    #[inline]
+    /// Seeks the wrapped writer without changing the byte count.
+    ///
+    /// # Parameters
+    ///
+    /// - `position`: Target writer position.
+    ///
+    /// # Returns
+    ///
+    /// Returns the resulting absolute position.
+    ///
+    /// # Errors
+    ///
+    /// Returns the error reported by the wrapped writer.
+    #[inline(always)]
     fn seek(&mut self, position: SeekFrom) -> Result<u64> {
         self.inner.seek(position)
     }

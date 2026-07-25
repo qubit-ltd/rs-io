@@ -60,8 +60,16 @@ use std::io::{
 /// assert_eq!(expected.finish(), reader.checksum());
 /// # Ok::<(), std::io::Error>(())
 /// ```
+///
+/// # Type Parameters
+///
+/// - `R`: Wrapped reader type.
+/// - `H`: Checksum hasher type.
+#[must_use]
 pub struct ChecksumReader<R, H> {
+    /// Reader whose successful reads are hashed.
     inner: R,
+    /// Hasher tracking returned bytes.
     hasher: H,
 }
 
@@ -77,7 +85,7 @@ where
     ///
     /// # Returns
     /// A new checksum reader.
-    #[inline]
+    #[inline(always)]
     pub fn new(inner: R, hasher: H) -> Self {
         Self { inner, hasher }
     }
@@ -86,7 +94,8 @@ where
     ///
     /// # Returns
     /// The value reported by [`Hasher::finish`].
-    #[inline]
+    #[inline(always)]
+    #[must_use]
     pub fn checksum(&self) -> u64 {
         self.hasher.finish()
     }
@@ -95,7 +104,8 @@ where
     ///
     /// # Returns
     /// The wrapped reader reference.
-    #[inline]
+    #[inline(always)]
+    #[must_use]
     pub fn inner(&self) -> &R {
         &self.inner
     }
@@ -107,7 +117,7 @@ where
     ///
     /// # Returns
     /// The wrapped reader reference.
-    #[inline]
+    #[inline(always)]
     pub fn inner_mut(&mut self) -> &mut R {
         &mut self.inner
     }
@@ -116,7 +126,8 @@ where
     ///
     /// # Returns
     /// The wrapped hasher reference.
-    #[inline]
+    #[inline(always)]
+    #[must_use]
     pub fn hasher(&self) -> &H {
         &self.hasher
     }
@@ -128,7 +139,7 @@ where
     ///
     /// # Returns
     /// The wrapped hasher reference.
-    #[inline]
+    #[inline(always)]
     pub fn hasher_mut(&mut self) -> &mut H {
         &mut self.hasher
     }
@@ -137,7 +148,8 @@ where
     ///
     /// # Returns
     /// A tuple containing the wrapped reader and hasher.
-    #[inline]
+    #[inline(always)]
+    #[must_use]
     pub fn into_inner(self) -> (R, H) {
         (self.inner, self.hasher)
     }
@@ -148,6 +160,21 @@ where
     R: Read,
     H: Hasher,
 {
+    /// Reads bytes and hashes only the successfully returned prefix.
+    ///
+    /// # Parameters
+    ///
+    /// - `buffer`: Destination byte slice.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of bytes read and hashed.
+    ///
+    /// # Errors
+    ///
+    /// Returns the error reported by the wrapped reader without changing the
+    /// hasher.
+    #[inline]
     fn read(&mut self, buffer: &mut [u8]) -> Result<usize> {
         let count = self.inner.read(buffer)?;
         self.hasher.write(&buffer[..count]);
@@ -170,7 +197,7 @@ where
     ///
     /// # Errors
     /// Returns the seek error reported by the wrapped reader.
-    #[inline]
+    #[inline(always)]
     fn seek(&mut self, position: SeekFrom) -> Result<u64> {
         self.inner.seek(position)
     }

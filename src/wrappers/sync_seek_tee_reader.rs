@@ -48,8 +48,16 @@ use std::io::{
 /// assert_eq!(&[0, 0, b'c', b'd', 0, 0], reader.branch().get_ref().as_slice());
 /// # Ok::<(), std::io::Error>(())
 /// ```
+///
+/// # Type Parameters
+///
+/// - `R`: Source reader type.
+/// - `W`: Mirroring branch writer type.
+#[must_use]
 pub struct SyncSeekTeeReader<R, W> {
+    /// Source reader.
     inner: R,
+    /// Branch writer receiving mirrored bytes.
     branch: W,
 }
 
@@ -63,7 +71,7 @@ impl<R, W> SyncSeekTeeReader<R, W> {
     ///
     /// # Returns
     /// A new sync-seek tee reader.
-    #[inline]
+    #[inline(always)]
     pub fn new(reader: R, branch: W) -> Self {
         Self {
             inner: reader,
@@ -75,7 +83,8 @@ impl<R, W> SyncSeekTeeReader<R, W> {
     ///
     /// # Returns
     /// The source reader reference.
-    #[inline]
+    #[inline(always)]
+    #[must_use]
     pub fn inner(&self) -> &R {
         &self.inner
     }
@@ -87,7 +96,7 @@ impl<R, W> SyncSeekTeeReader<R, W> {
     ///
     /// # Returns
     /// The source reader reference.
-    #[inline]
+    #[inline(always)]
     pub fn inner_mut(&mut self) -> &mut R {
         &mut self.inner
     }
@@ -96,7 +105,8 @@ impl<R, W> SyncSeekTeeReader<R, W> {
     ///
     /// # Returns
     /// The branch writer reference.
-    #[inline]
+    #[inline(always)]
+    #[must_use]
     pub fn branch(&self) -> &W {
         &self.branch
     }
@@ -108,7 +118,7 @@ impl<R, W> SyncSeekTeeReader<R, W> {
     ///
     /// # Returns
     /// The branch writer reference.
-    #[inline]
+    #[inline(always)]
     pub fn branch_mut(&mut self) -> &mut W {
         &mut self.branch
     }
@@ -117,7 +127,8 @@ impl<R, W> SyncSeekTeeReader<R, W> {
     ///
     /// # Returns
     /// A tuple containing the source reader and branch writer.
-    #[inline]
+    #[inline(always)]
+    #[must_use]
     pub fn into_inner(self) -> (R, W) {
         (self.inner, self.branch)
     }
@@ -128,6 +139,21 @@ where
     R: Read,
     W: Write,
 {
+    /// Reads from the source and mirrors the returned bytes to the branch.
+    ///
+    /// # Parameters
+    ///
+    /// - `buffer`: Destination byte slice.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of bytes read and mirrored.
+    ///
+    /// # Errors
+    ///
+    /// Returns a source read error, or a branch write error after the source
+    /// has already advanced.
+    #[inline]
     fn read(&mut self, buffer: &mut [u8]) -> Result<usize> {
         let count = self.inner.read(buffer)?;
         self.branch.write_all(&buffer[..count])?;

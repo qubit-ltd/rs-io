@@ -22,9 +22,17 @@ use crate::AsyncInput;
 ///
 /// Pending and failed reads do not change the hasher. The checksum algorithm
 /// and stability guarantees are those of the supplied [`Hasher`].
+///
+/// # Type Parameters
+///
+/// - `I`: Wrapped asynchronous byte input type.
+/// - `H`: Checksum hasher type.
+#[must_use]
 #[derive(Debug)]
 pub struct AsyncChecksumInput<I, H> {
+    /// Input whose successful reads are hashed.
     inner: I,
+    /// Hasher tracking returned bytes.
     hasher: H,
 }
 
@@ -42,7 +50,7 @@ where
     /// # Returns
     ///
     /// Returns an input with the supplied initial hasher state.
-    #[must_use]
+    #[inline(always)]
     pub const fn new(inner: I, hasher: H) -> Self {
         Self { inner, hasher }
     }
@@ -52,6 +60,7 @@ where
     /// # Returns
     ///
     /// Returns [`Hasher::finish`] for the current state.
+    #[inline(always)]
     #[must_use]
     pub fn checksum(&self) -> u64 {
         self.hasher.finish()
@@ -62,6 +71,7 @@ where
     /// # Returns
     ///
     /// Returns the wrapped asynchronous byte input.
+    #[inline(always)]
     #[must_use]
     pub const fn inner(&self) -> &I {
         &self.inner
@@ -75,6 +85,7 @@ where
     /// # Returns
     ///
     /// Returns the wrapped asynchronous byte input.
+    #[inline(always)]
     pub fn inner_mut(&mut self) -> &mut I {
         &mut self.inner
     }
@@ -84,6 +95,7 @@ where
     /// # Returns
     ///
     /// Returns the current hasher state.
+    #[inline(always)]
     #[must_use]
     pub const fn hasher(&self) -> &H {
         &self.hasher
@@ -97,6 +109,7 @@ where
     /// # Returns
     ///
     /// Returns the current hasher state mutably.
+    #[inline(always)]
     pub fn hasher_mut(&mut self) -> &mut H {
         &mut self.hasher
     }
@@ -106,6 +119,7 @@ where
     /// # Returns
     ///
     /// Returns the wrapped input and final hasher state.
+    #[inline(always)]
     #[must_use]
     pub fn into_parts(self) -> (I, H) {
         (self.inner, self.hasher)
@@ -117,14 +131,41 @@ where
     I: AsyncInput<Item = u8>,
     H: Hasher,
 {
+    /// Byte item hashed after successful reads.
     type Item = u8;
 
     /// Preserves the wrapped input's buffering declaration.
+    ///
+    /// # Returns
+    ///
+    /// Returns the wrapped input's buffering declaration.
+    #[inline(always)]
     fn is_buffered(&self) -> bool {
         self.inner.is_buffered()
     }
 
     /// Polls a read and hashes only bytes in a successful ready result.
+    ///
+    /// # Parameters
+    ///
+    /// - `cx`: Task context used to register a wake-up.
+    /// - `output`: Destination byte slice.
+    /// - `index`: Starting destination index.
+    /// - `count`: Maximum number of bytes to read.
+    ///
+    /// # Returns
+    ///
+    /// Returns [`Poll::Pending`] when the input is not ready. A ready success
+    /// contains the number of bytes read and hashed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an I/O error reported by the wrapped input without changing the
+    /// hasher.
+    ///
+    /// # Safety
+    ///
+    /// The range `index..index + count` must be valid for `output`.
     unsafe fn poll_read_unchecked(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,

@@ -44,8 +44,16 @@ use std::io::{
 /// assert_eq!(b"payload", writer.inner().as_slice());
 /// # Ok::<(), std::io::Error>(())
 /// ```
+///
+/// # Type Parameters
+///
+/// - `W`: Wrapped writer type.
+/// - `H`: Checksum hasher type.
+#[must_use]
 pub struct ChecksumWriter<W, H> {
+    /// Writer whose successful writes are hashed.
     inner: W,
+    /// Hasher tracking accepted bytes.
     hasher: H,
 }
 
@@ -61,7 +69,7 @@ where
     ///
     /// # Returns
     /// A new checksum writer.
-    #[inline]
+    #[inline(always)]
     pub fn new(inner: W, hasher: H) -> Self {
         Self { inner, hasher }
     }
@@ -70,7 +78,8 @@ where
     ///
     /// # Returns
     /// The value reported by [`Hasher::finish`].
-    #[inline]
+    #[inline(always)]
+    #[must_use]
     pub fn checksum(&self) -> u64 {
         self.hasher.finish()
     }
@@ -79,7 +88,8 @@ where
     ///
     /// # Returns
     /// The wrapped writer reference.
-    #[inline]
+    #[inline(always)]
+    #[must_use]
     pub fn inner(&self) -> &W {
         &self.inner
     }
@@ -91,7 +101,7 @@ where
     ///
     /// # Returns
     /// The wrapped writer reference.
-    #[inline]
+    #[inline(always)]
     pub fn inner_mut(&mut self) -> &mut W {
         &mut self.inner
     }
@@ -100,7 +110,8 @@ where
     ///
     /// # Returns
     /// The wrapped hasher reference.
-    #[inline]
+    #[inline(always)]
+    #[must_use]
     pub fn hasher(&self) -> &H {
         &self.hasher
     }
@@ -112,7 +123,7 @@ where
     ///
     /// # Returns
     /// The wrapped hasher reference.
-    #[inline]
+    #[inline(always)]
     pub fn hasher_mut(&mut self) -> &mut H {
         &mut self.hasher
     }
@@ -121,7 +132,8 @@ where
     ///
     /// # Returns
     /// A tuple containing the wrapped writer and hasher.
-    #[inline]
+    #[inline(always)]
+    #[must_use]
     pub fn into_inner(self) -> (W, H) {
         (self.inner, self.hasher)
     }
@@ -132,13 +144,37 @@ where
     W: Write,
     H: Hasher,
 {
+    /// Writes bytes and hashes only the successfully accepted prefix.
+    ///
+    /// # Parameters
+    ///
+    /// - `buffer`: Source byte slice.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of bytes written and hashed.
+    ///
+    /// # Errors
+    ///
+    /// Returns the error reported by the wrapped writer without changing the
+    /// hasher.
+    #[inline]
     fn write(&mut self, buffer: &[u8]) -> Result<usize> {
         let count = self.inner.write(buffer)?;
         self.hasher.write(&buffer[..count]);
         Ok(count)
     }
 
-    #[inline]
+    /// Flushes the wrapped writer.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` after the wrapped writer is flushed.
+    ///
+    /// # Errors
+    ///
+    /// Returns the error reported by the wrapped writer.
+    #[inline(always)]
     fn flush(&mut self) -> Result<()> {
         self.inner.flush()
     }
@@ -159,7 +195,7 @@ where
     ///
     /// # Errors
     /// Returns the seek error reported by the wrapped writer.
-    #[inline]
+    #[inline(always)]
     fn seek(&mut self, position: SeekFrom) -> Result<u64> {
         self.inner.seek(position)
     }

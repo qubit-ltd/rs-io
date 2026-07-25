@@ -18,9 +18,16 @@ use std::{
 use crate::AsyncInput;
 
 /// Asynchronous input that exposes at most a fixed number of items.
+///
+/// # Type Parameters
+///
+/// - `I`: Wrapped asynchronous input type.
+#[must_use]
 #[derive(Debug)]
 pub struct AsyncLimitInput<I> {
+    /// Input constrained by this wrapper.
     inner: I,
+    /// Number of items still exposed.
     remaining: u64,
 }
 
@@ -35,7 +42,7 @@ impl<I> AsyncLimitInput<I> {
     /// # Returns
     ///
     /// Returns an input with `limit` items remaining.
-    #[must_use]
+    #[inline(always)]
     pub const fn new(inner: I, limit: u64) -> Self {
         Self {
             inner,
@@ -48,6 +55,7 @@ impl<I> AsyncLimitInput<I> {
     /// # Returns
     ///
     /// Returns zero after the configured limit has been consumed.
+    #[inline(always)]
     #[must_use]
     pub const fn remaining(&self) -> u64 {
         self.remaining
@@ -58,6 +66,7 @@ impl<I> AsyncLimitInput<I> {
     /// # Returns
     ///
     /// Returns the wrapped asynchronous input.
+    #[inline(always)]
     #[must_use]
     pub const fn inner(&self) -> &I {
         &self.inner
@@ -71,6 +80,7 @@ impl<I> AsyncLimitInput<I> {
     /// # Returns
     ///
     /// Returns the wrapped asynchronous input.
+    #[inline(always)]
     pub fn inner_mut(&mut self) -> &mut I {
         &mut self.inner
     }
@@ -80,6 +90,7 @@ impl<I> AsyncLimitInput<I> {
     /// # Returns
     ///
     /// Returns the asynchronous input without changing its position.
+    #[inline(always)]
     #[must_use]
     pub fn into_inner(self) -> I {
         self.inner
@@ -90,14 +101,44 @@ impl<I> AsyncInput for AsyncLimitInput<I>
 where
     I: AsyncInput,
 {
+    /// Item type exposed by the limited input.
     type Item = I::Item;
 
     /// Preserves the wrapped input's buffering declaration.
+    ///
+    /// # Returns
+    ///
+    /// Returns the wrapped input's buffering declaration.
+    #[inline(always)]
     fn is_buffered(&self) -> bool {
         self.inner.is_buffered()
     }
 
     /// Polls a read bounded by the remaining item count.
+    ///
+    /// The method completes with zero items without polling `inner` when the
+    /// limit is exhausted or `count` is zero.
+    ///
+    /// # Parameters
+    ///
+    /// - `cx`: Task context used to register a wake-up.
+    /// - `output`: Destination item slice.
+    /// - `index`: Starting destination index.
+    /// - `count`: Maximum number of items requested.
+    ///
+    /// # Returns
+    ///
+    /// Returns [`Poll::Pending`] when the input is not ready. A ready success
+    /// contains the number of items read within the remaining limit.
+    ///
+    /// # Errors
+    ///
+    /// Returns an I/O error reported by the wrapped input without consuming the
+    /// remaining limit.
+    ///
+    /// # Safety
+    ///
+    /// The range `index..index + count` must be valid for `output`.
     unsafe fn poll_read_unchecked(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
