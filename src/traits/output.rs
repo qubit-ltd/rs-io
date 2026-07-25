@@ -161,12 +161,20 @@ pub trait Output {
     /// * `index` - Start index inside `input`.
     /// * `count` - Number of items to write.
     ///
+    /// # Returns
+    ///
+    /// `Ok(())` after the requested range has been written completely.
+    ///
     /// # Errors
     ///
     /// Returns the output error reported by the implementation. Returns
     /// [`ErrorKind::WriteZero`] if the implementation accepts zero items before
     /// the requested range is complete. Returns [`ErrorKind::InvalidData`] if
     /// the implementation reports accepting more items than requested.
+    ///
+    /// # Panics
+    ///
+    /// Panics in debug builds if the requested input range does not fit.
     ///
     /// # Safety
     ///
@@ -212,6 +220,9 @@ pub trait Output {
     /// # Parameters
     /// - `input`: Source items.
     ///
+    /// # Returns
+    /// `Ok(())` after every item in `input` has been written.
+    ///
     /// # Errors
     /// Returns the output error reported by the implementation. Returns
     /// [`ErrorKind::WriteZero`] if no progress is made before all items are
@@ -224,6 +235,10 @@ pub trait Output {
 
     /// Flushes any internally buffered items.
     ///
+    /// # Returns
+    ///
+    /// `Ok(())` after all internally buffered items have been flushed.
+    ///
     /// # Errors
     ///
     /// Returns the output error reported by the implementation.
@@ -234,9 +249,33 @@ impl<W> Output for W
 where
     W: Write + ?Sized,
 {
+    /// Bytes written by the standard [`Write`] implementation.
     type Item = u8;
 
     /// Writes bytes to a standard [`Write`] value from an indexed range.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` - Source storage.
+    /// * `index` - Start index inside `input`.
+    /// * `count` - Maximum number of bytes to write.
+    ///
+    /// # Returns
+    ///
+    /// The number of bytes written from the requested range.
+    ///
+    /// # Errors
+    ///
+    /// Returns the error reported by [`Write::write`].
+    ///
+    /// # Panics
+    ///
+    /// Panics in debug builds if the requested input range does not fit.
+    ///
+    /// # Safety
+    ///
+    /// The caller must guarantee that `index..index + count` is a valid range
+    /// inside `input` and that the addition does not overflow.
     #[inline(always)]
     unsafe fn write_unchecked(
         &mut self,
@@ -254,7 +293,20 @@ where
         Write::write(self, source)
     }
 
-    /// Writes items into the full output slice.
+    /// Writes bytes from the full input slice.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` - Source bytes.
+    ///
+    /// # Returns
+    ///
+    /// The number of bytes accepted from `input`.
+    ///
+    /// # Errors
+    ///
+    /// Returns the error reported by [`Write::write`], or
+    /// [`ErrorKind::InvalidData`] if the writer reports an impossible count.
     #[inline(always)]
     fn write(&mut self, input: &[Self::Item]) -> Result<usize> {
         let written = Write::write(self, input)?;
@@ -263,6 +315,14 @@ where
     }
 
     /// Flushes a standard [`Write`] value.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after the standard writer has been flushed.
+    ///
+    /// # Errors
+    ///
+    /// Returns the error reported by [`Write::flush`].
     #[inline(always)]
     fn flush(&mut self) -> Result<()> {
         Write::flush(self)
@@ -276,11 +336,15 @@ where
 /// * `written` - Item count reported by the output.
 /// * `requested` - Maximum item count requested from the output.
 ///
+/// # Returns
+///
+/// `Ok(())` when `written <= requested`.
+///
 /// # Errors
 ///
 /// Returns [`ErrorKind::InvalidData`] when the output reports more items than
 /// the source range contained.
-#[inline(always)]
+#[inline]
 pub fn validate_write_count(written: usize, requested: usize) -> Result<()> {
     if written > requested {
         return Err(Error::new(

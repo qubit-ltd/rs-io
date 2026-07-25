@@ -68,9 +68,15 @@ pub fn read_exact_or_eof(
 /// - `len`: Exact number of bytes to read.
 /// - `max_len`: Maximum accepted exact read length.
 ///
+/// # Returns
+///
+/// Returns `Ok(())` after exactly `len` bytes are appended.
+///
 /// # Errors
 /// Returns [`ErrorKind::InvalidData`] when `len > max_len` before reading and
-/// leaves `output` unchanged. Returns the error reported by
+/// leaves `output` unchanged. Returns [`ErrorKind::InvalidInput`] when
+/// `output.len() + len` overflows, or [`ErrorKind::OutOfMemory`] when `output`
+/// cannot reserve the appended bytes. Returns the error reported by
 /// [`Read::read_exact`] for read failures and truncates `output` back to its
 /// original length.
 pub fn read_exact_vec_limited_into(
@@ -107,9 +113,13 @@ pub fn read_exact_vec_limited_into(
 /// - `len`: Exact number of bytes requested by the caller.
 /// - `max_len`: Maximum accepted exact read length.
 ///
+/// # Returns
+///
+/// Returns `Ok(())` when `len <= max_len`.
+///
 /// # Errors
 /// Returns [`ErrorKind::InvalidData`] when `len > max_len`.
-#[inline(always)]
+#[inline]
 pub fn validate_exact_read_len(len: usize, max_len: usize) -> Result<()> {
     if len > max_len {
         return Err(Error::new(
@@ -131,9 +141,10 @@ pub fn validate_exact_read_len(len: usize, max_len: usize) -> Result<()> {
 ///
 /// # Errors
 /// Returns [`ErrorKind::InvalidData`] after detecting that the input contains
-/// more than `max_len` bytes and truncates `output` back to its original
-/// length. Returns the first non-interrupted read error reported by `reader`
-/// after the same rollback.
+/// more than `max_len` bytes. Returns [`ErrorKind::OutOfMemory`] when the
+/// result vector cannot grow, or the first non-interrupted read error reported
+/// by `reader`. No vector is returned on failure.
+#[inline]
 pub fn read_to_end_limited(
     reader: &mut dyn Read,
     max_len: usize,
@@ -157,8 +168,9 @@ pub fn read_to_end_limited(
 ///
 /// # Errors
 /// Returns [`ErrorKind::InvalidData`] after detecting that the input contains
-/// more than `max_len` bytes. Returns the first non-interrupted read error
-/// reported by `reader`.
+/// more than `max_len` bytes. Returns [`ErrorKind::OutOfMemory`] when `output`
+/// cannot grow, or the first non-interrupted read error reported by `reader`.
+/// `output` is restored to its original length on failure.
 pub fn read_to_end_limited_into(
     reader: &mut dyn Read,
     output: &mut Vec<u8>,
@@ -212,6 +224,8 @@ pub fn read_to_end_limited_into(
 ///
 /// # Returns
 /// An [`ErrorKind::InvalidData`] error containing the UTF-8 error context.
+#[inline(always)]
+#[must_use]
 pub fn invalid_utf8_error(error: FromUtf8Error) -> Error {
     Error::new(
         ErrorKind::InvalidData,
@@ -220,6 +234,10 @@ pub fn invalid_utf8_error(error: FromUtf8Error) -> Error {
 }
 
 /// Reads bytes through `delimiter` into `output` with a maximum result size.
+///
+/// # Type Parameters
+///
+/// - `T`: Buffered reader type.
 ///
 /// # Parameters
 /// - `reader`: Buffered source reader.
@@ -231,8 +249,10 @@ pub fn invalid_utf8_error(error: FromUtf8Error) -> Error {
 /// Number of bytes appended to `output`.
 ///
 /// # Errors
-/// Returns an invalid-data error when the limit is exceeded, or an I/O error
-/// from `reader`.
+/// Returns [`ErrorKind::InvalidData`] when the limit is exceeded,
+/// [`ErrorKind::OutOfMemory`] when `output` cannot grow, or an I/O error from
+/// `reader`.
+#[inline]
 pub fn read_until_limited_into<T>(
     reader: &mut T,
     delimiter: u8,
@@ -252,6 +272,29 @@ where
     }
 }
 
+/// Appends bytes through `delimiter` without rollback on failure.
+///
+/// # Type Parameters
+///
+/// - `T`: Buffered reader type.
+///
+/// # Parameters
+///
+/// - `reader`: Buffered source reader.
+/// - `delimiter`: Delimiter byte to search for.
+/// - `output`: Destination vector.
+/// - `max_len`: Maximum accepted byte count.
+///
+/// # Returns
+///
+/// Returns the number of appended bytes.
+///
+/// # Errors
+///
+/// Returns [`ErrorKind::InvalidData`] if reaching the delimiter or EOF requires
+/// more than `max_len` bytes, [`ErrorKind::OutOfMemory`] if `output` cannot
+/// grow, or the first error reported by `reader`. Bytes appended before an
+/// error remain in `output`.
 fn read_until_limited_into_inner<T>(
     reader: &mut T,
     delimiter: u8,
@@ -298,6 +341,8 @@ where
 ///
 /// # Returns
 /// An [`ErrorKind::InvalidData`] error.
+#[inline]
+#[must_use]
 fn limit_exceeded_error(max_len: usize, delimiter: u8) -> Error {
     Error::new(
         ErrorKind::InvalidData,

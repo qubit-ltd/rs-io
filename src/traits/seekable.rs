@@ -118,9 +118,22 @@ impl<S> Seekable for S
 where
     S: Seek + ?Sized,
 {
+    /// Bytes used by the standard [`Seek`] implementation.
     type Unit = u8;
 
     /// Seeks a standard [`Seek`] value using byte offsets.
+    ///
+    /// # Parameters
+    ///
+    /// * `position` - Target byte position.
+    ///
+    /// # Returns
+    ///
+    /// The new absolute byte position.
+    ///
+    /// # Errors
+    ///
+    /// Returns the error reported by [`Seek::seek`].
     #[inline(always)]
     fn seek_to(&mut self, position: SeekFrom) -> Result<u64> {
         Seek::seek(self, position)

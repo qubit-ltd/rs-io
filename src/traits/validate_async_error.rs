@@ -23,7 +23,7 @@ use super::internal::AsyncContractError;
 ///
 /// Returns an [`ErrorKind::InvalidData`] contract error for `WouldBlock` and
 /// `Interrupted`; otherwise, returns `error` unchanged.
-#[inline]
+#[must_use]
 pub(crate) fn validate_async_error(error: Error) -> Error {
     match error.kind() {
         ErrorKind::WouldBlock => Error::new(

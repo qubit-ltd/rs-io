@@ -119,6 +119,10 @@ pub trait Input {
     /// [`ErrorKind::InvalidData`] if the implementation reports more items than
     /// requested.
     ///
+    /// # Panics
+    ///
+    /// Panics in debug builds if the requested output range does not fit.
+    ///
     /// # Safety
     ///
     /// The caller must guarantee that `index..index + count` is a valid range
@@ -178,13 +182,17 @@ pub trait Input {
     ///
     /// * `output` - Destination storage that must be filled completely.
     ///
+    /// # Returns
+    ///
+    /// `Ok(())` after the destination has been filled completely.
+    ///
     /// # Errors
     ///
     /// Returns [`ErrorKind::UnexpectedEof`] if the input ends before filling
     /// `output`. Returns the first non-interrupted input error, or
     /// [`ErrorKind::InvalidData`] if the implementation reports an impossible
     /// item count.
-    #[inline(always)]
+    #[inline]
     fn read_exactly(&mut self, output: &mut [Self::Item]) -> Result<()> {
         if self.read_fully(output)? == output.len() {
             Ok(())
@@ -201,9 +209,33 @@ impl<R> Input for R
 where
     R: Read + ?Sized,
 {
+    /// Bytes read by the standard [`Read`] implementation.
     type Item = u8;
 
     /// Reads bytes from a standard [`Read`] value into an indexed range.
+    ///
+    /// # Parameters
+    ///
+    /// * `output` - Destination storage.
+    /// * `index` - Start index inside `output`.
+    /// * `count` - Maximum number of bytes to read.
+    ///
+    /// # Returns
+    ///
+    /// The number of bytes read into the requested range.
+    ///
+    /// # Errors
+    ///
+    /// Returns the error reported by [`Read::read`].
+    ///
+    /// # Panics
+    ///
+    /// Panics in debug builds if the requested output range does not fit.
+    ///
+    /// # Safety
+    ///
+    /// The caller must guarantee that `index..index + count` is a valid range
+    /// inside `output` and that the addition does not overflow.
     #[inline(always)]
     unsafe fn read_unchecked(
         &mut self,
@@ -222,7 +254,20 @@ where
         Read::read(self, target)
     }
 
-    /// Reads items into the full output slice.
+    /// Reads bytes into the full output slice.
+    ///
+    /// # Parameters
+    ///
+    /// * `output` - Destination storage.
+    ///
+    /// # Returns
+    ///
+    /// The number of bytes read into `output`.
+    ///
+    /// # Errors
+    ///
+    /// Returns the error reported by [`Read::read`], or
+    /// [`ErrorKind::InvalidData`] if the reader reports an impossible count.
     #[inline(always)]
     fn read(&mut self, output: &mut [Self::Item]) -> Result<usize> {
         let read = Read::read(self, output)?;
@@ -238,11 +283,15 @@ where
 /// * `read` - Item count reported by the input.
 /// * `requested` - Maximum item count requested from the input.
 ///
+/// # Returns
+///
+/// `Ok(())` when `read <= requested`.
+///
 /// # Errors
 ///
 /// Returns [`ErrorKind::InvalidData`] when the input reports more items than
 /// the destination range could hold.
-#[inline(always)]
+#[inline]
 pub fn validate_read_count(read: usize, requested: usize) -> Result<()> {
     if read > requested {
         return Err(Error::new(

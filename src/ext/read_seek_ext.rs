@@ -67,6 +67,17 @@ pub trait ReadSeekExt: Read + Seek {
 }
 
 /// Implements a position-preserving read through a type-erased stream.
+///
+/// # Parameters
+/// - `reader`: Stream to read and restore.
+/// - `buffer`: Destination buffer.
+///
+/// # Returns
+/// The number of bytes written into `buffer`.
+///
+/// # Errors
+/// Returns an error when reading, querying, or restoring the stream position
+/// fails.
 fn peek_exact_or_eof_impl(
     reader: &mut dyn ReadSeek,
     buffer: &mut [u8],
@@ -82,6 +93,18 @@ fn peek_exact_or_eof_impl(
 }
 
 /// Implements an offset read through a type-erased stream.
+///
+/// # Parameters
+/// - `reader`: Stream to seek, read, and restore.
+/// - `offset`: Absolute byte offset to read from.
+/// - `buffer`: Destination buffer.
+///
+/// # Returns
+/// The number of bytes written into `buffer`.
+///
+/// # Errors
+/// Returns an error when querying, changing, or restoring the stream position,
+/// or when reading fails.
 fn read_exact_or_eof_at_impl(
     reader: &mut dyn ReadSeek,
     offset: u64,
@@ -104,13 +127,36 @@ impl<T> ReadSeekExt for T
 where
     T: Read + Seek + ?Sized,
 {
-    #[inline]
+    /// Reads from the current position and restores it afterward.
+    ///
+    /// # Parameters
+    /// - `buffer`: Destination buffer.
+    ///
+    /// # Returns
+    /// The number of bytes written into `buffer`.
+    ///
+    /// # Errors
+    /// Returns an error when reading, querying, or restoring the stream
+    /// position fails.
+    #[inline(always)]
     fn peek_exact_or_eof(&mut self, buffer: &mut [u8]) -> Result<usize> {
         let mut reader = self;
         peek_exact_or_eof_impl(&mut reader, buffer)
     }
 
-    #[inline]
+    /// Reads from an absolute offset and restores the original position.
+    ///
+    /// # Parameters
+    /// - `offset`: Absolute byte offset to read from.
+    /// - `buffer`: Destination buffer.
+    ///
+    /// # Returns
+    /// The number of bytes written into `buffer`.
+    ///
+    /// # Errors
+    /// Returns an error when querying, changing, or restoring the stream
+    /// position, or when reading fails.
+    #[inline(always)]
     fn read_exact_or_eof_at(
         &mut self,
         offset: u64,

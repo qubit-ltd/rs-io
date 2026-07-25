@@ -29,14 +29,23 @@ use crate::AsyncOutput;
 ///
 /// [`Future::poll`] panics when called again after this future has returned
 /// [`Poll::Ready`].
+///
+/// # Type Parameters
+///
+/// - `'a`: Shared lifetime of the output borrow and source slice.
+/// - `O`: Asynchronous output type.
 #[must_use = "futures do nothing unless polled"]
 pub struct WriteFullyFuture<'a, O>
 where
     O: AsyncOutput + ?Sized,
 {
+    /// Output being written.
     output: Pin<&'a mut O>,
+    /// Source whose items must all be written.
     input: &'a [O::Item],
+    /// Number of items written so far.
     written: usize,
+    /// Whether the write operation has completed.
     completed: bool,
 }
 
@@ -48,12 +57,12 @@ where
     ///
     /// # Parameters
     ///
-    /// * `output` - Pinned asynchronous output.
-    /// * `input` - Source storage.
+    /// - `output`: Pinned asynchronous output.
+    /// - `input`: Source storage.
     ///
     /// # Returns
     ///
-    /// A future that resolves after every item has been accepted.
+    /// Returns a future that resolves after every item has been accepted.
     #[inline(always)]
     pub const fn new(output: Pin<&'a mut O>, input: &'a [O::Item]) -> Self {
         Self {
@@ -65,6 +74,10 @@ where
     }
 
     /// Returns the number of items written so far.
+    ///
+    /// # Returns
+    ///
+    /// Returns the progress retained across polls.
     #[inline(always)]
     #[must_use]
     pub const fn items_written(&self) -> usize {
@@ -76,8 +89,28 @@ impl<O> Future for WriteFullyFuture<'_, O>
 where
     O: AsyncOutput + ?Sized,
 {
+    /// Result produced when the write-fully operation becomes ready.
     type Output = Result<()>;
 
+    /// Polls the write-fully operation.
+    ///
+    /// # Parameters
+    ///
+    /// - `cx`: Task context used to register a wake-up.
+    ///
+    /// # Returns
+    ///
+    /// Returns [`Poll::Pending`] while more output capacity is needed, or
+    /// [`Poll::Ready`] after all items are written or an error occurs.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ErrorKind::WriteZero`] if the output accepts no item before
+    /// completion. Other errors are propagated from the output.
+    ///
+    /// # Panics
+    ///
+    /// Panics when polled after returning [`Poll::Ready`].
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
         assert!(!this.completed, "WriteFullyFuture polled after completion");

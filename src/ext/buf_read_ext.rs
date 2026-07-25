@@ -41,8 +41,9 @@ pub trait BufReadExt: BufRead {
     ///
     /// # Errors
     /// Returns [`ErrorKind::InvalidData`] when more than `max_len` bytes are
-    /// required before reaching `delimiter` or EOF. Returns the first I/O error
-    /// reported by the underlying reader.
+    /// required before reaching `delimiter` or EOF. Returns
+    /// [`ErrorKind::OutOfMemory`] when the result vector cannot grow. Returns
+    /// the first I/O error reported by the underlying reader.
     fn read_until_limited(
         &mut self,
         delimiter: u8,
@@ -66,8 +67,9 @@ pub trait BufReadExt: BufRead {
     ///
     /// # Errors
     /// Returns [`ErrorKind::InvalidData`] when more than `max_len` bytes are
-    /// required before reaching `delimiter` or EOF. Returns the first I/O error
-    /// reported by the underlying reader.
+    /// required before reaching `delimiter` or EOF. Returns
+    /// [`ErrorKind::OutOfMemory`] when `output` cannot grow. Returns the first
+    /// I/O error reported by the underlying reader.
     fn read_until_limited_into(
         &mut self,
         delimiter: u8,
@@ -89,8 +91,9 @@ pub trait BufReadExt: BufRead {
     ///
     /// # Errors
     /// Returns [`ErrorKind::InvalidData`] when the line exceeds `max_len` or is
-    /// not valid UTF-8. Returns the first I/O error reported by the underlying
-    /// reader.
+    /// not valid UTF-8. Returns [`ErrorKind::OutOfMemory`] when the result
+    /// buffers cannot grow. Returns the first I/O error reported by the
+    /// underlying reader.
     fn read_line_limited(&mut self, max_len: usize) -> Result<String>;
 
     /// Reads one UTF-8 line into `output` while enforcing `max_len`.
@@ -109,8 +112,9 @@ pub trait BufReadExt: BufRead {
     ///
     /// # Errors
     /// Returns [`ErrorKind::InvalidData`] when the line exceeds `max_len` or is
-    /// not valid UTF-8. Returns the first I/O error reported by the underlying
-    /// reader.
+    /// not valid UTF-8. Returns [`ErrorKind::OutOfMemory`] when the temporary
+    /// byte buffer or `output` cannot grow. Returns the first I/O error
+    /// reported by the underlying reader.
     fn read_line_limited_into(
         &mut self,
         output: &mut String,
@@ -145,6 +149,21 @@ impl<T> BufReadExt for T
 where
     T: BufRead + ?Sized,
 {
+    /// Reads a bounded delimiter-terminated byte vector.
+    ///
+    /// # Parameters
+    ///
+    /// - `delimiter`: Delimiter byte to search for.
+    /// - `max_len`: Maximum accepted byte count.
+    ///
+    /// # Returns
+    ///
+    /// Returns bytes through the delimiter or EOF.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ErrorKind::InvalidData`] for oversized input, the first reader
+    /// error, or [`ErrorKind::OutOfMemory`] when the result vector cannot grow.
     #[inline]
     fn read_until_limited(
         &mut self,
@@ -163,7 +182,24 @@ where
         Ok(output)
     }
 
-    #[inline]
+    /// Appends a bounded delimiter-terminated byte sequence.
+    ///
+    /// # Parameters
+    ///
+    /// - `delimiter`: Delimiter byte to search for.
+    /// - `output`: Destination vector.
+    /// - `max_len`: Maximum accepted byte count.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of appended bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ErrorKind::InvalidData`] for oversized input, the first reader
+    /// error, or [`ErrorKind::OutOfMemory`] when `output` cannot grow. `output`
+    /// is restored on failure.
+    #[inline(always)]
     fn read_until_limited_into(
         &mut self,
         delimiter: u8,
@@ -173,6 +209,21 @@ where
         read_ext_impl::read_until_limited_into(self, delimiter, output, max_len)
     }
 
+    /// Reads a bounded UTF-8 line.
+    ///
+    /// # Parameters
+    ///
+    /// - `max_len`: Maximum accepted line length in bytes.
+    ///
+    /// # Returns
+    ///
+    /// Returns the decoded line, including a trailing newline when present.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ErrorKind::InvalidData`] for oversized or invalid UTF-8 input,
+    /// the first reader error, or [`ErrorKind::OutOfMemory`] when the result
+    /// buffers cannot grow.
     #[inline]
     fn read_line_limited(&mut self, max_len: usize) -> Result<String> {
         let mut output = String::new();
@@ -180,6 +231,22 @@ where
         Ok(output)
     }
 
+    /// Appends a bounded UTF-8 line.
+    ///
+    /// # Parameters
+    ///
+    /// - `output`: Destination string.
+    /// - `max_len`: Maximum accepted line length in bytes.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of appended bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ErrorKind::InvalidData`] for oversized or invalid UTF-8 input,
+    /// the first reader error, or [`ErrorKind::OutOfMemory`] when the temporary
+    /// byte buffer or `output` cannot grow. `output` is restored on failure.
     fn read_line_limited_into(
         &mut self,
         output: &mut String,
@@ -209,6 +276,21 @@ where
         result
     }
 
+    /// Discards a bounded delimiter-terminated sequence.
+    ///
+    /// # Parameters
+    ///
+    /// - `delimiter`: Delimiter byte to search for.
+    /// - `max_len`: Maximum number of bytes to discard.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of discarded bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ErrorKind::InvalidData`] if reaching the delimiter or EOF
+    /// requires more than `max_len` bytes, or the first reader error.
     fn discard_until_limited(
         &mut self,
         delimiter: u8,

@@ -23,16 +23,27 @@ use crate::{
 /// This enum is returned by [`BufferedOutput::ensure`]. It keeps an output that
 /// already buffers items as-is, and wraps an unbuffered output in
 /// [`BufferedOutput`]. Operations delegate to the selected branch.
+///
+/// # Type Parameters
+///
+/// - `O`: Output type that may require buffering.
+#[must_use]
 pub enum EnsuredBufferedOutput<O>
 where
     O: Output,
     O::Item: Copy + Default,
 {
     /// The original output already reported itself as buffered.
-    AlreadyBuffered(O),
+    AlreadyBuffered(
+        /// Original buffered output.
+        O,
+    ),
 
     /// The original output was wrapped in [`BufferedOutput`].
-    Buffered(BufferedOutput<O>),
+    Buffered(
+        /// Buffered wrapper around the original output.
+        BufferedOutput<O>,
+    ),
 }
 
 impl<O> Output for EnsuredBufferedOutput<O>
@@ -40,15 +51,38 @@ where
     O: Output,
     O::Item: Copy + Default,
 {
+    /// Item type accepted by the selected output.
     type Item = O::Item;
 
     /// Reports that this output is buffered.
+    ///
+    /// # Returns
+    ///
+    /// Always returns `true`.
     #[inline(always)]
     fn is_buffered(&self) -> bool {
         true
     }
 
     /// Writes items through the selected output branch.
+    ///
+    /// # Parameters
+    ///
+    /// - `input`: Source item slice.
+    /// - `index`: Starting source index.
+    /// - `count`: Maximum number of items to write.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of items written.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error reported by the selected output.
+    ///
+    /// # Safety
+    ///
+    /// The range `index..index + count` must be valid for `input`.
     #[inline(always)]
     unsafe fn write_unchecked(
         &mut self,
@@ -69,6 +103,18 @@ where
     }
 
     /// Writes items from the full input slice.
+    ///
+    /// # Parameters
+    ///
+    /// - `input`: Source item slice.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of items written.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error reported by the selected output.
     #[inline(always)]
     fn write(&mut self, input: &[Self::Item]) -> Result<usize> {
         match self {
@@ -78,6 +124,25 @@ where
     }
 
     /// Writes all items from an indexed input range.
+    ///
+    /// # Parameters
+    ///
+    /// - `input`: Source item slice.
+    /// - `index`: Starting source index.
+    /// - `count`: Number of items to write.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` after every requested item is written.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error reported by the selected output, including premature
+    /// write-zero failures.
+    ///
+    /// # Safety
+    ///
+    /// The range `index..index + count` must be valid for `input`.
     #[inline(always)]
     unsafe fn write_fully_unchecked(
         &mut self,
@@ -98,6 +163,19 @@ where
     }
 
     /// Writes all items from the full input slice.
+    ///
+    /// # Parameters
+    ///
+    /// - `input`: Source item slice.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` after every item is written.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error reported by the selected output, including premature
+    /// write-zero failures.
     #[inline(always)]
     fn write_fully(&mut self, input: &[Self::Item]) -> Result<()> {
         match self {
@@ -107,6 +185,14 @@ where
     }
 
     /// Flushes pending items through the selected output branch.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` after the selected output is flushed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error reported while flushing the selected output.
     #[inline(always)]
     fn flush(&mut self) -> Result<()> {
         match self {
@@ -121,9 +207,22 @@ where
     O: SeekableOutput,
     <O as Output>::Item: Copy + Default,
 {
+    /// Item unit used for seek offsets.
     type Unit = <O as Output>::Item;
 
     /// Seeks in item offsets through the selected output branch.
+    ///
+    /// # Parameters
+    ///
+    /// - `position`: Target item offset.
+    ///
+    /// # Returns
+    ///
+    /// Returns the resulting absolute item position.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error reported by the selected output.
     #[inline(always)]
     fn seek_to(&mut self, position: SeekFrom) -> Result<u64> {
         match self {
