@@ -193,7 +193,7 @@ where
 }
 
 #[test]
-fn async_buffered_input_preserves_generic_items_across_pending_refills()
+fn test_async_buffered_input_preserves_generic_items_across_pending_refills()
 -> io::Result<()> {
     let inner = ScriptedInput::new([
         ReadStep::Pending,
@@ -217,7 +217,8 @@ fn async_buffered_input_preserves_generic_items_across_pending_refills()
 }
 
 #[test]
-fn async_buffered_output_retains_items_until_async_flush() -> io::Result<()> {
+fn test_async_buffered_output_retains_items_until_async_flush() -> io::Result<()>
+{
     let inner = ScriptedOutput::new(
         [
             WriteStep::Pending,
@@ -240,7 +241,8 @@ fn async_buffered_output_retains_items_until_async_flush() -> io::Result<()> {
 }
 
 #[test]
-fn async_buffered_input_exposes_owned_parts_and_accessors() -> io::Result<()> {
+fn test_async_buffered_input_exposes_owned_parts_and_accessors()
+-> io::Result<()> {
     let inner = ScriptedInput::new([ReadStep::Data(vec![1, 2])]);
     let mut input = AsyncBufferedInput::new(inner);
     assert!(input.capacity() > 1);
@@ -268,7 +270,8 @@ fn async_buffered_input_exposes_owned_parts_and_accessors() -> io::Result<()> {
 }
 
 #[test]
-fn async_buffered_input_handles_empty_direct_pending_eof_and_error_reads() {
+fn test_async_buffered_input_handles_empty_direct_pending_eof_and_error_reads()
+{
     let mut cx = Context::from_waker(Waker::noop());
     let mut empty = AsyncBufferedInput::with_capacity(
         ScriptedInput::new([ReadStep::Data(vec![1])]),
@@ -341,7 +344,7 @@ fn async_buffered_input_handles_empty_direct_pending_eof_and_error_reads() {
 }
 
 #[test]
-fn async_buffered_output_exposes_pending_parts_and_direct_writes()
+fn test_async_buffered_output_exposes_pending_parts_and_direct_writes()
 -> io::Result<()> {
     let inner = ScriptedOutput::new([], []);
     let mut output = AsyncBufferedOutput::new(inner);
@@ -398,8 +401,8 @@ fn test_async_buffered_output_buffers_write_that_exactly_fills_remaining_capacit
 }
 
 #[test]
-fn async_buffered_output_handles_pending_and_partial_drains() -> io::Result<()>
-{
+fn test_async_buffered_output_handles_pending_and_partial_drains()
+-> io::Result<()> {
     let inner = ScriptedOutput::new(
         [
             WriteStep::Pending,
@@ -436,7 +439,8 @@ fn async_buffered_output_handles_pending_and_partial_drains() -> io::Result<()>
 }
 
 #[test]
-fn async_buffered_output_reports_drain_and_flush_failures() -> io::Result<()> {
+fn test_async_buffered_output_reports_drain_and_flush_failures()
+-> io::Result<()> {
     let mut zero = AsyncBufferedOutput::with_capacity(
         ScriptedOutput::new([WriteStep::Zero], []),
         2,
@@ -476,7 +480,7 @@ fn async_buffered_output_reports_drain_and_flush_failures() -> io::Result<()> {
 }
 
 #[test]
-fn async_buffered_output_rejects_forbidden_flush_and_close_error_kinds() {
+fn test_async_buffered_output_rejects_forbidden_flush_and_close_error_kinds() {
     for kind in [ErrorKind::WouldBlock, ErrorKind::Interrupted] {
         let mut flushing = AsyncBufferedOutput::new(ScriptedOutput::new(
             [],
@@ -502,7 +506,7 @@ fn async_buffered_output_rejects_forbidden_flush_and_close_error_kinds() {
 }
 
 #[test]
-fn async_buffered_output_drains_before_closing_inner() -> io::Result<()> {
+fn test_async_buffered_output_drains_before_closing_inner() -> io::Result<()> {
     let inner = ScriptedOutput::new([WriteStep::Accept(2)], []);
     let mut output = AsyncBufferedOutput::with_capacity(inner, 3);
     assert_eq!(2, complete(output.write_async(&[1, 2]))?);

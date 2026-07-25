@@ -370,8 +370,8 @@ where
 }
 
 #[test]
-fn async_input_wrappers_limit_count_and_hash_successful_reads() -> io::Result<()>
-{
+fn test_async_input_wrappers_limit_count_and_hash_successful_reads()
+-> io::Result<()> {
     let input = ByteInput {
         bytes: b"abcdef".to_vec(),
         position: 0,
@@ -394,7 +394,7 @@ fn async_input_wrappers_limit_count_and_hash_successful_reads() -> io::Result<()
 }
 
 #[test]
-fn async_output_wrappers_limit_count_and_hash_successful_writes()
+fn test_async_output_wrappers_limit_count_and_hash_successful_writes()
 -> io::Result<()> {
     let bytes = Arc::new(Mutex::new(Vec::new()));
     let output = ByteOutput {
@@ -422,7 +422,7 @@ fn async_output_wrappers_limit_count_and_hash_successful_writes()
 }
 
 #[test]
-fn async_counting_input_counts_only_successful_reads_and_exposes_inner() {
+fn test_async_counting_input_counts_only_successful_reads_and_exposes_inner() {
     let inner = ScriptedInput::new(
         [
             ReadStep::Pending,
@@ -465,7 +465,8 @@ fn async_counting_input_counts_only_successful_reads_and_exposes_inner() {
 }
 
 #[test]
-fn async_counting_output_counts_only_successful_writes_and_delegates_flush() {
+fn test_async_counting_output_counts_only_successful_writes_and_delegates_flush()
+ {
     let inner = ScriptedOutput::new(
         [
             WriteStep::Pending,
@@ -515,7 +516,8 @@ fn async_counting_output_counts_only_successful_writes_and_delegates_flush() {
 }
 
 #[test]
-fn async_limit_input_bounds_reads_and_preserves_state_on_pending_or_error() {
+fn test_async_limit_input_bounds_reads_and_preserves_state_on_pending_or_error()
+{
     let inner = ScriptedInput::new(
         [
             ReadStep::Pending,
@@ -571,7 +573,8 @@ fn async_limit_input_bounds_reads_and_preserves_state_on_pending_or_error() {
 }
 
 #[test]
-fn async_limit_output_bounds_writes_and_preserves_state_on_pending_or_error() {
+fn test_async_limit_output_bounds_writes_and_preserves_state_on_pending_or_error()
+ {
     let inner = ScriptedOutput::new(
         [
             WriteStep::Pending,
@@ -634,7 +637,7 @@ fn async_limit_output_bounds_writes_and_preserves_state_on_pending_or_error() {
 }
 
 #[test]
-fn async_checksum_input_hashes_only_successful_reads_and_exposes_parts() {
+fn test_async_checksum_input_hashes_only_successful_reads_and_exposes_parts() {
     let inner = ScriptedInput::new(
         [
             ReadStep::Pending,
@@ -683,7 +686,8 @@ fn async_checksum_input_hashes_only_successful_reads_and_exposes_parts() {
 }
 
 #[test]
-fn async_checksum_output_hashes_only_successful_writes_and_exposes_parts() {
+fn test_async_checksum_output_hashes_only_successful_writes_and_exposes_parts()
+{
     let inner = ScriptedOutput::new(
         [
             WriteStep::Pending,
