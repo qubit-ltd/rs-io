@@ -23,9 +23,9 @@ paths, commit, abort, or persistence semantics.
 | Close | Output ownership / drop | `AsyncClose` |
 | Convenience | `read_fully`, `write_fully` | Defaults on `AsyncInput`, `AsyncOutput` |
 | Buffering | `BufferedInput`, `BufferedOutput` | `AsyncBufferedInput`, `AsyncBufferedOutput` |
-| Limits | `LimitReader`, `LimitWriter` for std streams | `AsyncLimitInput`, `AsyncLimitOutput` |
-| Counters | `CountingReader`, `CountingWriter` | `AsyncCountingInput`, `AsyncCountingOutput` |
-| Checksums | `ChecksumReader`, `ChecksumWriter` | `AsyncChecksumInput`, `AsyncChecksumOutput` |
+| Limits | `LimitInput`, `LimitOutput` | `AsyncLimitInput`, `AsyncLimitOutput` |
+| Counters | `CountingInput`, `CountingOutput` | `AsyncCountingInput`, `AsyncCountingOutput` |
+| Checksums | `ChecksumInput`, `ChecksumOutput` | `AsyncChecksumInput`, `AsyncChecksumOutput` |
 
 `AsyncInput` and `AsyncOutput` use `Pin`, `Context`, and `Poll`. They do not
 depend on Tokio, `futures-io`, or an executor. Multi-poll operations are named

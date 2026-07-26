@@ -22,9 +22,9 @@ Qubit IO 提供运行时中立的同步与异步 item stream，是 Qubit 文件�
 | 关闭 | output 所有权 / drop | `AsyncClose` |
 | 便利操作 | `read_fully`、`write_fully` | `AsyncInput`、`AsyncOutput` 的默认方法 |
 | 缓冲 | `BufferedInput`、`BufferedOutput` | `AsyncBufferedInput`、`AsyncBufferedOutput` |
-| 限量 | std stream 的 `LimitReader`、`LimitWriter` | `AsyncLimitInput`、`AsyncLimitOutput` |
-| 计数 | `CountingReader`、`CountingWriter` | `AsyncCountingInput`、`AsyncCountingOutput` |
-| 校验 | `ChecksumReader`、`ChecksumWriter` | `AsyncChecksumInput`、`AsyncChecksumOutput` |
+| 限量 | `LimitInput`、`LimitOutput` | `AsyncLimitInput`、`AsyncLimitOutput` |
+| 计数 | `CountingInput`、`CountingOutput` | `AsyncCountingInput`、`AsyncCountingOutput` |
+| 校验 | `ChecksumInput`、`ChecksumOutput` | `AsyncChecksumInput`、`AsyncChecksumOutput` |
 
 `AsyncInput` 和 `AsyncOutput` 只使用 `Pin`、`Context` 与 `Poll`，不依赖
 Tokio、`futures-io` 或任何 executor。跨多次 `Pending` 的操作由
