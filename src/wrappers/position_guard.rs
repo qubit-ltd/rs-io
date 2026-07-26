@@ -7,9 +7,10 @@
 // =============================================================================
 use std::io::{
     Result,
-    Seek,
     SeekFrom,
 };
+
+use crate::Seekable;
 
 /// Guard that restores a seekable stream to its original position.
 ///
@@ -50,7 +51,7 @@ use std::io::{
 #[must_use = "dropping an unused guard restores the captured position immediately"]
 pub struct PositionGuard<'a, S>
 where
-    S: Seek + ?Sized,
+    S: Seekable + ?Sized,
 {
     /// Mutable stream borrow retained by the guard.
     stream: &'a mut S,
@@ -62,7 +63,7 @@ where
 
 impl<'a, S> PositionGuard<'a, S>
 where
-    S: Seek + ?Sized,
+    S: Seekable + ?Sized,
 {
     /// Captures the current position of `stream`.
     ///
@@ -73,11 +74,11 @@ where
     /// A guard that will restore the captured position on drop.
     ///
     /// # Errors
-    /// Returns the error reported by [`Seek::stream_position`] when the current
+    /// Returns the error reported by [`Seekable::seek_to`] when the current
     /// position cannot be read.
     #[inline]
     pub fn new(stream: &'a mut S) -> Result<Self> {
-        let position = stream.stream_position()?;
+        let position = stream.seek_to(SeekFrom::Current(0))?;
         Ok(Self {
             stream,
             position,
@@ -114,13 +115,15 @@ where
     /// Returns `Ok(())` after restoring the captured position.
     ///
     /// # Errors
-    /// Returns the error reported by [`Seek::seek`] when the stream cannot seek
-    /// back to the captured position.
+    /// Returns the error reported by [`Seekable::seek_to`] when the stream
+    /// cannot seek back to the captured position.
     #[inline(always)]
     pub fn restore(&mut self) -> Result<()> {
-        self.stream.seek(SeekFrom::Start(self.position)).map(|_| {
-            self.done = true;
-        })
+        self.stream
+            .seek_to(SeekFrom::Start(self.position))
+            .map(|_| {
+                self.done = true;
+            })
     }
 
     /// Disables drop-time restoration without moving the stream.
@@ -135,14 +138,14 @@ where
 
 impl<S> Drop for PositionGuard<'_, S>
 where
-    S: Seek + ?Sized,
+    S: Seekable + ?Sized,
 {
     /// Attempts best-effort restoration when it remains enabled.
     ///
     /// Any seek error is ignored because destructors cannot report it.
     fn drop(&mut self) {
         if !self.done {
-            drop(self.stream.seek(SeekFrom::Start(self.position)));
+            drop(self.stream.seek_to(SeekFrom::Start(self.position)));
         }
     }
 }
