@@ -11,7 +11,11 @@
 use libfuzzer_sys::fuzz_target;
 use qubit_io::UncheckedSlice;
 
+/// Bounds allocations even when the target is invoked without CI flags.
+const MAX_FUZZ_INPUT_LEN: usize = 4096;
+
 fuzz_target!(|data: &[u8]| {
+    let data = &data[..data.len().min(MAX_FUZZ_INPUT_LEN)];
     fuzz_ranges(data);
     fuzz_elements(data);
     fuzz_copies(data);
