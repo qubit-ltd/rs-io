@@ -32,7 +32,11 @@ use qubit_io::{
     AsyncOutput,
 };
 
+/// Keeps allocations and poll loops bounded outside the repository CI wrapper.
+const MAX_FUZZ_INPUT_LEN: usize = 4096;
+
 fuzz_target!(|data: &[u8]| {
+    let data = &data[..data.len().min(MAX_FUZZ_INPUT_LEN)];
     fuzz_buffered_input(data);
     fuzz_buffered_output(data);
     fuzz_forbidden_errors(data);

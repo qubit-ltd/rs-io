@@ -11,7 +11,11 @@
 use libfuzzer_sys::fuzz_target;
 use qubit_io::Buffer;
 
+/// Bounds modeled operations even when the target is invoked without CI flags.
+const MAX_FUZZ_INPUT_LEN: usize = 4096;
+
 fuzz_target!(|data: &[u8]| {
+    let data = &data[..data.len().min(MAX_FUZZ_INPUT_LEN)];
     let capacity =
         usize::from(data.first().copied().unwrap_or_default() % 32) + 1;
     let mut buffer = Buffer::<u8>::with_capacity(capacity);
