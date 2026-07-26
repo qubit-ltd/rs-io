@@ -144,3 +144,9 @@ close 不会用 flush 冒充：`TokioOutput` 委托给 `poll_shutdown`，
 
 codec 状态应独立于同步或异步驱动。同一套 codec 应分别由 `Input`/`Output`
 或 `AsyncInput`/`AsyncOutput` 驱动，而不是复制两套算法。
+
+## 8. 从 0.13 迁移
+
+0.14 将同步 `Reader`/`Writer` wrapper 改名为 `Input`/`Output` wrapper，
+并相应修改了它们实现的 trait。完整的类型映射、方法变化和 tee 失败语义请参阅
+[0.14 迁移指南](migration-0.14.zh_CN.md)。
