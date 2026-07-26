@@ -783,6 +783,42 @@ impl Seek for TrackingSeekReader {
     }
 }
 
+#[cfg(target_pointer_width = "64")]
+struct ZstSeekReader {
+    seek_calls: usize,
+}
+
+#[cfg(target_pointer_width = "64")]
+impl ZstSeekReader {
+    fn new() -> Self {
+        Self { seek_calls: 0 }
+    }
+}
+
+#[cfg(target_pointer_width = "64")]
+impl Input for ZstSeekReader {
+    type Item = ();
+
+    unsafe fn read_unchecked(
+        &mut self,
+        _output: &mut [()],
+        _index: usize,
+        count: usize,
+    ) -> std::io::Result<usize> {
+        Ok(count)
+    }
+}
+
+#[cfg(target_pointer_width = "64")]
+impl Seekable for ZstSeekReader {
+    type Unit = ();
+
+    fn seek_to(&mut self, _position: SeekFrom) -> std::io::Result<u64> {
+        self.seek_calls += 1;
+        Ok(u64::MAX)
+    }
+}
+
 struct InconsistentPositionReader {
     data: Vec<u8>,
     position: u64,
@@ -1511,6 +1547,23 @@ fn test_seek_current_large_offset_outside_buffer_delegates_to_inner_seek() {
     );
     assert_eq!(1, input.inner().seek_calls);
     assert_eq!(0, input.unread_len());
+}
+
+#[cfg(target_pointer_width = "64")]
+#[test]
+fn test_seek_current_rejects_unread_zst_count_exceeding_i64() {
+    let reader = ZstSeekReader::new();
+    let mut input = BufferedInput::with_capacity(reader, usize::MAX);
+    assert!(input.fill_more().expect("ZST refill should succeed"));
+    assert_eq!(usize::MAX, input.unread_len());
+
+    let error = input.seek_to(SeekFrom::Current(-1)).expect_err(
+        "relative seek should reject an unread count exceeding i64",
+    );
+
+    assert_eq!(ErrorKind::InvalidInput, error.kind());
+    assert_eq!(0, input.inner().seek_calls);
+    assert_eq!(usize::MAX, input.unread_len());
 }
 
 #[test]
