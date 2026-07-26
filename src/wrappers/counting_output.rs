@@ -2,6 +2,8 @@
 //    Copyright (c) 2026 Haixing Hu.
 //
 //    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
 use std::io::{
@@ -15,6 +17,12 @@ use crate::{
 };
 
 /// Output wrapper that counts successfully accepted items.
+///
+/// The counter saturates at [`u64::MAX`].
+///
+/// # Type Parameters
+///
+/// * `O` - Wrapped output type.
 #[must_use]
 #[derive(Debug)]
 pub struct CountingOutput<O> {
@@ -25,7 +33,7 @@ pub struct CountingOutput<O> {
 }
 
 impl<O> CountingOutput<O> {
-    /// Creates a counting output around `inner`.
+    /// Creates a counting output around `inner` with a zero item count.
     #[inline(always)]
     pub const fn new(inner: O) -> Self {
         Self {
@@ -34,7 +42,8 @@ impl<O> CountingOutput<O> {
         }
     }
 
-    /// Returns the number of items successfully accepted through this wrapper.
+    /// Returns the saturating number of items successfully accepted through
+    /// this wrapper.
     #[inline(always)]
     #[must_use]
     pub const fn items_written(&self) -> u64 {
@@ -92,9 +101,15 @@ where
 
     /// Writes items and counts only a successful, validated result.
     ///
+    /// # Errors
+    ///
+    /// Returns an error from the wrapped output, including
+    /// [`io::ErrorKind::InvalidData`] when it reports an impossible count.
+    ///
     /// # Safety
     ///
     /// `index..index + count` must be a valid range in `input`.
+    #[inline(always)]
     unsafe fn write_unchecked(
         &mut self,
         input: &[Self::Item],

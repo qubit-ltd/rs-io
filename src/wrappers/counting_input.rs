@@ -2,6 +2,8 @@
 //    Copyright (c) 2026 Haixing Hu.
 //
 //    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
 use std::io::{
@@ -17,7 +19,11 @@ use crate::{
 /// Input wrapper that counts successfully returned items.
 ///
 /// Failed reads and invalid counts reported by the wrapped input do not change
-/// the counter.
+/// the counter. The counter saturates at [`u64::MAX`].
+///
+/// # Type Parameters
+///
+/// * `I` - Wrapped input type.
 #[must_use]
 #[derive(Debug)]
 pub struct CountingInput<I> {
@@ -28,7 +34,7 @@ pub struct CountingInput<I> {
 }
 
 impl<I> CountingInput<I> {
-    /// Creates a counting input around `inner`.
+    /// Creates a counting input around `inner` with a zero item count.
     #[inline(always)]
     pub const fn new(inner: I) -> Self {
         Self {
@@ -37,7 +43,8 @@ impl<I> CountingInput<I> {
         }
     }
 
-    /// Returns the number of items successfully returned through this wrapper.
+    /// Returns the saturating number of items successfully returned through
+    /// this wrapper.
     #[inline(always)]
     #[must_use]
     pub const fn items_read(&self) -> u64 {
@@ -95,9 +102,15 @@ where
 
     /// Reads items and counts only a successful, validated result.
     ///
+    /// # Errors
+    ///
+    /// Returns an error from the wrapped input, including
+    /// [`io::ErrorKind::InvalidData`] when it reports an impossible count.
+    ///
     /// # Safety
     ///
     /// `index..index + count` must be a valid range in `output`.
+    #[inline(always)]
     unsafe fn read_unchecked(
         &mut self,
         output: &mut [Self::Item],

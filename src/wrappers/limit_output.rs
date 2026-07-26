@@ -2,6 +2,8 @@
 //    Copyright (c) 2026 Haixing Hu.
 //
 //    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
 use std::io;
@@ -9,6 +11,10 @@ use std::io;
 use crate::Output;
 
 /// Output wrapper that accepts at most a fixed number of items.
+///
+/// # Type Parameters
+///
+/// * `O` - Wrapped output type.
 #[must_use]
 #[derive(Debug)]
 pub struct LimitOutput<O> {
@@ -43,6 +49,9 @@ impl<O> LimitOutput<O> {
     }
 
     /// Returns mutable access to the wrapped output.
+    ///
+    /// Writes made through the returned reference bypass the remaining-item
+    /// limit and do not change [`Self::remaining`].
     #[inline(always)]
     pub fn inner_mut(&mut self) -> &mut O {
         &mut self.inner
@@ -71,9 +80,16 @@ where
 
     /// Writes only the still-accepted prefix of the requested item range.
     ///
+    /// # Errors
+    ///
+    /// Returns an error from the wrapped output, including
+    /// [`io::ErrorKind::InvalidData`] when it reports an impossible count. The
+    /// remaining limit is unchanged when an error is returned.
+    ///
     /// # Safety
     ///
     /// `index..index + count` must be a valid range in `input`.
+    #[inline(always)]
     unsafe fn write_unchecked(
         &mut self,
         input: &[Self::Item],
