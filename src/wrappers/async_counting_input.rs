@@ -9,10 +9,7 @@
 use std::{
     io,
     pin::Pin,
-    task::{
-        Context,
-        Poll,
-    },
+    task::{Context, Poll},
 };
 
 use crate::AsyncInput;

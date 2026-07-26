@@ -6,10 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Error,
-    ErrorKind,
-};
+use std::io::{Error, ErrorKind};
 
 use super::internal::AsyncContractError;
 
@@ -28,10 +25,7 @@ pub(crate) fn validate_async_error(error: Error) -> Error {
     match error.kind() {
         ErrorKind::WouldBlock => Error::new(
             ErrorKind::InvalidData,
-            AsyncContractError::new(
-                "asynchronous I/O implementation returned WouldBlock",
-                error,
-            ),
+            AsyncContractError::new("asynchronous I/O implementation returned WouldBlock", error),
         ),
         ErrorKind::Interrupted => Error::new(
             ErrorKind::InvalidData,

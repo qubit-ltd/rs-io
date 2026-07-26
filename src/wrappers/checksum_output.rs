@@ -8,16 +8,10 @@
 
 use std::{
     hash::Hasher,
-    io::{
-        self,
-        SeekFrom,
-    },
+    io::{self, SeekFrom},
 };
 
-use crate::{
-    Output,
-    Seekable,
-};
+use crate::{Output, Seekable};
 
 /// Byte output wrapper that hashes successfully accepted bytes.
 ///

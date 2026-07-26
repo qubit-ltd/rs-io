@@ -9,24 +9,14 @@
 use std::future::Future;
 use std::io::ErrorKind;
 use std::pin::Pin;
-use std::task::{
-    Context,
-    Poll,
-    Waker,
-};
+use std::task::{Context, Poll, Waker};
 
-use super::support_tests::{
-    ForbiddenErrorOutput,
-    TestOutput,
-};
+use super::support_tests::{ForbiddenErrorOutput, TestOutput};
 use qubit_io::FlushFuture;
 
 #[test]
 fn test_flush_future_type_is_public() {
-    assert!(
-        std::any::type_name::<FlushFuture<'static, TestOutput>>()
-            .contains("FlushFuture")
-    );
+    assert!(std::any::type_name::<FlushFuture<'static, TestOutput>>().contains("FlushFuture"));
 }
 
 #[test]
