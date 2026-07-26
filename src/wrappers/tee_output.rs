@@ -2,6 +2,8 @@
 //    Copyright (c) 2026 Haixing Hu.
 //
 //    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
 use std::io::{
@@ -15,6 +17,14 @@ use crate::{
 };
 
 /// Output wrapper that mirrors successfully accepted items to a branch output.
+///
+/// Operations are ordered and not transactional. A branch write or seek
+/// failure can leave the primary output advanced while the branch is behind.
+///
+/// # Type Parameters
+///
+/// * `P` - Primary output type.
+/// * `B` - Branch output type receiving mirrored items.
 #[must_use]
 #[derive(Debug)]
 pub struct TeeOutput<P, B> {
@@ -39,6 +49,8 @@ impl<P, B> TeeOutput<P, B> {
     }
 
     /// Returns mutable access to the primary output.
+    ///
+    /// Direct writes, flushes, and seeks bypass the branch.
     #[inline(always)]
     pub fn inner_mut(&mut self) -> &mut P {
         &mut self.inner
@@ -52,6 +64,8 @@ impl<P, B> TeeOutput<P, B> {
     }
 
     /// Returns mutable access to the branch output.
+    ///
+    /// Direct operations can make the branch diverge from the primary output.
     #[inline(always)]
     pub fn branch_mut(&mut self) -> &mut B {
         &mut self.branch
@@ -81,9 +95,16 @@ where
 
     /// Writes to the primary output and mirrors its successful item prefix.
     ///
+    /// # Errors
+    ///
+    /// Returns a primary error before touching the branch. If mirroring fails,
+    /// returns the branch error after the primary has accepted the reported
+    /// prefix.
+    ///
     /// # Safety
     ///
     /// `index..index + count` must be valid in `input`.
+    #[inline(always)]
     unsafe fn write_unchecked(
         &mut self,
         input: &[Self::Item],
@@ -96,6 +117,12 @@ where
     }
 
     /// Flushes the primary output and then the branch output.
+    ///
+    /// # Errors
+    ///
+    /// Returns the primary flush error without flushing the branch, or returns
+    /// the branch flush error after the primary has flushed successfully.
+    #[inline(always)]
     fn flush(&mut self) -> io::Result<()> {
         self.inner.flush()?;
         self.branch.flush()
@@ -111,6 +138,12 @@ where
     type Unit = P::Unit;
 
     /// Seeks the primary output and then aligns the branch output.
+    ///
+    /// # Errors
+    ///
+    /// Returns a primary seek error without seeking the branch. If the branch
+    /// seek fails, the primary remains at its new position.
+    #[inline(always)]
     fn seek_to(&mut self, position: SeekFrom) -> io::Result<u64> {
         let position = self.inner.seek_to(position)?;
         self.branch.seek_to(SeekFrom::Start(position))?;

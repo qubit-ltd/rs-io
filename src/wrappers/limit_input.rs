@@ -2,6 +2,8 @@
 //    Copyright (c) 2026 Haixing Hu.
 //
 //    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
 use std::io;
@@ -9,6 +11,10 @@ use std::io;
 use crate::Input;
 
 /// Input wrapper that exposes at most a fixed number of items.
+///
+/// # Type Parameters
+///
+/// * `I` - Wrapped input type.
 #[must_use]
 #[derive(Debug)]
 pub struct LimitInput<I> {
@@ -43,6 +49,9 @@ impl<I> LimitInput<I> {
     }
 
     /// Returns mutable access to the wrapped input.
+    ///
+    /// Reads made through the returned reference bypass the remaining-item
+    /// limit and do not change [`Self::remaining`].
     #[inline(always)]
     pub fn inner_mut(&mut self) -> &mut I {
         &mut self.inner
@@ -71,9 +80,16 @@ where
 
     /// Reads only the still-exposed prefix of the requested item range.
     ///
+    /// # Errors
+    ///
+    /// Returns an error from the wrapped input, including
+    /// [`io::ErrorKind::InvalidData`] when it reports an impossible count. The
+    /// remaining limit is unchanged when an error is returned.
+    ///
     /// # Safety
     ///
     /// `index..index + count` must be a valid range in `output`.
+    #[inline(always)]
     unsafe fn read_unchecked(
         &mut self,
         output: &mut [Self::Item],

@@ -2,6 +2,8 @@
 //    Copyright (c) 2026 Haixing Hu.
 //
 //    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
 use std::io::{
@@ -17,6 +19,14 @@ use crate::{
 };
 
 /// Input wrapper that mirrors successfully returned items to a branch output.
+///
+/// A branch failure is not transactional: the source has already advanced and
+/// the caller's destination already contains the returned items.
+///
+/// # Type Parameters
+///
+/// * `I` - Source input type.
+/// * `B` - Branch output type receiving mirrored items.
 #[must_use]
 #[derive(Debug)]
 pub struct TeeInput<I, B> {
@@ -50,6 +60,8 @@ impl<I, B> TeeInput<I, B> {
     }
 
     /// Returns mutable access to the source input.
+    ///
+    /// Reads and seeks made through the returned reference bypass the branch.
     #[inline(always)]
     pub fn inner_mut(&mut self) -> &mut I {
         &mut self.inner
@@ -63,6 +75,8 @@ impl<I, B> TeeInput<I, B> {
     }
 
     /// Returns mutable access to the branch output.
+    ///
+    /// Direct writes can make branch content diverge from the source.
     #[inline(always)]
     pub fn branch_mut(&mut self) -> &mut B {
         &mut self.branch
@@ -92,9 +106,16 @@ where
 
     /// Reads from the source and mirrors the successful item prefix.
     ///
+    /// # Errors
+    ///
+    /// Returns a source error before touching the branch. If mirroring fails,
+    /// returns the branch error after the source has advanced and the
+    /// destination has been modified.
+    ///
     /// # Safety
     ///
     /// `index..index + count` must be valid in `output`.
+    #[inline(always)]
     unsafe fn read_unchecked(
         &mut self,
         output: &mut [Self::Item],

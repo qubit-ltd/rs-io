@@ -2,6 +2,8 @@
 //    Copyright (c) 2026 Haixing Hu.
 //
 //    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
 use std::{
@@ -18,6 +20,14 @@ use crate::{
 };
 
 /// Byte output wrapper that hashes successfully accepted bytes.
+///
+/// Seeking changes only the output position; it does not reset or otherwise
+/// modify the accumulated checksum.
+///
+/// # Type Parameters
+///
+/// * `O` - Wrapped byte output type.
+/// * `H` - Hasher updated with successfully accepted bytes.
 #[must_use]
 #[derive(Debug)]
 pub struct ChecksumOutput<O, H> {
@@ -52,6 +62,8 @@ where
     }
 
     /// Returns mutable access to the wrapped output.
+    ///
+    /// Writes made through the returned reference bypass the hasher.
     #[inline(always)]
     pub fn inner_mut(&mut self) -> &mut O {
         &mut self.inner
@@ -65,6 +77,9 @@ where
     }
 
     /// Returns mutable access to the wrapped hasher.
+    ///
+    /// Direct changes become part of the checksum state exposed by this
+    /// wrapper.
     #[inline(always)]
     pub fn hasher_mut(&mut self) -> &mut H {
         &mut self.hasher
@@ -94,9 +109,16 @@ where
 
     /// Writes bytes and hashes only the successful prefix.
     ///
+    /// # Errors
+    ///
+    /// Returns an error from the wrapped output, including
+    /// [`io::ErrorKind::InvalidData`] when it reports an impossible count. No
+    /// bytes are added to the hasher when an error is returned.
+    ///
     /// # Safety
     ///
     /// `index..index + count` must be valid in `input`.
+    #[inline(always)]
     unsafe fn write_unchecked(
         &mut self,
         input: &[u8],

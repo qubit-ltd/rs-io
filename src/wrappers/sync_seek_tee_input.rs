@@ -2,6 +2,8 @@
 //    Copyright (c) 2026 Haixing Hu.
 //
 //    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
 use std::io::{
@@ -16,6 +18,14 @@ use crate::{
 };
 
 /// Tee input whose branch position follows every source seek.
+///
+/// Operations are ordered and not transactional. A branch write or seek
+/// failure can leave the source advanced while the branch is behind.
+///
+/// # Type Parameters
+///
+/// * `I` - Source input type.
+/// * `B` - Seekable branch output receiving mirrored items.
 #[must_use]
 #[derive(Debug)]
 pub struct SyncSeekTeeInput<I, B> {
@@ -40,6 +50,8 @@ impl<I, B> SyncSeekTeeInput<I, B> {
     }
 
     /// Returns mutable access to the source input.
+    ///
+    /// Direct reads and seeks bypass branch synchronization.
     #[inline(always)]
     pub fn inner_mut(&mut self) -> &mut I {
         &mut self.inner
@@ -53,6 +65,8 @@ impl<I, B> SyncSeekTeeInput<I, B> {
     }
 
     /// Returns mutable access to the branch output.
+    ///
+    /// Direct operations can make the branch diverge from the source.
     #[inline(always)]
     pub fn branch_mut(&mut self) -> &mut B {
         &mut self.branch
@@ -82,9 +96,16 @@ where
 
     /// Reads from the source and mirrors the successful item prefix.
     ///
+    /// # Errors
+    ///
+    /// Returns a source error before touching the branch. If mirroring fails,
+    /// returns the branch error after the source has advanced and the
+    /// destination has been modified.
+    ///
     /// # Safety
     ///
     /// `index..index + count` must be valid in `output`.
+    #[inline(always)]
     unsafe fn read_unchecked(
         &mut self,
         output: &mut [Self::Item],
@@ -106,6 +127,12 @@ where
     type Unit = I::Unit;
 
     /// Seeks the source and then aligns the branch output.
+    ///
+    /// # Errors
+    ///
+    /// Returns a source seek error without seeking the branch. If the branch
+    /// seek fails, the source remains at its new position.
+    #[inline(always)]
     fn seek_to(&mut self, position: SeekFrom) -> io::Result<u64> {
         let position = self.inner.seek_to(position)?;
         self.branch.seek_to(SeekFrom::Start(position))?;
