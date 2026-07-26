@@ -9,10 +9,11 @@
 //!
 //! Run with `cargo bench --bench buffered`. The benchmark keeps fixture setup
 //! outside the measured closure and varies transfer widths to exercise both
-//! buffered copies and the large-transfer direct path.
+//! buffered copies, the large-transfer direct path, and standard-library
+//! buffered and unbuffered baselines.
 
 use std::hint::black_box;
-use std::io::Cursor;
+use std::io::{BufReader, BufWriter, Cursor, Read, Write};
 
 use criterion::{BatchSize, BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use qubit_io::{BufferedInput, BufferedOutput};
@@ -38,7 +39,7 @@ fn benchmark_buffered_input(criterion: &mut Criterion) {
 
     for width in TRANSFER_WIDTHS {
         group.bench_with_input(
-            BenchmarkId::from_parameter(width),
+            BenchmarkId::new("qubit", width),
             &width,
             |bencher, &width| {
                 bencher.iter_batched(
@@ -50,6 +51,54 @@ fn benchmark_buffered_input(criterion: &mut Criterion) {
                             let count = input
                                 .read(&mut output[..width])
                                 .expect("buffered input benchmark read");
+                            if count == 0 {
+                                break;
+                            }
+                            total += count;
+                        }
+                        black_box((total, output));
+                    },
+                    BatchSize::SmallInput,
+                );
+            },
+        );
+        group.bench_with_input(
+            BenchmarkId::new("std_bufreader", width),
+            &width,
+            |bencher, &width| {
+                bencher.iter_batched(
+                    || BufReader::with_capacity(BUFFER_CAPACITY, Cursor::new(fixture.clone())),
+                    |mut input| {
+                        let mut output = [0_u8; BUFFER_CAPACITY];
+                        let mut total = 0_usize;
+                        loop {
+                            let count = input
+                                .read(&mut output[..width])
+                                .expect("std buffered input benchmark read");
+                            if count == 0 {
+                                break;
+                            }
+                            total += count;
+                        }
+                        black_box((total, output));
+                    },
+                    BatchSize::SmallInput,
+                );
+            },
+        );
+        group.bench_with_input(
+            BenchmarkId::new("unbuffered", width),
+            &width,
+            |bencher, &width| {
+                bencher.iter_batched(
+                    || Cursor::new(fixture.clone()),
+                    |mut input| {
+                        let mut output = [0_u8; BUFFER_CAPACITY];
+                        let mut total = 0_usize;
+                        loop {
+                            let count = input
+                                .read(&mut output[..width])
+                                .expect("unbuffered input benchmark read");
                             if count == 0 {
                                 break;
                             }
@@ -75,7 +124,7 @@ fn benchmark_buffered_output(criterion: &mut Criterion) {
 
     for width in TRANSFER_WIDTHS {
         group.bench_with_input(
-            BenchmarkId::from_parameter(width),
+            BenchmarkId::new("qubit", width),
             &width,
             |bencher, &width| {
                 bencher.iter_batched(
@@ -95,6 +144,53 @@ fn benchmark_buffered_output(criterion: &mut Criterion) {
                         let (writer, pending) = output.into_parts();
                         let bytes = writer.into_inner();
                         black_box((bytes, pending.available()));
+                    },
+                    BatchSize::SmallInput,
+                );
+            },
+        );
+        group.bench_with_input(
+            BenchmarkId::new("std_bufwriter", width),
+            &width,
+            |bencher, &width| {
+                bencher.iter_batched(
+                    || {
+                        BufWriter::with_capacity(
+                            BUFFER_CAPACITY,
+                            Cursor::new(Vec::with_capacity(DATA_LEN)),
+                        )
+                    },
+                    |mut output| {
+                        for chunk in fixture.chunks_exact(width) {
+                            output
+                                .write_all(chunk)
+                                .expect("std buffered output benchmark write");
+                        }
+                        output.flush().expect("std buffered output benchmark flush");
+                        let bytes = output
+                            .into_inner()
+                            .expect("std buffered output should flush into cursor")
+                            .into_inner();
+                        black_box(bytes);
+                    },
+                    BatchSize::SmallInput,
+                );
+            },
+        );
+        group.bench_with_input(
+            BenchmarkId::new("unbuffered", width),
+            &width,
+            |bencher, &width| {
+                bencher.iter_batched(
+                    || Cursor::new(Vec::with_capacity(DATA_LEN)),
+                    |mut output| {
+                        for chunk in fixture.chunks_exact(width) {
+                            output
+                                .write_all(chunk)
+                                .expect("unbuffered output benchmark write");
+                        }
+                        output.flush().expect("unbuffered output benchmark flush");
+                        black_box(output.into_inner());
                     },
                     BatchSize::SmallInput,
                 );
