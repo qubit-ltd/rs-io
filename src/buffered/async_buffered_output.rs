@@ -7,7 +7,8 @@
 // =============================================================================
 
 use std::{
-    io,
+    collections::TryReserveError,
+    io::{self, Error, ErrorKind},
     pin::Pin,
     task::{Context, Poll},
 };
@@ -153,6 +154,79 @@ where
     #[must_use]
     pub fn pending(&self) -> &[O::Item] {
         self.buffer.readable()
+    }
+
+    /// Tries to ensure that the internal item capacity is at least `capacity`.
+    ///
+    /// Pending items are retained and this method performs no I/O.
+    ///
+    /// # Errors
+    ///
+    /// Returns the allocation error when the backing buffer cannot grow.
+    ///
+    /// # Panics
+    ///
+    /// Panics if growing the backing buffer requires `O::Item::default()` and
+    /// it panics.
+    #[inline(always)]
+    pub fn try_reserve_capacity(&mut self, capacity: usize) -> Result<(), TryReserveError> {
+        self.buffer.try_reserve_capacity(capacity)
+    }
+
+    /// Returns the unused capacity in the internal buffer.
+    #[inline(always)]
+    #[must_use]
+    pub fn spare_capacity(&self) -> usize {
+        self.buffer.spare_capacity()
+    }
+
+    /// Returns the full backing storage and its spare-tail range.
+    ///
+    /// Call [`Self::advance`] after writing initialized items into the returned
+    /// spare range.
+    #[inline(always)]
+    #[must_use]
+    pub fn spare_raw_parts_mut(&mut self) -> (&mut [O::Item], usize, usize) {
+        self.buffer.spare_raw_parts_mut()
+    }
+
+    /// Advances the pending-item limit without checking bounds.
+    ///
+    /// # Safety
+    ///
+    /// The caller must guarantee that `count <= self.spare_capacity()` and
+    /// that the corresponding spare items have been initialized.
+    #[inline(always)]
+    pub unsafe fn advance(&mut self, count: usize) {
+        // SAFETY: The caller guarantees that initialized items fit the spare
+        // tail.
+        unsafe {
+            self.buffer.advance(count);
+        }
+    }
+
+    /// Polls delivery of pending items when `count` spare items are needed.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ErrorKind::InvalidInput`] when `count` exceeds the buffer
+    /// capacity, [`ErrorKind::WriteZero`] when draining makes no progress, or
+    /// an error reported by the wrapped output.
+    pub fn poll_ensure_spare_capacity(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        count: usize,
+    ) -> Poll<io::Result<()>> {
+        if count > self.as_ref().get_ref().buffer.capacity() {
+            return Poll::Ready(Err(Error::new(
+                ErrorKind::InvalidInput,
+                "requested spare capacity exceeds buffered output capacity",
+            )));
+        }
+        if self.as_ref().get_ref().buffer.spare_capacity() < count {
+            return self.as_mut().poll_drain_buffer(cx);
+        }
+        Poll::Ready(Ok(()))
     }
 
     /// Polls pending-item delivery without flushing the inner output.

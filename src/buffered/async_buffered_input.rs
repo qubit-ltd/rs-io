@@ -7,12 +7,13 @@
 // =============================================================================
 
 use std::{
-    io,
+    collections::TryReserveError,
+    io::{self, Error, ErrorKind},
     pin::Pin,
     task::{Context, Poll},
 };
 
-use crate::{AsyncInput, Buffer, buffered::DEFAULT_BUFFER_CAPACITY};
+use crate::{AsyncInput, Buffer, UncheckedSlice, buffered::DEFAULT_BUFFER_CAPACITY};
 
 /// Buffered asynchronous item input.
 ///
@@ -149,6 +150,173 @@ where
     #[must_use]
     pub fn unread(&self) -> &[I::Item] {
         self.buffer.readable()
+    }
+
+    /// Tries to ensure that the internal item capacity is at least `capacity`.
+    ///
+    /// Existing unread items are retained and this method performs no I/O.
+    ///
+    /// # Errors
+    ///
+    /// Returns the allocation error when the backing buffer cannot grow.
+    ///
+    /// # Panics
+    ///
+    /// Panics if growing the backing buffer requires `I::Item::default()` and
+    /// it panics.
+    #[inline(always)]
+    pub fn try_reserve_capacity(&mut self, capacity: usize) -> Result<(), TryReserveError> {
+        self.buffer.try_reserve_capacity(capacity)
+    }
+
+    /// Advances the unread cursor without checking bounds.
+    ///
+    /// # Safety
+    ///
+    /// The caller must guarantee that `count <= self.unread_len()`.
+    #[inline(always)]
+    pub unsafe fn consume(&mut self, count: usize) {
+        // SAFETY: The caller guarantees that `count` fits the unread window.
+        unsafe {
+            self.buffer.consume(count);
+        }
+    }
+
+    /// Copies unread items into an indexed output range without consuming them.
+    ///
+    /// # Safety
+    ///
+    /// The caller must guarantee that the indexed destination range fits,
+    /// `count <= self.unread_len()`, and the destination does not overlap the
+    /// unread window.
+    #[inline]
+    pub unsafe fn copy_unread_to(&self, output: &mut [I::Item], output_index: usize, count: usize) {
+        debug_assert!(
+            UncheckedSlice::range_fits(output.len(), output_index, count),
+            "unchecked unread copy output range exceeds destination buffer",
+        );
+        debug_assert!(
+            count <= self.unread_len(),
+            "unchecked unread copy exceeds available input buffer",
+        );
+        // SAFETY: The caller guarantees both ranges are valid and do not
+        // overlap, and `count` fits the readable window.
+        unsafe {
+            UncheckedSlice::copy_nonoverlapping(
+                self.buffer.readable(),
+                0,
+                output,
+                output_index,
+                count,
+            );
+        }
+    }
+
+    /// Polls one refill while preserving unread items.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(true)` after appending at least one item, `Ok(false)` at
+    /// EOF, or [`Poll::Pending`] while the wrapped input is not ready.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ErrorKind::InvalidInput`] when the buffer is full with no
+    /// consumed prefix to reclaim, or an error reported by the wrapped input.
+    pub fn poll_fill_more(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<io::Result<bool>> {
+        // SAFETY: `inner` remains pinned for the duration of this projection.
+        let this = unsafe { self.as_mut().get_unchecked_mut() };
+        if this.buffer.available() == 0 {
+            this.buffer.clear();
+        } else if this.buffer.spare_capacity() == 0 {
+            this.buffer.compact();
+            if this.buffer.spare_capacity() == 0 {
+                return Poll::Ready(Err(Error::new(
+                    ErrorKind::InvalidInput,
+                    "buffered input is full; consume buffered items before refilling",
+                )));
+            }
+        }
+
+        let result = {
+            // SAFETY: The projection does not move `inner`.
+            let inner = unsafe { Pin::new_unchecked(&mut this.inner) };
+            inner.poll_read(cx, this.buffer.spare_mut())
+        };
+        match result {
+            Poll::Ready(Ok(0)) => Poll::Ready(Ok(false)),
+            Poll::Ready(Ok(read)) => {
+                // SAFETY: `poll_read` validated `read` against the spare tail.
+                unsafe {
+                    this.buffer.advance(read);
+                }
+                Poll::Ready(Ok(true))
+            }
+            Poll::Ready(Err(error)) => Poll::Ready(Err(error)),
+            Poll::Pending => Poll::Pending,
+        }
+    }
+
+    /// Polls refills until `count` unread items are available or EOF occurs.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ErrorKind::InvalidInput`] when `count` exceeds the buffer
+    /// capacity, or an error reported by the wrapped input.
+    pub fn poll_fill_until(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        count: usize,
+    ) -> Poll<io::Result<bool>> {
+        if count > self.as_ref().get_ref().buffer.capacity() {
+            return Poll::Ready(Err(Error::new(
+                ErrorKind::InvalidInput,
+                "requested available items exceed buffered input capacity",
+            )));
+        }
+        while self.as_ref().get_ref().buffer.available() < count {
+            match self.as_mut().poll_fill_more(cx) {
+                Poll::Ready(Ok(true)) => {}
+                Poll::Ready(Ok(false)) => return Poll::Ready(Ok(false)),
+                Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
+                Poll::Pending => return Poll::Pending,
+            }
+        }
+        Poll::Ready(Ok(true))
+    }
+
+    /// Polls refills until `count` unread items are available.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ErrorKind::UnexpectedEof`] after discarding an incomplete
+    /// unread window, [`ErrorKind::InvalidInput`] when `count` exceeds the
+    /// buffer capacity, or an error reported by the wrapped input.
+    pub fn poll_ensure_available(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        count: usize,
+    ) -> Poll<io::Result<()>> {
+        match self.as_mut().poll_fill_until(cx, count) {
+            Poll::Ready(Ok(true)) => Poll::Ready(Ok(())),
+            Poll::Ready(Ok(false)) => {
+                // SAFETY: The complete unread window is available for discard.
+                let this = unsafe { self.as_mut().get_unchecked_mut() };
+                let available = this.buffer.available();
+                unsafe {
+                    this.buffer.consume(available);
+                }
+                Poll::Ready(Err(Error::new(
+                    ErrorKind::UnexpectedEof,
+                    "failed to fill whole buffer",
+                )))
+            }
+            Poll::Ready(Err(error)) => Poll::Ready(Err(error)),
+            Poll::Pending => Poll::Pending,
+        }
     }
 }
 
