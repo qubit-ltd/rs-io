@@ -120,6 +120,9 @@ qubit-io = "0.14"
 
 - [User guide](doc/user_guide.md)
 - [用户指南](doc/user_guide.zh_CN.md)
+- [Migration from 0.13 to 0.14](doc/migration-0.14.md)
+- [0.13 至 0.14 迁移指南](doc/migration-0.14.zh_CN.md)
+- [Changelog](CHANGELOG.md)
 
 API documentation on docs.rs is built with all declared features enabled.
 

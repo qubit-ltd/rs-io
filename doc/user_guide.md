@@ -156,3 +156,10 @@ adapters require `AsyncClose<Item = u8>`.
 Keep codecs independent from the synchronous or asynchronous driver. The same
 codec state should be driven by `Input`/`Output` or
 `AsyncInput`/`AsyncOutput`, not implemented twice.
+
+## 8. Migrating from 0.13
+
+Version 0.14 renamed the synchronous `Reader`/`Writer` wrappers to
+`Input`/`Output` wrappers and changed their implemented traits accordingly.
+See the [0.14 migration guide](migration-0.14.md) for the type mapping, method
+changes, and tee failure semantics.
