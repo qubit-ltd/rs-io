@@ -521,6 +521,49 @@ fn test_async_buffered_output_drains_before_closing_inner() -> io::Result<()> {
     Ok(())
 }
 
+#[test]
+fn test_async_buffered_output_close_preserves_pending_data_while_drain_is_pending()
+-> io::Result<()> {
+    let inner = ScriptedOutput::new(
+        [WriteStep::Pending, WriteStep::Accept(2)],
+        [],
+    );
+    let mut output = AsyncBufferedOutput::with_capacity(inner, 3);
+    assert_eq!(2, complete(output.write_async(&[1, 2]))?);
+    let mut cx = Context::from_waker(Waker::noop());
+
+    assert!(AsyncClose::poll_close(Pin::new(&mut output), &mut cx).is_pending());
+    assert_eq!(&[1, 2], output.pending());
+    assert!(!output.inner().closed);
+
+    AsyncClose::poll_close(Pin::new(&mut output), &mut cx)
+        .expect_ready("close should finish after draining")?;
+    assert_eq!(&[1, 2], output.inner().values.as_slice());
+    assert!(output.inner().closed);
+    assert_eq!(0, output.pending_len());
+    Ok(())
+}
+
+#[test]
+fn test_async_buffered_output_close_preserves_drain_error() -> io::Result<()> {
+    let inner = ScriptedOutput::new(
+        [WriteStep::Error(ErrorKind::BrokenPipe)],
+        [],
+    );
+    let mut output = AsyncBufferedOutput::with_capacity(inner, 3);
+    assert_eq!(2, complete(output.write_async(&[1, 2]))?);
+    let mut cx = Context::from_waker(Waker::noop());
+
+    let error = AsyncClose::poll_close(Pin::new(&mut output), &mut cx)
+        .expect_ready("close drain error should be ready")
+        .expect_err("close should preserve its drain error");
+    assert_eq!(ErrorKind::BrokenPipe, error.kind());
+    assert_eq!(&[1, 2], output.pending());
+    assert!(output.inner().values.is_empty());
+    assert!(!output.inner().closed);
+    Ok(())
+}
+
 trait PollResultExt<T> {
     fn expect_ready(self, message: &str) -> T;
 }
