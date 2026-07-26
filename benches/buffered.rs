@@ -14,18 +14,8 @@
 use std::hint::black_box;
 use std::io::Cursor;
 
-use criterion::{
-    BatchSize,
-    BenchmarkId,
-    Criterion,
-    Throughput,
-    criterion_group,
-    criterion_main,
-};
-use qubit_io::{
-    BufferedInput,
-    BufferedOutput,
-};
+use criterion::{BatchSize, BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
+use qubit_io::{BufferedInput, BufferedOutput};
 
 const BUFFER_CAPACITY: usize = 8 * 1024;
 const DATA_LEN: usize = 256 * 1024;
@@ -52,12 +42,7 @@ fn benchmark_buffered_input(criterion: &mut Criterion) {
             &width,
             |bencher, &width| {
                 bencher.iter_batched(
-                    || {
-                        BufferedInput::with_capacity(
-                            Cursor::new(fixture.clone()),
-                            BUFFER_CAPACITY,
-                        )
-                    },
+                    || BufferedInput::with_capacity(Cursor::new(fixture.clone()), BUFFER_CAPACITY),
                     |mut input| {
                         let mut output = [0_u8; BUFFER_CAPACITY];
                         let mut total = 0_usize;
@@ -106,9 +91,7 @@ fn benchmark_buffered_output(criterion: &mut Criterion) {
                                 .write_fully(chunk)
                                 .expect("buffered output benchmark write");
                         }
-                        output
-                            .flush()
-                            .expect("buffered output benchmark flush");
+                        output.flush().expect("buffered output benchmark flush");
                         let (writer, pending) = output.into_parts();
                         let bytes = writer.into_inner();
                         black_box((bytes, pending.available()));

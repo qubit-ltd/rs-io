@@ -8,12 +8,7 @@
 
 use std::pin::Pin;
 
-use crate::{
-    AsyncInput,
-    ReadExactFuture,
-    ReadFullyFuture,
-    ReadFuture,
-};
+use crate::{AsyncInput, ReadExactFuture, ReadFullyFuture, ReadFuture};
 
 /// Convenience futures for an already pinned asynchronous input.
 pub trait PinnedAsyncInputExt {
@@ -96,10 +91,7 @@ where
     ///
     /// A future that resolves with the number of items read.
     #[inline(always)]
-    fn read_async<'a>(
-        &'a mut self,
-        output: &'a mut [I::Item],
-    ) -> ReadFuture<'a, Self::Input> {
+    fn read_async<'a>(&'a mut self, output: &'a mut [I::Item]) -> ReadFuture<'a, Self::Input> {
         ReadFuture::new(self.as_mut(), output)
     }
 

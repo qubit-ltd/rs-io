@@ -12,7 +12,6 @@ use qubit_io::ReadExactFuture;
 #[test]
 fn test_read_exact_future_type_is_public() {
     assert!(
-        std::any::type_name::<ReadExactFuture<'static, TestInput>>()
-            .contains("ReadExactFuture")
+        std::any::type_name::<ReadExactFuture<'static, TestInput>>().contains("ReadExactFuture")
     );
 }

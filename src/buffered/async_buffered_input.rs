@@ -9,17 +9,10 @@
 use std::{
     io,
     pin::Pin,
-    task::{
-        Context,
-        Poll,
-    },
+    task::{Context, Poll},
 };
 
-use crate::{
-    AsyncInput,
-    Buffer,
-    buffered::DEFAULT_BUFFER_CAPACITY,
-};
+use crate::{AsyncInput, Buffer, buffered::DEFAULT_BUFFER_CAPACITY};
 
 /// Buffered asynchronous item input.
 ///
@@ -222,8 +215,7 @@ where
         let this = unsafe { self.as_mut().get_unchecked_mut() };
         if !this.buffer.is_empty() {
             let read = count.min(this.buffer.available());
-            output[index..index + read]
-                .copy_from_slice(&this.buffer.readable()[..read]);
+            output[index..index + read].copy_from_slice(&this.buffer.readable()[..read]);
             // SAFETY: `read` was bounded by the readable-window length.
             unsafe {
                 this.buffer.consume(read);
@@ -253,8 +245,7 @@ where
                     this.buffer.advance(fetched);
                 }
                 let read = count.min(fetched);
-                output[index..index + read]
-                    .copy_from_slice(&this.buffer.readable()[..read]);
+                output[index..index + read].copy_from_slice(&this.buffer.readable()[..read]);
                 // SAFETY: `read <= fetched` items are readable.
                 unsafe {
                     this.buffer.consume(read);

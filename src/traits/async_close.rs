@@ -8,15 +8,9 @@
 
 use std::io::Result;
 use std::pin::Pin;
-use std::task::{
-    Context,
-    Poll,
-};
+use std::task::{Context, Poll};
 
-use crate::{
-    AsyncOutput,
-    CloseFuture,
-};
+use crate::{AsyncOutput, CloseFuture};
 
 /// Asynchronous output that supports an explicit close operation.
 pub trait AsyncClose: AsyncOutput {
@@ -37,10 +31,7 @@ pub trait AsyncClose: AsyncOutput {
     /// # Errors
     ///
     /// Returns the close error reported by the implementation.
-    fn poll_close(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<()>>;
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<()>>;
 
     /// Creates a future that closes this output.
     ///

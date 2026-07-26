@@ -6,11 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use qubit_io::{
-    DEFAULT_BUFFER_CAPACITY,
-    DEFAULT_COMPARE_BUFFER_SIZE,
-    DEFAULT_COPY_BUFFER_SIZE,
-};
+use qubit_io::{DEFAULT_BUFFER_CAPACITY, DEFAULT_COMPARE_BUFFER_SIZE, DEFAULT_COPY_BUFFER_SIZE};
 
 #[test]
 fn test_default_capacities_are_non_zero() {
