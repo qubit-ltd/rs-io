@@ -115,9 +115,10 @@ poll 契约是严格的：零长度传输立即完成且不轮询内部 stream�
 `Pending` 和错误都不会改变计数或 hash。checksum wrapper 只处理底层实际报告
 成功的前缀。
 
-当 API 明确要求 `Read`、`Write`、`BufRead` 或 `Seek` 时，原有标准库 wrapper
-仍然适用，包括 `LimitReader`、`CountingReader`、`ChecksumReader`、tee wrapper
-及对应 writer。
+同步 wrapper 以 item 为单位：`LimitInput` / `LimitOutput`、
+`CountingInput` / `CountingOutput` 以及 tee wrapper 支持任意 item。
+`ChecksumInput` 与 `ChecksumOutput` 仍仅支持字节，因为 `Hasher` 消费字节。
+标准 `Read` 与 `Write` 可通过 blanket implementation 直接作为字节 input/output。
 
 ## 6. Tokio 与 futures-io 桥接
 

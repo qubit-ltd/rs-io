@@ -123,9 +123,11 @@ The asynchronous wrappers implement the poll traits directly and can contain a
 Counts and hashes do not change on `Pending` or errors. Checksum wrappers hash
 only the prefix actually reported by the inner stream.
 
-The legacy standard-library wrappers remain useful around APIs that explicitly
-require `Read`, `Write`, `BufRead`, or `Seek`: `LimitReader`, `CountingReader`,
-`ChecksumReader`, tee wrappers, and their writer counterparts.
+The synchronous wrappers are item-oriented: `LimitInput` / `LimitOutput`,
+`CountingInput` / `CountingOutput`, and tee wrappers work with any item type.
+`ChecksumInput` and `ChecksumOutput` remain byte-only because `Hasher`
+consumes bytes. Standard `Read` and `Write` values can be used as byte inputs
+and outputs through the blanket implementations.
 
 ## 6. Tokio and futures-io bridges
 
