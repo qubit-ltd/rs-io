@@ -1084,9 +1084,12 @@ where
     where
         I: SeekableInput,
     {
-        // Unread items fit in `isize` for any `Vec`-backed buffer, which always
-        // fits in `i64`.
-        let unread = self.unread_len() as i64;
+        let unread = i64::try_from(self.unread_len()).map_err(|_| {
+            Error::new(
+                ErrorKind::InvalidInput,
+                "buffered unread item count exceeds i64",
+            )
+        })?;
         let adjusted = offset.checked_sub(unread).ok_or_else(|| {
             Error::new(
                 ErrorKind::InvalidInput,
