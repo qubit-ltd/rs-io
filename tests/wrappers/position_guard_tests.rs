@@ -14,7 +14,57 @@ use std::io::{
     SeekFrom,
 };
 
-use qubit_io::PositionGuard;
+use qubit_io::{
+    PositionGuard,
+    Seekable,
+};
+
+/// Seekable stream that does not implement `std::io::Seek`.
+struct SeekableOnly {
+    /// Current position maintained by the custom stream.
+    position: u64,
+}
+
+impl Seekable for SeekableOnly {
+    type Unit = u8;
+
+    fn seek_to(&mut self, position: SeekFrom) -> Result<u64, Error> {
+        self.position = match position {
+            SeekFrom::Start(position) => position,
+            SeekFrom::Current(offset) => {
+                self.position.checked_add_signed(offset).ok_or_else(|| {
+                    Error::new(
+                        ErrorKind::InvalidInput,
+                        "seek position out of range",
+                    )
+                })?
+            }
+            SeekFrom::End(_) => {
+                return Err(Error::new(
+                    ErrorKind::Unsupported,
+                    "end-relative seeks are unsupported",
+                ));
+            }
+        };
+        Ok(self.position)
+    }
+}
+
+#[test]
+fn test_position_guard_accepts_seekable_without_std_seek() {
+    let mut stream = SeekableOnly { position: 3 };
+
+    {
+        let mut guard = PositionGuard::new(&mut stream)
+            .expect("guard should capture position");
+        guard
+            .inner_mut()
+            .seek_to(SeekFrom::Start(8))
+            .expect("seek should succeed");
+    }
+
+    assert_eq!(3, stream.position);
+}
 
 struct PositionFailingSeek;
 
