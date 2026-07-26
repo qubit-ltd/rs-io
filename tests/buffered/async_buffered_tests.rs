@@ -499,6 +499,84 @@ fn test_async_buffered_output_close_preserves_drain_error() -> io::Result<()> {
     Ok(())
 }
 
+#[test]
+fn test_async_buffered_input_exposes_window_refill_and_consume_operations() -> io::Result<()> {
+    let inner = ScriptedInput::new([ReadStep::Data(vec![1, 2]), ReadStep::Data(vec![3, 4])]);
+    let mut input = AsyncBufferedInput::with_capacity(inner, 4);
+    let mut cx = Context::from_waker(Waker::noop());
+
+    assert!(
+        Pin::new(&mut input)
+            .poll_fill_until(&mut cx, 2)
+            .expect_ready("first refill should be ready")?
+    );
+    assert_eq!(&[1, 2], input.unread());
+
+    let mut copied = [0_u16; 1];
+    unsafe {
+        input.copy_unread_to(&mut copied, 0, 1);
+        input.consume(1);
+    }
+    assert_eq!([1], copied);
+    assert_eq!(&[2], input.unread());
+
+    assert!(
+        Pin::new(&mut input)
+            .poll_fill_until(&mut cx, 3)
+            .expect_ready("compacting refill should be ready")?
+    );
+    assert_eq!(&[2, 3, 4], input.unread());
+
+    input
+        .try_reserve_capacity(6)
+        .expect("buffer capacity should grow");
+    assert!(input.capacity() >= 6);
+    Ok(())
+}
+
+#[test]
+fn test_async_buffered_input_ensure_available_discards_incomplete_eof_window() {
+    let mut input = AsyncBufferedInput::with_capacity(
+        ScriptedInput::new([ReadStep::Data(vec![1]), ReadStep::Eof]),
+        2,
+    );
+    let mut cx = Context::from_waker(Waker::noop());
+
+    let error = Pin::new(&mut input)
+        .poll_ensure_available(&mut cx, 2)
+        .expect_ready("EOF should complete the availability check")
+        .expect_err("incomplete EOF window should fail");
+
+    assert_eq!(ErrorKind::UnexpectedEof, error.kind());
+    assert!(input.unread().is_empty());
+}
+
+#[test]
+fn test_async_buffered_output_exposes_spare_window_and_async_capacity_check() -> io::Result<()> {
+    let mut output = AsyncBufferedOutput::with_capacity(ScriptedOutput::new([], []), 3);
+    let (spare, index, available) = output.spare_raw_parts_mut();
+    assert_eq!(0, index);
+    assert_eq!(3, available);
+    spare[..2].copy_from_slice(&[7, 8]);
+    unsafe {
+        output.advance(2);
+    }
+    assert_eq!(&[7, 8], output.pending());
+
+    let mut cx = Context::from_waker(Waker::noop());
+    Pin::new(&mut output)
+        .poll_ensure_spare_capacity(&mut cx, 2)
+        .expect_ready("draining capacity check should be ready")?;
+    assert_eq!(&[7, 8], output.inner().values.as_slice());
+    assert_eq!(3, output.spare_capacity());
+
+    output
+        .try_reserve_capacity(6)
+        .expect("buffer capacity should grow");
+    assert!(output.capacity() >= 6);
+    Ok(())
+}
+
 trait PollResultExt<T> {
     fn expect_ready(self, message: &str) -> T;
 }
