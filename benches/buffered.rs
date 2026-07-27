@@ -20,7 +20,15 @@ use qubit_io::{BufferedInput, BufferedOutput};
 
 const BUFFER_CAPACITY: usize = 8 * 1024;
 const DATA_LEN: usize = 256 * 1024;
-const TRANSFER_WIDTHS: [usize; 5] = [1, 4, 8, 64, BUFFER_CAPACITY];
+const TRANSFER_WIDTHS: [usize; 7] = [
+    1,
+    8,
+    64,
+    BUFFER_CAPACITY - 1,
+    BUFFER_CAPACITY,
+    BUFFER_CAPACITY + 1,
+    4 * BUFFER_CAPACITY,
+];
 
 /// Creates a deterministic byte fixture for the buffered benchmarks.
 fn benchmark_fixture() -> Vec<u8> {
@@ -45,7 +53,7 @@ fn benchmark_buffered_input(criterion: &mut Criterion) {
                 bencher.iter_batched(
                     || BufferedInput::with_capacity(Cursor::new(fixture.clone()), BUFFER_CAPACITY),
                     |mut input| {
-                        let mut output = [0_u8; BUFFER_CAPACITY];
+                        let mut output = vec![0_u8; width];
                         let mut total = 0_usize;
                         loop {
                             let count = input
@@ -69,7 +77,7 @@ fn benchmark_buffered_input(criterion: &mut Criterion) {
                 bencher.iter_batched(
                     || BufReader::with_capacity(BUFFER_CAPACITY, Cursor::new(fixture.clone())),
                     |mut input| {
-                        let mut output = [0_u8; BUFFER_CAPACITY];
+                        let mut output = vec![0_u8; width];
                         let mut total = 0_usize;
                         loop {
                             let count = input
@@ -93,7 +101,7 @@ fn benchmark_buffered_input(criterion: &mut Criterion) {
                 bencher.iter_batched(
                     || Cursor::new(fixture.clone()),
                     |mut input| {
-                        let mut output = [0_u8; BUFFER_CAPACITY];
+                        let mut output = vec![0_u8; width];
                         let mut total = 0_usize;
                         loop {
                             let count = input
@@ -135,7 +143,7 @@ fn benchmark_buffered_output(criterion: &mut Criterion) {
                         )
                     },
                     |mut output| {
-                        for chunk in fixture.chunks_exact(width) {
+                        for chunk in fixture.chunks(width) {
                             output
                                 .write_fully(chunk)
                                 .expect("buffered output benchmark write");
@@ -161,7 +169,7 @@ fn benchmark_buffered_output(criterion: &mut Criterion) {
                         )
                     },
                     |mut output| {
-                        for chunk in fixture.chunks_exact(width) {
+                        for chunk in fixture.chunks(width) {
                             output
                                 .write_all(chunk)
                                 .expect("std buffered output benchmark write");
@@ -184,7 +192,7 @@ fn benchmark_buffered_output(criterion: &mut Criterion) {
                 bencher.iter_batched(
                     || Cursor::new(Vec::with_capacity(DATA_LEN)),
                     |mut output| {
-                        for chunk in fixture.chunks_exact(width) {
+                        for chunk in fixture.chunks(width) {
                             output
                                 .write_all(chunk)
                                 .expect("unbuffered output benchmark write");
