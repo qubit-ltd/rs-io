@@ -135,6 +135,35 @@ impl AsyncOutput for OverreportingAsyncOutput {
     }
 }
 
+struct OneItemAsyncOutput {
+    values: Vec<u8>,
+}
+
+impl AsyncOutput for OneItemAsyncOutput {
+    type Item = u8;
+
+    unsafe fn poll_write_unchecked(
+        mut self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+        input: &[u8],
+        index: usize,
+        count: usize,
+    ) -> Poll<std::io::Result<usize>> {
+        if count == 0 {
+            return Poll::Ready(Ok(0));
+        }
+        self.values.push(input[index]);
+        Poll::Ready(Ok(1))
+    }
+
+    fn poll_flush(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        Poll::Ready(Ok(()))
+    }
+}
+
 fn context() -> Context<'static> {
     Context::from_waker(Waker::noop())
 }
@@ -300,6 +329,45 @@ fn test_write_fully_async_default_method_writes_all_items() {
         .expect("write_fully should succeed");
     drop(future);
     assert_eq!(&[1, 2, 3], output.0.as_slice());
+}
+
+#[test]
+fn test_write_fully_async_yields_after_ready_progress_budget() {
+    const ITEM_COUNT: usize = 256;
+
+    struct TestWake(AtomicBool);
+
+    impl Wake for TestWake {
+        fn wake(self: Arc<Self>) {
+            self.0.store(true, Ordering::Relaxed);
+        }
+    }
+
+    let mut output = OneItemAsyncOutput { values: Vec::new() };
+    let input = [7_u8; ITEM_COUNT];
+    let wake_state = Arc::new(TestWake(AtomicBool::new(false)));
+    let waker = Waker::from(Arc::clone(&wake_state));
+    let mut cx = Context::from_waker(&waker);
+    let mut future = WriteFullyFuture::new(Pin::new(&mut output), &input);
+
+    assert!(Future::poll(Pin::new(&mut future), &mut cx).is_pending());
+    assert!(wake_state.0.load(Ordering::Relaxed));
+    assert!(future.items_written() > 0);
+    assert!(future.items_written() < ITEM_COUNT);
+
+    let mut completed = false;
+    for _ in 0..8 {
+        if let Poll::Ready(result) =
+            Future::poll(Pin::new(&mut future), &mut cx)
+        {
+            result.expect("cooperative write should succeed");
+            completed = true;
+            break;
+        }
+    }
+    assert!(completed);
+    drop(future);
+    assert_eq!(input.as_slice(), output.values.as_slice());
 }
 
 #[test]

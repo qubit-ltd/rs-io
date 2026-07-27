@@ -20,10 +20,16 @@ use std::task::{
 
 use crate::AsyncOutput;
 
+use super::read_fully_future::MAX_READY_OPERATIONS_PER_POLL;
+
 /// Future that writes every item from its source slice.
 ///
 /// Items accepted before cancellation remain written. The accepted count is
 /// observable through [`Self::items_written`].
+///
+/// To preserve executor fairness, one outer poll performs a bounded number of
+/// successful inner writes. The future self-wakes and returns [`Poll::Pending`]
+/// when that budget is exhausted before completion.
 ///
 /// # Panics
 ///
@@ -114,6 +120,7 @@ where
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
         assert!(!this.completed, "WriteFullyFuture polled after completion");
+        let mut ready_operations = 0_usize;
         while this.written < this.input.len() {
             let remaining = &this.input[this.written..];
             match this.output.as_mut().poll_write(cx, remaining) {
@@ -124,7 +131,16 @@ where
                         "failed to write whole output range",
                     )));
                 }
-                Poll::Ready(Ok(written)) => this.written += written,
+                Poll::Ready(Ok(written)) => {
+                    this.written += written;
+                    ready_operations += 1;
+                    if this.written < this.input.len()
+                        && ready_operations >= MAX_READY_OPERATIONS_PER_POLL
+                    {
+                        cx.waker().wake_by_ref();
+                        return Poll::Pending;
+                    }
+                }
                 Poll::Ready(Err(error)) => {
                     this.completed = true;
                     return Poll::Ready(Err(error));
