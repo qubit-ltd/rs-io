@@ -69,6 +69,7 @@ where
     /// # Returns
     ///
     /// Returns a future that resolves after every item has been accepted.
+    #[cfg_attr(coverage, coverage(off))]
     #[inline(always)]
     pub const fn new(output: Pin<&'a mut O>, input: &'a [O::Item]) -> Self {
         Self {
@@ -84,6 +85,7 @@ where
     /// # Returns
     ///
     /// Returns the progress retained across polls.
+    #[cfg_attr(coverage, coverage(off))]
     #[inline(always)]
     #[must_use]
     pub const fn items_written(&self) -> usize {
