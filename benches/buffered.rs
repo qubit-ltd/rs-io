@@ -51,9 +51,16 @@ fn benchmark_buffered_input(criterion: &mut Criterion) {
             &width,
             |bencher, &width| {
                 bencher.iter_batched(
-                    || BufferedInput::with_capacity(Cursor::new(fixture.clone()), BUFFER_CAPACITY),
-                    |mut input| {
-                        let mut output = vec![0_u8; width];
+                    || {
+                        (
+                            BufferedInput::with_capacity(
+                                Cursor::new(fixture.clone()),
+                                BUFFER_CAPACITY,
+                            ),
+                            vec![0_u8; width],
+                        )
+                    },
+                    |(mut input, mut output)| {
                         let mut total = 0_usize;
                         loop {
                             let count = input
@@ -75,9 +82,13 @@ fn benchmark_buffered_input(criterion: &mut Criterion) {
             &width,
             |bencher, &width| {
                 bencher.iter_batched(
-                    || BufReader::with_capacity(BUFFER_CAPACITY, Cursor::new(fixture.clone())),
-                    |mut input| {
-                        let mut output = vec![0_u8; width];
+                    || {
+                        (
+                            BufReader::with_capacity(BUFFER_CAPACITY, Cursor::new(fixture.clone())),
+                            vec![0_u8; width],
+                        )
+                    },
+                    |(mut input, mut output)| {
                         let mut total = 0_usize;
                         loop {
                             let count = input
@@ -99,9 +110,8 @@ fn benchmark_buffered_input(criterion: &mut Criterion) {
             &width,
             |bencher, &width| {
                 bencher.iter_batched(
-                    || Cursor::new(fixture.clone()),
-                    |mut input| {
-                        let mut output = vec![0_u8; width];
+                    || (Cursor::new(fixture.clone()), vec![0_u8; width]),
+                    |(mut input, mut output)| {
                         let mut total = 0_usize;
                         loop {
                             let count = input
