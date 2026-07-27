@@ -17,7 +17,7 @@ use qubit_io::{
     AsyncOutput,
 };
 
-pub struct TestInput;
+pub(super) struct TestInput;
 
 impl AsyncInput for TestInput {
     type Item = u8;
@@ -33,7 +33,7 @@ impl AsyncInput for TestInput {
     }
 }
 
-pub struct TestOutput;
+pub(super) struct TestOutput;
 
 impl AsyncOutput for TestOutput {
     type Item = u8;

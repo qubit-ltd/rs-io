@@ -345,7 +345,10 @@ where
 /// Returns [`ErrorKind::InvalidData`] when the output reports more items than
 /// the source range contained.
 #[inline]
-pub fn validate_write_count(written: usize, requested: usize) -> Result<()> {
+pub(crate) fn validate_write_count(
+    written: usize,
+    requested: usize,
+) -> Result<()> {
     if written > requested {
         return Err(Error::new(
             ErrorKind::InvalidData,

@@ -22,7 +22,7 @@ use qubit_io::{
     AsyncOutput,
 };
 
-pub struct TestInput;
+pub(super) struct TestInput;
 
 impl AsyncInput for TestInput {
     type Item = u8;
@@ -38,7 +38,7 @@ impl AsyncInput for TestInput {
     }
 }
 
-pub struct TestOutput;
+pub(super) struct TestOutput;
 
 impl AsyncOutput for TestOutput {
     type Item = u8;
@@ -70,12 +70,12 @@ impl AsyncClose for TestOutput {
     }
 }
 
-pub struct ForbiddenErrorOutput {
+pub(super) struct ForbiddenErrorOutput {
     kind: ErrorKind,
 }
 
 impl ForbiddenErrorOutput {
-    pub const fn new(kind: ErrorKind) -> Self {
+    pub(super) const fn new(kind: ErrorKind) -> Self {
         Self { kind }
     }
 }

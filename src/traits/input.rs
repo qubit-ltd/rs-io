@@ -292,7 +292,7 @@ where
 /// Returns [`ErrorKind::InvalidData`] when the input reports more items than
 /// the destination range could hold.
 #[inline]
-pub fn validate_read_count(read: usize, requested: usize) -> Result<()> {
+pub(crate) fn validate_read_count(read: usize, requested: usize) -> Result<()> {
     if read > requested {
         return Err(Error::new(
             ErrorKind::InvalidData,

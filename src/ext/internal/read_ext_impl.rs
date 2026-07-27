@@ -27,7 +27,7 @@ use crate::util::{
 };
 
 /// Default stack buffer size used by bounded read operations.
-pub const READ_TO_END_BUFFER_SIZE: usize = 8 * 1024;
+pub(crate) const READ_TO_END_BUFFER_SIZE: usize = 8 * 1024;
 
 /// Reads from `reader` until `buffer` is full or EOF is reached.
 ///
@@ -40,7 +40,7 @@ pub const READ_TO_END_BUFFER_SIZE: usize = 8 * 1024;
 ///
 /// # Errors
 /// Returns the first non-interrupted read error reported by `reader`.
-pub fn read_exact_or_eof(
+pub(crate) fn read_exact_or_eof(
     reader: &mut dyn Read,
     buffer: &mut [u8],
 ) -> Result<usize> {
@@ -79,7 +79,7 @@ pub fn read_exact_or_eof(
 /// cannot reserve the appended bytes. Returns the error reported by
 /// [`Read::read_exact`] for read failures and truncates `output` back to its
 /// original length.
-pub fn read_exact_vec_limited_into(
+pub(crate) fn read_exact_vec_limited_into(
     reader: &mut dyn Read,
     output: &mut Vec<u8>,
     len: usize,
@@ -120,7 +120,10 @@ pub fn read_exact_vec_limited_into(
 /// # Errors
 /// Returns [`ErrorKind::InvalidData`] when `len > max_len`.
 #[inline]
-pub fn validate_exact_read_len(len: usize, max_len: usize) -> Result<()> {
+pub(crate) fn validate_exact_read_len(
+    len: usize,
+    max_len: usize,
+) -> Result<()> {
     if len > max_len {
         return Err(Error::new(
             ErrorKind::InvalidData,
@@ -145,7 +148,7 @@ pub fn validate_exact_read_len(len: usize, max_len: usize) -> Result<()> {
 /// result vector cannot grow, or the first non-interrupted read error reported
 /// by `reader`. No vector is returned on failure.
 #[inline]
-pub fn read_to_end_limited(
+pub(crate) fn read_to_end_limited(
     reader: &mut dyn Read,
     max_len: usize,
 ) -> Result<Vec<u8>> {
@@ -171,7 +174,7 @@ pub fn read_to_end_limited(
 /// more than `max_len` bytes. Returns [`ErrorKind::OutOfMemory`] when `output`
 /// cannot grow, or the first non-interrupted read error reported by `reader`.
 /// `output` is restored to its original length on failure.
-pub fn read_to_end_limited_into(
+pub(crate) fn read_to_end_limited_into(
     reader: &mut dyn Read,
     output: &mut Vec<u8>,
     max_len: usize,
@@ -226,7 +229,7 @@ pub fn read_to_end_limited_into(
 /// An [`ErrorKind::InvalidData`] error containing the UTF-8 error context.
 #[inline(always)]
 #[must_use]
-pub fn invalid_utf8_error(error: FromUtf8Error) -> Error {
+pub(crate) fn invalid_utf8_error(error: FromUtf8Error) -> Error {
     Error::new(
         ErrorKind::InvalidData,
         format!("limited input is not valid UTF-8: {error}"),
@@ -253,7 +256,7 @@ pub fn invalid_utf8_error(error: FromUtf8Error) -> Error {
 /// [`ErrorKind::OutOfMemory`] when `output` cannot grow, or an I/O error from
 /// `reader`.
 #[inline]
-pub fn read_until_limited_into<T>(
+pub(crate) fn read_until_limited_into<T>(
     reader: &mut T,
     delimiter: u8,
     output: &mut Vec<u8>,
