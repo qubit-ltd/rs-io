@@ -12,6 +12,7 @@ use qubit_io::WriteFullyFuture;
 #[test]
 fn test_write_fully_future_type_is_public() {
     assert!(
-        std::any::type_name::<WriteFullyFuture<'static, TestOutput>>().contains("WriteFullyFuture")
+        std::any::type_name::<WriteFullyFuture<'static, TestOutput>>()
+            .contains("WriteFullyFuture")
     );
 }

@@ -6,9 +6,15 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{self, SeekFrom};
+use std::io::{
+    self,
+    SeekFrom,
+};
 
-use crate::{Output, Seekable};
+use crate::{
+    Output,
+    Seekable,
+};
 
 /// Output wrapper that mirrors successfully accepted items to a branch output.
 ///

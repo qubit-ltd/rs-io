@@ -164,7 +164,10 @@ where
     /// Panics if growing the backing storage requires `T::default()` and it
     /// panics.
     #[inline]
-    pub fn try_reserve_capacity(&mut self, capacity: usize) -> Result<(), TryReserveError> {
+    pub fn try_reserve_capacity(
+        &mut self,
+        capacity: usize,
+    ) -> Result<(), TryReserveError> {
         if capacity <= self.data.len() {
             return Ok(());
         }
@@ -408,7 +411,12 @@ where
             // SAFETY: `available` unread elements at `position..limit` fit in
             // `0..available` after compaction.
             unsafe {
-                UncheckedSlice::copy_within(&mut self.data, self.position, 0, available);
+                UncheckedSlice::copy_within(
+                    &mut self.data,
+                    self.position,
+                    0,
+                    available,
+                );
             }
         }
         self.position = 0;
@@ -437,7 +445,12 @@ where
     /// `count <= self.spare_capacity()`, and that the source range does not
     /// overlap with this buffer's destination range.
     #[inline(always)]
-    pub unsafe fn copy_from(&mut self, input: &[T], input_index: usize, count: usize) {
+    pub unsafe fn copy_from(
+        &mut self,
+        input: &[T],
+        input_index: usize,
+        count: usize,
+    ) {
         debug_assert!(
             count <= self.spare_capacity(),
             "unchecked input copy exceeds spare buffer capacity"
@@ -478,7 +491,12 @@ where
     /// `count <= self.available()`, and that the source range does not overlap
     /// with the destination range.
     #[inline(always)]
-    pub unsafe fn copy_to(&mut self, output: &mut [T], output_index: usize, count: usize) {
+    pub unsafe fn copy_to(
+        &mut self,
+        output: &mut [T],
+        output_index: usize,
+        count: usize,
+    ) {
         // SAFETY: The caller guarantees the readable source range and
         // destination range are valid and non-overlapping.
         unsafe {

@@ -7,9 +7,16 @@
 // =============================================================================
 
 use std::error::Error as StdError;
-use std::io::{Error, ErrorKind};
+use std::io::{
+    Error,
+    ErrorKind,
+};
 use std::pin::Pin;
-use std::task::{Context, Poll, Waker};
+use std::task::{
+    Context,
+    Poll,
+    Waker,
+};
 
 use qubit_io::AsyncInput;
 
@@ -37,7 +44,8 @@ fn test_async_contract_error_retains_original_error_context() {
         let mut input = ForbiddenErrorInput { kind };
         let mut output = [0_u8; 1];
         let mut cx = Context::from_waker(Waker::noop());
-        let result = AsyncInput::poll_read(Pin::new(&mut input), &mut cx, &mut output);
+        let result =
+            AsyncInput::poll_read(Pin::new(&mut input), &mut cx, &mut output);
         let Poll::Ready(Err(error)) = result else {
             panic!("forbidden async error should be returned");
         };

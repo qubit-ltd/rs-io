@@ -7,13 +7,17 @@
 // =============================================================================
 
 use std::error::Error as StdError;
-use std::io::{Error, ErrorKind};
+use std::io::{
+    Error,
+    ErrorKind,
+};
 
 use qubit_io::IntoInnerError;
 
 #[test]
 fn test_accessors_preserve_error_and_buffered_object() {
-    let mut error = IntoInnerError::new(Error::other("write failed"), vec![1_u8]);
+    let mut error =
+        IntoInnerError::new(Error::other("write failed"), vec![1_u8]);
 
     assert_eq!("write failed", error.to_string());
     assert_eq!(ErrorKind::Other, error.error().kind());
@@ -29,15 +33,22 @@ fn test_accessors_preserve_error_and_buffered_object() {
 
 #[test]
 fn test_into_writer_and_into_error_return_owned_values() {
-    let inner =
-        IntoInnerError::new(Error::other("flush failed"), String::from("pending")).into_inner();
+    let inner = IntoInnerError::new(
+        Error::other("flush failed"),
+        String::from("pending"),
+    )
+    .into_inner();
     assert_eq!("pending", inner);
 
-    let writer =
-        IntoInnerError::new(Error::other("flush failed"), String::from("pending")).into_writer();
+    let writer = IntoInnerError::new(
+        Error::other("flush failed"),
+        String::from("pending"),
+    )
+    .into_writer();
     assert_eq!("pending", writer);
 
-    let error = IntoInnerError::new(Error::other("flush failed"), ()).into_error();
+    let error =
+        IntoInnerError::new(Error::other("flush failed"), ()).into_error();
     assert_eq!("flush failed", error.to_string());
 }
 

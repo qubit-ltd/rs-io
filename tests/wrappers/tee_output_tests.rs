@@ -7,9 +7,16 @@
 // =============================================================================
 //! Tests for [`qubit_io::TeeOutput`].
 
-use std::io::{ErrorKind, SeekFrom};
+use std::io::{
+    ErrorKind,
+    SeekFrom,
+};
 
-use qubit_io::{Output, Seekable, TeeOutput};
+use qubit_io::{
+    Output,
+    Seekable,
+    TeeOutput,
+};
 
 use super::support_tests::ScriptedOutput;
 
@@ -46,7 +53,10 @@ fn test_tee_output_is_buffered_only_when_both_paths_are_buffered() {
 
 #[test]
 fn test_tee_output_mutable_accessors_modify_both_paths() {
-    let mut output = TeeOutput::new(ScriptedOutput::accepting(), ScriptedOutput::accepting());
+    let mut output = TeeOutput::new(
+        ScriptedOutput::accepting(),
+        ScriptedOutput::accepting(),
+    );
     output.inner_mut().items.push(1_u16);
     output.branch_mut().items.push(2);
 

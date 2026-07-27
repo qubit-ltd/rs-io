@@ -7,11 +7,17 @@
 // =============================================================================
 
 use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::task::{
+    Context,
+    Poll,
+};
 
 use futures_io::AsyncWrite;
 
-use crate::{AsyncClose, traits::validate_async_error};
+use crate::{
+    AsyncClose,
+    traits::validate_async_error,
+};
 
 /// Exposes a Qubit byte [`crate::AsyncOutput`] as a futures-io [`AsyncWrite`].
 ///
@@ -133,7 +139,10 @@ where
     /// asynchronous error kinds are normalized to
     /// [`std::io::ErrorKind::InvalidData`].
     #[inline(always)]
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+    fn poll_flush(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<std::io::Result<()>> {
         self.get_pin_mut()
             .poll_flush(cx)
             .map(|result| result.map_err(validate_async_error))
@@ -156,7 +165,10 @@ where
     /// asynchronous error kinds are normalized to
     /// [`std::io::ErrorKind::InvalidData`].
     #[inline(always)]
-    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+    fn poll_close(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<std::io::Result<()>> {
         self.get_pin_mut()
             .poll_close(cx)
             .map(|result| result.map_err(validate_async_error))

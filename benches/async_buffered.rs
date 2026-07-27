@@ -14,10 +14,26 @@
 use std::hint::black_box;
 use std::io;
 use std::pin::Pin;
-use std::task::{Context, Poll, Waker};
+use std::task::{
+    Context,
+    Poll,
+    Waker,
+};
 
-use criterion::{BatchSize, BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use qubit_io::{AsyncBufferedInput, AsyncBufferedOutput, AsyncInput, AsyncOutput};
+use criterion::{
+    BatchSize,
+    BenchmarkId,
+    Criterion,
+    Throughput,
+    criterion_group,
+    criterion_main,
+};
+use qubit_io::{
+    AsyncBufferedInput,
+    AsyncBufferedOutput,
+    AsyncInput,
+    AsyncOutput,
+};
 
 const BUFFER_CAPACITY: usize = 8 * 1024;
 const DATA_LEN: usize = 256 * 1024;
@@ -206,7 +222,10 @@ impl AsyncOutput for ScriptedOutput {
     }
 
     /// Completes immediately unless this poll is scheduled to be pending.
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    fn poll_flush(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<io::Result<()>> {
         if self.as_mut().get_mut().poll_is_pending() {
             cx.waker().wake_by_ref();
             Poll::Pending
@@ -235,7 +254,9 @@ where
     loop {
         let end = (position + width).min(output.len());
         caller_polls += 1;
-        match Pin::new(&mut *input).poll_read(&mut context, &mut output[position..end]) {
+        match Pin::new(&mut *input)
+            .poll_read(&mut context, &mut output[position..end])
+        {
             Poll::Ready(Ok(0)) => break,
             Poll::Ready(Ok(count)) => position += count,
             Poll::Ready(Err(error)) => {
@@ -263,7 +284,9 @@ where
     while position < input.len() {
         let end = (position + width).min(input.len());
         caller_polls += 1;
-        match Pin::new(&mut *output).poll_write(&mut context, &input[position..end]) {
+        match Pin::new(&mut *output)
+            .poll_write(&mut context, &input[position..end])
+        {
             Poll::Ready(Ok(count)) => position += count,
             Poll::Ready(Err(error)) => {
                 panic!("async output benchmark write failed: {error}")
@@ -314,7 +337,8 @@ fn benchmark_async_input(criterion: &mut Criterion) {
                             )
                         },
                         |(mut input, mut output)| {
-                            let stats = read_to_end(&mut input, &mut output, width);
+                            let stats =
+                                read_to_end(&mut input, &mut output, width);
                             let (inner, pending) = input.into_parts();
                             black_box((
                                 stats.bytes,
@@ -341,7 +365,8 @@ fn benchmark_async_input(criterion: &mut Criterion) {
                             )
                         },
                         |(mut input, mut output)| {
-                            let stats = read_to_end(&mut input, &mut output, width);
+                            let stats =
+                                read_to_end(&mut input, &mut output, width);
                             black_box((
                                 stats.bytes,
                                 stats.caller_polls,
@@ -382,7 +407,8 @@ fn benchmark_async_output(criterion: &mut Criterion) {
                             )
                         },
                         |mut output| {
-                            let stats = write_and_flush(&mut output, &fixture, width);
+                            let stats =
+                                write_and_flush(&mut output, &fixture, width);
                             let (inner, pending) = output.into_parts();
                             black_box((
                                 stats.bytes,
@@ -404,7 +430,8 @@ fn benchmark_async_output(criterion: &mut Criterion) {
                     bencher.iter_batched(
                         || ScriptedOutput::new(mode),
                         |mut output| {
-                            let stats = write_and_flush(&mut output, &fixture, width);
+                            let stats =
+                                write_and_flush(&mut output, &fixture, width);
                             black_box((
                                 stats.bytes,
                                 stats.caller_polls,
