@@ -6,11 +6,14 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Error,
-    ErrorKind,
-    Result,
-    SeekFrom,
+use std::{
+    collections::TryReserveError,
+    io::{
+        Error,
+        ErrorKind,
+        Result,
+        SeekFrom,
+    },
 };
 
 use crate::buffered::{
@@ -485,6 +488,38 @@ where
         }
     }
 
+    /// Tries to create a buffered item input with a requested capacity.
+    ///
+    /// # Parameters
+    ///
+    /// - `inner`: Input supplying items to the buffer.
+    /// - `capacity`: Requested internal buffer capacity in items.
+    ///
+    /// # Returns
+    ///
+    /// Returns a buffered item input whose actual capacity is
+    /// `capacity.max(1)`.
+    ///
+    /// # Errors
+    ///
+    /// Returns the allocation error when the backing buffer cannot be
+    /// allocated.
+    ///
+    /// # Panics
+    ///
+    /// Panics if initializing the backing buffer requires
+    /// `I::Item::default()` and it panics.
+    #[inline]
+    pub fn try_with_capacity(
+        inner: I,
+        capacity: usize,
+    ) -> std::result::Result<Self, TryReserveError> {
+        Ok(Self {
+            inner,
+            buffer: Buffer::try_with_capacity(capacity)?,
+        })
+    }
+
     /// Ensures that an input is buffered.
     ///
     /// # Parameters
@@ -496,6 +531,10 @@ where
     /// [`EnsuredBufferedInput::AlreadyBuffered`] when `input` already reports
     /// buffered status, or [`EnsuredBufferedInput::Buffered`] wrapping `input`
     /// in [`BufferedInput`] otherwise.
+    ///
+    /// This check only observes [`Input::is_buffered`]. Standard-library
+    /// [`std::io::BufReader`] values use the blanket [`std::io::Read`]
+    /// implementation and are therefore not detected.
     ///
     /// # Panics
     ///
@@ -525,6 +564,10 @@ where
     /// A boxed input trait object. The original input is boxed directly when it
     /// already reports buffered status; otherwise it is first wrapped in
     /// [`BufferedInput`].
+    ///
+    /// This check only observes [`Input::is_buffered`]. Standard-library
+    /// [`std::io::BufReader`] values use the blanket [`std::io::Read`]
+    /// implementation and are therefore not detected.
     ///
     /// # Panics
     ///

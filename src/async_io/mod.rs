@@ -21,3 +21,5 @@ pub use read_fully_future::ReadFullyFuture;
 pub use read_future::ReadFuture;
 pub use write_fully_future::WriteFullyFuture;
 pub use write_future::WriteFuture;
+
+pub(crate) use read_fully_future::MAX_READY_OPERATIONS_PER_POLL;

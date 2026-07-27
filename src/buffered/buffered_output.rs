@@ -6,14 +6,17 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Error,
-    ErrorKind,
-    Result,
-    SeekFrom,
-};
 use std::mem::ManuallyDrop;
 use std::ptr;
+use std::{
+    collections::TryReserveError,
+    io::{
+        Error,
+        ErrorKind,
+        Result,
+        SeekFrom,
+    },
+};
 
 use crate::buffered::{
     DEFAULT_BUFFER_CAPACITY,
@@ -116,6 +119,39 @@ where
         }
     }
 
+    /// Tries to create a buffered item output with a requested capacity.
+    ///
+    /// # Parameters
+    ///
+    /// - `inner`: Output receiving items when the buffer is flushed.
+    /// - `capacity`: Requested internal buffer capacity in items.
+    ///
+    /// # Returns
+    ///
+    /// Returns a buffered item output whose actual buffer capacity is
+    /// `capacity.max(1)`.
+    ///
+    /// # Errors
+    ///
+    /// Returns the allocation error when the backing buffer cannot be
+    /// allocated.
+    ///
+    /// # Panics
+    ///
+    /// Panics if initializing the backing buffer requires
+    /// `O::Item::default()` and it panics.
+    #[inline]
+    pub fn try_with_capacity(
+        inner: O,
+        capacity: usize,
+    ) -> std::result::Result<Self, TryReserveError> {
+        Ok(Self {
+            inner,
+            buffer: Buffer::try_with_capacity(capacity)?,
+            panicked: false,
+        })
+    }
+
     /// Ensures that an output is buffered.
     ///
     /// # Parameters
@@ -127,6 +163,10 @@ where
     /// [`EnsuredBufferedOutput::AlreadyBuffered`] when `output` already
     /// reports buffered status, or [`EnsuredBufferedOutput::Buffered`]
     /// wrapping `output` in [`BufferedOutput`] otherwise.
+    ///
+    /// This check only observes [`Output::is_buffered`]. Standard-library
+    /// [`std::io::BufWriter`] values use the blanket [`std::io::Write`]
+    /// implementation and are therefore not detected.
     ///
     /// # Panics
     ///
@@ -157,6 +197,10 @@ where
     /// A boxed output trait object. The original output is boxed directly when
     /// it already reports buffered status; otherwise it is first wrapped in
     /// [`BufferedOutput`].
+    ///
+    /// This check only observes [`Output::is_buffered`]. Standard-library
+    /// [`std::io::BufWriter`] values use the blanket [`std::io::Write`]
+    /// implementation and are therefore not detected.
     ///
     /// # Panics
     ///

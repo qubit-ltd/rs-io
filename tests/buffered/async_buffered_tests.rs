@@ -602,6 +602,32 @@ fn test_async_buffered_input_exposes_window_refill_and_consume_operations()
 }
 
 #[test]
+fn test_async_buffered_input_yields_after_bounded_ready_refills()
+-> io::Result<()> {
+    let inner =
+        ScriptedInput::new((0_u16..65).map(|item| ReadStep::Data(vec![item])));
+    let mut input = AsyncBufferedInput::with_capacity(inner, 65);
+    let mut cx = Context::from_waker(Waker::noop());
+
+    assert!(
+        Pin::new(&mut input)
+            .poll_fill_until(&mut cx, 65)
+            .is_pending()
+    );
+    assert_eq!(64, input.unread_len());
+
+    assert!(
+        Pin::new(&mut input)
+            .poll_fill_until(&mut cx, 65)
+            .expect_ready("second refill should complete")?
+    );
+    assert_eq!(65, input.unread_len());
+    assert_eq!(Some(&0), input.unread().first());
+    assert_eq!(Some(&64), input.unread().last());
+    Ok(())
+}
+
+#[test]
 fn test_async_buffered_input_ensure_available_discards_incomplete_eof_window() {
     let mut input = AsyncBufferedInput::with_capacity(
         ScriptedInput::new([ReadStep::Data(vec![1]), ReadStep::Eof]),
@@ -616,6 +642,119 @@ fn test_async_buffered_input_ensure_available_discards_incomplete_eof_window() {
 
     assert_eq!(ErrorKind::UnexpectedEof, error.kind());
     assert!(input.unread().is_empty());
+}
+
+#[test]
+fn test_async_buffered_input_covers_refill_error_and_pending_paths() {
+    let mut cx = Context::from_waker(Waker::noop());
+
+    let mut full = AsyncBufferedInput::with_capacity(
+        ScriptedInput::new([ReadStep::Data(vec![1, 2])]),
+        2,
+    );
+    assert!(
+        Pin::new(&mut full)
+            .poll_fill_more(&mut cx)
+            .expect_ready("initial refill should be ready")
+            .expect("initial refill should succeed")
+    );
+    let error = Pin::new(&mut full)
+        .poll_fill_more(&mut cx)
+        .expect_ready("full refill should be ready")
+        .expect_err("full unread buffer should reject refilling");
+    assert_eq!(ErrorKind::InvalidInput, error.kind());
+
+    let mut failing = AsyncBufferedInput::with_capacity(
+        ScriptedInput::new([ReadStep::Error(ErrorKind::BrokenPipe)]),
+        2,
+    );
+    let error = Pin::new(&mut failing)
+        .poll_fill_more(&mut cx)
+        .expect_ready("read error should be ready")
+        .expect_err("read error should be propagated");
+    assert_eq!(ErrorKind::BrokenPipe, error.kind());
+
+    let mut pending = AsyncBufferedInput::with_capacity(
+        ScriptedInput::new([ReadStep::Pending]),
+        2,
+    );
+    assert!(Pin::new(&mut pending).poll_fill_more(&mut cx).is_pending());
+
+    let mut invalid_count =
+        AsyncBufferedInput::with_capacity(ScriptedInput::new([]), 2);
+    let error = Pin::new(&mut invalid_count)
+        .poll_fill_until(&mut cx, 3)
+        .expect_ready("oversized refill should be ready")
+        .expect_err("oversized refill should fail");
+    assert_eq!(ErrorKind::InvalidInput, error.kind());
+
+    let mut failed_until = AsyncBufferedInput::with_capacity(
+        ScriptedInput::new([ReadStep::Error(ErrorKind::ConnectionReset)]),
+        2,
+    );
+    let error = Pin::new(&mut failed_until)
+        .poll_fill_until(&mut cx, 1)
+        .expect_ready("refill error should be ready")
+        .expect_err("refill error should be propagated");
+    assert_eq!(ErrorKind::ConnectionReset, error.kind());
+
+    let mut pending_until = AsyncBufferedInput::with_capacity(
+        ScriptedInput::new([ReadStep::Pending]),
+        2,
+    );
+    assert!(
+        Pin::new(&mut pending_until)
+            .poll_fill_until(&mut cx, 1)
+            .is_pending()
+    );
+
+    let mut ready_ensure = AsyncBufferedInput::with_capacity(
+        ScriptedInput::new([ReadStep::Data(vec![9])]),
+        2,
+    );
+    Pin::new(&mut ready_ensure)
+        .poll_ensure_available(&mut cx, 1)
+        .expect_ready("available item should satisfy ensure")
+        .expect("ensure should succeed");
+
+    let mut failed_ensure = AsyncBufferedInput::with_capacity(
+        ScriptedInput::new([ReadStep::Error(ErrorKind::Other)]),
+        2,
+    );
+    let error = Pin::new(&mut failed_ensure)
+        .poll_ensure_available(&mut cx, 1)
+        .expect_ready("refill error should be ready")
+        .expect_err("ensure should propagate refill error");
+    assert_eq!(ErrorKind::Other, error.kind());
+
+    let mut pending_ensure = AsyncBufferedInput::with_capacity(
+        ScriptedInput::new([ReadStep::Pending]),
+        2,
+    );
+    assert!(
+        Pin::new(&mut pending_ensure)
+            .poll_ensure_available(&mut cx, 1)
+            .is_pending()
+    );
+
+    let mut zero_read = AsyncBufferedInput::with_capacity(
+        ScriptedInput::new([ReadStep::Data(vec![1])]),
+        2,
+    );
+    let mut output = [];
+    assert_eq!(
+        0,
+        unsafe {
+            Pin::new(&mut zero_read).poll_read_unchecked(
+                &mut cx,
+                &mut output,
+                0,
+                0,
+            )
+        }
+        .expect_ready("zero-length unchecked read should be ready")
+        .expect("zero-length unchecked read should succeed")
+    );
 }
 
 #[test]
@@ -643,6 +782,33 @@ fn test_async_buffered_output_exposes_spare_window_and_async_capacity_check()
         .try_reserve_capacity(6)
         .expect("buffer capacity should grow");
     assert!(output.capacity() >= 6);
+    Ok(())
+}
+
+#[test]
+fn test_async_buffered_output_yields_after_bounded_ready_drains()
+-> io::Result<()> {
+    let inner = ScriptedOutput::new(
+        std::iter::repeat_with(|| WriteStep::Accept(1)).take(65),
+        [],
+    );
+    let mut output = AsyncBufferedOutput::with_capacity(inner, 65);
+    let mut cx = Context::from_waker(Waker::noop());
+    let first: Vec<_> = (0_u16..64).collect();
+
+    assert_eq!(64, complete(output.write_async(&first))?);
+    assert_eq!(1, complete(output.write_async(&[64]))?);
+    assert_eq!(65, output.pending_len());
+
+    assert!(Pin::new(&mut output).poll_flush(&mut cx).is_pending());
+    assert_eq!(1, output.pending_len());
+    assert_eq!(64, output.inner().values.len());
+
+    Pin::new(&mut output)
+        .poll_flush(&mut cx)
+        .expect_ready("second flush should complete")?;
+    assert_eq!(0, output.pending_len());
+    assert_eq!((0_u16..65).collect::<Vec<_>>(), output.inner().values);
     Ok(())
 }
 
