@@ -32,6 +32,7 @@ use criterion::{
 use qubit_io::{
     BufferedInput,
     BufferedOutput,
+    Input,
 };
 
 const BUFFER_CAPACITY: usize = 8 * 1024;
@@ -110,9 +111,36 @@ fn benchmark_buffered_input(criterion: &mut Criterion) {
                     |(mut input, mut output)| {
                         let mut total = 0_usize;
                         loop {
-                            let count = input
-                                .read(&mut output[..width])
-                                .expect("std buffered input benchmark read");
+                            let count =
+                                Read::read(&mut input, &mut output[..width])
+                                    .expect(
+                                        "std buffered input benchmark read",
+                                    );
+                            if count == 0 {
+                                break;
+                            }
+                            total += count;
+                        }
+                        black_box((total, output));
+                    },
+                    BatchSize::SmallInput,
+                );
+            },
+        );
+        group.bench_with_input(
+            BenchmarkId::new("qubit_unbuffered", width),
+            &width,
+            |bencher, &width| {
+                bencher.iter_batched(
+                    || (Cursor::new(fixture.clone()), vec![0_u8; width]),
+                    |(mut input, mut output)| {
+                        let mut total = 0_usize;
+                        loop {
+                            let count =
+                                Input::read(&mut input, &mut output[..width])
+                                    .expect(
+                                        "Qubit unbuffered input benchmark read",
+                                    );
                             if count == 0 {
                                 break;
                             }
@@ -133,9 +161,9 @@ fn benchmark_buffered_input(criterion: &mut Criterion) {
                     |(mut input, mut output)| {
                         let mut total = 0_usize;
                         loop {
-                            let count = input
-                                .read(&mut output[..width])
-                                .expect("unbuffered input benchmark read");
+                            let count =
+                                Read::read(&mut input, &mut output[..width])
+                                    .expect("unbuffered input benchmark read");
                             if count == 0 {
                                 break;
                             }
