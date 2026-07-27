@@ -5,4 +5,4 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-pub mod read_ext_impl;
+pub(crate) mod read_ext_impl;
