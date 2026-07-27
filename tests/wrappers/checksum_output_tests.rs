@@ -10,10 +10,17 @@
 use std::{
     collections::hash_map::DefaultHasher,
     hash::Hasher,
-    io::{ErrorKind, SeekFrom},
+    io::{
+        ErrorKind,
+        SeekFrom,
+    },
 };
 
-use qubit_io::{ChecksumOutput, Output, Seekable};
+use qubit_io::{
+    ChecksumOutput,
+    Output,
+    Seekable,
+};
 
 use super::support_tests::ScriptedOutput;
 
@@ -25,7 +32,8 @@ fn expected_checksum(bytes: &[u8]) -> u64 {
 
 #[test]
 fn test_checksum_output_hashes_successful_prefix_and_exposes_accessors() {
-    let mut output = ChecksumOutput::new(ScriptedOutput::short(2), DefaultHasher::new());
+    let mut output =
+        ChecksumOutput::new(ScriptedOutput::short(2), DefaultHasher::new());
     output.inner_mut().items.extend_from_slice(b"x");
     output.hasher_mut().write(b"y");
 
@@ -52,8 +60,10 @@ fn test_checksum_output_does_not_hash_failed_or_invalid_writes() {
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!(expected_checksum(b""), failing.checksum());
 
-    let mut invalid =
-        ChecksumOutput::new(ScriptedOutput::<u8>::invalid_count(), DefaultHasher::new());
+    let mut invalid = ChecksumOutput::new(
+        ScriptedOutput::<u8>::invalid_count(),
+        DefaultHasher::new(),
+    );
     let error = invalid
         .write(b"abc")
         .expect_err("invalid progress should be rejected");
@@ -63,7 +73,10 @@ fn test_checksum_output_does_not_hash_failed_or_invalid_writes() {
 
 #[test]
 fn test_checksum_output_forwards_flush_and_seek_without_hashing() {
-    let mut output = ChecksumOutput::new(ScriptedOutput::<u8>::accepting(), DefaultHasher::new());
+    let mut output = ChecksumOutput::new(
+        ScriptedOutput::<u8>::accepting(),
+        DefaultHasher::new(),
+    );
 
     output.flush().expect("flush should succeed");
     assert_eq!(1, output.inner().flush_calls);

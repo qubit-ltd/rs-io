@@ -11,5 +11,8 @@ use std::io::Cursor;
 
 #[test]
 fn test_tokio_async_read_type_is_public() {
-    assert!(std::any::type_name::<TokioAsyncRead<Cursor<Vec<u8>>>>().contains("TokioAsyncRead"));
+    assert!(
+        std::any::type_name::<TokioAsyncRead<Cursor<Vec<u8>>>>()
+            .contains("TokioAsyncRead")
+    );
 }

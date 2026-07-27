@@ -8,7 +8,10 @@
 
 use std::io;
 
-use qubit_io::{BoxInput, Input};
+use qubit_io::{
+    BoxInput,
+    Input,
+};
 
 struct CharInput {
     items: Vec<char>,
@@ -52,7 +55,8 @@ fn test_box_input_forwards_trait_object_input() {
     // SAFETY: `output[1..2]` is a valid destination range.
     assert_eq!(
         1,
-        unsafe { input.read_unchecked(&mut output, 1, 1) }.expect("unchecked read should succeed")
+        unsafe { input.read_unchecked(&mut output, 1, 1) }
+            .expect("unchecked read should succeed")
     );
     assert_eq!(['\0', 'a'], output);
     assert_eq!(

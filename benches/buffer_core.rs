@@ -14,8 +14,18 @@
 
 use std::hint::black_box;
 
-use criterion::{BatchSize, BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use qubit_io::{Buffer, UncheckedSlice};
+use criterion::{
+    BatchSize,
+    BenchmarkId,
+    Criterion,
+    Throughput,
+    criterion_group,
+    criterion_main,
+};
+use qubit_io::{
+    Buffer,
+    UncheckedSlice,
+};
 
 const BUFFER_CAPACITY: usize = 8 * 1024;
 const DATA_LEN: usize = 256 * 1024;
@@ -34,20 +44,32 @@ fn copy_offsets(width: usize) -> Vec<usize> {
 }
 
 /// Copies the fixture through `UncheckedSlice` with compiler-visible bounds.
-fn copy_unchecked_with_visible_invariants(input: &[u8], output: &mut [u8], width: usize) {
+fn copy_unchecked_with_visible_invariants(
+    input: &[u8],
+    output: &mut [u8],
+    width: usize,
+) {
     for offset in (0..input.len()).step_by(width) {
         // SAFETY: `COPY_WIDTHS` divides `DATA_LEN`; both ranges start at the
         // same valid offset and contain exactly `width` items.
         unsafe {
-            UncheckedSlice::copy_nonoverlapping(input, offset, output, offset, width);
+            UncheckedSlice::copy_nonoverlapping(
+                input, offset, output, offset, width,
+            );
         }
     }
 }
 
-/// Copies the fixture with safe slices while bounds remain visible to the optimizer.
-fn copy_safe_with_visible_invariants(input: &[u8], output: &mut [u8], width: usize) {
+/// Copies the fixture with safe slices while bounds remain visible to the
+/// optimizer.
+fn copy_safe_with_visible_invariants(
+    input: &[u8],
+    output: &mut [u8],
+    width: usize,
+) {
     for offset in (0..input.len()).step_by(width) {
-        output[offset..offset + width].copy_from_slice(&input[offset..offset + width]);
+        output[offset..offset + width]
+            .copy_from_slice(&input[offset..offset + width]);
     }
 }
 
@@ -64,7 +86,9 @@ fn copy_unchecked_with_runtime_indexes(
         // destination range remains valid even though the optimizer cannot
         // prove that fact after `black_box`.
         unsafe {
-            UncheckedSlice::copy_nonoverlapping(input, offset, output, offset, width);
+            UncheckedSlice::copy_nonoverlapping(
+                input, offset, output, offset, width,
+            );
         }
     }
 }
@@ -78,11 +102,13 @@ fn copy_safe_with_runtime_indexes(
 ) {
     for &offset in offsets {
         let offset = black_box(offset);
-        output[offset..offset + width].copy_from_slice(&input[offset..offset + width]);
+        output[offset..offset + width]
+            .copy_from_slice(&input[offset..offset + width]);
     }
 }
 
-/// Appends the fixture through `Buffer::copy_from` using valid window invariants.
+/// Appends the fixture through `Buffer::copy_from` using valid window
+/// invariants.
 fn append_with_buffer(input: &[u8], buffer: &mut Buffer<u8>, width: usize) {
     for input_index in (0..input.len()).step_by(width) {
         if buffer.spare_capacity() < width {
@@ -97,13 +123,18 @@ fn append_with_buffer(input: &[u8], buffer: &mut Buffer<u8>, width: usize) {
 }
 
 /// Appends the fixture with the corresponding safe-slice window implementation.
-fn append_with_safe_slices(input: &[u8], output: &mut [u8], width: usize) -> usize {
+fn append_with_safe_slices(
+    input: &[u8],
+    output: &mut [u8],
+    width: usize,
+) -> usize {
     let mut limit = 0_usize;
     for input_index in (0..input.len()).step_by(width) {
         if output.len() - limit < width {
             limit = 0;
         }
-        output[limit..limit + width].copy_from_slice(&input[input_index..input_index + width]);
+        output[limit..limit + width]
+            .copy_from_slice(&input[input_index..input_index + width]);
         limit += width;
     }
     limit
@@ -144,7 +175,11 @@ fn benchmark_visible_invariants(criterion: &mut Criterion) {
                 bencher.iter_batched(
                     || vec![0_u8; DATA_LEN],
                     |mut output| {
-                        copy_unchecked_with_visible_invariants(&input, &mut output, width);
+                        copy_unchecked_with_visible_invariants(
+                            &input,
+                            &mut output,
+                            width,
+                        );
                         black_box(output);
                     },
                     BatchSize::LargeInput,
@@ -158,7 +193,11 @@ fn benchmark_visible_invariants(criterion: &mut Criterion) {
                 bencher.iter_batched(
                     || vec![0_u8; DATA_LEN],
                     |mut output| {
-                        copy_safe_with_visible_invariants(&input, &mut output, width);
+                        copy_safe_with_visible_invariants(
+                            &input,
+                            &mut output,
+                            width,
+                        );
                         black_box(output);
                     },
                     BatchSize::LargeInput,
@@ -186,7 +225,12 @@ fn benchmark_runtime_indexes(criterion: &mut Criterion) {
                 bencher.iter_batched(
                     || vec![0_u8; DATA_LEN],
                     |mut output| {
-                        copy_unchecked_with_runtime_indexes(&input, &mut output, &offsets, width);
+                        copy_unchecked_with_runtime_indexes(
+                            &input,
+                            &mut output,
+                            &offsets,
+                            width,
+                        );
                         black_box(output);
                     },
                     BatchSize::LargeInput,
@@ -200,7 +244,12 @@ fn benchmark_runtime_indexes(criterion: &mut Criterion) {
                 bencher.iter_batched(
                     || vec![0_u8; DATA_LEN],
                     |mut output| {
-                        copy_safe_with_runtime_indexes(&input, &mut output, &offsets, width);
+                        copy_safe_with_runtime_indexes(
+                            &input,
+                            &mut output,
+                            &offsets,
+                            width,
+                        );
                         black_box(output);
                     },
                     BatchSize::LargeInput,
@@ -241,7 +290,8 @@ fn benchmark_buffer_append(criterion: &mut Criterion) {
                 bencher.iter_batched(
                     || vec![0_u8; BUFFER_CAPACITY],
                     |mut output| {
-                        let limit = append_with_safe_slices(&input, &mut output, width);
+                        let limit =
+                            append_with_safe_slices(&input, &mut output, width);
                         black_box((output, limit));
                     },
                     BatchSize::SmallInput,
@@ -290,7 +340,11 @@ fn benchmark_buffer_consume(criterion: &mut Criterion) {
                 bencher.iter_batched(
                     || vec![0_u8; BUFFER_CAPACITY],
                     |mut output| {
-                        copy_from_safe_slices(&input[..BUFFER_CAPACITY], &mut output, width);
+                        copy_from_safe_slices(
+                            &input[..BUFFER_CAPACITY],
+                            &mut output,
+                            width,
+                        );
                         black_box(output);
                     },
                     BatchSize::SmallInput,
