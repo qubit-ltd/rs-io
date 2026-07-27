@@ -68,7 +68,12 @@ where
     /// Returns a future that resolves with the total number of items read.
     #[inline(always)]
     pub const fn new(input: Pin<&'a mut I>, output: &'a mut [I::Item]) -> Self {
-        Self { input, output, read: 0, completed: false }
+        Self {
+            input,
+            output,
+            read: 0,
+            completed: false,
+        }
     }
 
     /// Returns the number of items read so far.

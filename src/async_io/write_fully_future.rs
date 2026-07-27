@@ -71,7 +71,12 @@ where
     /// Returns a future that resolves after every item has been accepted.
     #[inline(always)]
     pub const fn new(output: Pin<&'a mut O>, input: &'a [O::Item]) -> Self {
-        Self { output, input, written: 0, completed: false }
+        Self {
+            output,
+            input,
+            written: 0,
+            completed: false,
+        }
     }
 
     /// Returns the number of items written so far.
