@@ -7,22 +7,11 @@
 // =============================================================================
 //! Tests for [`qubit_io::SyncSeekTeeInput`].
 
-use std::io::{
-    ErrorKind,
-    SeekFrom,
-};
+use std::io::{ErrorKind, SeekFrom};
 
-use qubit_io::{
-    Input,
-    Seekable,
-    SyncSeekTeeInput,
-};
+use qubit_io::{Input, Seekable, SyncSeekTeeInput};
 
-use super::support_tests::{
-    InputAction,
-    ScriptedInput,
-    ScriptedOutput,
-};
+use super::support_tests::{InputAction, ScriptedInput, ScriptedOutput};
 
 #[test]
 fn test_sync_seek_tee_input_mirrors_generic_items_and_exposes_parts() {

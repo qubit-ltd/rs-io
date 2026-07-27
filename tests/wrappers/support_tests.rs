@@ -6,18 +6,9 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    self,
-    Error,
-    ErrorKind,
-    SeekFrom,
-};
+use std::io::{self, Error, ErrorKind, SeekFrom};
 
-use qubit_io::{
-    Input,
-    Output,
-    Seekable,
-};
+use qubit_io::{Input, Output, Seekable};
 
 /// Marker used by compile-time async wrapper surface tests.
 pub(crate) struct TestStream;
@@ -250,9 +241,7 @@ fn seek_position(current: u64, position: SeekFrom) -> io::Result<u64> {
         SeekFrom::Start(position) => Ok(position),
         SeekFrom::Current(offset) => {
             let target = i128::from(current) + i128::from(offset);
-            u64::try_from(target).map_err(|_| {
-                Error::new(ErrorKind::InvalidInput, "negative seek")
-            })
+            u64::try_from(target).map_err(|_| Error::new(ErrorKind::InvalidInput, "negative seek"))
         }
         SeekFrom::End(_) => Err(Error::new(
             ErrorKind::Unsupported,

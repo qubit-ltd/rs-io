@@ -6,10 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Result,
-    Write,
-};
+use std::io::{Result, Write};
 
 use crate::util::UncheckedSlice;
 
@@ -59,8 +56,7 @@ pub trait WriteExt: Write {
         );
         // SAFETY: The caller guarantees that the computed pointer and length
         // form a valid subslice of `buffer`.
-        let source =
-            unsafe { UncheckedSlice::subslice(buffer, start_index, count) };
+        let source = unsafe { UncheckedSlice::subslice(buffer, start_index, count) };
         self.write(source)
     }
 
@@ -103,8 +99,7 @@ pub trait WriteExt: Write {
         );
         // SAFETY: The caller guarantees that the computed pointer and length
         // form a valid subslice of `buffer`.
-        let source =
-            unsafe { UncheckedSlice::subslice(buffer, start_index, count) };
+        let source = unsafe { UncheckedSlice::subslice(buffer, start_index, count) };
         self.write_all(source)
     }
 }

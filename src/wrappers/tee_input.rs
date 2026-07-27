@@ -6,17 +6,9 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    self,
-    SeekFrom,
-};
+use std::io::{self, SeekFrom};
 
-use crate::{
-    Input,
-    Output,
-    Seekable,
-    SyncSeekTeeInput,
-};
+use crate::{Input, Output, Seekable, SyncSeekTeeInput};
 
 /// Input wrapper that mirrors successfully returned items to a branch output.
 ///
@@ -45,10 +37,7 @@ impl<I, B> TeeInput<I, B> {
 
     /// Creates a tee input whose branch position follows source seeks.
     #[inline(always)]
-    pub const fn with_sync_branch_seek(
-        inner: I,
-        branch: B,
-    ) -> SyncSeekTeeInput<I, B> {
+    pub const fn with_sync_branch_seek(inner: I, branch: B) -> SyncSeekTeeInput<I, B> {
         SyncSeekTeeInput::new(inner, branch)
     }
 

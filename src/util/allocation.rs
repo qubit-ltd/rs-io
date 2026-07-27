@@ -9,11 +9,7 @@
 #[cfg(coverage)]
 use std::cell::Cell;
 use std::collections::TryReserveError;
-use std::io::{
-    Error,
-    ErrorKind,
-    Result,
-};
+use std::io::{Error, ErrorKind, Result};
 
 /// Converts a fallible allocation error into an I/O error.
 ///

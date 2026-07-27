@@ -41,74 +41,28 @@ mod traits;
 mod util;
 mod wrappers;
 
-pub use adapters::{
-    BoxInput,
-    BoxOutput,
-    InputRef,
-    OutputRef,
-};
+pub use adapters::{BoxInput, BoxOutput, InputRef, OutputRef};
 #[cfg(feature = "futures-io")]
-pub use adapters::{
-    FuturesAsyncRead,
-    FuturesAsyncWrite,
-    FuturesInput,
-    FuturesOutput,
-};
+pub use adapters::{FuturesAsyncRead, FuturesAsyncWrite, FuturesInput, FuturesOutput};
 #[cfg(feature = "tokio")]
-pub use adapters::{
-    TokioAsyncRead,
-    TokioAsyncWrite,
-    TokioInput,
-    TokioOutput,
-};
+pub use adapters::{TokioAsyncRead, TokioAsyncWrite, TokioInput, TokioOutput};
 pub use async_io::{
-    CloseFuture,
-    FlushFuture,
-    ReadExactFuture,
-    ReadFullyFuture,
-    ReadFuture,
-    WriteFullyFuture,
+    CloseFuture, FlushFuture, ReadExactFuture, ReadFullyFuture, ReadFuture, WriteFullyFuture,
     WriteFuture,
 };
 pub use buffered::{
-    AsyncBufferedInput,
-    AsyncBufferedOutput,
-    Buffer,
-    BufferedInput,
-    BufferedOutput,
-    EnsuredBufferedInput,
-    EnsuredBufferedOutput,
+    AsyncBufferedInput, AsyncBufferedOutput, Buffer, BufferedInput, BufferedOutput,
+    EnsuredBufferedInput, EnsuredBufferedOutput,
 };
 pub use capacity_const::{
-    DEFAULT_BUFFER_CAPACITY,
-    DEFAULT_COMPARE_BUFFER_SIZE,
-    DEFAULT_COPY_BUFFER_SIZE,
+    DEFAULT_BUFFER_CAPACITY, DEFAULT_COMPARE_BUFFER_SIZE, DEFAULT_COPY_BUFFER_SIZE,
 };
-pub use ext::{
-    BufReadExt,
-    ReadExt,
-    ReadSeekExt,
-    SeekExt,
-    WriteExt,
-    WriteSeekExt,
-};
+pub use ext::{BufReadExt, ReadExt, ReadSeekExt, SeekExt, WriteExt, WriteSeekExt};
 pub use into_inner_error::IntoInnerError;
 pub use traits::{
-    AsyncClose,
-    AsyncInput,
-    AsyncOutput,
-    BufReadSeek,
-    Input,
-    Output,
-    PinnedAsyncInputExt,
-    PinnedAsyncOutputExt,
-    ReadSeek,
-    ReadWrite,
-    ReadWriteSeek,
-    Seekable,
-    SeekableInput,
-    SeekableOutput,
-    WriteSeek,
+    AsyncClose, AsyncInput, AsyncOutput, BufReadSeek, Input, Output, PinnedAsyncInputExt,
+    PinnedAsyncOutputExt, ReadSeek, ReadWrite, ReadWriteSeek, Seekable, SeekableInput,
+    SeekableOutput, WriteSeek,
 };
 pub use util::Streams;
 #[allow(unused_imports)]
@@ -116,34 +70,13 @@ pub use util::UncheckedSlice;
 #[cfg(coverage)]
 #[doc(hidden)]
 pub use util::{
-    coverage_add_item_count_overflow,
-    coverage_fail_next_add_item_count,
-    coverage_fail_next_reserve,
-    coverage_fail_next_string_reserve,
-    coverage_fail_reserve_above,
-    coverage_fail_reserve_after,
-    coverage_reset_add_item_count_hooks,
-    coverage_reset_reserve_hooks,
+    coverage_add_item_count_overflow, coverage_fail_next_add_item_count,
+    coverage_fail_next_reserve, coverage_fail_next_string_reserve, coverage_fail_reserve_above,
+    coverage_fail_reserve_after, coverage_reset_add_item_count_hooks, coverage_reset_reserve_hooks,
 };
-pub use util::{
-    try_reserve_string,
-    try_reserve_vec,
-};
+pub use util::{try_reserve_string, try_reserve_vec};
 pub use wrappers::{
-    AsyncChecksumInput,
-    AsyncChecksumOutput,
-    AsyncCountingInput,
-    AsyncCountingOutput,
-    AsyncLimitInput,
-    AsyncLimitOutput,
-    ChecksumInput,
-    ChecksumOutput,
-    CountingInput,
-    CountingOutput,
-    LimitInput,
-    LimitOutput,
-    PositionGuard,
-    SyncSeekTeeInput,
-    TeeInput,
-    TeeOutput,
+    AsyncChecksumInput, AsyncChecksumOutput, AsyncCountingInput, AsyncCountingOutput,
+    AsyncLimitInput, AsyncLimitOutput, ChecksumInput, ChecksumOutput, CountingInput,
+    CountingOutput, LimitInput, LimitOutput, PositionGuard, SyncSeekTeeInput, TeeInput, TeeOutput,
 };
