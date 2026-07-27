@@ -7,17 +7,9 @@
 // =============================================================================
 //! Tests for [`qubit_io::CountingInput`].
 
-use std::io::{
-    Cursor,
-    ErrorKind,
-    SeekFrom,
-};
+use std::io::{Cursor, ErrorKind, SeekFrom};
 
-use qubit_io::{
-    CountingInput,
-    Input,
-    Seekable,
-};
+use qubit_io::{CountingInput, Input, Seekable};
 
 use super::support_tests::ScriptedInput;
 
@@ -49,8 +41,7 @@ fn test_counting_input_exposes_byte_count_and_inner_input() {
 
 #[test]
 fn test_counting_input_preserves_count_on_read_errors_and_invalid_progress() {
-    let mut failing =
-        CountingInput::new(ScriptedInput::<u16>::failing("read failed"));
+    let mut failing = CountingInput::new(ScriptedInput::<u16>::failing("read failed"));
     let mut output = [0_u16; 2];
     let error = failing
         .read(&mut output)

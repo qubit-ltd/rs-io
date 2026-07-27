@@ -7,16 +7,9 @@
 // =============================================================================
 //! Tests for [`qubit_io::CountingOutput`].
 
-use std::io::{
-    ErrorKind,
-    SeekFrom,
-};
+use std::io::{ErrorKind, SeekFrom};
 
-use qubit_io::{
-    CountingOutput,
-    Output,
-    Seekable,
-};
+use qubit_io::{CountingOutput, Output, Seekable};
 
 use super::support_tests::ScriptedOutput;
 
@@ -50,16 +43,14 @@ fn test_counting_output_exposes_byte_count_and_inner_output() {
 
 #[test]
 fn test_counting_output_preserves_count_on_write_errors_and_invalid_progress() {
-    let mut failing =
-        CountingOutput::new(ScriptedOutput::<u16>::failing_write("failed"));
+    let mut failing = CountingOutput::new(ScriptedOutput::<u16>::failing_write("failed"));
     let error = failing
         .write(&[1_u16])
         .expect_err("write error should be returned");
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!(0, failing.items_written());
 
-    let mut invalid =
-        CountingOutput::new(ScriptedOutput::<u16>::invalid_count());
+    let mut invalid = CountingOutput::new(ScriptedOutput::<u16>::invalid_count());
     let error = invalid
         .write(&[1_u16])
         .expect_err("invalid progress should be rejected");

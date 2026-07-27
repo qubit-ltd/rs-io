@@ -5,17 +5,9 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use std::io::{
-    Read,
-    Result,
-    Seek,
-    SeekFrom,
-};
+use std::io::{Read, Result, Seek, SeekFrom};
 
-use crate::{
-    ReadSeek,
-    ext::internal::read_ext_impl,
-};
+use crate::{ReadSeek, ext::internal::read_ext_impl};
 
 /// Extension methods for values that implement both [`Read`] and [`Seek`].
 ///
@@ -59,11 +51,7 @@ pub trait ReadSeekExt: Read + Seek {
     /// Returns an error when reading the current position, seeking to `offset`,
     /// reading bytes, or restoring the original position fails. If restoration
     /// fails, the restoration error is returned.
-    fn read_exact_or_eof_at(
-        &mut self,
-        offset: u64,
-        buffer: &mut [u8],
-    ) -> Result<usize>;
+    fn read_exact_or_eof_at(&mut self, offset: u64, buffer: &mut [u8]) -> Result<usize>;
 }
 
 /// Implements a position-preserving read through a type-erased stream.
@@ -78,10 +66,7 @@ pub trait ReadSeekExt: Read + Seek {
 /// # Errors
 /// Returns an error when reading, querying, or restoring the stream position
 /// fails.
-fn peek_exact_or_eof_impl(
-    reader: &mut dyn ReadSeek,
-    buffer: &mut [u8],
-) -> Result<usize> {
+fn peek_exact_or_eof_impl(reader: &mut dyn ReadSeek, buffer: &mut [u8]) -> Result<usize> {
     let position = reader.stream_position()?;
     let read_result = read_ext_impl::read_exact_or_eof(reader, buffer);
     let restore_result = reader.seek(SeekFrom::Start(position));
@@ -157,11 +142,7 @@ where
     /// Returns an error when querying, changing, or restoring the stream
     /// position, or when reading fails.
     #[inline(always)]
-    fn read_exact_or_eof_at(
-        &mut self,
-        offset: u64,
-        buffer: &mut [u8],
-    ) -> Result<usize> {
+    fn read_exact_or_eof_at(&mut self, offset: u64, buffer: &mut [u8]) -> Result<usize> {
         let mut reader = self;
         read_exact_or_eof_at_impl(&mut reader, offset, buffer)
     }

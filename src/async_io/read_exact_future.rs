@@ -7,16 +7,9 @@
 // =============================================================================
 
 use std::future::Future;
-use std::io::{
-    Error,
-    ErrorKind,
-    Result,
-};
+use std::io::{Error, ErrorKind, Result};
 use std::pin::Pin;
-use std::task::{
-    Context,
-    Poll,
-};
+use std::task::{Context, Poll};
 
 use crate::AsyncInput;
 

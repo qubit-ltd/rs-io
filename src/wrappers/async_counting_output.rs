@@ -9,17 +9,10 @@
 use std::{
     io,
     pin::Pin,
-    task::{
-        Context,
-        Poll,
-    },
+    task::{Context, Poll},
 };
 
-use crate::{
-    AsyncClose,
-    AsyncOutput,
-    traits::validate_async_error,
-};
+use crate::{AsyncClose, AsyncOutput, traits::validate_async_error};
 
 /// Asynchronous output that counts successfully accepted items.
 ///
@@ -55,10 +48,7 @@ where
     /// Returns an error reported by the wrapped output. Invalid asynchronous
     /// error kinds are normalized to [`io::ErrorKind::InvalidData`].
     #[inline(always)]
-    fn poll_close(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<io::Result<()>> {
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         // SAFETY: `inner` is never moved while projecting this pinned wrapper.
         let this = unsafe { self.get_unchecked_mut() };
         // SAFETY: The pinned wrapper keeps `inner` at a stable address.
@@ -203,8 +193,7 @@ where
         match inner.poll_write(cx, source) {
             Poll::Ready(Ok(written)) => {
                 let written_u64 = u64::try_from(written).unwrap_or(u64::MAX);
-                this.items_written =
-                    this.items_written.saturating_add(written_u64);
+                this.items_written = this.items_written.saturating_add(written_u64);
                 Poll::Ready(Ok(written))
             }
             Poll::Ready(Err(error)) => Poll::Ready(Err(error)),
@@ -228,10 +217,7 @@ where
     /// Returns an error reported by the wrapped output. Invalid asynchronous
     /// error kinds are normalized to [`io::ErrorKind::InvalidData`].
     #[inline(always)]
-    fn poll_flush(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<io::Result<()>> {
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         // SAFETY: `inner` is never moved while projecting this pinned wrapper.
         let this = unsafe { self.get_unchecked_mut() };
         // SAFETY: The pinned wrapper keeps `inner` at a stable address.
