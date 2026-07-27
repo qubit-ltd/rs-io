@@ -16,5 +16,4 @@ All notable changes to this project are documented in this file.
 - Documented ordered, non-transactional error behavior for tee writes, flushes,
   and synchronized seeks.
 
-See the [0.14 migration guide](doc/migration-0.14.md) for the complete mapping
-and behavioral notes.
+The renamed wrappers and their behavior are documented in the user guide.
