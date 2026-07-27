@@ -7,11 +7,18 @@
 // =============================================================================
 
 use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::task::{
+    Context,
+    Poll,
+};
 
 use futures_io::AsyncRead;
 
-use crate::{AsyncInput, UncheckedSlice, traits::validate_async_error};
+use crate::{
+    AsyncInput,
+    UncheckedSlice,
+    traits::validate_async_error,
+};
 
 /// Adapts a futures-io [`AsyncRead`] value to Qubit's [`AsyncInput`].
 ///
@@ -140,7 +147,8 @@ where
             return Poll::Ready(Ok(0));
         }
         // SAFETY: The caller guarantees that the destination range is valid.
-        let target = unsafe { UncheckedSlice::subslice_mut(output, index, count) };
+        let target =
+            unsafe { UncheckedSlice::subslice_mut(output, index, count) };
         AsyncRead::poll_read(self.get_pin_mut(), cx, target)
             .map(|result| result.map_err(validate_async_error))
     }

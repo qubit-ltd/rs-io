@@ -31,7 +31,10 @@ impl AsyncContractError {
     ///
     /// Returns an error retaining both supplied values.
     #[inline(always)]
-    pub(in crate::traits) const fn new(message: &'static str, source: io::Error) -> Self {
+    pub(in crate::traits) const fn new(
+        message: &'static str,
+        source: io::Error,
+    ) -> Self {
         Self { message, source }
     }
 }

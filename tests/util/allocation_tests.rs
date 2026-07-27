@@ -7,7 +7,10 @@
 // =============================================================================
 use std::collections::TryReserveError;
 
-use qubit_io::{try_reserve_string, try_reserve_vec};
+use qubit_io::{
+    try_reserve_string,
+    try_reserve_vec,
+};
 
 #[test]
 fn test_try_reserve_vec_preserves_try_reserve_error() {

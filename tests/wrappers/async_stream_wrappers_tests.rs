@@ -7,13 +7,27 @@
 // =============================================================================
 
 use std::{
-    collections::{VecDeque, hash_map::DefaultHasher},
+    collections::{
+        VecDeque,
+        hash_map::DefaultHasher,
+    },
     future::Future,
     hash::Hasher,
-    io::{self, Error, ErrorKind},
+    io::{
+        self,
+        Error,
+        ErrorKind,
+    },
     pin::Pin,
-    sync::{Arc, Mutex},
-    task::{Context, Poll, Waker},
+    sync::{
+        Arc,
+        Mutex,
+    },
+    task::{
+        Context,
+        Poll,
+        Waker,
+    },
 };
 
 enum ReadStep {
@@ -59,7 +73,9 @@ impl AsyncInput for ScriptedInput {
                 output[index..index + read].copy_from_slice(&bytes[..read]);
                 Poll::Ready(Ok(read))
             }
-            ReadStep::Error(kind) => Poll::Ready(Err(Error::new(kind, "scripted read failure"))),
+            ReadStep::Error(kind) => {
+                Poll::Ready(Err(Error::new(kind, "scripted read failure")))
+            }
             ReadStep::Pending => Poll::Pending,
             ReadStep::Eof => Poll::Ready(Ok(0)),
         }
@@ -112,9 +128,15 @@ impl ScriptedOutput {
 }
 
 impl AsyncClose for ScriptedOutput {
-    fn poll_close(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    fn poll_close(
+        mut self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<io::Result<()>> {
         if let Some(kind) = self.close_error.take() {
-            return Poll::Ready(Err(Error::new(kind, "scripted close failure")));
+            return Poll::Ready(Err(Error::new(
+                kind,
+                "scripted close failure",
+            )));
         }
         self.closed = true;
         Poll::Ready(Ok(()))
@@ -145,23 +167,37 @@ impl AsyncOutput for ScriptedOutput {
                 self.bytes.extend_from_slice(&input[index..index + written]);
                 Poll::Ready(Ok(written))
             }
-            WriteStep::Error(kind) => Poll::Ready(Err(Error::new(kind, "scripted write failure"))),
+            WriteStep::Error(kind) => {
+                Poll::Ready(Err(Error::new(kind, "scripted write failure")))
+            }
             WriteStep::Pending => Poll::Pending,
         }
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    fn poll_flush(
+        mut self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<io::Result<()>> {
         match self.flush_steps.pop_front().unwrap_or(FlushStep::Ready) {
             FlushStep::Ready => Poll::Ready(Ok(())),
-            FlushStep::Error(kind) => Poll::Ready(Err(Error::new(kind, "scripted flush failure"))),
+            FlushStep::Error(kind) => {
+                Poll::Ready(Err(Error::new(kind, "scripted flush failure")))
+            }
             FlushStep::Pending => Poll::Pending,
         }
     }
 }
 
 use qubit_io::{
-    AsyncChecksumInput, AsyncChecksumOutput, AsyncClose, AsyncCountingInput, AsyncCountingOutput,
-    AsyncInput, AsyncLimitInput, AsyncLimitOutput, AsyncOutput,
+    AsyncChecksumInput,
+    AsyncChecksumOutput,
+    AsyncClose,
+    AsyncCountingInput,
+    AsyncCountingOutput,
+    AsyncInput,
+    AsyncLimitInput,
+    AsyncLimitOutput,
+    AsyncOutput,
 };
 
 #[test]
@@ -185,10 +221,15 @@ fn test_async_output_wrappers_propagate_close() {
 #[test]
 fn test_async_output_wrappers_reject_forbidden_flush_error_kinds() {
     for kind in [ErrorKind::WouldBlock, ErrorKind::Interrupted] {
-        let mut counting =
-            AsyncCountingOutput::new(ScriptedOutput::new([], [FlushStep::Error(kind)], false));
-        let mut limit =
-            AsyncLimitOutput::new(ScriptedOutput::new([], [FlushStep::Error(kind)], false), 1);
+        let mut counting = AsyncCountingOutput::new(ScriptedOutput::new(
+            [],
+            [FlushStep::Error(kind)],
+            false,
+        ));
+        let mut limit = AsyncLimitOutput::new(
+            ScriptedOutput::new([], [FlushStep::Error(kind)], false),
+            1,
+        );
         let mut checksum = AsyncChecksumOutput::new(
             ScriptedOutput::new([], [FlushStep::Error(kind)], false),
             DefaultHasher::new(),
@@ -217,10 +258,13 @@ fn test_async_output_wrappers_reject_forbidden_flush_error_kinds() {
 #[test]
 fn test_async_output_wrappers_reject_forbidden_close_error_kinds() {
     for kind in [ErrorKind::WouldBlock, ErrorKind::Interrupted] {
-        let mut counting =
-            AsyncCountingOutput::new(ScriptedOutput::new([], [], false).with_close_error(kind));
-        let mut limit =
-            AsyncLimitOutput::new(ScriptedOutput::new([], [], false).with_close_error(kind), 1);
+        let mut counting = AsyncCountingOutput::new(
+            ScriptedOutput::new([], [], false).with_close_error(kind),
+        );
+        let mut limit = AsyncLimitOutput::new(
+            ScriptedOutput::new([], [], false).with_close_error(kind),
+            1,
+        );
         let mut checksum = AsyncChecksumOutput::new(
             ScriptedOutput::new([], [], false).with_close_error(kind),
             DefaultHasher::new(),
@@ -303,7 +347,10 @@ impl AsyncOutput for ByteOutput {
         Poll::Ready(Ok(written))
     }
 
-    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    fn poll_flush(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<io::Result<()>> {
         Poll::Ready(Ok(()))
     }
 }
@@ -323,7 +370,8 @@ where
 }
 
 #[test]
-fn test_async_input_wrappers_limit_count_and_hash_successful_reads() -> io::Result<()> {
+fn test_async_input_wrappers_limit_count_and_hash_successful_reads()
+-> io::Result<()> {
     let input = ByteInput {
         bytes: b"abcdef".to_vec(),
         position: 0,
@@ -346,7 +394,8 @@ fn test_async_input_wrappers_limit_count_and_hash_successful_reads() -> io::Resu
 }
 
 #[test]
-fn test_async_output_wrappers_limit_count_and_hash_successful_writes() -> io::Result<()> {
+fn test_async_output_wrappers_limit_count_and_hash_successful_writes()
+-> io::Result<()> {
     let bytes = Arc::new(Mutex::new(Vec::new()));
     let output = ByteOutput {
         bytes: bytes.clone(),
@@ -416,7 +465,8 @@ fn test_async_counting_input_counts_only_successful_reads_and_exposes_inner() {
 }
 
 #[test]
-fn test_async_counting_output_counts_only_successful_writes_and_delegates_flush() {
+fn test_async_counting_output_counts_only_successful_writes_and_delegates_flush()
+ {
     let inner = ScriptedOutput::new(
         [
             WriteStep::Pending,
@@ -466,7 +516,8 @@ fn test_async_counting_output_counts_only_successful_writes_and_delegates_flush(
 }
 
 #[test]
-fn test_async_limit_input_bounds_reads_and_preserves_state_on_pending_or_error() {
+fn test_async_limit_input_bounds_reads_and_preserves_state_on_pending_or_error()
+{
     let inner = ScriptedInput::new(
         [
             ReadStep::Pending,
@@ -522,7 +573,8 @@ fn test_async_limit_input_bounds_reads_and_preserves_state_on_pending_or_error()
 }
 
 #[test]
-fn test_async_limit_output_bounds_writes_and_preserves_state_on_pending_or_error() {
+fn test_async_limit_output_bounds_writes_and_preserves_state_on_pending_or_error()
+ {
     let inner = ScriptedOutput::new(
         [
             WriteStep::Pending,
@@ -634,7 +686,8 @@ fn test_async_checksum_input_hashes_only_successful_reads_and_exposes_parts() {
 }
 
 #[test]
-fn test_async_checksum_output_hashes_only_successful_writes_and_exposes_parts() {
+fn test_async_checksum_output_hashes_only_successful_writes_and_exposes_parts()
+{
     let inner = ScriptedOutput::new(
         [
             WriteStep::Pending,

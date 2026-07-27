@@ -6,9 +6,16 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{self, SeekFrom};
+use std::io::{
+    self,
+    SeekFrom,
+};
 
-use crate::{Input, Output, Seekable};
+use crate::{
+    Input,
+    Output,
+    Seekable,
+};
 
 /// Tee input whose branch position follows every source seek.
 ///

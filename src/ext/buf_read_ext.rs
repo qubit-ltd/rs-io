@@ -5,10 +5,19 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use std::io::{BufRead, Error, ErrorKind, Result};
+use std::io::{
+    BufRead,
+    Error,
+    ErrorKind,
+    Result,
+};
 
 use crate::ext::internal::read_ext_impl;
-use crate::util::{allocation_error, try_reserve_string, try_reserve_vec};
+use crate::util::{
+    allocation_error,
+    try_reserve_string,
+    try_reserve_vec,
+};
 
 /// Extension methods for [`BufRead`] values.
 ///
@@ -35,7 +44,11 @@ pub trait BufReadExt: BufRead {
     /// required before reaching `delimiter` or EOF. Returns
     /// [`ErrorKind::OutOfMemory`] when the result vector cannot grow. Returns
     /// the first I/O error reported by the underlying reader.
-    fn read_until_limited(&mut self, delimiter: u8, max_len: usize) -> Result<Vec<u8>>;
+    fn read_until_limited(
+        &mut self,
+        delimiter: u8,
+        max_len: usize,
+    ) -> Result<Vec<u8>>;
 
     /// Reads bytes through `delimiter` into `output` while enforcing `max_len`.
     ///
@@ -102,7 +115,11 @@ pub trait BufReadExt: BufRead {
     /// not valid UTF-8. Returns [`ErrorKind::OutOfMemory`] when the temporary
     /// byte buffer or `output` cannot grow. Returns the first I/O error
     /// reported by the underlying reader.
-    fn read_line_limited_into(&mut self, output: &mut String, max_len: usize) -> Result<usize>;
+    fn read_line_limited_into(
+        &mut self,
+        output: &mut String,
+        max_len: usize,
+    ) -> Result<usize>;
 
     /// Discards bytes through `delimiter` while enforcing `max_len`.
     ///
@@ -121,7 +138,11 @@ pub trait BufReadExt: BufRead {
     /// Returns [`ErrorKind::InvalidData`] when more than `max_len` bytes are
     /// required before reaching `delimiter` or EOF. Returns the first I/O error
     /// reported by the underlying reader.
-    fn discard_until_limited(&mut self, delimiter: u8, max_len: usize) -> Result<usize>;
+    fn discard_until_limited(
+        &mut self,
+        delimiter: u8,
+        max_len: usize,
+    ) -> Result<usize>;
 }
 
 impl<T> BufReadExt for T
@@ -144,10 +165,20 @@ where
     /// Returns [`ErrorKind::InvalidData`] for oversized input, the first reader
     /// error, or [`ErrorKind::OutOfMemory`] when the result vector cannot grow.
     #[inline]
-    fn read_until_limited(&mut self, delimiter: u8, max_len: usize) -> Result<Vec<u8>> {
+    fn read_until_limited(
+        &mut self,
+        delimiter: u8,
+        max_len: usize,
+    ) -> Result<Vec<u8>> {
         let mut output = Vec::new();
-        try_reserve_vec(&mut output, max_len.min(8192)).map_err(allocation_error)?;
-        read_ext_impl::read_until_limited_into(self, delimiter, &mut output, max_len)?;
+        try_reserve_vec(&mut output, max_len.min(8192))
+            .map_err(allocation_error)?;
+        read_ext_impl::read_until_limited_into(
+            self,
+            delimiter,
+            &mut output,
+            max_len,
+        )?;
         Ok(output)
     }
 
@@ -216,12 +247,19 @@ where
     /// Returns [`ErrorKind::InvalidData`] for oversized or invalid UTF-8 input,
     /// the first reader error, or [`ErrorKind::OutOfMemory`] when the temporary
     /// byte buffer or `output` cannot grow. `output` is restored on failure.
-    fn read_line_limited_into(&mut self, output: &mut String, max_len: usize) -> Result<usize> {
+    fn read_line_limited_into(
+        &mut self,
+        output: &mut String,
+        max_len: usize,
+    ) -> Result<usize> {
         let original_len = output.len();
         let mut bytes = Vec::new();
-        try_reserve_vec(&mut bytes, max_len.min(8192)).map_err(allocation_error)?;
+        try_reserve_vec(&mut bytes, max_len.min(8192))
+            .map_err(allocation_error)?;
         let result = (|| {
-            let count = read_ext_impl::read_until_limited_into(self, b'\n', &mut bytes, max_len)?;
+            let count = read_ext_impl::read_until_limited_into(
+                self, b'\n', &mut bytes, max_len,
+            )?;
             let line = String::from_utf8(bytes).map_err(|error| {
                 Error::new(
                     ErrorKind::InvalidData,
@@ -253,7 +291,11 @@ where
     ///
     /// Returns [`ErrorKind::InvalidData`] if reaching the delimiter or EOF
     /// requires more than `max_len` bytes, or the first reader error.
-    fn discard_until_limited(&mut self, delimiter: u8, max_len: usize) -> Result<usize> {
+    fn discard_until_limited(
+        &mut self,
+        delimiter: u8,
+        max_len: usize,
+    ) -> Result<usize> {
         let mut discarded = 0;
         loop {
             let available = self.fill_buf()?;
@@ -261,8 +303,10 @@ where
                 return Ok(discarded);
             }
 
-            let delimiter_position = available.iter().position(|byte| *byte == delimiter);
-            let requested = delimiter_position.map_or(available.len(), |position| position + 1);
+            let delimiter_position =
+                available.iter().position(|byte| *byte == delimiter);
+            let requested = delimiter_position
+                .map_or(available.len(), |position| position + 1);
             let remaining = max_len.saturating_sub(discarded);
             if requested > remaining {
                 if remaining > 0 {
