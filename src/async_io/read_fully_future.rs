@@ -66,15 +66,9 @@ where
     /// # Returns
     ///
     /// Returns a future that resolves with the total number of items read.
-    #[cfg_attr(coverage, coverage(off))]
     #[inline(always)]
     pub const fn new(input: Pin<&'a mut I>, output: &'a mut [I::Item]) -> Self {
-        Self {
-            input,
-            output,
-            read: 0,
-            completed: false,
-        }
+        Self { input, output, read: 0, completed: false }
     }
 
     /// Returns the number of items read so far.
@@ -82,7 +76,6 @@ where
     /// # Returns
     ///
     /// Returns the progress retained across polls.
-    #[cfg_attr(coverage, coverage(off))]
     #[inline(always)]
     #[must_use]
     pub const fn items_read(&self) -> usize {
