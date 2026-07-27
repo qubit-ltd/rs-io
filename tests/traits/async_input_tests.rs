@@ -106,6 +106,29 @@ impl AsyncInput for OverreportingAsyncInput {
     }
 }
 
+struct OneItemAsyncInput {
+    remaining: usize,
+}
+
+impl AsyncInput for OneItemAsyncInput {
+    type Item = u8;
+
+    unsafe fn poll_read_unchecked(
+        mut self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+        output: &mut [u8],
+        index: usize,
+        count: usize,
+    ) -> Poll<std::io::Result<usize>> {
+        if self.remaining == 0 || count == 0 {
+            return Poll::Ready(Ok(0));
+        }
+        output[index] = 7;
+        self.remaining -= 1;
+        Poll::Ready(Ok(1))
+    }
+}
+
 fn context() -> Context<'static> {
     Context::from_waker(Waker::noop())
 }
@@ -408,6 +431,87 @@ fn test_read_fully_async_completes_when_destination_is_full() {
         .expect("read_fully should succeed");
 
     assert_eq!(2, read);
+}
+
+#[test]
+fn test_read_fully_async_yields_after_ready_progress_budget() {
+    const ITEM_COUNT: usize = 256;
+
+    struct TestWake(AtomicBool);
+
+    impl Wake for TestWake {
+        fn wake(self: Arc<Self>) {
+            self.0.store(true, Ordering::Relaxed);
+        }
+    }
+
+    let mut input = OneItemAsyncInput {
+        remaining: ITEM_COUNT,
+    };
+    let mut output = [0_u8; ITEM_COUNT];
+    let wake_state = Arc::new(TestWake(AtomicBool::new(false)));
+    let waker = Waker::from(Arc::clone(&wake_state));
+    let mut cx = Context::from_waker(&waker);
+    let mut future = ReadFullyFuture::new(Pin::new(&mut input), &mut output);
+
+    assert!(Future::poll(Pin::new(&mut future), &mut cx).is_pending());
+    assert!(wake_state.0.load(Ordering::Relaxed));
+    assert!(future.items_read() > 0);
+    assert!(future.items_read() < ITEM_COUNT);
+
+    let mut completed = None;
+    for _ in 0..8 {
+        if let Poll::Ready(result) =
+            Future::poll(Pin::new(&mut future), &mut cx)
+        {
+            completed = Some(result.expect("cooperative read should succeed"));
+            break;
+        }
+    }
+    assert_eq!(Some(ITEM_COUNT), completed);
+    drop(future);
+    assert!(output.iter().all(|&value| value == 7));
+}
+
+#[test]
+fn test_read_exactly_async_yields_after_ready_progress_budget() {
+    const ITEM_COUNT: usize = 256;
+
+    struct TestWake(AtomicBool);
+
+    impl Wake for TestWake {
+        fn wake(self: Arc<Self>) {
+            self.0.store(true, Ordering::Relaxed);
+        }
+    }
+
+    let mut input = OneItemAsyncInput {
+        remaining: ITEM_COUNT,
+    };
+    let mut output = [0_u8; ITEM_COUNT];
+    let wake_state = Arc::new(TestWake(AtomicBool::new(false)));
+    let waker = Waker::from(Arc::clone(&wake_state));
+    let mut cx = Context::from_waker(&waker);
+    let mut future = ReadExactFuture::new(Pin::new(&mut input), &mut output);
+
+    assert!(Future::poll(Pin::new(&mut future), &mut cx).is_pending());
+    assert!(wake_state.0.load(Ordering::Relaxed));
+    assert!(future.items_read() > 0);
+    assert!(future.items_read() < ITEM_COUNT);
+
+    let mut completed = false;
+    for _ in 0..8 {
+        if let Poll::Ready(result) =
+            Future::poll(Pin::new(&mut future), &mut cx)
+        {
+            result.expect("cooperative exact read should succeed");
+            completed = true;
+            break;
+        }
+    }
+    assert!(completed);
+    drop(future);
+    assert!(output.iter().all(|&value| value == 7));
 }
 
 trait PollResultExt<T> {

@@ -20,10 +20,16 @@ use std::task::{
 
 use crate::AsyncInput;
 
+use super::read_fully_future::MAX_READY_OPERATIONS_PER_POLL;
+
 /// Future that reads until its destination is full.
 ///
 /// Progress is retained in the destination and is observable through
 /// [`Self::items_read`] if the future is cancelled.
+///
+/// To preserve executor fairness, one outer poll performs a bounded number of
+/// successful inner reads. The future self-wakes and returns [`Poll::Pending`]
+/// when that budget is exhausted before completion.
 ///
 /// # Panics
 ///
@@ -114,6 +120,7 @@ where
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
         assert!(!this.completed, "ReadExactFuture polled after completion");
+        let mut ready_operations = 0_usize;
         while this.read < this.output.len() {
             let remaining = &mut this.output[this.read..];
             match this.input.as_mut().poll_read(cx, remaining) {
@@ -124,7 +131,16 @@ where
                         "failed to fill whole input range",
                     )));
                 }
-                Poll::Ready(Ok(read)) => this.read += read,
+                Poll::Ready(Ok(read)) => {
+                    this.read += read;
+                    ready_operations += 1;
+                    if this.read < this.output.len()
+                        && ready_operations >= MAX_READY_OPERATIONS_PER_POLL
+                    {
+                        cx.waker().wake_by_ref();
+                        return Poll::Pending;
+                    }
+                }
                 Poll::Ready(Err(error)) => {
                     this.completed = true;
                     return Poll::Ready(Err(error));
