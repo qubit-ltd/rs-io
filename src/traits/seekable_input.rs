@@ -6,7 +6,10 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use super::{Input, Seekable};
+use super::{
+    Input,
+    Seekable,
+};
 
 /// Object-safe capability trait for inputs that can be read and repositioned
 /// in the same item space.
@@ -44,6 +47,9 @@ use super::{Input, Seekable};
 /// assert_eq!(0, input.seek_to(SeekFrom::Start(0))?);
 /// # Ok::<(), std::io::Error>(())
 /// ```
-pub trait SeekableInput: Input + Seekable<Unit = <Self as Input>::Item> {}
+pub trait SeekableInput:
+    Input + Seekable<Unit = <Self as Input>::Item>
+{
+}
 
 impl<T> SeekableInput for T where T: Input + Seekable<Unit = <T as Input>::Item> {}

@@ -8,13 +8,23 @@
 
 use std::{
     collections::TryReserveError,
-    io::{self, Error, ErrorKind},
+    io::{
+        self,
+        Error,
+        ErrorKind,
+    },
     pin::Pin,
-    task::{Context, Poll},
+    task::{
+        Context,
+        Poll,
+    },
 };
 
 use crate::{
-    AsyncClose, AsyncOutput, Buffer, buffered::DEFAULT_BUFFER_CAPACITY,
+    AsyncClose,
+    AsyncOutput,
+    Buffer,
+    buffered::DEFAULT_BUFFER_CAPACITY,
     traits::validate_async_error,
 };
 
@@ -169,7 +179,10 @@ where
     /// Panics if growing the backing buffer requires `O::Item::default()` and
     /// it panics.
     #[inline(always)]
-    pub fn try_reserve_capacity(&mut self, capacity: usize) -> Result<(), TryReserveError> {
+    pub fn try_reserve_capacity(
+        &mut self,
+        capacity: usize,
+    ) -> Result<(), TryReserveError> {
         self.buffer.try_reserve_capacity(capacity)
     }
 
@@ -244,7 +257,10 @@ where
     ///
     /// Returns [`io::ErrorKind::WriteZero`] if the inner output accepts no
     /// pending item. Other errors are propagated from the inner output.
-    fn poll_drain_buffer(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    fn poll_drain_buffer(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<io::Result<()>> {
         // SAFETY: `inner` is never moved after projecting from this pinned
         // wrapper. `buffer` does not structurally pin any value.
         let this = unsafe { self.as_mut().get_unchecked_mut() };
@@ -394,7 +410,10 @@ where
     /// an error reported by the wrapped output. Invalid asynchronous error
     /// kinds from the flush operation are normalized to
     /// [`io::ErrorKind::InvalidData`].
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    fn poll_flush(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<io::Result<()>> {
         match self.as_mut().poll_drain_buffer(cx) {
             Poll::Ready(Ok(())) => {}
             Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
@@ -431,7 +450,10 @@ where
     /// an error reported by the wrapped output. Invalid asynchronous error
     /// kinds from the close operation are normalized to
     /// [`io::ErrorKind::InvalidData`].
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    fn poll_close(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<io::Result<()>> {
         match self.as_mut().poll_drain_buffer(cx) {
             Poll::Ready(Ok(())) => {}
             Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),

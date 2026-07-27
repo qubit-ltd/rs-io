@@ -27,8 +27,14 @@ pub use async_close::AsyncClose;
 pub use async_input::AsyncInput;
 pub use async_output::AsyncOutput;
 pub use buf_read_seek::BufReadSeek;
-pub use input::{Input, validate_read_count};
-pub use output::{Output, validate_write_count};
+pub use input::{
+    Input,
+    validate_read_count,
+};
+pub use output::{
+    Output,
+    validate_write_count,
+};
 pub use pinned_async_input_ext::PinnedAsyncInputExt;
 pub use pinned_async_output_ext::PinnedAsyncOutputExt;
 pub use read_seek::ReadSeek;

@@ -8,12 +8,24 @@
 
 use std::{
     collections::TryReserveError,
-    io::{self, Error, ErrorKind},
+    io::{
+        self,
+        Error,
+        ErrorKind,
+    },
     pin::Pin,
-    task::{Context, Poll},
+    task::{
+        Context,
+        Poll,
+    },
 };
 
-use crate::{AsyncInput, Buffer, UncheckedSlice, buffered::DEFAULT_BUFFER_CAPACITY};
+use crate::{
+    AsyncInput,
+    Buffer,
+    UncheckedSlice,
+    buffered::DEFAULT_BUFFER_CAPACITY,
+};
 
 /// Buffered asynchronous item input.
 ///
@@ -165,7 +177,10 @@ where
     /// Panics if growing the backing buffer requires `I::Item::default()` and
     /// it panics.
     #[inline(always)]
-    pub fn try_reserve_capacity(&mut self, capacity: usize) -> Result<(), TryReserveError> {
+    pub fn try_reserve_capacity(
+        &mut self,
+        capacity: usize,
+    ) -> Result<(), TryReserveError> {
         self.buffer.try_reserve_capacity(capacity)
     }
 
@@ -190,7 +205,12 @@ where
     /// `count <= self.unread_len()`, and the destination does not overlap the
     /// unread window.
     #[inline]
-    pub unsafe fn copy_unread_to(&self, output: &mut [I::Item], output_index: usize, count: usize) {
+    pub unsafe fn copy_unread_to(
+        &self,
+        output: &mut [I::Item],
+        output_index: usize,
+        count: usize,
+    ) {
         debug_assert!(
             UncheckedSlice::range_fits(output.len(), output_index, count),
             "unchecked unread copy output range exceeds destination buffer",
@@ -383,7 +403,8 @@ where
         let this = unsafe { self.as_mut().get_unchecked_mut() };
         if !this.buffer.is_empty() {
             let read = count.min(this.buffer.available());
-            output[index..index + read].copy_from_slice(&this.buffer.readable()[..read]);
+            output[index..index + read]
+                .copy_from_slice(&this.buffer.readable()[..read]);
             // SAFETY: `read` was bounded by the readable-window length.
             unsafe {
                 this.buffer.consume(read);
@@ -413,7 +434,8 @@ where
                     this.buffer.advance(fetched);
                 }
                 let read = count.min(fetched);
-                output[index..index + read].copy_from_slice(&this.buffer.readable()[..read]);
+                output[index..index + read]
+                    .copy_from_slice(&this.buffer.readable()[..read]);
                 // SAFETY: `read <= fetched` items are readable.
                 unsafe {
                     this.buffer.consume(read);
