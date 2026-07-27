@@ -283,6 +283,7 @@ where
 ///
 /// The caller must guarantee that `output_index..output_index + count` is a
 /// valid range inside `output` and that the addition does not overflow.
+#[inline(always)]
 unsafe fn read_unchecked_impl<T>(
     inner: &mut dyn Input<Item = T>,
     buffer: &mut Buffer<T>,
