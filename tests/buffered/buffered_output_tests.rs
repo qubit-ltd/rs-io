@@ -27,6 +27,12 @@ use qubit_io::{
     Seekable,
 };
 
+#[test]
+fn test_buffered_output_try_with_capacity_reports_allocation_failure() {
+    let output = Cursor::new(Vec::<u8>::new());
+    assert!(BufferedOutput::try_with_capacity(output, usize::MAX).is_err());
+}
+
 #[derive(Default)]
 struct U16SeekOutput {
     values: Vec<u16>,

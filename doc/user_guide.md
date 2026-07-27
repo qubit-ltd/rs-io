@@ -85,6 +85,11 @@ Synchronous buffering:
 - `BufferedOutput<O>` accumulates small writes and flushes them to `O`.
 - `EnsuredBufferedInput` and `EnsuredBufferedOutput` avoid redundant wrapping.
 
+`ensure` can only detect buffering reported through `Input::is_buffered` or
+`Output::is_buffered`. Standard-library `BufReader` and `BufWriter` use the
+blanket `Read`/`Write` implementations and therefore are not detected; do not
+pass an already standard-buffered stream to `ensure`.
+
 Asynchronous buffering:
 
 - `AsyncBufferedInput<I>` retains prefetched items across `Pending`.

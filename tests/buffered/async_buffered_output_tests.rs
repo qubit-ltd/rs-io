@@ -14,3 +14,10 @@ fn test_async_buffered_output_uses_requested_capacity() {
     let output = AsyncBufferedOutput::with_capacity(TestOutput, 3);
     assert_eq!(3, output.capacity());
 }
+
+#[test]
+fn test_async_buffered_output_try_with_capacity_reports_allocation_failure() {
+    assert!(
+        AsyncBufferedOutput::try_with_capacity(TestOutput, usize::MAX).is_err()
+    );
+}

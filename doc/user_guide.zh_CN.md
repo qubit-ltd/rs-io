@@ -78,6 +78,11 @@ poll 契约是严格的：零长度传输立即完成且不轮询内部 stream�
 - `BufferedOutput<O>` 聚合小写入并向 `O` flush；
 - `EnsuredBufferedInput` 与 `EnsuredBufferedOutput` 避免重复套缓冲。
 
+`ensure` 只能识别由 `Input::is_buffered` 或 `Output::is_buffered`
+报告的缓冲状态。标准库的 `BufReader` 和 `BufWriter` 通过 `Read`/`Write`
+blanket 实现接入，因而不会被识别；不要将已经由标准库缓冲的 stream 传给
+`ensure`。
+
 异步缓冲：
 
 - `AsyncBufferedInput<I>` 跨 `Pending` 保留已预读 item；

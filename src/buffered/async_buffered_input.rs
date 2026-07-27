@@ -24,6 +24,7 @@ use crate::{
     AsyncInput,
     Buffer,
     UncheckedSlice,
+    async_io::MAX_READY_OPERATIONS_PER_POLL,
     buffered::DEFAULT_BUFFER_CAPACITY,
 };
 
@@ -94,6 +95,37 @@ where
             inner,
             buffer: Buffer::with_capacity(capacity),
         }
+    }
+
+    /// Tries to create a buffered input with a requested item capacity.
+    ///
+    /// # Parameters
+    ///
+    /// - `inner`: Asynchronous item input to buffer.
+    /// - `capacity`: Requested number of buffered items.
+    ///
+    /// # Returns
+    ///
+    /// Returns a buffered input whose actual capacity is at least one.
+    ///
+    /// # Errors
+    ///
+    /// Returns the allocation error when the backing buffer cannot be
+    /// allocated.
+    ///
+    /// # Panics
+    ///
+    /// Panics if initializing the backing buffer requires
+    /// `I::Item::default()` and it panics.
+    #[inline]
+    pub fn try_with_capacity(
+        inner: I,
+        capacity: usize,
+    ) -> Result<Self, TryReserveError> {
+        Ok(Self {
+            inner,
+            buffer: Buffer::try_with_capacity(capacity)?,
+        })
     }
 
     /// Returns a shared reference to the wrapped input.
@@ -297,9 +329,18 @@ where
                 "requested available items exceed buffered input capacity",
             )));
         }
+        let mut ready_operations = 0;
         while self.as_ref().get_ref().buffer.available() < count {
             match self.as_mut().poll_fill_more(cx) {
-                Poll::Ready(Ok(true)) => {}
+                Poll::Ready(Ok(true)) => {
+                    ready_operations += 1;
+                    if self.as_ref().get_ref().buffer.available() < count
+                        && ready_operations >= MAX_READY_OPERATIONS_PER_POLL
+                    {
+                        cx.waker().wake_by_ref();
+                        return Poll::Pending;
+                    }
+                }
                 Poll::Ready(Ok(false)) => return Poll::Ready(Ok(false)),
                 Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
                 Poll::Pending => return Poll::Pending,

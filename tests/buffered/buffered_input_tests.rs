@@ -23,6 +23,12 @@ use qubit_io::{
     Seekable,
 };
 
+#[test]
+fn test_buffered_input_try_with_capacity_reports_allocation_failure() {
+    let input = Cursor::new(Vec::<u8>::new());
+    assert!(BufferedInput::try_with_capacity(input, usize::MAX).is_err());
+}
+
 struct U16Input {
     chunks: VecDeque<Vec<u16>>,
     buffered: bool,

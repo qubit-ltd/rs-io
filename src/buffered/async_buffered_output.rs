@@ -24,6 +24,7 @@ use crate::{
     AsyncClose,
     AsyncOutput,
     Buffer,
+    async_io::MAX_READY_OPERATIONS_PER_POLL,
     buffered::DEFAULT_BUFFER_CAPACITY,
     traits::validate_async_error,
 };
@@ -97,6 +98,37 @@ where
             inner,
             buffer: Buffer::with_capacity(capacity),
         }
+    }
+
+    /// Tries to create a buffered output with a requested item capacity.
+    ///
+    /// # Parameters
+    ///
+    /// - `inner`: Asynchronous item output to buffer.
+    /// - `capacity`: Requested number of buffered items.
+    ///
+    /// # Returns
+    ///
+    /// Returns a buffered output whose actual capacity is at least one.
+    ///
+    /// # Errors
+    ///
+    /// Returns the allocation error when the backing buffer cannot be
+    /// allocated.
+    ///
+    /// # Panics
+    ///
+    /// Panics if initializing the backing buffer requires
+    /// `O::Item::default()` and it panics.
+    #[inline]
+    pub fn try_with_capacity(
+        inner: O,
+        capacity: usize,
+    ) -> Result<Self, TryReserveError> {
+        Ok(Self {
+            inner,
+            buffer: Buffer::try_with_capacity(capacity)?,
+        })
     }
 
     /// Returns a shared reference to the wrapped output.
@@ -264,6 +296,7 @@ where
         // SAFETY: `inner` is never moved after projecting from this pinned
         // wrapper. `buffer` does not structurally pin any value.
         let this = unsafe { self.as_mut().get_unchecked_mut() };
+        let mut ready_operations = 0;
         while !this.buffer.is_empty() {
             let result = {
                 let pending = this.buffer.readable();
@@ -280,6 +313,13 @@ where
                     // the pending slice length.
                     unsafe {
                         this.buffer.consume(written);
+                    }
+                    ready_operations += 1;
+                    if !this.buffer.is_empty()
+                        && ready_operations >= MAX_READY_OPERATIONS_PER_POLL
+                    {
+                        cx.waker().wake_by_ref();
+                        return Poll::Pending;
                     }
                 }
                 Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
