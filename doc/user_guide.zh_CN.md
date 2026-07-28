@@ -79,7 +79,7 @@ item 类型是泛型。limit、counting 与 tee 等 wrapper 因而能处理字�
 `Seekable` 是面向 item 的 `std::io::Seek` 对应物，位置以内部 stream 的单位
 衡量；标准 `Seek` 类型的单位为 `u8`。`SeekableInput`、`SeekableOutput`、
 `ReadSeek`、`WriteSeek`、`ReadWrite` 与 `ReadWriteSeek` 只表达有用的 trait
-组合，不引入新行为。`PositionGuard` 记录 `Seekable` 的位置，除非调用
+组合，不引入新行为。这些标准库组合 trait 从 `qubit_io::std_io` 导出。`PositionGuard` 记录 `Seekable` 的位置，除非调用
 `dismiss`，否则会在 drop 时恢复；需要观察恢复错误时调用 `restore`。
 
 ## 4. `Buffer<T>` 与同步缓冲
@@ -210,7 +210,8 @@ item；`copy*` 与比较方法处理 `std::io` 字节流。
 
 ```rust
 use std::io::{Cursor, Result};
-use qubit_io::{BufReadExt, Streams};
+use qubit_io::Streams;
+use qubit_io::std_io::ext::BufReadExt;
 
 fn main() -> Result<()> {
     let mut input = Cursor::new(b"abcdef".to_vec());
