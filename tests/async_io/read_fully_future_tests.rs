@@ -122,11 +122,15 @@ fn test_read_fully_future_pauses_when_ready_budget_is_exhausted() {
     ));
     match Future::poll(Pin::new(&mut future), &mut cx) {
         Poll::Ready(Ok(65)) => {}
-        Poll::Ready(Ok(_)) | Poll::Pending => panic!(
-            "read-fully future should complete after second poll, got not fully consumed"
-        ),
-        Poll::Ready(Err(error)) => panic!(
-            "read-fuly future should complete after second poll, got error {error}"
-        ),
+        Poll::Ready(Ok(_)) | Poll::Pending => {
+            panic!(
+                "read-fully future should complete after second poll, got not fully consumed"
+            )
+        }
+        Poll::Ready(Err(error)) => {
+            panic!(
+                "read-fuly future should complete after second poll, got error {error}"
+            )
+        }
     }
 }
