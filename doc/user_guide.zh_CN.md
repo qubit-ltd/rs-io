@@ -23,8 +23,6 @@ binary value 时使用 `qubit-io-binary`；需要文本与字符编码时使用
 从 `qubit_io::std_io` 导出，扩展 trait 从 `qubit_io::std_io::ext` 导出。内部模块
 不属于兼容性边界。
 
-从 0.13 升级时，请阅读 [0.14 迁移指南](migration-0.14.zh_CN.md)。
-
 ## 2. 添加依赖并选择 feature
 
 默认 feature 只包含运行时中立的核心层：
