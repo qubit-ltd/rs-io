@@ -12,12 +12,18 @@ use std::io::{
     ErrorKind,
     Write,
 };
+use std::panic::{
+    AssertUnwindSafe,
+    catch_unwind,
+};
 
 use qubit_io::Output;
 
 struct OverreportingStdWriter;
 
 struct FailingStdWriter;
+
+struct FailingFlushStdWriter;
 
 impl Write for FailingStdWriter {
     /// Returns a deterministic standard writer failure.
@@ -28,6 +34,18 @@ impl Write for FailingStdWriter {
     /// Completes flushing because the test writer buffers no data.
     fn flush(&mut self) -> std::io::Result<()> {
         Ok(())
+    }
+}
+
+impl Write for FailingFlushStdWriter {
+    /// Returns deterministic write success so tests can isolate flush errors.
+    fn write(&mut self, input: &[u8]) -> std::io::Result<usize> {
+        Ok(input.len())
+    }
+
+    /// Fails every flush attempt.
+    fn flush(&mut self) -> std::io::Result<()> {
+        Err(Error::new(ErrorKind::BrokenPipe, "flush failed"))
     }
 }
 
@@ -86,6 +104,63 @@ fn test_write_blanket_impl_propagates_std_write_error() {
 
     let error = Output::write(&mut writer, b"abc")
         .expect_err("blanket output should propagate Write errors");
+
+    assert_eq!(ErrorKind::BrokenPipe, error.kind());
+}
+
+#[test]
+fn test_write_blanket_impl_write_unchecked_panics_on_invalid_range() {
+    let mut writer = Cursor::new(Vec::new());
+
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        // SAFETY: the range is intentionally invalid; this verifies
+        // debug-assert behavior.
+        let _ = unsafe {
+            Output::write_unchecked(&mut writer, b"ab", 1, 2)
+                .expect("should panic")
+        };
+    }));
+
+    assert!(
+        result.is_err(),
+        "write_unchecked should panic on invalid range"
+    );
+}
+
+#[test]
+fn test_write_blanket_impl_write_unchecked_panics_on_index_plus_count_overflow()
+{
+    let mut writer = Cursor::new(Vec::new());
+
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        let _ = unsafe {
+            Output::write_unchecked(&mut writer, b"ab", usize::MAX, 2)
+                .expect("should panic")
+        };
+    }));
+
+    assert!(
+        result.is_err(),
+        "write_unchecked should panic when index + count overflows"
+    );
+}
+
+#[test]
+fn test_write_blanket_impl_write_unchecked_propagates_std_write_error() {
+    let mut writer = FailingStdWriter;
+
+    let result = unsafe { Output::write_unchecked(&mut writer, b"abc", 0, 1) }
+        .expect_err("write_unchecked should propagate std write errors");
+
+    assert_eq!(ErrorKind::BrokenPipe, result.kind());
+}
+
+#[test]
+fn test_write_blanket_impl_flush_propagates_std_flush_error() {
+    let mut writer = FailingFlushStdWriter;
+
+    let error = Output::flush(&mut writer)
+        .expect_err("Output::flush should propagate std flush errors");
 
     assert_eq!(ErrorKind::BrokenPipe, error.kind());
 }
