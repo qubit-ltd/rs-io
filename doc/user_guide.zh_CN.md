@@ -133,18 +133,13 @@ fn main() -> Result<()> {
 }
 ```
 
-消费 API 使所有权决策保持显式：
+`into_parts()` 使所有权决策保持显式。对于 input，它返回内部 input 与未读
+`Buffer`；继续读取同一逻辑流前，必须先消费该 readable window。对于 output，它不
+执行 I/O，直接返回内部 output 与 pending `Buffer`。正常完成时先调用 `flush`；若
+刷新失败，wrapper 仍由调用方持有，可检查或重试。
 
-- `BufferedInput::into_inner()` 会丢弃未消费的预读 item。
-- `BufferedInput::try_into_inner()` 拒绝丢弃这些 item。
-- `BufferedInput::into_parts()` 返回内部 input 和未读 `Buffer`。
-- `BufferedOutput::into_inner()` 先 flush；失败时，其 `IntoInnerError<Self>` 会
-  保留完整的 buffered output 以供恢复。
-- `BufferedOutput::into_parts()` 不执行 I/O，直接返回内部 output 与 pending
-  `Buffer`。
-
-丢弃同步 `BufferedOutput` 会 best-effort flush。不要把 drop 当作送达保证；当
-pending 数据重要时，应显式 `flush`、消费 `into_inner`，或通过 `into_parts` 恢复。
+丢弃同步 `BufferedOutput` 会 best-effort flush。不要把 drop 当作送达保证；需要取得
+output 所有权时，应显式 `flush` 后再使用 `into_parts`。
 
 ```rust
 use std::io::Result;
@@ -323,8 +318,8 @@ async fn main() -> io::Result<()> {
    `BufReader` 或 `BufWriter`。
 3. 将 limit 放在最靠近不可信 input 或受保护 output quota 的位置。
 4. 根据必须观测的字节或 item 放置 counter 与 checksum，不要只按构造方便程度。
-5. 显式 flush 或 close。操作失败时，优先通过 `into_parts` 或
-   `IntoInnerError` 的恢复方法处理，而不是丢弃含有 pending 数据的值。
+5. 显式 flush 或 close。操作失败时，保留 wrapper 并检查或重试；只有明确要接管
+   pending 数据时才使用 `into_parts`。
 
 docs.rs 上的 API 文档说明每个方法精确的错误、panic、所有权与 pinning 约束；本
 指南说明这些 API 在应用中应如何组合。

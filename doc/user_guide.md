@@ -144,20 +144,15 @@ fn main() -> Result<()> {
 }
 ```
 
-The consumption APIs make ownership decisions explicit:
-
-- `BufferedInput::into_inner()` discards unread prefetched items.
-- `BufferedInput::try_into_inner()` refuses to discard them.
-- `BufferedInput::into_parts()` returns both the inner input and its unread
-  `Buffer`.
-- `BufferedOutput::into_inner()` flushes first. On failure, its
-  `IntoInnerError<Self>` retains the complete buffered output for recovery.
-- `BufferedOutput::into_parts()` performs no I/O and returns the inner output
-  with the pending `Buffer`.
+`into_parts()` makes ownership decisions explicit. For input, it returns both
+the inner input and its unread `Buffer`; consume that readable window before
+reading from the inner input again. For output, it performs no I/O and returns
+the inner output with its pending `Buffer`. Call `flush` first for normal
+completion; if flushing fails, the wrapper remains owned and can be retried.
 
 Dropping a synchronous `BufferedOutput` makes a best-effort flush. Do not use
-drop as a delivery guarantee; explicitly `flush`, consume `into_inner`, or
-recover `into_parts` when pending data matters.
+drop as a delivery guarantee; explicitly `flush`, then use `into_parts` when
+ownership of the output is needed.
 
 ```rust
 use std::io::Result;
@@ -352,9 +347,9 @@ Use this checklist when composing stream layers:
 3. Put a limit closest to untrusted input or the output quota it protects.
 4. Place counters and checksums according to the bytes or items that must be
    observed, not simply according to construction convenience.
-5. Flush or close explicitly. When an operation fails, prefer `into_parts` or
-   the recovery methods on `IntoInnerError` over dropping a value with pending
-   data.
+5. Flush or close explicitly. When an operation fails, retain the wrapper and
+   retry or inspect it; use `into_parts` only when transferring responsibility
+   for pending data is intentional.
 
 The API documentation on docs.rs describes every method and its exact error,
 panic, ownership, and pinning constraints. This guide explains how those APIs
