@@ -11,5 +11,8 @@ use qubit_io::ReadFuture;
 
 #[test]
 fn test_read_future_type_is_public() {
-    assert!(std::any::type_name::<ReadFuture<'static, TestInput>>().contains("ReadFuture"));
+    assert!(
+        std::any::type_name::<ReadFuture<'static, TestInput>>()
+            .contains("ReadFuture")
+    );
 }

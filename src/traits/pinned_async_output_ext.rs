@@ -8,7 +8,14 @@
 
 use std::pin::Pin;
 
-use crate::{AsyncClose, AsyncOutput, CloseFuture, FlushFuture, WriteFullyFuture, WriteFuture};
+use crate::{
+    AsyncClose,
+    AsyncOutput,
+    CloseFuture,
+    FlushFuture,
+    WriteFullyFuture,
+    WriteFuture,
+};
 
 /// Convenience futures for an already pinned asynchronous output.
 ///
@@ -93,7 +100,10 @@ where
     ///
     /// A future that resolves with the number of accepted items.
     #[inline(always)]
-    fn write_async<'a>(&'a mut self, input: &'a [O::Item]) -> WriteFuture<'a, Self::Output> {
+    fn write_async<'a>(
+        &'a mut self,
+        input: &'a [O::Item],
+    ) -> WriteFuture<'a, Self::Output> {
         WriteFuture::new(self.as_mut(), input)
     }
 

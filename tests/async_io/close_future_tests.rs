@@ -9,9 +9,16 @@
 use std::future::Future;
 use std::io::ErrorKind;
 use std::pin::Pin;
-use std::task::{Context, Poll, Waker};
+use std::task::{
+    Context,
+    Poll,
+    Waker,
+};
 
-use super::support_tests::{ForbiddenErrorOutput, TestOutput};
+use super::support_tests::{
+    ForbiddenErrorOutput,
+    TestOutput,
+};
 use qubit_io::CloseFuture;
 
 #[test]

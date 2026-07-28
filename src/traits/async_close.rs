@@ -8,9 +8,15 @@
 
 use std::io::Result;
 use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::task::{
+    Context,
+    Poll,
+};
 
-use crate::{AsyncOutput, CloseFuture};
+use crate::{
+    AsyncOutput,
+    CloseFuture,
+};
 
 /// Optional asynchronous capability for gracefully closing an output.
 ///
@@ -23,7 +29,8 @@ pub trait AsyncClose: AsyncOutput {
     ///
     /// Before returning [`Poll::Pending`], the implementation must arrange for
     /// `cx`'s waker to be notified when closing may progress. `WouldBlock` and
-    /// `Interrupted` must not cross this asynchronous boundary. A successful result means callers must no longer assume that writing remains valid.
+    /// `Interrupted` must not cross this asynchronous boundary. A successful
+    /// result means callers must no longer assume that writing remains valid.
     ///
     /// # Parameters
     ///
@@ -36,7 +43,10 @@ pub trait AsyncClose: AsyncOutput {
     /// # Errors
     ///
     /// Returns the close error reported by the implementation.
-    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<()>>;
+    fn poll_close(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<()>>;
 
     /// Creates a future that closes this output.
     ///

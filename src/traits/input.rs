@@ -6,25 +6,29 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{Error, ErrorKind, Result};
+use std::io::{
+    Error,
+    ErrorKind,
+    Result,
+};
 
 use super::validate_read_count;
 use crate::util::UncheckedSlice;
 
 /// Minimal indexed input interface over items.
 ///
-/// `Input` is intentionally smaller and lower-level than [`std::io::Read`]. It only
-/// states that an implementor can read up to `count` items into
+/// `Input` is intentionally smaller and lower-level than [`std::io::Read`]. It
+/// only states that an implementor can read up to `count` items into
 /// `output[index..index + count]`. The caller owns range validation so hot
 /// paths can avoid repeated slicing and bounds checks.
 ///
 /// # Coherence note
 ///
-/// Every [`std::io::Read`] value automatically implements `Input<Item = u8>` through the
-/// blanket impl below. Because [`Input::Item`] is an associated type rather
-/// than a trait parameter, a concrete type that implements [`std::io::Read`] cannot also
-/// provide any other direct `Input` implementation for the same type, including
-/// one with a different item type.
+/// Every [`std::io::Read`] value automatically implements `Input<Item = u8>`
+/// through the blanket impl below. Because [`Input::Item`] is an associated
+/// type rather than a trait parameter, a concrete type that implements
+/// [`std::io::Read`] cannot also provide any other direct `Input`
+/// implementation for the same type, including one with a different item type.
 ///
 /// Use a wrapper/newtype when a type needs item-oriented input semantics that
 /// differ from its byte-oriented [`std::io::Read`] implementation.
@@ -138,7 +142,9 @@ pub trait Input {
             let remaining = count - total;
             // SAFETY: The caller guarantees the original destination range is
             // valid; `total < count`, so this suffix remains inside it.
-            match unsafe { self.read_unchecked(output, index + total, remaining) } {
+            match unsafe {
+                self.read_unchecked(output, index + total, remaining)
+            } {
                 Ok(0) => break,
                 Ok(read) => {
                     validate_read_count(read, remaining)?;

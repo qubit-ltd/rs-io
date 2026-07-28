@@ -8,9 +8,16 @@
 
 use std::future::Future;
 use std::pin::Pin;
-use std::task::{Context, Poll, Waker};
+use std::task::{
+    Context,
+    Poll,
+    Waker,
+};
 
-use qubit_io::{AsyncClose, AsyncOutput};
+use qubit_io::{
+    AsyncClose,
+    AsyncOutput,
+};
 
 struct CloseOutput {
     /// Whether the output has been closed.
@@ -32,13 +39,19 @@ impl AsyncOutput for CloseOutput {
         Poll::Ready(Ok(count))
     }
 
-    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+    fn poll_flush(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<std::io::Result<()>> {
         Poll::Ready(Ok(()))
     }
 }
 
 impl AsyncClose for CloseOutput {
-    fn poll_close(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+    fn poll_close(
+        mut self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<std::io::Result<()>> {
         if self.pending {
             self.pending = false;
             return Poll::Pending;

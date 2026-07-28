@@ -8,7 +8,11 @@
 
 use core::fmt;
 use std::error::Error as StdError;
-use std::io::{Error, ErrorKind, Result};
+use std::io::{
+    Error,
+    ErrorKind,
+    Result,
+};
 
 /// Describes an asynchronous I/O contract violation and its original error.
 #[must_use]
@@ -53,7 +57,10 @@ pub(crate) fn normalize_async_error(error: Error) -> Error {
     match error.kind() {
         ErrorKind::WouldBlock => Error::new(
             ErrorKind::InvalidData,
-            AsyncContractError::new("asynchronous I/O implementation returned WouldBlock", error),
+            AsyncContractError::new(
+                "asynchronous I/O implementation returned WouldBlock",
+                error,
+            ),
         ),
         ErrorKind::Interrupted => Error::new(
             ErrorKind::InvalidData,
@@ -74,7 +81,9 @@ pub(crate) fn validate_read_count(read: usize, requested: usize) -> Result<()> {
     if read > requested {
         return Err(Error::new(
             ErrorKind::InvalidData,
-            format!("reader reported {read} items for a {requested}-item buffer"),
+            format!(
+                "reader reported {read} items for a {requested}-item buffer"
+            ),
         ));
     }
     Ok(())
@@ -84,11 +93,16 @@ pub(crate) fn validate_read_count(read: usize, requested: usize) -> Result<()> {
 ///
 /// Returns InvalidData when written exceeds requested.
 #[inline]
-pub(crate) fn validate_write_count(written: usize, requested: usize) -> Result<()> {
+pub(crate) fn validate_write_count(
+    written: usize,
+    requested: usize,
+) -> Result<()> {
     if written > requested {
         return Err(Error::new(
             ErrorKind::InvalidData,
-            format!("writer reported {written} items for a {requested}-item buffer"),
+            format!(
+                "writer reported {written} items for a {requested}-item buffer"
+            ),
         ));
     }
     Ok(())

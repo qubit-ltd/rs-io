@@ -6,9 +6,19 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{Cursor, Error, ErrorKind, Read, Seek, SeekFrom};
+use std::io::{
+    Cursor,
+    Error,
+    ErrorKind,
+    Read,
+    Seek,
+    SeekFrom,
+};
 
-use qubit_io::std_io::{ReadSeek, ext::ReadSeekExt};
+use qubit_io::std_io::{
+    ReadSeek,
+    ext::ReadSeekExt,
+};
 
 struct RestoreFailingReader {
     restored_position: u64,
@@ -109,7 +119,10 @@ impl OffsetSeekFailingReadSeek {
         }
     }
 
-    fn with_restore_error(original_position: u64, rejected_offset: u64) -> Self {
+    fn with_restore_error(
+        original_position: u64,
+        rejected_offset: u64,
+    ) -> Self {
         Self {
             original_position,
             rejected_offset,
@@ -370,8 +383,11 @@ fn test_read_seek_ext_ufcs_methods_work_on_dyn_read_seek() {
     let stream: &mut dyn ReadSeek = &mut cursor;
 
     let mut peek_buffer = [0; 2];
-    let count = <dyn ReadSeek as ReadSeekExt>::peek_exact_or_eof(stream, &mut peek_buffer)
-        .expect("UFCS peek extension should work on dyn ReadSeek");
+    let count = <dyn ReadSeek as ReadSeekExt>::peek_exact_or_eof(
+        stream,
+        &mut peek_buffer,
+    )
+    .expect("UFCS peek extension should work on dyn ReadSeek");
     assert_eq!(2, count);
     assert_eq!(b"ef", &peek_buffer);
     assert_eq!(
@@ -382,8 +398,12 @@ fn test_read_seek_ext_ufcs_methods_work_on_dyn_read_seek() {
     );
 
     let mut offset_buffer = [0; 3];
-    let count = <dyn ReadSeek as ReadSeekExt>::read_exact_or_eof_at(stream, 1, &mut offset_buffer)
-        .expect("UFCS offset read extension should work on dyn ReadSeek");
+    let count = <dyn ReadSeek as ReadSeekExt>::read_exact_or_eof_at(
+        stream,
+        1,
+        &mut offset_buffer,
+    )
+    .expect("UFCS offset read extension should work on dyn ReadSeek");
     assert_eq!(3, count);
     assert_eq!(b"bcd", &offset_buffer);
     assert_eq!(
@@ -399,9 +419,9 @@ fn test_read_exact_or_eof_at_returns_offset_seek_error_after_restore() {
     let mut reader = OffsetSeekFailingReadSeek::new(5, 2);
     let mut buffer = [0; 1];
 
-    let error = reader
-        .read_exact_or_eof_at(2, &mut buffer)
-        .expect_err("offset seek errors should be returned after restoring position");
+    let error = reader.read_exact_or_eof_at(2, &mut buffer).expect_err(
+        "offset seek errors should be returned after restoring position",
+    );
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("offset seek failed", error.to_string());
@@ -412,9 +432,9 @@ fn test_read_exact_or_eof_at_prefers_restore_error_over_offset_seek_error() {
     let mut reader = OffsetSeekFailingReadSeek::with_restore_error(5, 2);
     let mut buffer = [0; 1];
 
-    let error = reader
-        .read_exact_or_eof_at(2, &mut buffer)
-        .expect_err("restore errors should take precedence over offset seek errors");
+    let error = reader.read_exact_or_eof_at(2, &mut buffer).expect_err(
+        "restore errors should take precedence over offset seek errors",
+    );
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("restore failed", error.to_string());

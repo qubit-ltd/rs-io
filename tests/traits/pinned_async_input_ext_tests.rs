@@ -9,9 +9,16 @@
 use std::future::Future;
 use std::marker::PhantomPinned;
 use std::pin::Pin;
-use std::task::{Context, Poll, Waker};
+use std::task::{
+    Context,
+    Poll,
+    Waker,
+};
 
-use qubit_io::{AsyncInput, PinnedAsyncInputExt};
+use qubit_io::{
+    AsyncInput,
+    PinnedAsyncInputExt,
+};
 
 struct PinnedInput {
     _pinned: PhantomPinned,

@@ -6,7 +6,12 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{Cursor, Error, ErrorKind, Write};
+use std::io::{
+    Cursor,
+    Error,
+    ErrorKind,
+    Write,
+};
 
 use qubit_io::Output;
 
@@ -38,14 +43,16 @@ impl Write for OverreportingStdWriter {
     }
 }
 
-/// Verifies normal, indexed, and flush operations through the standard writer bridge.
+/// Verifies normal, indexed, and flush operations through the standard writer
+/// bridge.
 #[test]
 fn test_write_blanket_impl_exposes_output_methods() {
     let mut cursor = Cursor::new(Vec::new());
 
     // SAFETY: b"bc" is a valid source range inside b"abc".
     let written = unsafe {
-        Output::write_unchecked(&mut cursor, b"abc", 1, 2).expect("write_unchecked should succeed")
+        Output::write_unchecked(&mut cursor, b"abc", 1, 2)
+            .expect("write_unchecked should succeed")
     };
     assert_eq!(2, written);
     assert_eq!(b"bc", cursor.into_inner().as_slice());
