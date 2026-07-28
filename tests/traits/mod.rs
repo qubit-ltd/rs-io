@@ -6,20 +6,13 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 mod async_close_tests;
-mod async_contract_error_tests;
+mod async_contract_tests;
 mod async_input_tests;
 mod async_output_tests;
-mod buf_read_seek_tests;
 mod input_tests;
 mod output_tests;
 mod pinned_async_input_ext_tests;
 mod pinned_async_output_ext_tests;
-mod read_seek_tests;
-mod read_write_seek_tests;
-mod read_write_tests;
 mod seekable_input_tests;
 mod seekable_output_tests;
-mod seekable_tests;
 mod support_tests;
-mod validate_async_error_tests;
-mod write_seek_tests;

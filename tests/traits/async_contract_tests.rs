@@ -1,5 +1,5 @@
 // =============================================================================
-//    Copyright (c) 2026 Haixing Hu.
+//    Copyright (c) 2025 - 2026 Haixing Hu.
 //
 //    SPDX-License-Identifier: Apache-2.0
 //
@@ -7,16 +7,9 @@
 // =============================================================================
 
 use std::error::Error as StdError;
-use std::io::{
-    Error,
-    ErrorKind,
-};
+use std::io::{Error, ErrorKind};
 use std::pin::Pin;
-use std::task::{
-    Context,
-    Poll,
-    Waker,
-};
+use std::task::{Context, Poll, Waker};
 
 use qubit_io::AsyncInput;
 
@@ -27,6 +20,7 @@ struct ForbiddenErrorInput {
 impl AsyncInput for ForbiddenErrorInput {
     type Item = u8;
 
+    /// Returns the configured forbidden asynchronous error.
     unsafe fn poll_read_unchecked(
         self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
@@ -38,23 +32,39 @@ impl AsyncInput for ForbiddenErrorInput {
     }
 }
 
+/// Verifies that forbidden asynchronous error kinds are normalized.
 #[test]
-fn test_async_contract_error_retains_original_error_context() {
+fn test_async_contract_normalizes_forbidden_error_kinds() {
     for kind in [ErrorKind::WouldBlock, ErrorKind::Interrupted] {
         let mut input = ForbiddenErrorInput { kind };
         let mut output = [0_u8; 1];
         let mut cx = Context::from_waker(Waker::noop());
-        let result =
-            AsyncInput::poll_read(Pin::new(&mut input), &mut cx, &mut output);
+        let result = AsyncInput::poll_read(Pin::new(&mut input), &mut cx, &mut output);
+
+        match result {
+            Poll::Ready(Err(error)) => {
+                assert_eq!(ErrorKind::InvalidData, error.kind());
+            }
+            Poll::Ready(Ok(_)) => panic!("forbidden async error should fail"),
+            Poll::Pending => panic!("forbidden async error should be ready"),
+        }
+    }
+}
+
+/// Verifies that normalized asynchronous errors retain their original source.
+#[test]
+fn test_async_contract_retains_original_error_context() {
+    for kind in [ErrorKind::WouldBlock, ErrorKind::Interrupted] {
+        let mut input = ForbiddenErrorInput { kind };
+        let mut output = [0_u8; 1];
+        let mut cx = Context::from_waker(Waker::noop());
+        let result = AsyncInput::poll_read(Pin::new(&mut input), &mut cx, &mut output);
         let Poll::Ready(Err(error)) = result else {
             panic!("forbidden async error should be returned");
         };
 
         assert_eq!(
-            format!(
-                "asynchronous I/O implementation returned {kind:?}: \
-                 forbidden async error"
-            ),
+            format!("asynchronous I/O implementation returned {kind:?}: forbidden async error"),
             error.to_string(),
         );
         let source = StdError::source(&error)

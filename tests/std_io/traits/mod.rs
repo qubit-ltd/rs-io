@@ -6,4 +6,8 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-mod ext;
+mod buf_read_seek_tests;
+mod read_seek_tests;
+mod read_write_seek_tests;
+mod read_write_tests;
+mod write_seek_tests;

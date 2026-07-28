@@ -6,13 +6,9 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    BufReader,
-    Cursor,
-    SeekFrom,
-};
+use std::io::{BufReader, Cursor, SeekFrom};
 
-use qubit_io::BufReadSeek;
+use qubit_io::std_io::BufReadSeek;
 
 #[test]
 fn test_buf_read_seek_trait_object_supports_buffered_reading_and_seeking() {

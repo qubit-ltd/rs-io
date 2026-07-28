@@ -8,7 +8,7 @@
 
 use std::io::SeekFrom;
 
-use qubit_io::ReadSeek;
+use qubit_io::std_io::ReadSeek;
 
 #[test]
 fn test_read_seek_trait_object_supports_reading_and_seeking() {

@@ -6,13 +6,9 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    BufRead,
-    Cursor,
-    ErrorKind,
-};
+use std::io::{BufRead, Cursor, ErrorKind};
 
-use qubit_io::BufReadExt;
+use qubit_io::std_io::ext::BufReadExt;
 
 #[test]
 fn test_read_until_limited_reads_through_delimiter() {
@@ -262,9 +258,9 @@ fn test_discard_until_limited_accepts_eof_before_delimiter() {
 fn test_discard_until_limited_rejects_input_beyond_limit() {
     let mut input = Cursor::new(b"abcdef\n".to_vec());
 
-    let error = input.discard_until_limited(b'\n', 3).expect_err(
-        "input beyond the limit should be rejected while discarding",
-    );
+    let error = input
+        .discard_until_limited(b'\n', 3)
+        .expect_err("input beyond the limit should be rejected while discarding");
 
     assert_eq!(ErrorKind::InvalidData, error.kind());
     assert_eq!(
@@ -277,9 +273,9 @@ fn test_discard_until_limited_rejects_input_beyond_limit() {
 fn test_discard_until_limited_rejects_zero_limit_without_consuming() {
     let mut input = Cursor::new(b"abcdef\n".to_vec());
 
-    let error = input.discard_until_limited(b'\n', 0).expect_err(
-        "input beyond the zero limit should be rejected while discarding",
-    );
+    let error = input
+        .discard_until_limited(b'\n', 0)
+        .expect_err("input beyond the zero limit should be rejected while discarding");
 
     assert_eq!(ErrorKind::InvalidData, error.kind());
     assert_eq!(

@@ -6,10 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use qubit_io::{
-    BufferedInput,
-    EnsuredBufferedInput,
-};
+use qubit_io::{BufferedInput, EnsuredBufferedInput};
 use std::io::Cursor;
 
 #[test]

@@ -6,13 +6,9 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Error,
-    ErrorKind,
-    Write,
-};
+use std::io::{Error, ErrorKind, Write};
 
-use qubit_io::WriteExt;
+use qubit_io::std_io::ext::WriteExt;
 
 struct ShortWriter {
     output: Vec<u8>,

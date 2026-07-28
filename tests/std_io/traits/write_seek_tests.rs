@@ -8,7 +8,7 @@
 
 use std::io::SeekFrom;
 
-use qubit_io::WriteSeek;
+use qubit_io::std_io::WriteSeek;
 
 #[test]
 fn test_write_seek_trait_object_supports_writing_and_seeking() {
