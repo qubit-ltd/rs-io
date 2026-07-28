@@ -12,6 +12,10 @@ use std::io::{
     ErrorKind,
     Read,
 };
+use std::panic::{
+    AssertUnwindSafe,
+    catch_unwind,
+};
 
 use qubit_io::Input;
 
@@ -77,4 +81,54 @@ fn test_read_blanket_impl_propagates_std_read_error() {
         .expect_err("blanket input should propagate Read errors");
 
     assert_eq!(ErrorKind::PermissionDenied, error.kind());
+}
+
+#[test]
+fn test_read_blanket_impl_read_unchecked_panics_on_invalid_range() {
+    let mut reader = Cursor::new(b"ab".to_vec());
+    let mut output = [0_u8; 1];
+
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        // SAFETY: the range is intentionally invalid; this verifies
+        // debug-assert behavior.
+        let _ = unsafe {
+            Input::read_unchecked(&mut reader, &mut output, 1, 2)
+                .expect("should panic")
+        };
+    }));
+
+    assert!(
+        result.is_err(),
+        "read_unchecked should panic on invalid range"
+    );
+}
+
+#[test]
+fn test_read_blanket_impl_read_unchecked_panics_on_index_plus_count_overflow() {
+    let mut reader = Cursor::new(b"ab".to_vec());
+    let mut output = [0_u8; 1];
+
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        let _ = unsafe {
+            Input::read_unchecked(&mut reader, &mut output, usize::MAX, 2)
+                .expect("should panic")
+        };
+    }));
+
+    assert!(
+        result.is_err(),
+        "read_unchecked should panic when index + count overflows"
+    );
+}
+
+#[test]
+fn test_read_blanket_impl_read_unchecked_propagates_std_read_error() {
+    let mut reader = FailingStdReader;
+    let mut output = [0_u8; 1];
+
+    let result =
+        unsafe { Input::read_unchecked(&mut reader, &mut output, 0, 1) }
+            .expect_err("read_unchecked should propagate std read errors");
+
+    assert_eq!(ErrorKind::PermissionDenied, result.kind());
 }
