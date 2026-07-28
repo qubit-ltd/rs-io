@@ -14,10 +14,10 @@ mod coverage_tests {
         ErrorKind,
     };
 
+    use qubit_io::std_io::ext::ReadExt;
     use qubit_io::{
         Input,
         Output,
-        ReadExt,
         Streams,
         coverage_add_item_count_overflow,
         coverage_fail_next_add_item_count,
