@@ -640,10 +640,6 @@ where
         start_index: usize,
         count: usize,
     ) -> Result<usize> {
-        debug_assert!(
-            UncheckedSlice::range_fits(buffer.len(), start_index, count),
-            "unchecked read range exceeds buffer"
-        );
         // SAFETY: The caller guarantees that the requested range is valid for
         // `buffer`.
         let target =
@@ -715,10 +711,6 @@ where
         start_index: usize,
         count: usize,
     ) -> Result<()> {
-        debug_assert!(
-            UncheckedSlice::range_fits(buffer.len(), start_index, count),
-            "unchecked read range exceeds buffer"
-        );
         // SAFETY: The caller guarantees that the requested range is valid for
         // `buffer`.
         let target =

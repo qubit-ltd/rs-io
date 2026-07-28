@@ -728,14 +728,6 @@ where
         input_index: usize,
         count: usize,
     ) {
-        debug_assert!(
-            UncheckedSlice::range_fits(input.len(), input_index, count),
-            "unchecked write range exceeds input buffer"
-        );
-        debug_assert!(
-            count <= self.spare_capacity(),
-            "unchecked write exceeds spare buffer capacity"
-        );
         let (destination, destination_index, _) =
             self.buffer.spare_raw_parts_mut();
         // SAFETY: The caller guarantees valid source and destination ranges and

@@ -451,10 +451,6 @@ where
         input_index: usize,
         count: usize,
     ) {
-        debug_assert!(
-            count <= self.spare_capacity(),
-            "unchecked input copy exceeds spare buffer capacity"
-        );
         // SAFETY: The caller guarantees the source range and spare destination
         // range are valid and non-overlapping.
         unsafe {

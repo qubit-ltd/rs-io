@@ -40,10 +40,6 @@ where
         index: usize,
         count: usize,
     ) -> Result<usize> {
-        debug_assert!(
-            UncheckedSlice::range_fits(input.len(), index, count),
-            "unchecked write range exceeds input buffer"
-        );
         // SAFETY: The caller guarantees that the range is valid inside input.
         let source = unsafe { UncheckedSlice::subslice(input, index, count) };
         Write::write(self, source)

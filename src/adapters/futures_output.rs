@@ -140,10 +140,6 @@ where
         index: usize,
         count: usize,
     ) -> Poll<std::io::Result<usize>> {
-        debug_assert!(
-            UncheckedSlice::range_fits(input.len(), index, count),
-            "unchecked futures-io write range exceeds input buffer"
-        );
         if count == 0 {
             return Poll::Ready(Ok(0));
         }

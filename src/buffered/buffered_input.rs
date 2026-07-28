@@ -739,14 +739,6 @@ where
         output_index: usize,
         count: usize,
     ) {
-        debug_assert!(
-            UncheckedSlice::range_fits(output.len(), output_index, count),
-            "unchecked unread copy output range exceeds destination buffer",
-        );
-        debug_assert!(
-            count <= self.unread_len(),
-            "unchecked unread copy exceeds available input buffer",
-        );
         // SAFETY: The caller guarantees that the destination range is valid,
         // non-overlapping, and that `count` unread items are currently
         // available.

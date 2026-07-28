@@ -53,10 +53,6 @@ pub trait WriteExt: Write {
         start_index: usize,
         count: usize,
     ) -> Result<usize> {
-        debug_assert!(
-            UncheckedSlice::range_fits(buffer.len(), start_index, count),
-            "unchecked write range exceeds buffer"
-        );
         // SAFETY: The caller guarantees that the computed pointer and length
         // form a valid subslice of `buffer`.
         let source =
@@ -97,10 +93,6 @@ pub trait WriteExt: Write {
         start_index: usize,
         count: usize,
     ) -> Result<()> {
-        debug_assert!(
-            UncheckedSlice::range_fits(buffer.len(), start_index, count),
-            "unchecked write range exceeds buffer"
-        );
         // SAFETY: The caller guarantees that the computed pointer and length
         // form a valid subslice of `buffer`.
         let source =

@@ -220,6 +220,7 @@ impl UncheckedSlice {
     /// # Panics
     ///
     /// Panics in debug builds if the requested range does not fit.
+    /// Callers do not need to repeat this range assertion.
     ///
     /// # Safety
     ///
@@ -255,6 +256,7 @@ impl UncheckedSlice {
     /// # Panics
     ///
     /// Panics in debug builds if the requested range does not fit.
+    /// Callers do not need to repeat this range assertion.
     ///
     /// # Safety
     ///
@@ -299,6 +301,7 @@ impl UncheckedSlice {
     /// # Panics
     ///
     /// Panics in debug builds if either requested range does not fit.
+    /// Callers do not need to repeat these range assertions.
     ///
     /// # Safety
     ///
@@ -349,6 +352,7 @@ impl UncheckedSlice {
     /// # Panics
     ///
     /// Panics in debug builds if either requested range does not fit.
+    /// Callers do not need to repeat these range assertions.
     ///
     /// # Safety
     ///
@@ -398,6 +402,7 @@ impl UncheckedSlice {
     /// # Panics
     ///
     /// Panics in debug builds if the requested byte range does not fit.
+    /// Callers do not need to repeat this range assertion.
     ///
     /// # Safety
     ///
@@ -442,6 +447,7 @@ impl UncheckedSlice {
     /// # Panics
     ///
     /// Panics in debug builds if the requested byte range does not fit.
+    /// Callers do not need to repeat this range assertion.
     ///
     /// # Safety
     ///
