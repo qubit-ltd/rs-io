@@ -10,5 +10,5 @@ mod ext;
 mod input_impl_tests;
 mod output_impl_tests;
 mod public_api_tests;
-mod seekable_impl_tests;
+mod seekable_tests;
 mod traits;
