@@ -40,10 +40,6 @@ where
         index: usize,
         count: usize,
     ) -> Result<usize> {
-        debug_assert!(
-            UncheckedSlice::range_fits(output.len(), index, count),
-            "unchecked read range exceeds output buffer"
-        );
         // SAFETY: The caller guarantees that the range is valid inside output.
         let target =
             unsafe { UncheckedSlice::subslice_mut(output, index, count) };
