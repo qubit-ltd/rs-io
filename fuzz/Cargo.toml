@@ -32,3 +32,10 @@ path = "fuzz_targets/async_io.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "buffered_io"
+path = "fuzz_targets/buffered_io.rs"
+test = false
+doc = false
+bench = false
