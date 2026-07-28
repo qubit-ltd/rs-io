@@ -5,10 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use std::io::{
-    Read,
-    Write,
-};
+use std::io::{Read, Write};
 
 /// Object-safe capability trait for values that can be both read and written.
 ///
@@ -24,7 +21,7 @@ use std::io::{
 /// # Examples
 ///
 /// ```rust
-/// use qubit_io::ReadWrite;
+/// use qubit_io::std_io::ReadWrite;
 ///
 /// fn send_ping(stream: &mut dyn ReadWrite) -> std::io::Result<()> {
 ///     stream.write_all(b"ping")

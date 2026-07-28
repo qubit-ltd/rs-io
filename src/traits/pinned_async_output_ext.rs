@@ -8,16 +8,13 @@
 
 use std::pin::Pin;
 
-use crate::{
-    AsyncClose,
-    AsyncOutput,
-    CloseFuture,
-    FlushFuture,
-    WriteFullyFuture,
-    WriteFuture,
-};
+use crate::{AsyncClose, AsyncOutput, CloseFuture, FlushFuture, WriteFullyFuture, WriteFuture};
 
 /// Convenience futures for an already pinned asynchronous output.
+///
+/// This extension serves outputs that are not Unpin and pinned output trait
+/// objects, for which AsyncOutput convenience methods taking a movable mutable
+/// reference are unavailable.
 pub trait PinnedAsyncOutputExt {
     /// The pinned asynchronous output type.
     type Output: AsyncOutput + ?Sized;
@@ -96,10 +93,7 @@ where
     ///
     /// A future that resolves with the number of accepted items.
     #[inline(always)]
-    fn write_async<'a>(
-        &'a mut self,
-        input: &'a [O::Item],
-    ) -> WriteFuture<'a, Self::Output> {
+    fn write_async<'a>(&'a mut self, input: &'a [O::Item]) -> WriteFuture<'a, Self::Output> {
         WriteFuture::new(self.as_mut(), input)
     }
 

@@ -6,18 +6,14 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Error,
-    ErrorKind,
-    Result,
-    Write,
-};
+use std::io::{Error, ErrorKind, Result};
 
+use super::validate_write_count;
 use crate::util::UncheckedSlice;
 
 /// Minimal indexed output interface over items.
 ///
-/// `Output` is intentionally smaller and lower-level than [`Write`]. Its
+/// `Output` is intentionally smaller and lower-level than [`std::io::Write`]. Its
 /// unchecked primitive writes up to `count` items from `input[index..index +
 /// count]`, plus an explicit flush operation. The caller owns range validation
 /// for unchecked calls so hot paths can avoid repeated slicing and bounds
@@ -26,18 +22,18 @@ use crate::util::UncheckedSlice;
 ///
 /// # Coherence note
 ///
-/// Every [`Write`] value automatically implements `Output<Item = u8>` through
-/// the blanket impl below. Because [`Output::Item`] is an associated type
-/// rather than a trait parameter, a concrete type that implements [`Write`]
+/// Every [`std::io::Write`] value automatically implements `Output<Item = u8>` through
+/// the standard I/O integration. Because [`Output::Item`] is an associated type
+/// rather than a trait parameter, a concrete type that implements [`std::io::Write`]
 /// cannot also provide any other direct `Output` implementation for the same
 /// type, including one with a different item type.
 ///
 /// Use a wrapper/newtype when a type needs item-oriented output semantics that
-/// differ from its byte-oriented [`Write`] implementation.
+/// differ from its byte-oriented [`std::io::Write`] implementation.
 ///
 /// # Method name overlap
 ///
-/// `Output::write` has the same method name as [`Write::write`] because both
+/// `Output::write` has the same method name as [`std::io::Write::write`] because both
 /// perform a safe single write for their respective abstraction layer. In
 /// generic code where both traits are in scope for the same value, use fully
 /// qualified syntax to choose the intended operation:
@@ -195,9 +191,7 @@ pub trait Output {
             let remaining = count - written;
             // SAFETY: The caller guarantees the original source range is valid;
             // `written < count`, so this suffix remains inside it.
-            match unsafe {
-                self.write_unchecked(input, index + written, remaining)
-            } {
+            match unsafe { self.write_unchecked(input, index + written, remaining) } {
                 Ok(0) => {
                     return Err(Error::new(
                         ErrorKind::WriteZero,
@@ -243,119 +237,4 @@ pub trait Output {
     ///
     /// Returns the output error reported by the implementation.
     fn flush(&mut self) -> Result<()>;
-}
-
-impl<W> Output for W
-where
-    W: Write + ?Sized,
-{
-    /// Bytes written by the standard [`Write`] implementation.
-    type Item = u8;
-
-    /// Writes bytes to a standard [`Write`] value from an indexed range.
-    ///
-    /// # Parameters
-    ///
-    /// * `input` - Source storage.
-    /// * `index` - Start index inside `input`.
-    /// * `count` - Maximum number of bytes to write.
-    ///
-    /// # Returns
-    ///
-    /// The number of bytes written from the requested range.
-    ///
-    /// # Errors
-    ///
-    /// Returns the error reported by [`Write::write`].
-    ///
-    /// # Panics
-    ///
-    /// Panics in debug builds if the requested input range does not fit.
-    ///
-    /// # Safety
-    ///
-    /// The caller must guarantee that `index..index + count` is a valid range
-    /// inside `input` and that the addition does not overflow.
-    #[inline(always)]
-    unsafe fn write_unchecked(
-        &mut self,
-        input: &[u8],
-        index: usize,
-        count: usize,
-    ) -> Result<usize> {
-        debug_assert!(
-            UncheckedSlice::range_fits(input.len(), index, count),
-            "unchecked write range exceeds input buffer"
-        );
-        // SAFETY: The caller guarantees that the range is valid inside
-        // `input`.
-        let source = unsafe { UncheckedSlice::subslice(input, index, count) };
-        Write::write(self, source)
-    }
-
-    /// Writes bytes from the full input slice.
-    ///
-    /// # Parameters
-    ///
-    /// * `input` - Source bytes.
-    ///
-    /// # Returns
-    ///
-    /// The number of bytes accepted from `input`.
-    ///
-    /// # Errors
-    ///
-    /// Returns the error reported by [`Write::write`], or
-    /// [`ErrorKind::InvalidData`] if the writer reports an impossible count.
-    #[inline(always)]
-    fn write(&mut self, input: &[Self::Item]) -> Result<usize> {
-        let written = Write::write(self, input)?;
-        validate_write_count(written, input.len())?;
-        Ok(written)
-    }
-
-    /// Flushes a standard [`Write`] value.
-    ///
-    /// # Returns
-    ///
-    /// `Ok(())` after the standard writer has been flushed.
-    ///
-    /// # Errors
-    ///
-    /// Returns the error reported by [`Write::flush`].
-    #[inline(always)]
-    fn flush(&mut self) -> Result<()> {
-        Write::flush(self)
-    }
-}
-
-/// Validates an item count returned by an output.
-///
-/// # Parameters
-///
-/// * `written` - Item count reported by the output.
-/// * `requested` - Maximum item count requested from the output.
-///
-/// # Returns
-///
-/// `Ok(())` when `written <= requested`.
-///
-/// # Errors
-///
-/// Returns [`ErrorKind::InvalidData`] when the output reports more items than
-/// the source range contained.
-#[inline]
-pub(crate) fn validate_write_count(
-    written: usize,
-    requested: usize,
-) -> Result<()> {
-    if written > requested {
-        return Err(Error::new(
-            ErrorKind::InvalidData,
-            format!(
-                "writer reported {written} items for a {requested}-item buffer"
-            ),
-        ));
-    }
-    Ok(())
 }

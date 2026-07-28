@@ -8,20 +8,10 @@
 
 use std::io::Result;
 use std::pin::Pin;
-use std::task::{
-    Context,
-    Poll,
-};
+use std::task::{Context, Poll};
 
-use crate::traits::{
-    validate_async_error,
-    validate_read_count,
-};
-use crate::{
-    ReadExactFuture,
-    ReadFullyFuture,
-    ReadFuture,
-};
+use crate::traits::{normalize_async_error, validate_read_count};
+use crate::{ReadExactFuture, ReadFullyFuture, ReadFuture};
 
 /// Minimal runtime-independent asynchronous input interface over items.
 ///
@@ -114,9 +104,7 @@ pub trait AsyncInput {
             Poll::Ready(Ok(read)) => {
                 Poll::Ready(validate_read_count(read, requested).map(|()| read))
             }
-            Poll::Ready(Err(error)) => {
-                Poll::Ready(Err(validate_async_error(error)))
-            }
+            Poll::Ready(Err(error)) => Poll::Ready(Err(normalize_async_error(error))),
             Poll::Pending => Poll::Pending,
         }
     }
@@ -135,10 +123,7 @@ pub trait AsyncInput {
     ///
     /// A future that resolves with the number of items read.
     #[inline(always)]
-    fn read_async<'a>(
-        &'a mut self,
-        output: &'a mut [Self::Item],
-    ) -> ReadFuture<'a, Self>
+    fn read_async<'a>(&'a mut self, output: &'a mut [Self::Item]) -> ReadFuture<'a, Self>
     where
         Self: Sized + Unpin,
     {
@@ -162,10 +147,7 @@ pub trait AsyncInput {
     ///
     /// A future that resolves with the total number of items read.
     #[inline(always)]
-    fn read_fully_async<'a>(
-        &'a mut self,
-        output: &'a mut [Self::Item],
-    ) -> ReadFullyFuture<'a, Self>
+    fn read_fully_async<'a>(&'a mut self, output: &'a mut [Self::Item]) -> ReadFullyFuture<'a, Self>
     where
         Self: Sized + Unpin,
     {

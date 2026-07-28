@@ -6,15 +6,11 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Result,
-    Seek,
-    SeekFrom,
-};
+use std::io::{Result, SeekFrom};
 
 /// Minimal seek interface measured in stream items.
 ///
-/// Unlike [`Seek`], which measures positions and offsets in bytes,
+/// Unlike [`std::io::Seek`], which measures positions and offsets in bytes,
 /// `Seekable` measures them in units of [`Self::Unit`]. For byte streams,
 /// set `Unit = u8`; offsets passed through [`SeekFrom`] then count units
 /// rather than bytes.
@@ -25,7 +21,7 @@ use std::io::{
 /// # Byte- and item-oriented seeking
 ///
 /// [`Seekable::seek_to`] expresses positions in `Self::Unit`, while
-/// [`Seek::seek`] always expresses positions in bytes. In generic code where
+/// [`std::io::Seek::seek`] always expresses positions in bytes. In generic code where
 /// both traits are implemented for the same value, fully qualified syntax can
 /// make the selected unit semantics explicit:
 ///
@@ -55,7 +51,7 @@ use std::io::{
 ///
 /// # Coherence note
 ///
-/// The blanket impl below maps [`std::io::Seek`] to `Unit = u8` for binary
+/// The standard I/O integration maps [`std::io::Seek`] to `Unit = u8` for binary
 /// compatibility. If a concrete type already implements `Seek`, it already has
 /// an implicit `Seekable<Unit = u8>` impl from this blanket, so another
 /// `Seekable` impl with the same `(Self, Unit)` pair would be a coherence
@@ -112,30 +108,4 @@ pub trait Seekable {
     ///
     /// Returns the seek error reported by the implementation.
     fn seek_to(&mut self, position: SeekFrom) -> Result<u64>;
-}
-
-impl<S> Seekable for S
-where
-    S: Seek + ?Sized,
-{
-    /// Bytes used by the standard [`Seek`] implementation.
-    type Unit = u8;
-
-    /// Seeks a standard [`Seek`] value using byte offsets.
-    ///
-    /// # Parameters
-    ///
-    /// * `position` - Target byte position.
-    ///
-    /// # Returns
-    ///
-    /// The new absolute byte position.
-    ///
-    /// # Errors
-    ///
-    /// Returns the error reported by [`Seek::seek`].
-    #[inline(always)]
-    fn seek_to(&mut self, position: SeekFrom) -> Result<u64> {
-        Seek::seek(self, position)
-    }
 }

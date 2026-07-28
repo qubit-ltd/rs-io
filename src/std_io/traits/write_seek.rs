@@ -5,10 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use std::io::{
-    Seek,
-    Write,
-};
+use std::io::{Seek, Write};
 
 /// Object-safe capability trait for values that can be written and
 /// repositioned.
@@ -25,7 +22,7 @@ use std::io::{
 /// # Examples
 ///
 /// ```rust
-/// use qubit_io::WriteSeek;
+/// use qubit_io::std_io::WriteSeek;
 /// use std::io::SeekFrom;
 ///
 /// fn write_with_length(output: &mut dyn WriteSeek) -> std::io::Result<()> {

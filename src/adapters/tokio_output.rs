@@ -7,19 +7,11 @@
 // =============================================================================
 
 use std::pin::Pin;
-use std::task::{
-    Context,
-    Poll,
-};
+use std::task::{Context, Poll};
 
 use tokio::io::AsyncWrite;
 
-use crate::{
-    AsyncClose,
-    AsyncOutput,
-    UncheckedSlice,
-    traits::validate_async_error,
-};
+use crate::{AsyncClose, AsyncOutput, UncheckedSlice, traits::normalize_async_error};
 
 /// Adapts a Tokio [`AsyncWrite`] value to Qubit's [`AsyncOutput`].
 ///
@@ -150,7 +142,7 @@ where
         // SAFETY: The caller guarantees that the source range is valid.
         let source = unsafe { UncheckedSlice::subslice(input, index, count) };
         AsyncWrite::poll_write(self.get_pin_mut(), cx, source)
-            .map(|result| result.map_err(validate_async_error))
+            .map(|result| result.map_err(normalize_async_error))
     }
 
     /// Polls flushing through the wrapped Tokio writer.
@@ -170,12 +162,9 @@ where
     /// asynchronous error kinds are normalized to
     /// [`std::io::ErrorKind::InvalidData`].
     #[inline(always)]
-    fn poll_flush(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<std::io::Result<()>> {
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         AsyncWrite::poll_flush(self.get_pin_mut(), cx)
-            .map(|result| result.map_err(validate_async_error))
+            .map(|result| result.map_err(normalize_async_error))
     }
 }
 
@@ -200,11 +189,8 @@ where
     /// asynchronous error kinds are normalized to
     /// [`std::io::ErrorKind::InvalidData`].
     #[inline(always)]
-    fn poll_close(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<std::io::Result<()>> {
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         AsyncWrite::poll_shutdown(self.get_pin_mut(), cx)
-            .map(|result| result.map_err(validate_async_error))
+            .map(|result| result.map_err(normalize_async_error))
     }
 }

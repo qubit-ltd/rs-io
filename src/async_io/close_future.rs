@@ -9,15 +9,9 @@
 use std::future::Future;
 use std::io::Result;
 use std::pin::Pin;
-use std::task::{
-    Context,
-    Poll,
-};
+use std::task::{Context, Poll};
 
-use crate::{
-    AsyncClose,
-    traits::validate_async_error,
-};
+use crate::{AsyncClose, traits::normalize_async_error};
 
 /// Future that closes an [`AsyncClose`] output.
 ///
@@ -97,7 +91,7 @@ where
             .output
             .as_mut()
             .poll_close(cx)
-            .map(|result| result.map_err(validate_async_error));
+            .map(|result| result.map_err(normalize_async_error));
         if result.is_ready() {
             this.completed = true;
         }
