@@ -22,7 +22,7 @@ buffer ownership rules, wrapper composition, and adapter guidance.
 | Transfer | `Input<Item = T>`, `Output<Item = T>` | `AsyncInput<Item = T>`, `AsyncOutput<Item = T>` |
 | Buffering | `BufferedInput`, `BufferedOutput` | `AsyncBufferedInput`, `AsyncBufferedOutput` |
 | Wrappers | limit, counting, checksum, tee | limit, counting, checksum |
-| Ecosystem bridges | `std::io` blanket implementations | optional Tokio and `futures-io` adapters |
+| Ecosystem bridges | `qubit_io::std_io` standard-library integrations | optional Tokio and `futures-io` adapters |
 
 ## Synchronous example
 
@@ -45,6 +45,9 @@ assert_eq!(b"qubit", output.as_slice());
 
 `Input` and `Output` remain generic over the item type, so codecs can also use
 `u16`, `char`, or another cheap scalar unit without converting through bytes.
+Standard-library-specific composite traits are available from
+`qubit_io::std_io`, and its extension traits are available from
+`qubit_io::std_io::ext`.
 
 ## Features
 
@@ -61,7 +64,6 @@ qubit-io = "0.14"
 
 - [User guide](doc/user_guide.md)
 - [中文用户指南](doc/user_guide.zh_CN.md)
-- [Changelog](CHANGELOG.md)
 
 API documentation on docs.rs is built with all declared features enabled.
 

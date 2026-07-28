@@ -17,10 +17,13 @@ typed binary values, and `qubit-io-text` for text and character encodings.
 | Flush or close | `Output::flush` | `AsyncOutput::flush_async`, `AsyncClose::close_async` |
 | Add a buffer | `BufferedInput`, `BufferedOutput` | `AsyncBufferedInput`, `AsyncBufferedOutput` |
 | Constrain or observe transfer | limit, counting, checksum, tee wrappers | async limit, counting, checksum wrappers |
-| Interoperate with another ecosystem | blanket `std::io` implementations | optional Tokio and `futures-io` newtypes |
+| Interoperate with another ecosystem | `qubit_io::std_io` integrations | optional Tokio and `futures-io` newtypes |
 
-The public types are re-exported from the crate root. Internal modules are not
-part of the compatibility boundary.
+Core traits, wrappers, buffers, and adapters are re-exported from the crate
+root. Standard-library-specific composite traits are exposed from
+`qubit_io::std_io`, and extension traits are exposed from
+`qubit_io::std_io::ext`. Internal modules are not part of the compatibility
+boundary.
 
 ## 2. Add the dependency and select features
 
@@ -85,11 +88,14 @@ bytes.
 ### Seeking and composite traits
 
 `Seekable` is the item-oriented counterpart of `std::io::Seek`; its positions
-are measured in the wrapped stream's unit. Standard `Seek` values use `u8`.
+are measured in the wrapped stream's unit. The standard-library `Seek`
+integration uses `u8` as that unit.
 `SeekableInput`, `SeekableOutput`, `ReadSeek`, `WriteSeek`, `ReadWrite`, and
 `ReadWriteSeek` express useful trait combinations without introducing new
-behavior. The standard-library combinations are exported from `qubit_io::std_io`. `PositionGuard` records a `Seekable` position and restores it on drop
-unless the guard is dismissed; call `restore` to observe a restoration error.
+behavior. `SeekableInput` and `SeekableOutput` are crate-root traits; the
+standard-library combinations are exported from `qubit_io::std_io`.
+`PositionGuard` records a `Seekable` position and restores it on drop unless
+the guard is dismissed; call `restore` to observe a restoration error.
 
 ## 4. `Buffer<T>` and synchronous buffering
 
@@ -217,8 +223,9 @@ required.
 
 ## 6. Standard I/O extensions and `Streams`
 
-The extension traits operate on standard byte streams and add explicit resource
-limits. `ReadExt` offers exact-or-EOF reads, bounded vectors and strings,
+The standard-library integrations are grouped under `qubit_io::std_io`; import
+extension traits from `qubit_io::std_io::ext`. They operate on standard byte
+streams and add explicit resource limits. `ReadExt` offers exact-or-EOF reads, bounded vectors and strings,
 bounded copy operations, and discard helpers. `BufReadExt` adds bounded line
 and delimiter reads. `ReadSeekExt`, `SeekExt`, and `WriteSeekExt` offer
 position-preserving operations. The unchecked extension methods have the same

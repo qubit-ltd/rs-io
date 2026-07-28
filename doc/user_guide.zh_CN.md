@@ -17,9 +17,11 @@ binary value 时使用 `qubit-io-binary`；需要文本与字符编码时使用
 | flush 或 close | `Output::flush` | `AsyncOutput::flush_async`、`AsyncClose::close_async` |
 | 添加缓冲 | `BufferedInput`、`BufferedOutput` | `AsyncBufferedInput`、`AsyncBufferedOutput` |
 | 限制或观测传输 | limit、counting、checksum、tee wrapper | 异步 limit、counting、checksum wrapper |
-| 与其他生态互操作 | `std::io` blanket implementation | 可选 Tokio 与 `futures-io` newtype |
+| 与其他生态互操作 | `qubit_io::std_io` 集成 | 可选 Tokio 与 `futures-io` newtype |
 
-所有公共类型都会从 crate 根导出；内部模块不属于兼容性边界。
+核心 trait、wrapper、buffer 与 adapter 从 crate 根导出。标准库专属的组合 trait
+从 `qubit_io::std_io` 导出，扩展 trait 从 `qubit_io::std_io::ext` 导出。内部模块
+不属于兼容性边界。
 
 ## 2. 添加依赖并选择 feature
 
@@ -77,10 +79,11 @@ item 类型是泛型。limit、counting 与 tee 等 wrapper 因而能处理字�
 ### seek 与组合 trait
 
 `Seekable` 是面向 item 的 `std::io::Seek` 对应物，位置以内部 stream 的单位
-衡量；标准 `Seek` 类型的单位为 `u8`。`SeekableInput`、`SeekableOutput`、
+衡量；标准库的 `Seek` 集成使用 `u8` 作为该单位。`SeekableInput`、`SeekableOutput`、
 `ReadSeek`、`WriteSeek`、`ReadWrite` 与 `ReadWriteSeek` 只表达有用的 trait
-组合，不引入新行为。这些标准库组合 trait 从 `qubit_io::std_io` 导出。`PositionGuard` 记录 `Seekable` 的位置，除非调用
-`dismiss`，否则会在 drop 时恢复；需要观察恢复错误时调用 `restore`。
+组合，不引入新行为。`SeekableInput` 与 `SeekableOutput` 是 crate 根 trait；标准库
+组合 trait 从 `qubit_io::std_io` 导出。`PositionGuard` 记录 `Seekable` 的位置，除非
+调用 `dismiss`，否则会在 drop 时恢复；需要观察恢复错误时调用 `restore`。
 
 ## 4. `Buffer<T>` 与同步缓冲
 
@@ -200,7 +203,8 @@ branch。flush 与同步 seek 也会先操作 primary 或 source。后续错误�
 
 ## 6. 标准 I/O 扩展与 `Streams`
 
-扩展 trait 面向标准字节流，并提供显式资源上限。`ReadExt` 提供 exact-or-EOF
+标准库集成统一位于 `qubit_io::std_io`；扩展 trait 从
+`qubit_io::std_io::ext` 导入。它们面向标准字节流，并提供显式资源上限。`ReadExt` 提供 exact-or-EOF
 读取、受限 vector 与 string、受限 copy 和 discard；`BufReadExt` 提供受限的行与
 分隔符读取；`ReadSeekExt`、`SeekExt` 与 `WriteSeekExt` 提供保持位置的操作。
 unchecked 扩展方法具有其名称所表达的同类 range 约束。
