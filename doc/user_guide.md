@@ -88,7 +88,7 @@ bytes.
 are measured in the wrapped stream's unit. Standard `Seek` values use `u8`.
 `SeekableInput`, `SeekableOutput`, `ReadSeek`, `WriteSeek`, `ReadWrite`, and
 `ReadWriteSeek` express useful trait combinations without introducing new
-behavior. `PositionGuard` records a `Seekable` position and restores it on drop
+behavior. The standard-library combinations are exported from `qubit_io::std_io`. `PositionGuard` records a `Seekable` position and restores it on drop
 unless the guard is dismissed; call `restore` to observe a restoration error.
 
 ## 4. `Buffer<T>` and synchronous buffering
@@ -230,7 +230,8 @@ work with `std::io` byte streams.
 
 ```rust
 use std::io::{Cursor, Result};
-use qubit_io::{BufReadExt, Streams};
+use qubit_io::Streams;
+use qubit_io::std_io::ext::BufReadExt;
 
 fn main() -> Result<()> {
     let mut input = Cursor::new(b"abcdef".to_vec());
