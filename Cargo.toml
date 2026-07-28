@@ -15,7 +15,6 @@ categories = ["rust-patterns"]
 include = [
     "/Cargo.toml",
     "/LICENSE",
-    "/CHANGELOG.md",
     "/README.md",
     "/README.zh_CN.md",
     "/doc/*.md",
