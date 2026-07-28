@@ -10,27 +10,13 @@ use std::mem::ManuallyDrop;
 use std::ptr;
 use std::{
     collections::TryReserveError,
-    io::{
-        Error,
-        ErrorKind,
-        Result,
-        SeekFrom,
-    },
+    io::{Error, ErrorKind, Result, SeekFrom},
 };
 
-use crate::buffered::{
-    DEFAULT_BUFFER_CAPACITY,
-    EnsuredBufferedOutput,
-};
+use crate::buffered::{DEFAULT_BUFFER_CAPACITY, EnsuredBufferedOutput};
 use crate::traits::validate_write_count;
 use crate::util::UncheckedSlice;
-use crate::{
-    Buffer,
-    IntoInnerError,
-    Output,
-    Seekable,
-    SeekableOutput,
-};
+use crate::{Buffer, Output, Seekable, SeekableOutput};
 
 /// Buffered item output over a wrapped output sink.
 ///
@@ -248,57 +234,21 @@ where
         &mut self.inner
     }
 
-    /// Flushes this buffered output and returns the wrapped output.
-    ///
-    /// # Returns
-    ///
-    /// Returns the wrapped output after every buffered item and the wrapped
-    /// output itself have been flushed.
-    ///
-    /// # Errors
-    ///
-    /// Returns an [`IntoInnerError`] carrying the flush error and this
-    /// buffered output, preserving any unwritten suffix for a later retry.
-    #[inline]
-    pub fn into_inner(
-        mut self,
-    ) -> std::result::Result<O, IntoInnerError<Self>> {
-        if let Err(error) = self.flush() {
-            return Err(IntoInnerError::new(error, self));
-        }
-        let (inner, _) = self.into_parts();
-        Ok(inner)
-    }
-
-    /// Compatibility alias for [`Self::into_inner`].
-    ///
-    /// # Returns
-    ///
-    /// Returns the wrapped output after every buffered item and the wrapped
-    /// output itself have been flushed.
-    ///
-    /// # Errors
-    ///
-    /// Returns an [`IntoInnerError`] carrying the flush error and this
-    /// buffered output, preserving any unwritten suffix for a later retry.
-    #[inline(always)]
-    pub fn try_into_inner(
-        self,
-    ) -> std::result::Result<O, IntoInnerError<Self>> {
-        self.into_inner()
-    }
-
     /// Consumes this buffered output without flushing pending items.
     ///
     /// This method performs no I/O. Pending items that have been accepted into
     /// the internal buffer but not written to the wrapped writer remain in the
-    /// readable window of the returned buffer.
+    /// readable window of the returned buffer. Call [`Self::flush`] first for
+    /// normal completion; a successful flush leaves that buffer empty. Calling
+    /// this method first transfers responsibility for pending items to the
+    /// caller.
     ///
     /// # Returns
     ///
-    /// Returns the wrapped writer and the buffer holding pending items in
+    /// Returns the wrapped output and the buffer holding pending items in
     /// logical write order.
     #[inline(always)]
+    #[must_use = "the returned inner output and pending buffer must be handled"]
     pub fn into_parts(self) -> (O, Buffer<O::Item>) {
         let this = ManuallyDrop::new(self);
         // SAFETY: `this` will not be dropped, so reading both fields moves them
@@ -630,8 +580,7 @@ where
     where
         O: SeekableOutput,
     {
-        let position =
-            Seekable::seek_to(&mut self.inner, SeekFrom::Current(0))?;
+        let position = Seekable::seek_to(&mut self.inner, SeekFrom::Current(0))?;
         position
             .checked_add(self.buffer.available() as u64)
             .ok_or_else(|| {
@@ -702,11 +651,8 @@ where
             // range maintained by `Buffer`.
             self.panicked = true;
             let result = unsafe {
-                self.inner.write_unchecked(
-                    self.buffer.data(),
-                    position,
-                    available,
-                )
+                self.inner
+                    .write_unchecked(self.buffer.data(), position, available)
             };
             self.panicked = false;
             match result {
@@ -718,8 +664,7 @@ where
                     ));
                 }
                 Ok(written) => {
-                    if let Err(error) = validate_write_count(written, available)
-                    {
+                    if let Err(error) = validate_write_count(written, available) {
                         self.buffer.compact();
                         return Err(error);
                     }
@@ -759,12 +704,7 @@ where
     /// source range does not overlap with the destination range in the internal
     /// buffer.
     #[inline(always)]
-    unsafe fn write_to_buffer(
-        &mut self,
-        input: &[O::Item],
-        input_index: usize,
-        count: usize,
-    ) {
+    unsafe fn write_to_buffer(&mut self, input: &[O::Item], input_index: usize, count: usize) {
         debug_assert!(
             UncheckedSlice::range_fits(input.len(), input_index, count),
             "unchecked write range exceeds input buffer"
@@ -773,8 +713,7 @@ where
             count <= self.spare_capacity(),
             "unchecked write exceeds spare buffer capacity"
         );
-        let (destination, destination_index, _) =
-            self.buffer.spare_raw_parts_mut();
+        let (destination, destination_index, _) = self.buffer.spare_raw_parts_mut();
         // SAFETY: The caller guarantees valid source and destination ranges and
         // that they do not overlap.
         unsafe {
@@ -818,8 +757,7 @@ where
         count: usize,
     ) -> Result<usize> {
         // SAFETY: The caller guarantees the source range is valid.
-        let written =
-            unsafe { self.inner.write_unchecked(input, input_index, count) }?;
+        let written = unsafe { self.inner.write_unchecked(input, input_index, count) }?;
         validate_write_count(written, count)?;
         Ok(written)
     }
@@ -857,9 +795,7 @@ where
             let remaining = count - written;
             // SAFETY: `written < count`, so this suffix remains inside the
             // caller-validated source range.
-            match unsafe {
-                self.write_inner(input, input_index + written, remaining)
-            } {
+            match unsafe { self.write_inner(input, input_index + written, remaining) } {
                 Ok(0) => {
                     return Err(Error::new(
                         ErrorKind::WriteZero,
@@ -1028,9 +964,7 @@ where
         count: usize,
     ) -> Result<usize> {
         // SAFETY: Forwarded from the trait caller.
-        unsafe {
-            BufferedOutput::write_unchecked(self, input, input_index, count)
-        }
+        unsafe { BufferedOutput::write_unchecked(self, input, input_index, count) }
     }
 
     /// Writes items from the full input slice.
@@ -1086,9 +1020,7 @@ where
         count: usize,
     ) -> Result<()> {
         // SAFETY: Forwarded from the trait caller.
-        unsafe {
-            BufferedOutput::write_fully_unchecked(self, input, index, count)
-        }
+        unsafe { BufferedOutput::write_fully_unchecked(self, input, index, count) }
     }
 
     /// Writes all items from the full input slice through the internal buffer.
