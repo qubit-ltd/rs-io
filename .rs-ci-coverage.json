@@ -1,0 +1,8 @@
+{
+  "threshold_exempt_files": {
+    "qubit-io": [
+      "src/std_io/impls/input.rs",
+      "src/std_io/impls/output.rs"
+    ]
+  }
+}
