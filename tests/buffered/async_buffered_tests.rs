@@ -812,6 +812,44 @@ fn test_async_buffered_output_yields_after_bounded_ready_drains()
     Ok(())
 }
 
+#[test]
+fn test_async_buffered_input_async_fill_helpers_delegate_to_poll_operations()
+-> io::Result<()> {
+    let inner = ScriptedInput::new([
+        ReadStep::Data(vec![10]),
+        ReadStep::Data(vec![20]),
+    ]);
+    let mut input = AsyncBufferedInput::with_capacity(inner, 2);
+
+    assert!(complete(input.fill_more_async())?);
+    assert_eq!(&[10], input.unread());
+    assert!(complete(input.fill_until_async(2))?);
+    assert_eq!(&[10, 20], input.unread());
+    complete(input.ensure_available_async(2))?;
+
+    Ok(())
+}
+
+#[test]
+fn test_async_buffered_output_async_capacity_helper_drains_pending_items()
+-> io::Result<()> {
+    let mut output =
+        AsyncBufferedOutput::with_capacity(ScriptedOutput::new([], []), 3);
+    let (spare, index, available) = output.spare_raw_parts_mut();
+    assert_eq!(0, index);
+    assert_eq!(3, available);
+    spare[..2].copy_from_slice(&[7, 8]);
+    unsafe {
+        output.advance(2);
+    }
+
+    complete(output.ensure_spare_capacity_async(2))?;
+    assert_eq!(&[7, 8], output.inner().values.as_slice());
+    assert_eq!(3, output.spare_capacity());
+
+    Ok(())
+}
+
 trait PollResultExt<T> {
     fn expect_ready(self, message: &str) -> T;
 }

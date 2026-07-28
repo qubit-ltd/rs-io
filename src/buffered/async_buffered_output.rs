@@ -8,6 +8,7 @@
 
 use std::{
     collections::TryReserveError,
+    future::poll_fn,
     io::{
         self,
         Error,
@@ -333,6 +334,28 @@ where
         }
         this.buffer.clear();
         Poll::Ready(Ok(()))
+    }
+}
+
+impl<O> AsyncBufferedOutput<O>
+where
+    O: AsyncOutput + Unpin,
+    O::Item: Copy + Default + Unpin,
+{
+    /// Asynchronously ensures that the pending buffer has room for at least
+    /// `count` more items.
+    ///
+    /// Pending items are written to the wrapped output when necessary; this
+    /// does not flush the wrapped output itself. Returns `InvalidInput`
+    /// when `count` exceeds the buffer capacity, `WriteZero` when the
+    /// wrapped output makes no progress, or forwards errors from the wrapped
+    /// output.
+    pub async fn ensure_spare_capacity_async(
+        &mut self,
+        count: usize,
+    ) -> io::Result<()> {
+        poll_fn(|cx| Pin::new(&mut *self).poll_ensure_spare_capacity(cx, count))
+            .await
     }
 }
 
