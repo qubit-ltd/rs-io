@@ -21,7 +21,7 @@ Qubit IO 提供运行时中立的同步与异步 item stream，是 Qubit 文件�
 | 传输 | `Input<Item = T>`、`Output<Item = T>` | `AsyncInput<Item = T>`、`AsyncOutput<Item = T>` |
 | 缓冲 | `BufferedInput`、`BufferedOutput` | `AsyncBufferedInput`、`AsyncBufferedOutput` |
 | wrapper | 限量、计数、checksum、tee | 限量、计数、checksum |
-| 生态桥接 | `std::io` blanket implementation | 可选 Tokio 与 `futures-io` adapter |
+| 生态桥接 | `qubit_io::std_io` 标准库集成 | 可选 Tokio 与 `futures-io` adapter |
 
 ## 同步示例
 
@@ -44,6 +44,8 @@ assert_eq!(b"qubit", output.as_slice());
 
 `Input` 与 `Output` 的 item 类型是泛型，因此 codec 也可以直接使用 `u16`、
 `char` 或其他廉价标量，而不必先转换成字节。
+标准库专属的组合 trait 从 `qubit_io::std_io` 导出，扩展 trait 位于
+`qubit_io::std_io::ext`。
 
 ## Feature
 
@@ -60,7 +62,6 @@ qubit-io = "0.14"
 
 - [English user guide](doc/user_guide.md)
 - [用户指南](doc/user_guide.zh_CN.md)
-- [变更日志](CHANGELOG.md)
 
 docs.rs 上的 API 文档会启用项目声明的全部 feature 构建。
 
