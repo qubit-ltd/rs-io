@@ -5,10 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use std::io::{
-    Read,
-    Seek,
-};
+use std::io::{Read, Seek};
 
 /// Object-safe capability trait for values that can be read and repositioned.
 ///
@@ -25,7 +22,7 @@ use std::io::{
 /// # Examples
 ///
 /// ```rust
-/// use qubit_io::ReadSeek;
+/// use qubit_io::std_io::ReadSeek;
 /// use std::io::SeekFrom;
 ///
 /// fn read_from_start(input: &mut dyn ReadSeek) -> std::io::Result<Vec<u8>> {

@@ -7,21 +7,11 @@
 // =============================================================================
 
 use std::pin::Pin;
-use std::task::{
-    Context,
-    Poll,
-};
+use std::task::{Context, Poll};
 
-use tokio::io::{
-    AsyncRead,
-    ReadBuf,
-};
+use tokio::io::{AsyncRead, ReadBuf};
 
-use crate::{
-    AsyncInput,
-    UncheckedSlice,
-    traits::validate_async_error,
-};
+use crate::{AsyncInput, UncheckedSlice, traits::normalize_async_error};
 
 /// Adapts a Tokio [`AsyncRead`] value to Qubit's [`AsyncInput`].
 ///
@@ -147,15 +137,12 @@ where
             return Poll::Ready(Ok(0));
         }
         // SAFETY: The caller guarantees that the destination range is valid.
-        let target =
-            unsafe { UncheckedSlice::subslice_mut(output, index, count) };
+        let target = unsafe { UncheckedSlice::subslice_mut(output, index, count) };
         let mut buffer = ReadBuf::new(target);
-        AsyncRead::poll_read(self.get_pin_mut(), cx, &mut buffer).map(
-            |result| {
-                result
-                    .map_err(validate_async_error)
-                    .map(|()| buffer.filled().len())
-            },
-        )
+        AsyncRead::poll_read(self.get_pin_mut(), cx, &mut buffer).map(|result| {
+            result
+                .map_err(normalize_async_error)
+                .map(|()| buffer.filled().len())
+        })
     }
 }

@@ -5,14 +5,9 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use std::io::{
-    Result,
-    Seek,
-    SeekFrom,
-    Write,
-};
+use std::io::{Result, Seek, SeekFrom, Write};
 
-use crate::WriteSeek;
+use crate::std_io::WriteSeek;
 
 /// Extension methods for values that implement both [`Write`] and [`Seek`].
 ///
@@ -36,11 +31,7 @@ pub trait WriteSeekExt: Write + Seek {
     /// Returns an error when reading the current position, seeking to `offset`,
     /// writing bytes, or restoring the original position fails. If restoration
     /// fails, the restoration error is returned.
-    fn write_all_at_preserving_position(
-        &mut self,
-        offset: u64,
-        buffer: &[u8],
-    ) -> Result<()>;
+    fn write_all_at_preserving_position(&mut self, offset: u64, buffer: &[u8]) -> Result<()>;
 }
 
 /// Implements a position-preserving write through a type-erased stream.
@@ -91,11 +82,7 @@ where
     /// Returns an error when querying, changing, or restoring the stream
     /// position, or when writing fails.
     #[inline(always)]
-    fn write_all_at_preserving_position(
-        &mut self,
-        offset: u64,
-        buffer: &[u8],
-    ) -> Result<()> {
+    fn write_all_at_preserving_position(&mut self, offset: u64, buffer: &[u8]) -> Result<()> {
         let mut output = self;
         write_all_at_preserving_position_impl(&mut output, offset, buffer)
     }

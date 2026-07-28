@@ -6,15 +6,9 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    self,
-    SeekFrom,
-};
+use std::io::{self, SeekFrom};
 
-use crate::{
-    Input,
-    Seekable,
-};
+use crate::{Input, Seekable};
 
 /// Input wrapper that counts successfully returned items.
 ///

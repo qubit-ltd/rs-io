@@ -15,7 +15,7 @@ use std::{
 
 use crate::{
     AsyncClose, AsyncOutput, Buffer, async_io::MAX_READY_OPERATIONS_PER_POLL,
-    buffered::DEFAULT_BUFFER_CAPACITY, traits::validate_async_error,
+    buffered::DEFAULT_BUFFER_CAPACITY, traits::normalize_async_error,
 };
 
 /// Buffered asynchronous item output.
@@ -445,7 +445,7 @@ where
         // SAFETY: `inner` remains pinned in place for this call.
         unsafe { Pin::new_unchecked(&mut this.inner) }
             .poll_flush(cx)
-            .map(|result| result.map_err(validate_async_error))
+            .map(|result| result.map_err(normalize_async_error))
     }
 }
 
@@ -482,6 +482,6 @@ where
         // SAFETY: `inner` remains pinned in place for this call.
         unsafe { Pin::new_unchecked(&mut this.inner) }
             .poll_close(cx)
-            .map(|result| result.map_err(validate_async_error))
+            .map(|result| result.map_err(normalize_async_error))
     }
 }

@@ -5,10 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use std::io::{
-    BufRead,
-    Seek,
-};
+use std::io::{BufRead, Seek};
 
 /// Object-safe capability trait for values that can be buffered-read and
 /// repositioned.
@@ -25,7 +22,7 @@ use std::io::{
 /// # Examples
 ///
 /// ```rust
-/// use qubit_io::BufReadSeek;
+/// use qubit_io::std_io::BufReadSeek;
 /// use std::io::{BufRead, BufReader, Cursor, SeekFrom};
 ///
 /// fn read_after_prefix(input: &mut dyn BufReadSeek) -> std::io::Result<String> {

@@ -5,6 +5,9 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-mod io_contract;
 
-pub(crate) use io_contract::{normalize_async_error, validate_read_count, validate_write_count};
+//! Blanket implementations bridging standard-library I/O to rs-io traits.
+
+mod input;
+mod output;
+mod seekable;

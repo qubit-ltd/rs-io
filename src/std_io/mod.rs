@@ -5,6 +5,12 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-mod io_contract;
 
-pub(crate) use io_contract::{normalize_async_error, validate_read_count, validate_write_count};
+//! Integrations with standard-library I/O traits.
+
+pub mod ext;
+
+mod impls;
+mod traits;
+
+pub use traits::{BufReadSeek, ReadSeek, ReadWrite, ReadWriteSeek, WriteSeek};

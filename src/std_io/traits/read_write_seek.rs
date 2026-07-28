@@ -5,11 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-use std::io::{
-    Read,
-    Seek,
-    Write,
-};
+use std::io::{Read, Seek, Write};
 
 /// Object-safe capability trait for values that can be read, written, and
 /// repositioned.
@@ -27,7 +23,7 @@ use std::io::{
 /// # Examples
 ///
 /// ```rust
-/// use qubit_io::ReadWriteSeek;
+/// use qubit_io::std_io::ReadWriteSeek;
 /// use std::io::SeekFrom;
 ///
 /// fn rewrite_first_byte(io: &mut dyn ReadWriteSeek) -> std::io::Result<String> {

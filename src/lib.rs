@@ -35,7 +35,7 @@ mod adapters;
 mod async_io;
 pub mod buffered;
 mod capacity_const;
-pub mod ext;
+pub mod std_io;
 mod traits;
 mod util;
 mod wrappers;
@@ -56,11 +56,9 @@ pub use buffered::{
 pub use capacity_const::{
     DEFAULT_BUFFER_CAPACITY, DEFAULT_COMPARE_BUFFER_SIZE, DEFAULT_COPY_BUFFER_SIZE,
 };
-pub use ext::{BufReadExt, ReadExt, ReadSeekExt, SeekExt, WriteExt, WriteSeekExt};
 pub use traits::{
-    AsyncClose, AsyncInput, AsyncOutput, BufReadSeek, Input, Output, PinnedAsyncInputExt,
-    PinnedAsyncOutputExt, ReadSeek, ReadWrite, ReadWriteSeek, Seekable, SeekableInput,
-    SeekableOutput, WriteSeek,
+    AsyncClose, AsyncInput, AsyncOutput, Input, Output, PinnedAsyncInputExt, PinnedAsyncOutputExt,
+    Seekable, SeekableInput, SeekableOutput,
 };
 pub use util::Streams;
 #[allow(unused_imports)]

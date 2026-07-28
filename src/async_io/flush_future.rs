@@ -9,15 +9,9 @@
 use std::future::Future;
 use std::io::Result;
 use std::pin::Pin;
-use std::task::{
-    Context,
-    Poll,
-};
+use std::task::{Context, Poll};
 
-use crate::{
-    AsyncOutput,
-    traits::validate_async_error,
-};
+use crate::{AsyncOutput, traits::normalize_async_error};
 
 /// Future that flushes an [`AsyncOutput`].
 ///
@@ -97,7 +91,7 @@ where
             .output
             .as_mut()
             .poll_flush(cx)
-            .map(|result| result.map_err(validate_async_error));
+            .map(|result| result.map_err(normalize_async_error));
         if result.is_ready() {
             this.completed = true;
         }

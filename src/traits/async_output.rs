@@ -8,20 +8,10 @@
 
 use std::io::Result;
 use std::pin::Pin;
-use std::task::{
-    Context,
-    Poll,
-};
+use std::task::{Context, Poll};
 
-use crate::traits::{
-    validate_async_error,
-    validate_write_count,
-};
-use crate::{
-    FlushFuture,
-    WriteFullyFuture,
-    WriteFuture,
-};
+use crate::traits::{normalize_async_error, validate_write_count};
+use crate::{FlushFuture, WriteFullyFuture, WriteFuture};
 
 /// Minimal runtime-independent asynchronous output interface over items.
 ///
@@ -110,12 +100,10 @@ pub trait AsyncOutput {
         let requested = input.len();
         // SAFETY: The full input slice is a valid source range.
         match unsafe { self.poll_write_unchecked(cx, input, 0, requested) } {
-            Poll::Ready(Ok(written)) => Poll::Ready(
-                validate_write_count(written, requested).map(|()| written),
-            ),
-            Poll::Ready(Err(error)) => {
-                Poll::Ready(Err(validate_async_error(error)))
+            Poll::Ready(Ok(written)) => {
+                Poll::Ready(validate_write_count(written, requested).map(|()| written))
             }
+            Poll::Ready(Err(error)) => Poll::Ready(Err(normalize_async_error(error))),
             Poll::Pending => Poll::Pending,
         }
     }
@@ -138,10 +126,7 @@ pub trait AsyncOutput {
     /// # Errors
     ///
     /// Returns the flush error reported by the implementation.
-    fn poll_flush(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<()>>;
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<()>>;
 
     /// Creates a future that performs one asynchronous write operation.
     ///
@@ -157,10 +142,7 @@ pub trait AsyncOutput {
     ///
     /// A future that resolves with the number of accepted items.
     #[inline(always)]
-    fn write_async<'a>(
-        &'a mut self,
-        input: &'a [Self::Item],
-    ) -> WriteFuture<'a, Self>
+    fn write_async<'a>(&'a mut self, input: &'a [Self::Item]) -> WriteFuture<'a, Self>
     where
         Self: Sized + Unpin,
     {
@@ -184,10 +166,7 @@ pub trait AsyncOutput {
     ///
     /// A future that resolves when every item has been accepted.
     #[inline(always)]
-    fn write_fully_async<'a>(
-        &'a mut self,
-        input: &'a [Self::Item],
-    ) -> WriteFullyFuture<'a, Self>
+    fn write_fully_async<'a>(&'a mut self, input: &'a [Self::Item]) -> WriteFullyFuture<'a, Self>
     where
         Self: Sized + Unpin,
     {
