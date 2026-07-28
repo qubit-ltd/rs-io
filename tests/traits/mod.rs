@@ -6,6 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 mod async_close_tests;
+mod async_contract_error_tests;
 mod async_input_tests;
 mod async_output_tests;
 mod input_tests;
