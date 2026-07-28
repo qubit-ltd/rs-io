@@ -25,8 +25,6 @@ root. Standard-library-specific composite traits are exposed from
 `qubit_io::std_io::ext`. Internal modules are not part of the compatibility
 boundary.
 
-Upgrading from 0.13? Read the [0.14 migration guide](migration-0.14.md).
-
 ## 2. Add the dependency and select features
 
 The default feature set contains the runtime-neutral core only:

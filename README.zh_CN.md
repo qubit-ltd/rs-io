@@ -62,8 +62,6 @@ qubit-io = "0.14"
 
 - [English user guide](doc/user_guide.md)
 - [用户指南](doc/user_guide.zh_CN.md)
-- [0.13 to 0.14 migration guide](doc/migration-0.14.md)
-- [0.13 到 0.14 迁移指南](doc/migration-0.14.zh_CN.md)
 
 docs.rs 上的 API 文档会启用项目声明的全部 feature 构建。
 
