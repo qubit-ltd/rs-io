@@ -6,7 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use qubit_io::ReadWrite;
+use qubit_io::std_io::ReadWrite;
 
 #[test]
 fn test_read_write_trait_object_supports_reading_and_writing() {

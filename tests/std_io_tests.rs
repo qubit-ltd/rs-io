@@ -6,10 +6,4 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use super::support_tests::TestInput;
-use qubit_io::ReadFuture;
-
-#[test]
-fn test_read_future_type_is_public() {
-    assert!(std::any::type_name::<ReadFuture<'static, TestInput>>().contains("ReadFuture"));
-}
+mod std_io;

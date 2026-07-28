@@ -68,8 +68,8 @@ fn test_with_capacity_initializes_empty_window() {
 
 #[test]
 fn test_try_with_capacity_initializes_empty_window() {
-    let buffer = Buffer::<u8>::try_with_capacity(0)
-        .expect("fallible buffer allocation should succeed");
+    let buffer =
+        Buffer::<u8>::try_with_capacity(0).expect("fallible buffer allocation should succeed");
 
     assert_eq!(1, buffer.capacity());
     assert!(buffer.is_empty());

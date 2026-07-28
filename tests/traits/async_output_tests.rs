@@ -8,30 +8,16 @@
 
 use std::collections::VecDeque;
 use std::future::Future;
-use std::io::{
-    Error,
-    ErrorKind,
-};
+use std::io::{Error, ErrorKind};
 use std::marker::PhantomPinned;
 use std::pin::Pin;
 use std::sync::{
     Arc,
-    atomic::{
-        AtomicBool,
-        Ordering,
-    },
+    atomic::{AtomicBool, Ordering},
 };
-use std::task::{
-    Context,
-    Poll,
-    Wake,
-    Waker,
-};
+use std::task::{Context, Poll, Wake, Waker};
 
-use qubit_io::{
-    AsyncOutput,
-    WriteFullyFuture,
-};
+use qubit_io::{AsyncOutput, WriteFullyFuture};
 
 enum WriteStep {
     Accept(usize),
@@ -86,9 +72,7 @@ impl AsyncOutput for ScriptedAsyncOutput {
                     .extend_from_slice(&input[index..index + written]);
                 Poll::Ready(Ok(written))
             }
-            WriteStep::Error(kind) => {
-                Poll::Ready(Err(Error::new(kind, "write failed")))
-            }
+            WriteStep::Error(kind) => Poll::Ready(Err(Error::new(kind, "write failed"))),
             WriteStep::Pending => {
                 this.registered_waker = Some(cx.waker().clone());
                 Poll::Pending
@@ -97,10 +81,7 @@ impl AsyncOutput for ScriptedAsyncOutput {
         }
     }
 
-    fn poll_flush(
-        self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-    ) -> Poll<std::io::Result<()>> {
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         // SAFETY: This implementation does not move the pinned value.
         let this = unsafe { self.get_unchecked_mut() };
         if this.flush_pending {
@@ -127,10 +108,7 @@ impl AsyncOutput for OverreportingAsyncOutput {
         Poll::Ready(Ok(count + 1))
     }
 
-    fn poll_flush(
-        self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-    ) -> Poll<std::io::Result<()>> {
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         Poll::Ready(Ok(()))
     }
 }
@@ -156,10 +134,7 @@ impl AsyncOutput for OneItemAsyncOutput {
         Poll::Ready(Ok(1))
     }
 
-    fn poll_flush(
-        self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-    ) -> Poll<std::io::Result<()>> {
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         Poll::Ready(Ok(()))
     }
 }
@@ -181,8 +156,7 @@ fn test_async_output_poll_write_rejects_overreported_count() {
     let mut output = OverreportingAsyncOutput;
     let mut cx = context();
 
-    let result =
-        AsyncOutput::poll_write(Pin::new(&mut output), &mut cx, &[1, 2, 3]);
+    let result = AsyncOutput::poll_write(Pin::new(&mut output), &mut cx, &[1, 2, 3]);
 
     let error = result
         .expect_ready("overreported write should be ready")
@@ -204,8 +178,7 @@ fn test_async_output_zero_length_write_does_not_poll_inner() {
 #[test]
 fn test_async_output_poll_write_rejects_forbidden_error_kinds() {
     for kind in [ErrorKind::WouldBlock, ErrorKind::Interrupted] {
-        let mut output =
-            Box::pin(ScriptedAsyncOutput::new(vec![WriteStep::Error(kind)]));
+        let mut output = Box::pin(ScriptedAsyncOutput::new(vec![WriteStep::Error(kind)]));
         let mut cx = context();
 
         let error = AsyncOutput::poll_write(output.as_mut(), &mut cx, &[1])
@@ -227,8 +200,7 @@ fn test_async_output_pending_registers_waker_without_progress() {
         }
     }
 
-    let mut output =
-        Box::pin(ScriptedAsyncOutput::new(vec![WriteStep::Pending]));
+    let mut output = Box::pin(ScriptedAsyncOutput::new(vec![WriteStep::Pending]));
     let wake_state = Arc::new(TestWake(AtomicBool::new(false)));
     let waker = Waker::from(Arc::clone(&wake_state));
     let mut cx = Context::from_waker(&waker);
@@ -279,10 +251,9 @@ fn test_write_fully_async_reports_write_zero() {
 
 #[test]
 fn test_write_fully_async_returns_non_interrupted_error() {
-    let mut output =
-        Box::pin(ScriptedAsyncOutput::new(vec![WriteStep::Error(
-            ErrorKind::BrokenPipe,
-        )]));
+    let mut output = Box::pin(ScriptedAsyncOutput::new(vec![WriteStep::Error(
+        ErrorKind::BrokenPipe,
+    )]));
     let mut future = WriteFullyFuture::new(output.as_mut(), &[1, 2, 3]);
     let mut cx = context();
 
@@ -311,10 +282,7 @@ fn test_write_fully_async_default_method_writes_all_items() {
             Poll::Ready(Ok(count))
         }
 
-        fn poll_flush(
-            self: Pin<&mut Self>,
-            _cx: &mut Context<'_>,
-        ) -> Poll<std::io::Result<()>> {
+        fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
             Poll::Ready(Ok(()))
         }
     }
@@ -357,9 +325,7 @@ fn test_write_fully_async_yields_after_ready_progress_budget() {
 
     let mut completed = false;
     for _ in 0..8 {
-        if let Poll::Ready(result) =
-            Future::poll(Pin::new(&mut future), &mut cx)
-        {
+        if let Poll::Ready(result) = Future::poll(Pin::new(&mut future), &mut cx) {
             result.expect("cooperative write should succeed");
             completed = true;
             break;
