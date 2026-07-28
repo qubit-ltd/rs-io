@@ -7,7 +7,10 @@
 // =============================================================================
 
 use std::collections::VecDeque;
-use std::io::{Error, ErrorKind};
+use std::io::{
+    Error,
+    ErrorKind,
+};
 
 use qubit_io::Input;
 
@@ -60,7 +63,9 @@ impl Input for ScriptedInput {
                 output[index..index + read].copy_from_slice(&data[..read]);
                 Ok(read)
             }
-            ReadStep::Interrupted => Err(Error::new(ErrorKind::Interrupted, "interrupted")),
+            ReadStep::Interrupted => {
+                Err(Error::new(ErrorKind::Interrupted, "interrupted"))
+            }
             ReadStep::Error(kind, message) => Err(Error::new(kind, message)),
             ReadStep::Eof => Ok(0),
         }
@@ -178,7 +183,8 @@ fn test_input_read_exactly_fills_destination() {
 
 #[test]
 fn test_input_read_exactly_reports_unexpected_eof() {
-    let mut input = ScriptedInput::new(vec![ReadStep::Data(vec![1, 2]), ReadStep::Eof]);
+    let mut input =
+        ScriptedInput::new(vec![ReadStep::Data(vec![1, 2]), ReadStep::Eof]);
     let mut output = [0_u8; 3];
 
     let error = input

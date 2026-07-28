@@ -17,5 +17,7 @@ fn test_async_buffered_output_uses_requested_capacity() {
 
 #[test]
 fn test_async_buffered_output_try_with_capacity_reports_allocation_failure() {
-    assert!(AsyncBufferedOutput::try_with_capacity(TestOutput, usize::MAX).is_err());
+    assert!(
+        AsyncBufferedOutput::try_with_capacity(TestOutput, usize::MAX).is_err()
+    );
 }

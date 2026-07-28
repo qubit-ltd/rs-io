@@ -10,15 +10,23 @@ use super::support_tests::TestInput;
 use qubit_io::ReadFullyFuture;
 use std::{
     future::Future,
-    panic::{AssertUnwindSafe, catch_unwind},
+    panic::{
+        AssertUnwindSafe,
+        catch_unwind,
+    },
     pin::Pin,
-    task::{Context, Poll, Waker},
+    task::{
+        Context,
+        Poll,
+        Waker,
+    },
 };
 
 #[test]
 fn test_read_fully_future_type_is_public() {
     assert!(
-        std::any::type_name::<ReadFullyFuture<'static, TestInput>>().contains("ReadFullyFuture")
+        std::any::type_name::<ReadFullyFuture<'static, TestInput>>()
+            .contains("ReadFullyFuture")
     );
 }
 

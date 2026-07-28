@@ -6,7 +6,10 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{Result, SeekFrom};
+use std::io::{
+    Result,
+    SeekFrom,
+};
 
 /// Minimal seek interface measured in stream items.
 ///
@@ -21,9 +24,9 @@ use std::io::{Result, SeekFrom};
 /// # Byte- and item-oriented seeking
 ///
 /// [`Seekable::seek_to`] expresses positions in `Self::Unit`, while
-/// [`std::io::Seek::seek`] always expresses positions in bytes. In generic code where
-/// both traits are implemented for the same value, fully qualified syntax can
-/// make the selected unit semantics explicit:
+/// [`std::io::Seek::seek`] always expresses positions in bytes. In generic code
+/// where both traits are implemented for the same value, fully qualified syntax
+/// can make the selected unit semantics explicit:
 ///
 /// ```
 /// use std::io::{
@@ -51,11 +54,11 @@ use std::io::{Result, SeekFrom};
 ///
 /// # Coherence note
 ///
-/// The standard I/O integration maps [`std::io::Seek`] to `Unit = u8` for binary
-/// compatibility. If a concrete type already implements `Seek`, it already has
-/// an implicit `Seekable<Unit = u8>` impl from this blanket, so another
-/// `Seekable` impl with the same `(Self, Unit)` pair would be a coherence
-/// conflict.
+/// The standard I/O integration maps [`std::io::Seek`] to `Unit = u8` for
+/// binary compatibility. If a concrete type already implements `Seek`, it
+/// already has an implicit `Seekable<Unit = u8>` impl from this blanket, so
+/// another `Seekable` impl with the same `(Self, Unit)` pair would be a
+/// coherence conflict.
 ///
 /// For example, this is rejected by the compiler:
 ///

@@ -6,7 +6,12 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{Cursor, Error, ErrorKind, Read};
+use std::io::{
+    Cursor,
+    Error,
+    ErrorKind,
+    Read,
+};
 
 use qubit_io::Input;
 
@@ -34,7 +39,8 @@ fn test_read_blanket_impl_exposes_input_read_and_read_unchecked() {
     let mut cursor = Cursor::new(b"ab".to_vec());
     let mut output = [0_u8; 4];
 
-    let read = Input::read(&mut cursor, &mut output).expect("read should succeed");
+    let read =
+        Input::read(&mut cursor, &mut output).expect("read should succeed");
     assert_eq!(2, read);
     assert_eq!(b"ab\x00\x00", &output);
 

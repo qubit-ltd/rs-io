@@ -6,9 +6,16 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{Result, Write};
+use std::io::{
+    Result,
+    Write,
+};
 
-use crate::{Output, UncheckedSlice, traits::validate_write_count};
+use crate::{
+    Output,
+    UncheckedSlice,
+    traits::validate_write_count,
+};
 
 /// Bridges byte-oriented standard writers to item-oriented output.
 impl<W> Output for W
@@ -44,7 +51,8 @@ where
 
     /// Writes bytes from the complete input slice.
     ///
-    /// Returns InvalidData if the writer reports more bytes than input contains.
+    /// Returns InvalidData if the writer reports more bytes than input
+    /// contains.
     #[inline(always)]
     fn write(&mut self, input: &[Self::Item]) -> Result<usize> {
         let written = Write::write(self, input)?;

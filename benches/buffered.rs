@@ -13,10 +13,27 @@
 //! buffered and unbuffered baselines.
 
 use std::hint::black_box;
-use std::io::{BufReader, BufWriter, Cursor, Read, Write};
+use std::io::{
+    BufReader,
+    BufWriter,
+    Cursor,
+    Read,
+    Write,
+};
 
-use criterion::{BatchSize, BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use qubit_io::{BufferedInput, BufferedOutput, Input};
+use criterion::{
+    BatchSize,
+    BenchmarkId,
+    Criterion,
+    Throughput,
+    criterion_group,
+    criterion_main,
+};
+use qubit_io::{
+    BufferedInput,
+    BufferedOutput,
+    Input,
+};
 
 const BUFFER_CAPACITY: usize = 8 * 1024;
 const DATA_LEN: usize = 256 * 1024;
@@ -84,15 +101,21 @@ fn benchmark_buffered_input(criterion: &mut Criterion) {
                 bencher.iter_batched(
                     || {
                         (
-                            BufReader::with_capacity(BUFFER_CAPACITY, Cursor::new(fixture.clone())),
+                            BufReader::with_capacity(
+                                BUFFER_CAPACITY,
+                                Cursor::new(fixture.clone()),
+                            ),
                             vec![0_u8; width],
                         )
                     },
                     |(mut input, mut output)| {
                         let mut total = 0_usize;
                         loop {
-                            let count = Read::read(&mut input, &mut output[..width])
-                                .expect("std buffered input benchmark read");
+                            let count =
+                                Read::read(&mut input, &mut output[..width])
+                                    .expect(
+                                        "std buffered input benchmark read",
+                                    );
                             if count == 0 {
                                 break;
                             }
@@ -113,8 +136,11 @@ fn benchmark_buffered_input(criterion: &mut Criterion) {
                     |(mut input, mut output)| {
                         let mut total = 0_usize;
                         loop {
-                            let count = Input::read(&mut input, &mut output[..width])
-                                .expect("Qubit unbuffered input benchmark read");
+                            let count =
+                                Input::read(&mut input, &mut output[..width])
+                                    .expect(
+                                        "Qubit unbuffered input benchmark read",
+                                    );
                             if count == 0 {
                                 break;
                             }
@@ -135,8 +161,9 @@ fn benchmark_buffered_input(criterion: &mut Criterion) {
                     |(mut input, mut output)| {
                         let mut total = 0_usize;
                         loop {
-                            let count = Read::read(&mut input, &mut output[..width])
-                                .expect("unbuffered input benchmark read");
+                            let count =
+                                Read::read(&mut input, &mut output[..width])
+                                    .expect("unbuffered input benchmark read");
                             if count == 0 {
                                 break;
                             }
@@ -178,7 +205,9 @@ fn benchmark_buffered_output(criterion: &mut Criterion) {
                                 .write_fully(chunk)
                                 .expect("buffered output benchmark write");
                         }
-                        output.flush().expect("buffered output benchmark flush");
+                        output
+                            .flush()
+                            .expect("buffered output benchmark flush");
                         let (writer, pending) = output.into_parts();
                         let bytes = writer.into_inner();
                         black_box((bytes, pending.available()));
@@ -204,10 +233,14 @@ fn benchmark_buffered_output(criterion: &mut Criterion) {
                                 .write_all(chunk)
                                 .expect("std buffered output benchmark write");
                         }
-                        output.flush().expect("std buffered output benchmark flush");
+                        output
+                            .flush()
+                            .expect("std buffered output benchmark flush");
                         let bytes = output
                             .into_inner()
-                            .expect("std buffered output should flush into cursor")
+                            .expect(
+                                "std buffered output should flush into cursor",
+                            )
                             .into_inner();
                         black_box(bytes);
                     },
@@ -227,7 +260,9 @@ fn benchmark_buffered_output(criterion: &mut Criterion) {
                                 .write_all(chunk)
                                 .expect("unbuffered output benchmark write");
                         }
-                        output.flush().expect("unbuffered output benchmark flush");
+                        output
+                            .flush()
+                            .expect("unbuffered output benchmark flush");
                         black_box(output.into_inner());
                     },
                     BatchSize::SmallInput,

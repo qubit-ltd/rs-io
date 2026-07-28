@@ -6,37 +6,41 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{Error, ErrorKind, Result};
+use std::io::{
+    Error,
+    ErrorKind,
+    Result,
+};
 
 use super::validate_write_count;
 use crate::util::UncheckedSlice;
 
 /// Minimal indexed output interface over items.
 ///
-/// `Output` is intentionally smaller and lower-level than [`std::io::Write`]. Its
-/// unchecked primitive writes up to `count` items from `input[index..index +
-/// count]`, plus an explicit flush operation. The caller owns range validation
-/// for unchecked calls so hot paths can avoid repeated slicing and bounds
-/// checks. Safe full-slice writes are available through [`Output::write`] and
-/// complete writes through [`Output::write_fully`].
+/// `Output` is intentionally smaller and lower-level than [`std::io::Write`].
+/// Its unchecked primitive writes up to `count` items from `input[index..index
+/// + count]`, plus an explicit flush operation. The caller owns range
+/// validation for unchecked calls so hot paths can avoid repeated slicing and
+/// bounds checks. Safe full-slice writes are available through
+/// [`Output::write`] and complete writes through [`Output::write_fully`].
 ///
 /// # Coherence note
 ///
-/// Every [`std::io::Write`] value automatically implements `Output<Item = u8>` through
-/// the standard I/O integration. Because [`Output::Item`] is an associated type
-/// rather than a trait parameter, a concrete type that implements [`std::io::Write`]
-/// cannot also provide any other direct `Output` implementation for the same
-/// type, including one with a different item type.
+/// Every [`std::io::Write`] value automatically implements `Output<Item = u8>`
+/// through the standard I/O integration. Because [`Output::Item`] is an
+/// associated type rather than a trait parameter, a concrete type that
+/// implements [`std::io::Write`] cannot also provide any other direct `Output`
+/// implementation for the same type, including one with a different item type.
 ///
 /// Use a wrapper/newtype when a type needs item-oriented output semantics that
 /// differ from its byte-oriented [`std::io::Write`] implementation.
 ///
 /// # Method name overlap
 ///
-/// `Output::write` has the same method name as [`std::io::Write::write`] because both
-/// perform a safe single write for their respective abstraction layer. In
-/// generic code where both traits are in scope for the same value, use fully
-/// qualified syntax to choose the intended operation:
+/// `Output::write` has the same method name as [`std::io::Write::write`]
+/// because both perform a safe single write for their respective abstraction
+/// layer. In generic code where both traits are in scope for the same value,
+/// use fully qualified syntax to choose the intended operation:
 ///
 /// ```
 /// use std::io::{
@@ -191,7 +195,9 @@ pub trait Output {
             let remaining = count - written;
             // SAFETY: The caller guarantees the original source range is valid;
             // `written < count`, so this suffix remains inside it.
-            match unsafe { self.write_unchecked(input, index + written, remaining) } {
+            match unsafe {
+                self.write_unchecked(input, index + written, remaining)
+            } {
                 Ok(0) => {
                     return Err(Error::new(
                         ErrorKind::WriteZero,

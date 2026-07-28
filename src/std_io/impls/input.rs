@@ -6,9 +6,16 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{Read, Result};
+use std::io::{
+    Read,
+    Result,
+};
 
-use crate::{Input, UncheckedSlice, traits::validate_read_count};
+use crate::{
+    Input,
+    UncheckedSlice,
+    traits::validate_read_count,
+};
 
 /// Bridges byte-oriented standard readers to item-oriented input.
 impl<R> Input for R
@@ -38,7 +45,8 @@ where
             "unchecked read range exceeds output buffer"
         );
         // SAFETY: The caller guarantees that the range is valid inside output.
-        let target = unsafe { UncheckedSlice::subslice_mut(output, index, count) };
+        let target =
+            unsafe { UncheckedSlice::subslice_mut(output, index, count) };
         Read::read(self, target)
     }
 

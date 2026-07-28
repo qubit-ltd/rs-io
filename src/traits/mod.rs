@@ -21,7 +21,11 @@ pub use async_close::AsyncClose;
 pub use async_input::AsyncInput;
 pub use async_output::AsyncOutput;
 pub use input::Input;
-pub(crate) use internal::{normalize_async_error, validate_read_count, validate_write_count};
+pub(crate) use internal::{
+    normalize_async_error,
+    validate_read_count,
+    validate_write_count,
+};
 pub use output::Output;
 pub use pinned_async_input_ext::PinnedAsyncInputExt;
 pub use pinned_async_output_ext::PinnedAsyncOutputExt;
