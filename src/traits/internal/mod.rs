@@ -5,6 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
+mod async_contract_error;
 mod io_contract;
 
 pub(crate) use io_contract::{
