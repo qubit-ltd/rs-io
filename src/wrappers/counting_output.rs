@@ -34,6 +34,14 @@ pub struct CountingOutput<O> {
 
 impl<O> CountingOutput<O> {
     /// Creates a counting output around `inner` with a zero item count.
+    ///
+    /// # Parameters
+    ///
+    /// - `inner`: Output whose successful transfers are counted.
+    ///
+    /// # Returns
+    ///
+    /// Returns a wrapper with its item count initialized to zero.
     #[inline(always)]
     pub const fn new(inner: O) -> Self {
         Self {
@@ -44,6 +52,10 @@ impl<O> CountingOutput<O> {
 
     /// Returns the saturating number of items successfully accepted through
     /// this wrapper.
+    ///
+    /// # Returns
+    ///
+    /// Returns the saturating count of successful item transfers.
     #[inline(always)]
     #[must_use]
     pub const fn items_written(&self) -> u64 {
@@ -51,6 +63,10 @@ impl<O> CountingOutput<O> {
     }
 
     /// Returns a shared reference to the wrapped output.
+    ///
+    /// # Returns
+    ///
+    /// Returns the wrapped output without allowing mutation.
     #[inline(always)]
     #[must_use]
     pub const fn inner(&self) -> &O {
@@ -61,12 +77,20 @@ impl<O> CountingOutput<O> {
     ///
     /// Writes through the returned reference do not affect this wrapper's
     /// counter.
+    ///
+    /// # Returns
+    ///
+    /// Returns mutable access to the wrapped output.
     #[inline(always)]
     pub fn inner_mut(&mut self) -> &mut O {
         &mut self.inner
     }
 
     /// Consumes this wrapper and returns the wrapped output.
+    ///
+    /// # Returns
+    ///
+    /// Returns the wrapped output.
     #[inline(always)]
     #[must_use]
     pub fn into_inner(self) -> O {
@@ -79,6 +103,10 @@ where
     O: Output<Item = u8>,
 {
     /// Returns the successfully accepted byte count.
+    ///
+    /// # Returns
+    ///
+    /// Returns the saturating number of successfully accepted bytes.
     #[inline(always)]
     #[must_use]
     pub const fn bytes_written(&self) -> u64 {

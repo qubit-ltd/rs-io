@@ -206,6 +206,15 @@ where
     ///
     /// Existing unread items are retained and this method performs no I/O.
     ///
+    /// # Parameters
+    ///
+    /// - `capacity`: Minimum total item capacity to reserve.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` after the backing buffer has at least `capacity`
+    /// item slots.
+    ///
     /// # Errors
     ///
     /// Returns the allocation error when the backing buffer cannot grow.
@@ -224,6 +233,10 @@ where
 
     /// Advances the unread cursor without checking bounds.
     ///
+    /// # Parameters
+    ///
+    /// - `count`: Number of unread items to consume.
+    ///
     /// # Safety
     ///
     /// The caller must guarantee that `count <= self.unread_len()`.
@@ -236,6 +249,12 @@ where
     }
 
     /// Copies unread items into an indexed output range without consuming them.
+    ///
+    /// # Parameters
+    ///
+    /// - `output`: Destination item slice.
+    /// - `output_index`: First destination index to write.
+    /// - `count`: Number of unread items to copy.
     ///
     /// # Safety
     ///
@@ -263,6 +282,10 @@ where
     }
 
     /// Polls one refill while preserving unread items.
+    ///
+    /// # Parameters
+    ///
+    /// - `cx`: Task context used to register a wake-up.
     ///
     /// # Returns
     ///
@@ -312,6 +335,16 @@ where
 
     /// Polls refills until `count` unread items are available or EOF occurs.
     ///
+    /// # Parameters
+    ///
+    /// - `cx`: Task context used to register a wake-up.
+    /// - `count`: Minimum number of unread items to make available.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(true)` when `count` items are available, `Ok(false)` at
+    /// EOF, or [`Poll::Pending`] while the wrapped input is not ready.
+    ///
     /// # Errors
     ///
     /// Returns [`ErrorKind::InvalidInput`] when `count` exceeds the buffer
@@ -348,6 +381,16 @@ where
     }
 
     /// Polls refills until `count` unread items are available.
+    ///
+    /// # Parameters
+    ///
+    /// - `cx`: Task context used to register a wake-up.
+    /// - `count`: Minimum number of unread items to make available.
+    ///
+    /// # Returns
+    ///
+    /// Returns a ready success after `count` items are available, or
+    /// [`Poll::Pending`] while the wrapped input is not ready.
     ///
     /// # Errors
     ///
@@ -386,10 +429,15 @@ where
 {
     /// Asynchronously reads and appends at least one item to the unread buffer.
     ///
-    /// Returns `Ok(true)` when data was appended, or `Ok(false)` when the
-    /// wrapped input reached end of input. Returns an error when the buffer
-    /// is full and cannot reclaim space, or when the wrapped input returns
-    /// an error.
+    /// # Returns
+    ///
+    /// Returns `Ok(true)` when data was appended or `Ok(false)` at end of
+    /// input.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the buffer is full and cannot reclaim space, or
+    /// when the wrapped input returns an error.
     pub async fn fill_more_async(&mut self) -> io::Result<bool> {
         poll_fn(|cx| Pin::new(&mut *self).poll_fill_more(cx)).await
     }
@@ -397,10 +445,19 @@ where
     /// Asynchronously fills the unread buffer until it contains at least
     /// `count` items.
     ///
-    /// Returns `Ok(true)` when `count` items are available, or `Ok(false)` when
-    /// the wrapped input reaches end of input first. Returns an error when
-    /// `count` exceeds the buffer capacity or when the wrapped input
-    /// returns an error.
+    /// # Parameters
+    ///
+    /// - `count`: Minimum number of unread items to make available.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(true)` when `count` items are available or `Ok(false)` when
+    /// the wrapped input reaches end of input first.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when `count` exceeds the buffer capacity or when the
+    /// wrapped input returns an error.
     pub async fn fill_until_async(&mut self, count: usize) -> io::Result<bool> {
         poll_fn(|cx| Pin::new(&mut *self).poll_fill_until(cx, count)).await
     }
@@ -408,10 +465,19 @@ where
     /// Asynchronously ensures that the unread buffer contains at least `count`
     /// items.
     ///
-    /// Returns an `UnexpectedEof` error after discarding incomplete unread data
-    /// when the wrapped input ends before `count` items are available.
-    /// Returns `InvalidInput` when `count` exceeds the buffer capacity, or
-    /// forwards errors from the wrapped input.
+    /// # Parameters
+    ///
+    /// - `count`: Minimum number of unread items to make available.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` after `count` items are available.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ErrorKind::UnexpectedEof`] after discarding incomplete unread
+    /// data when the wrapped input ends early, [`ErrorKind::InvalidInput`] when
+    /// `count` exceeds the buffer capacity, or an error from the wrapped input.
     pub async fn ensure_available_async(
         &mut self,
         count: usize,

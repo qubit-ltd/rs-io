@@ -36,12 +36,25 @@ pub struct TeeOutput<P, B> {
 
 impl<P, B> TeeOutput<P, B> {
     /// Creates a tee output around `inner` and `branch`.
+    ///
+    /// # Parameters
+    ///
+    /// - `inner`: Primary output.
+    /// - `branch`: Output that receives mirrored items.
+    ///
+    /// # Returns
+    ///
+    /// Returns a wrapper that mirrors successfully accepted items.
     #[inline(always)]
     pub const fn new(inner: P, branch: B) -> Self {
         Self { inner, branch }
     }
 
     /// Returns a shared reference to the primary output.
+    ///
+    /// # Returns
+    ///
+    /// Returns the primary output without allowing mutation.
     #[inline(always)]
     #[must_use]
     pub const fn inner(&self) -> &P {
@@ -51,12 +64,20 @@ impl<P, B> TeeOutput<P, B> {
     /// Returns mutable access to the primary output.
     ///
     /// Direct writes, flushes, and seeks bypass the branch.
+    ///
+    /// # Returns
+    ///
+    /// Returns mutable access to the primary output.
     #[inline(always)]
     pub fn inner_mut(&mut self) -> &mut P {
         &mut self.inner
     }
 
     /// Returns a shared reference to the branch output.
+    ///
+    /// # Returns
+    ///
+    /// Returns the branch output without allowing mutation.
     #[inline(always)]
     #[must_use]
     pub const fn branch(&self) -> &B {
@@ -66,6 +87,10 @@ impl<P, B> TeeOutput<P, B> {
     /// Returns mutable access to the branch output.
     ///
     /// Direct operations can make the branch diverge from the primary output.
+    ///
+    /// # Returns
+    ///
+    /// Returns mutable access to the branch output.
     #[inline(always)]
     pub fn branch_mut(&mut self) -> &mut B {
         &mut self.branch

@@ -42,12 +42,25 @@ where
     H: Hasher,
 {
     /// Creates a checksum output around `inner` and `hasher`.
+    ///
+    /// # Parameters
+    ///
+    /// - `inner`: Output that accepts bytes.
+    /// - `hasher`: Hasher updated with successfully accepted bytes.
+    ///
+    /// # Returns
+    ///
+    /// Returns a wrapper with the supplied output and hasher.
     #[inline(always)]
     pub const fn new(inner: O, hasher: H) -> Self {
         Self { inner, hasher }
     }
 
     /// Returns the current checksum value.
+    ///
+    /// # Returns
+    ///
+    /// Returns the value reported by the wrapped hasher.
     #[inline(always)]
     #[must_use]
     pub fn checksum(&self) -> u64 {
@@ -55,6 +68,10 @@ where
     }
 
     /// Returns a shared reference to the wrapped output.
+    ///
+    /// # Returns
+    ///
+    /// Returns the wrapped output without allowing mutation.
     #[inline(always)]
     #[must_use]
     pub const fn inner(&self) -> &O {
@@ -64,12 +81,20 @@ where
     /// Returns mutable access to the wrapped output.
     ///
     /// Writes made through the returned reference bypass the hasher.
+    ///
+    /// # Returns
+    ///
+    /// Returns mutable access to the wrapped output.
     #[inline(always)]
     pub fn inner_mut(&mut self) -> &mut O {
         &mut self.inner
     }
 
     /// Returns a shared reference to the wrapped hasher.
+    ///
+    /// # Returns
+    ///
+    /// Returns the wrapped hasher without allowing mutation.
     #[inline(always)]
     #[must_use]
     pub const fn hasher(&self) -> &H {
@@ -80,6 +105,10 @@ where
     ///
     /// Direct changes become part of the checksum state exposed by this
     /// wrapper.
+    ///
+    /// # Returns
+    ///
+    /// Returns mutable access to the wrapped hasher.
     #[inline(always)]
     pub fn hasher_mut(&mut self) -> &mut H {
         &mut self.hasher

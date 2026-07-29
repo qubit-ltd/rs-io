@@ -26,6 +26,15 @@ pub struct LimitInput<I> {
 
 impl<I> LimitInput<I> {
     /// Creates an input that exposes at most `limit` items.
+    ///
+    /// # Parameters
+    ///
+    /// - `inner`: Input constrained by this wrapper.
+    /// - `limit`: Maximum number of items the wrapper exposes.
+    ///
+    /// # Returns
+    ///
+    /// Returns a wrapper with `limit` remaining items.
     #[inline(always)]
     pub const fn new(inner: I, limit: u64) -> Self {
         Self {
@@ -35,6 +44,10 @@ impl<I> LimitInput<I> {
     }
 
     /// Returns the number of items still exposed by this wrapper.
+    ///
+    /// # Returns
+    ///
+    /// Returns the remaining number of items this wrapper can expose.
     #[inline(always)]
     #[must_use]
     pub const fn remaining(&self) -> u64 {
@@ -42,6 +55,10 @@ impl<I> LimitInput<I> {
     }
 
     /// Returns a shared reference to the wrapped input.
+    ///
+    /// # Returns
+    ///
+    /// Returns the wrapped input without allowing mutation.
     #[inline(always)]
     #[must_use]
     pub const fn inner(&self) -> &I {
@@ -52,12 +69,20 @@ impl<I> LimitInput<I> {
     ///
     /// Reads made through the returned reference bypass the remaining-item
     /// limit and do not change [`Self::remaining`].
+    ///
+    /// # Returns
+    ///
+    /// Returns mutable access to the wrapped input.
     #[inline(always)]
     pub fn inner_mut(&mut self) -> &mut I {
         &mut self.inner
     }
 
     /// Consumes this wrapper and returns the wrapped input.
+    ///
+    /// # Returns
+    ///
+    /// Returns the wrapped input.
     #[inline(always)]
     #[must_use]
     pub fn into_inner(self) -> I {

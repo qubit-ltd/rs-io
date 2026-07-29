@@ -26,6 +26,15 @@ pub struct LimitOutput<O> {
 
 impl<O> LimitOutput<O> {
     /// Creates an output that accepts at most `limit` items.
+    ///
+    /// # Parameters
+    ///
+    /// - `inner`: Output constrained by this wrapper.
+    /// - `limit`: Maximum number of items the wrapper accepts.
+    ///
+    /// # Returns
+    ///
+    /// Returns a wrapper with `limit` remaining items.
     #[inline(always)]
     pub const fn new(inner: O, limit: u64) -> Self {
         Self {
@@ -35,6 +44,10 @@ impl<O> LimitOutput<O> {
     }
 
     /// Returns the number of items still accepted by this wrapper.
+    ///
+    /// # Returns
+    ///
+    /// Returns the remaining number of items this wrapper can accept.
     #[inline(always)]
     #[must_use]
     pub const fn remaining(&self) -> u64 {
@@ -42,6 +55,10 @@ impl<O> LimitOutput<O> {
     }
 
     /// Returns a shared reference to the wrapped output.
+    ///
+    /// # Returns
+    ///
+    /// Returns the wrapped output without allowing mutation.
     #[inline(always)]
     #[must_use]
     pub const fn inner(&self) -> &O {
@@ -52,12 +69,20 @@ impl<O> LimitOutput<O> {
     ///
     /// Writes made through the returned reference bypass the remaining-item
     /// limit and do not change [`Self::remaining`].
+    ///
+    /// # Returns
+    ///
+    /// Returns mutable access to the wrapped output.
     #[inline(always)]
     pub fn inner_mut(&mut self) -> &mut O {
         &mut self.inner
     }
 
     /// Consumes this wrapper and returns the wrapped output.
+    ///
+    /// # Returns
+    ///
+    /// Returns the wrapped output.
     #[inline(always)]
     #[must_use]
     pub fn into_inner(self) -> O {
