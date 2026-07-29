@@ -41,6 +41,8 @@ mod util;
 mod wrappers;
 
 pub use adapters::{
+    BoxAsyncInput,
+    BoxAsyncOutput,
     BoxInput,
     BoxOutput,
     InputRef,
