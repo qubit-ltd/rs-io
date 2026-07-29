@@ -14,6 +14,7 @@ use std::io::{
     ErrorKind,
     Write,
 };
+#[cfg(debug_assertions)]
 use std::panic::{
     AssertUnwindSafe,
     catch_unwind,
@@ -110,6 +111,7 @@ fn test_write_blanket_impl_propagates_std_write_error() {
     assert_eq!(ErrorKind::BrokenPipe, error.kind());
 }
 
+#[cfg(debug_assertions)]
 #[test]
 fn test_write_blanket_impl_write_unchecked_panics_on_invalid_range() {
     let mut writer = Cursor::new(Vec::new());
@@ -129,6 +131,7 @@ fn test_write_blanket_impl_write_unchecked_panics_on_invalid_range() {
     );
 }
 
+#[cfg(debug_assertions)]
 #[test]
 fn test_write_blanket_impl_write_unchecked_panics_on_index_plus_count_overflow()
 {

@@ -10,7 +10,13 @@
 use std::io;
 
 use qubit_io::{
-    BufferedInput, CountingInput, CountingOutput, Input, LimitInput, Output, TeeOutput,
+    BufferedInput,
+    CountingInput,
+    CountingOutput,
+    Input,
+    LimitInput,
+    Output,
+    TeeOutput,
 };
 
 /// A fixed-layout sales record consumed by the mapper.
@@ -193,7 +199,8 @@ fn main() -> io::Result<()> {
     let buffered = BufferedInput::with_capacity(limited, 2);
     let mut input = CountingInput::new(buffered);
 
-    let output = TeeOutput::new(VecRecordOutput::default(), VecRecordOutput::default());
+    let output =
+        TeeOutput::new(VecRecordOutput::default(), VecRecordOutput::default());
     let mut output = CountingOutput::new(output);
     map_partition(&mut input, &mut output)?;
 

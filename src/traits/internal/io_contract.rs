@@ -23,8 +23,8 @@ use super::async_contract_error::AsyncContractError;
 /// # Returns
 ///
 /// Returns an [`ErrorKind::InvalidData`] error retaining the original error for
-/// [`ErrorKind::WouldBlock`] and [`ErrorKind::Interrupted`]. Returns every other
-/// error unchanged.
+/// [`ErrorKind::WouldBlock`] and [`ErrorKind::Interrupted`]. Returns every
+/// other error unchanged.
 #[must_use]
 pub(crate) fn normalize_async_error(error: Error) -> Error {
     match error.kind() {
