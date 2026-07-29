@@ -1,8 +1,13 @@
 {
-  "threshold_exempt_files": {
+  "source_dirs": {
     "qubit-io": [
-      "src/std_io/impls/input.rs",
-      "src/std_io/impls/output.rs"
+      "src/adapters",
+      "src/async_io",
+      "src/buffered",
+      "src/std_io/ext",
+      "src/traits",
+      "src/util",
+      "src/wrappers"
     ]
   }
 }
