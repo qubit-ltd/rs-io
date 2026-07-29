@@ -1,10 +1,22 @@
 # Qubit IO 用户指南
 
+## 目录
+
+1. [先理解抽象边界](#1-先理解抽象边界)
+2. [添加依赖并选择 feature](#2-添加依赖并选择-feature)
+3. [案例一：有上限的长度前缀 frame](#3-案例一有上限的长度前缀-frame)
+4. [保持异步驱动运行时中立](#4-保持异步驱动运行时中立)
+5. [在 decoder 周围组合传输策略](#5-在-decoder-周围组合传输策略)
+6. [在部分进度后恢复所有权](#6-在部分进度后恢复所有权)
+7. [案例二：不需要字节管线的 Map/Reduce 记录](#7-案例二不需要字节管线的-mapreduce-记录)
+8. [标准 I/O、seek 与高级工具](#8-标准-ioseek-与高级工具)
+9. [选择最窄的边界](#9-选择最窄的边界)
+
 ## 1. 先理解抽象边界
 
 当库拥有传输算法、却不应拥有调用方的运行时、transport 或 item 类型时，使用 Qubit IO。codec 可以依赖 `Input<Item = u8>` 或 `AsyncInput<Item = u8>`；应用决定字节来自标准 reader、Tokio 还是 `futures-io`。
 
-本 crate 有意止步于传输，不表达路径、文件身份、metadata、publication、commit、abort 或持久化。需要这些生命周期语义时使用 `qubit-fs`；需要 typed byte value 时使用 `qubit-io-binary`；需要文本编码时使用 `qubit-io-text`。
+本 crate 有意止步于传输，不表达路径、文件身份、metadata、publication、commit、abort 或持久化。需要这些生命周期语义时使用 [qubit-fs](https://docs.rs/qubit-fs)；需要 typed byte value 时使用 [qubit-io-binary](https://docs.rs/qubit-io-binary)；需要文本编码时使用 [qubit-io-text](https://docs.rs/qubit-io-text)。
 
 本指南用两个案例回答两个问题：
 
@@ -29,9 +41,18 @@ qubit-io = { version = "0.14", features = ["tokio"] }
 
 `tokio` 启用 `TokioInput`、`TokioOutput`、`TokioAsyncRead` 和 `TokioAsyncWrite`；`futures-io` 启用对应的 `Futures*` 类型。核心 trait 不选择 executor，也不要求这两个 feature。
 
+adapter 的名称表示目标接口：
+
+| 已有值 | 暴露为 | Tokio adapter | futures-io adapter |
+| --- | --- | --- | --- |
+| 生态 `AsyncRead` | Qubit `AsyncInput<Item = u8>` | `TokioInput` | `FuturesInput` |
+| 生态 `AsyncWrite` | Qubit `AsyncOutput<Item = u8>` | `TokioOutput` | `FuturesOutput` |
+| Qubit `AsyncInput<Item = u8>` | 生态 `AsyncRead` | `TokioAsyncRead` | `FuturesAsyncRead` |
+| Qubit `AsyncOutput<Item = u8>` | 生态 `AsyncWrite` | `TokioAsyncWrite` | `FuturesAsyncWrite` |
+
 ## 3. 案例一：有上限的长度前缀 frame
 
-该协议有四字节大端长度头和指定长度的 payload。空 payload 合法；声明长度超过 64 KiB 时必须在分配前拒绝；截断输入是错误。
+该协议有四字节大端长度头和指定长度的 payload。空 payload 合法；声明长度超过 64 KiB 时必须在分配前拒绝；截断输入是错误。包含断言且经过 Cargo 检查的完整程序见 [examples/bounded_frame.rs](../examples/bounded_frame.rs)。
 
 ```rust
 use std::io::{self, Error, ErrorKind};
@@ -140,11 +161,11 @@ buffer 使所有权保持显式：
 - 丢弃同步 `BufferedOutput` 只会 best-effort flush。异步析构函数无法 I/O，必须显式调用 `flush_async`。
 - `AsyncClose::close_async` 表示真实 transport shutdown；flush 不是 close。
 
-具名 async future 保留跨多次 poll 的状态。丢弃 pending `ReadFullyFuture`、`ReadExactFuture` 或 `WriteFullyFuture` 前，若恢复需要精确进度，读取 `items_read()` 或 `items_written()`。`Pending` 或错误都不传输 item；实现不得让 `WouldBlock` 或 `Interrupted` 穿过异步 trait 边界。
+具名 async future 保留跨多次 poll 的状态。丢弃 pending `ReadFullyFuture`、`ReadExactFuture` 或 `WriteFullyFuture` 前，若恢复需要精确进度，读取 `items_read()` 或 `items_written()`。一次底层 poll 返回 `Pending` 或错误时不会报告新的成功 item，但聚合 future 可能已经保存前序 poll 的进度；实现不得让 `WouldBlock` 或 `Interrupted` 穿过异步 trait 边界。
 
 ## 7. 案例二：不需要字节管线的 Map/Reduce 记录
 
-item stream 可以传输固定布局业务记录。下面的 mapper 不知道记录来自内存分区、文件引擎还是网络反序列化器。
+item stream 可以传输固定布局业务记录。下面的 mapper 不知道记录来自内存分区、文件引擎还是网络反序列化器。包含内存 adapter 与断言、且经过 Cargo 检查的完整程序见 [examples/typed_records.rs](../examples/typed_records.rs)。
 
 ```rust
 use std::io;
@@ -290,11 +311,17 @@ fn run_mapper() -> io::Result<()> {
 
 ## 8. 标准 I/O、seek 与高级工具
 
+### 标准 I/O 扩展
+
 标准库集成位于 `qubit_io::std_io`，扩展 trait 位于 `qubit_io::std_io::ext`。它们为字节流提供 bounded read、bounded string 与 delimiter read、copy、discard 和保持位置的操作。处理由其他方控制大小的数据时，优先使用 `*_limited`，不要使用无上限的 `read_to_end`、`read_to_string` 或 delimiter read；上限是资源策略。
+
+### seek 与传输工具
 
 `Seekable` 的位置以 wrapped stream 的 item 单位衡量。`SeekableInput` 与 `SeekableOutput` 只表达有用组合，不增加新行为。`PositionGuard` 除非被 dismiss，否则在 drop 时恢复记录的位置；需要观察恢复错误时调用 `restore`。
 
 `Streams` 是不可构造命名空间。`copy_input_to_output*` 处理泛型 Qubit item；`copy*` 与比较方法处理 `std::io` 字节流。
+
+### buffer 与 pinned 异步值
 
 `Buffer<T>` 持有已初始化的 `Copy + Default` 存储，公开 readable window 与 spare slot。它的低层状态修改方法是 `unsafe`，因为调用方必须证明 range 合法。普通缓冲使用 `BufferedInput` 或 `BufferedOutput`；只有实现专用 driver 或 encoder 时才直接使用 `Buffer<T>`。
 
@@ -311,4 +338,4 @@ fn run_mapper() -> io::Result<()> {
 5. 显式 flush 或 close。恢复需要 unread 或 pending data 时，失败后保留 wrapper。
 6. 不需要运行时中立边界、item 泛型传输或可组合策略时，直接使用原生 I/O。
 
-docs.rs 说明每个 API 精确的错误、panic、所有权与 pinning 约束；本指南说明这些 API 如何组成库设计。
+[API 文档](https://docs.rs/qubit-io)说明每个 API 精确的错误、panic、所有权与 pinning 约束；本指南说明这些 API 如何组成库设计。
