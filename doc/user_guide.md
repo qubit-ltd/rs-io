@@ -1,10 +1,22 @@
 # Qubit IO User Guide
 
+## Contents
+
+1. [Start with the boundary](#1-start-with-the-boundary)
+2. [Add the dependency and select features](#2-add-the-dependency-and-select-features)
+3. [Case study: a bounded length-prefixed frame](#3-case-study-a-bounded-length-prefixed-frame)
+4. [Keep the async driver runtime-neutral](#4-keep-the-async-driver-runtime-neutral)
+5. [Compose transfer policies around the decoder](#5-compose-transfer-policies-around-the-decoder)
+6. [Recover ownership after partial progress](#6-recover-ownership-after-partial-progress)
+7. [Case study: Map/Reduce records without byte plumbing](#7-case-study-mapreduce-records-without-byte-plumbing)
+8. [Standard I/O, seek, and advanced tools](#8-standard-io-seek-and-advanced-tools)
+9. [Choose the narrowest boundary](#9-choose-the-narrowest-boundary)
+
 ## 1. Start with the boundary
 
 Use Qubit IO when your library owns a transfer algorithm but must not own its caller's runtime, transport, or item type. A codec can depend on `Input<Item = u8>` or `AsyncInput<Item = u8>`; the application decides whether the bytes come from a standard reader, Tokio, or `futures-io`.
 
-This crate deliberately stops at transfer. It does not model paths, file identity, metadata, publication, commit, abort, or persistence. Use `qubit-fs` for those lifecycle semantics, `qubit-io-binary` for typed byte values, and `qubit-io-text` for text encoding.
+This crate deliberately stops at transfer. It does not model paths, file identity, metadata, publication, commit, abort, or persistence. Use [qubit-fs](https://docs.rs/qubit-fs) for those lifecycle semantics, [qubit-io-binary](https://docs.rs/qubit-io-binary) for typed byte values, and [qubit-io-text](https://docs.rs/qubit-io-text) for text encoding.
 
 The two case studies in this guide answer different questions:
 
@@ -29,9 +41,18 @@ qubit-io = { version = "0.14", features = ["tokio"] }
 
 `tokio` enables `TokioInput`, `TokioOutput`, `TokioAsyncRead`, and `TokioAsyncWrite`. `futures-io` enables the matching `Futures*` types. The core traits neither select an executor nor require either feature.
 
+The adapter names describe the destination interface:
+
+| Existing value | Exposed as | Tokio adapter | futures-io adapter |
+| --- | --- | --- | --- |
+| ecosystem `AsyncRead` | Qubit `AsyncInput<Item = u8>` | `TokioInput` | `FuturesInput` |
+| ecosystem `AsyncWrite` | Qubit `AsyncOutput<Item = u8>` | `TokioOutput` | `FuturesOutput` |
+| Qubit `AsyncInput<Item = u8>` | ecosystem `AsyncRead` | `TokioAsyncRead` | `FuturesAsyncRead` |
+| Qubit `AsyncOutput<Item = u8>` | ecosystem `AsyncWrite` | `TokioAsyncWrite` | `FuturesAsyncWrite` |
+
 ## 3. Case study: a bounded length-prefixed frame
 
-The protocol below has a four-byte big-endian length header followed by that many bytes of payload. It accepts an empty payload, rejects a declared payload over 64 KiB before allocating, and treats truncated input as an error.
+The protocol below has a four-byte big-endian length header followed by that many bytes of payload. It accepts an empty payload, rejects a declared payload over 64 KiB before allocating, and treats truncated input as an error. The complete checked program is [examples/bounded_frame.rs](../examples/bounded_frame.rs).
 
 ```rust
 use std::io::{self, Error, ErrorKind};
@@ -140,11 +161,11 @@ Buffers make ownership explicit:
 - Dropping a synchronous `BufferedOutput` makes only a best-effort flush. Asynchronous destructors cannot perform I/O, so call `flush_async` explicitly.
 - `AsyncClose::close_async` represents real transport shutdown; flushing is not closing.
 
-Named async futures retain their multi-poll state. Before dropping a pending `ReadFullyFuture`, `ReadExactFuture`, or `WriteFullyFuture`, inspect `items_read()` or `items_written()` if recovery needs the exact progress count. A `Pending` result or an error transfers no items; implementations must not expose `WouldBlock` or `Interrupted` through the async trait boundary.
+Named async futures retain their multi-poll state. Before dropping a pending `ReadFullyFuture`, `ReadExactFuture`, or `WriteFullyFuture`, inspect `items_read()` or `items_written()` if recovery needs the exact progress count. A single underlying poll that returns `Pending` or an error reports no new successful items, but an aggregate future can already contain progress from earlier polls. Implementations must not expose `WouldBlock` or `Interrupted` through the async trait boundary.
 
 ## 7. Case study: Map/Reduce records without byte plumbing
 
-An item stream can carry fixed-layout business records. The mapper below does not know whether records originated from an in-memory partition, a file-backed engine, or a network deserializer.
+An item stream can carry fixed-layout business records. The mapper below does not know whether records originated from an in-memory partition, a file-backed engine, or a network deserializer. The complete checked program, including its in-memory adapters and assertions, is [examples/typed_records.rs](../examples/typed_records.rs).
 
 ```rust
 use std::io;
@@ -290,11 +311,17 @@ The boundary is intentional:
 
 ## 8. Standard I/O, seek, and advanced tools
 
+### Standard I/O extensions
+
 Standard-library integrations live under `qubit_io::std_io` and extension traits under `qubit_io::std_io::ext`. They add bounded reads, bounded strings and delimiter reads, copy helpers, discard helpers, and position-preserving operations for byte streams. For data controlled by another party, prefer a `*_limited` method over unbounded `read_to_end`, `read_to_string`, or delimiter reads; the limit is resource policy.
+
+### Seek and transfer utilities
 
 `Seekable` measures positions in the wrapped stream's item unit. `SeekableInput` and `SeekableOutput` express useful combinations without adding behavior. `PositionGuard` restores a recorded position on drop unless dismissed; call `restore` when the restoration error must be observed.
 
 `Streams` is a non-constructible namespace. Its `copy_input_to_output*` methods work with generic Qubit items, while its `copy*` and comparison methods work with `std::io` byte streams.
+
+### Buffers and pinned asynchronous values
 
 `Buffer<T>` owns initialized `Copy + Default` storage and exposes a readable window plus spare slots. Its low-level state-changing methods are `unsafe` because callers must prove the requested range fits. Use `BufferedInput` or `BufferedOutput` for ordinary buffering; use `Buffer<T>` directly only when implementing a specialized driver or encoder.
 
@@ -311,4 +338,4 @@ Pinned `!Unpin` async values and trait objects use `PinnedAsyncInputExt` and `Pi
 5. Flush or close explicitly. Retain wrappers after failure when recovery needs their unread or pending data.
 6. Use native I/O directly when no runtime-neutral boundary, item-generic transfer, or composable policy is needed.
 
-docs.rs documents each API's exact error, panic, ownership, and pinning constraints. This guide explains how those APIs fit into a library design.
+[The API documentation](https://docs.rs/qubit-io) documents each API's exact error, panic, ownership, and pinning constraints. This guide explains how those APIs fit into a library design.
