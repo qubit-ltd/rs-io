@@ -6,6 +6,10 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 //! Demonstrates a bounded length-prefixed frame decoder.
+//!
+//! The decoder treats the length prefix as untrusted input: it validates the
+//! declared size before allocating and uses checked [`Input`] helpers so
+//! truncated headers and payloads are reported as errors.
 
 use std::io::{
     self,

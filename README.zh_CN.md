@@ -61,7 +61,7 @@ adapter。阻塞驱动仍是独立函数，但协议上限与校验规则保持�
 
 ## 策略留在 codec 外部
 
-上面的 frame decoder 只知道 wire format，调用方自行选择传输策略：
+有上限的 frame decoder 只知道 wire format，调用方自行选择传输策略：
 
 ```text
 transport adapter -> limit -> buffer -> counting -> frame decoder
@@ -84,7 +84,7 @@ operator 边界重复序列化。此时 limit 与 counting 的单位是“记录
 | --- | --- |
 | 库必须同时支持 Tokio 和 `futures-io` 调用方 | 公开 Qubit async trait，让调用方使用 adapter。 |
 | 传输策略必须独立于 codec 组合 | 使用 Qubit buffer 与 wrapper。 |
-| stream 承载 `char`、固定布局记录或其他逻辑 item | 使用泛型 `Input` 与 `Output`。 |
+| stream 承载 `char`、类型化业务记录或其他逻辑 item | 使用泛型 `Input` 与 `Output`。 |
 | 单一应用、单一运行时、普通字节流 | 优先使用原生 I/O trait。 |
 | 契约包含路径、文件身份、commit 或持久化 | 使用更高层的文件系统抽象。 |
 

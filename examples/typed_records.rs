@@ -6,6 +6,10 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 //! Demonstrates a typed Map/Reduce record pipeline without byte plumbing.
+//!
+//! Limits, buffering, and counters operate on whole records in this pipeline.
+//! The local adapters implement the low-level [`Input`] and [`Output`] safety
+//! contracts, while the mapper uses only their checked methods.
 
 use std::io;
 
@@ -19,7 +23,7 @@ use qubit_io::{
     TeeOutput,
 };
 
-/// A fixed-layout sales record consumed by the mapper.
+/// A typed sales record consumed by the mapper.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 struct Sale {
     /// Store that produced the sale.
@@ -39,7 +43,7 @@ struct CategoryRevenue {
     amount_cents: u64,
 }
 
-/// Input adapter over a borrowed fixed-layout record slice.
+/// Input adapter over a borrowed record slice.
 ///
 /// # Type Parameters
 ///

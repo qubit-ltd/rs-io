@@ -165,7 +165,7 @@ buffer 使所有权保持显式：
 
 ## 7. 案例二：不需要字节管线的 Map/Reduce 记录
 
-item stream 可以传输固定布局业务记录。下面的 mapper 不知道记录来自内存分区、文件引擎还是网络反序列化器。包含内存 adapter 与断言、且经过 Cargo 检查的完整程序见 [examples/typed_records.rs](../examples/typed_records.rs)。
+item stream 可以传输类型化业务记录。下面的 mapper 不知道记录来自内存分区、文件引擎还是网络反序列化器。包含内存 adapter 与断言、且经过 Cargo 检查的完整程序见 [examples/typed_records.rs](../examples/typed_records.rs)。
 
 ```rust
 use std::io;

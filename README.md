@@ -64,7 +64,7 @@ direction table and a bounded-frame case study.
 
 ## Policies stay outside the codec
 
-The frame decoder above only knows the wire format. Its caller chooses the transfer policy:
+The bounded-frame decoder only knows the wire format. Its caller chooses the transfer policy:
 
 ```text
 transport adapter -> limit -> buffer -> counting -> frame decoder
@@ -89,7 +89,7 @@ pipeline and the `Copy + Default` requirement of generic buffering.
 | --- | --- |
 | A library must support Tokio and `futures-io` callers | Expose Qubit async traits and let callers use adapters. |
 | Transfer policies must be composed independently of a codec | Use Qubit buffers and wrappers. |
-| The stream carries `char`, fixed-layout records, or another logical item | Use generic `Input` and `Output`. |
+| The stream carries `char`, typed business records, or another logical item | Use generic `Input` and `Output`. |
 | One application uses one runtime and ordinary byte streams | Prefer native I/O traits. |
 | The contract includes paths, file identity, commit, or persistence | Use a higher-level file-system abstraction. |
 
