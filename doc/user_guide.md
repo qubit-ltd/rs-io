@@ -1,364 +1,314 @@
 # Qubit IO User Guide
 
-## 1. What this crate does
+## 1. Start with the boundary
 
-`qubit-io` is a runtime-neutral, item-oriented transfer layer. It lets a
-codec, buffer, or wrapper operate on a stream without choosing `std::io`,
-Tokio, or `futures-io` as its public abstraction.
+Use Qubit IO when your library owns a transfer algorithm but must not own its caller's runtime, transport, or item type. A codec can depend on `Input<Item = u8>` or `AsyncInput<Item = u8>`; the application decides whether the bytes come from a standard reader, Tokio, or `futures-io`.
 
-The crate deliberately models transfer only. It does not represent file paths,
-file identity, metadata, publication, commit, abort, or persistence. Use
-`qubit-fs` when those lifecycle semantics are required, `qubit-io-binary` for
-typed binary values, and `qubit-io-text` for text and character encodings.
+This crate deliberately stops at transfer. It does not model paths, file identity, metadata, publication, commit, abort, or persistence. Use `qubit-fs` for those lifecycle semantics, `qubit-io-binary` for typed byte values, and `qubit-io-text` for text encoding.
 
-| Need | Synchronous API | Asynchronous API |
-| --- | --- | --- |
-| Move items | `Input`, `Output` | `AsyncInput`, `AsyncOutput` |
-| Flush or close | `Output::flush` | `AsyncOutput::flush_async`, `AsyncClose::close_async` |
-| Add a buffer | `BufferedInput`, `BufferedOutput` | `AsyncBufferedInput`, `AsyncBufferedOutput` |
-| Constrain or observe transfer | limit, counting, checksum, tee wrappers | async limit, counting, checksum wrappers |
-| Interoperate with another ecosystem | `qubit_io::std_io` integrations | optional Tokio and `futures-io` newtypes |
+The two case studies in this guide answer different questions:
 
-Core traits, wrappers, buffers, and adapters are re-exported from the crate
-root. Standard-library-specific composite traits are exposed from
-`qubit_io::std_io`, and extension traits are exposed from
-`qubit_io::std_io::ext`. Internal modules are not part of the compatibility
-boundary.
+- A length-prefixed frame shows why an async library boundary should not select Tokio or `futures-io`.
+- A Map/Reduce mapper shows why an item stream is more than a renamed byte stream.
 
 ## 2. Add the dependency and select features
 
-The default feature set contains the runtime-neutral core only:
+The default feature set contains the runtime-neutral core:
 
 ```toml
 [dependencies]
 qubit-io = "0.14"
 ```
 
-Enable an adapter only when the application uses that ecosystem:
+Enable an adapter only in an application that uses that ecosystem:
 
 ```toml
 [dependencies]
 qubit-io = { version = "0.14", features = ["tokio"] }
 ```
 
-`tokio` enables `TokioInput`, `TokioOutput`, `TokioAsyncRead`, and
-`TokioAsyncWrite`. `futures-io` enables the corresponding `Futures*` types.
-The core traits do not select an executor and do not require either feature.
+`tokio` enables `TokioInput`, `TokioOutput`, `TokioAsyncRead`, and `TokioAsyncWrite`. `futures-io` enables the matching `Futures*` types. The core traits neither select an executor nor require either feature.
 
-## 3. Synchronous item transfer
+## 3. Case study: a bounded length-prefixed frame
 
-`Input` produces `Item` values and `Output` accepts them. Their safe methods
-validate the count returned by the implementation; implementers provide the
-unchecked indexed operation only when they can uphold its documented range
-contract. Most applications consume the safe methods and do not implement the
-traits directly.
-
-All `std::io::Read` values implement `Input<Item = u8>`, and all
-`std::io::Write` values implement `Output<Item = u8>`. That is a byte-stream
-adapter, not a claim that every input is a file.
+The protocol below has a four-byte big-endian length header followed by that many bytes of payload. It accepts an empty payload, rejects a declared payload over 64 KiB before allocating, and treats truncated input as an error.
 
 ```rust
-use std::io::{Cursor, Result};
+use std::io::{self, Error, ErrorKind};
+use qubit_io::Input;
+
+const MAX_FRAME_LEN: usize = 64 * 1024;
+
+fn read_frame<I>(input: &mut I) -> io::Result<Vec<u8>>
+where
+    I: Input<Item = u8>,
+{
+    let mut header = [0_u8; 4];
+    input.read_exactly(&mut header)?;
+    let length = u32::from_be_bytes(header) as usize;
+    if length > MAX_FRAME_LEN {
+        return Err(Error::new(ErrorKind::InvalidData, "frame is too large"));
+    }
+
+    let mut payload = vec![0_u8; length];
+    input.read_exactly(&mut payload)?;
+    Ok(payload)
+}
+```
+
+`Input::read_exactly` converts an incomplete header or payload into `UnexpectedEof`. The explicit length check is still required even when an outer wrapper limits a connection: a transport quota and a protocol rule protect different boundaries.
+
+All `std::io::Read` values implement `Input<Item = u8>`, so a command-line program can call `read_frame` with a `Cursor` during tests or a `File` in production. The decoder has no file-specific behavior.
+
+## 4. Keep the async driver runtime-neutral
+
+The asynchronous entry point has the same protocol rule but uses `AsyncInput`:
+
+```rust
+use std::io::{self, Error, ErrorKind};
+use qubit_io::AsyncInput;
+
+const MAX_FRAME_LEN: usize = 64 * 1024;
+
+async fn read_frame_async<I>(input: &mut I) -> io::Result<Vec<u8>>
+where
+    I: AsyncInput<Item = u8> + Unpin,
+{
+    let mut header = [0_u8; 4];
+    input.read_exactly_async(&mut header).await?;
+    let length = u32::from_be_bytes(header) as usize;
+    if length > MAX_FRAME_LEN {
+        return Err(Error::new(ErrorKind::InvalidData, "frame is too large"));
+    }
+
+    let mut payload = vec![0_u8; length];
+    input.read_exactly_async(&mut payload).await?;
+    Ok(payload)
+}
+```
+
+A Tokio caller wraps its reader in `TokioInput`; a `futures-io` caller wraps its reader in `FuturesInput`. Both call the same `read_frame_async` function. `TokioAsyncRead` and `FuturesAsyncRead` provide the reverse direction when a Qubit byte stream must be presented to that ecosystem.
+
+Synchronous and asynchronous drivers remain separate functions. The benefit is that the async public API does not duplicate one implementation for Tokio and another for `futures-io`.
+
+## 5. Compose transfer policies around the decoder
+
+A caller can place transport policy outside the protocol:
+
+```text
+transport adapter -> limit -> buffer -> counting -> frame decoder
+```
+
+For example, a Tokio service can construct:
+
+```rust,ignore
+use qubit_io::{
+    AsyncBufferedInput, AsyncCountingInput, AsyncLimitInput, TokioInput,
+};
+
+let mut input = AsyncCountingInput::new(AsyncBufferedInput::with_capacity(
+    AsyncLimitInput::new(TokioInput::new(stream), 1_048_576),
+    8 * 1024,
+));
+let frame = read_frame_async(&mut input).await?;
+let consumed = input.bytes_read();
+```
+
+The 1 MiB limit bounds a connection. The 64 KiB check in the decoder bounds one frame. Neither policy has to know the other's implementation.
+
+Wrapper order changes meaning. Compare these two synchronous flows:
+
+```text
+decoder -> CountingInput -> BufferedInput -> LimitInput -> source
+decoder -> BufferedInput -> CountingInput -> LimitInput -> source
+```
+
+In the first flow, counting is outside the buffer and reports items delivered to the decoder. In the second, counting is inside the buffer and reports items pulled from the source, including unread prefetched items. Apply the same rule when deciding whether a checksum describes bytes consumed by a codec or bytes fetched from a transport.
+
+`LimitInput` and `LimitOutput` expose at most a remaining item count. `CountingInput` and `CountingOutput` saturating-count successful items. `ChecksumInput` and `ChecksumOutput` hash successful `u8` prefixes only. `TeeInput` and `TeeOutput` mirror a source or primary path, but they are ordered and non-transactional: a branch failure never rolls back work already performed by the source or primary path.
+
+`inner_mut()` and `branch_mut()` intentionally bypass wrapper bookkeeping. Reads and writes through them are not limited, counted, hashed, or mirrored.
+
+## 6. Recover ownership after partial progress
+
+`read` and `write` perform one operation and may make partial progress. `read_fully` stops at EOF and returns the transferred count; `read_exactly` returns `UnexpectedEof` unless it fills the destination. `write_fully` retries interrupted writes and returns `WriteZero` if an output stops making progress.
+
+Buffers make ownership explicit:
+
+- `BufferedInput::into_parts` returns the inner input and unread buffer without discarding prefetched items. Consume the unread window before reading the inner input again.
+- `BufferedOutput::into_parts` performs no I/O and returns the inner output plus pending items. Flush first for normal completion; after a flush failure, retain the wrapper to retry or inspect it.
+- Dropping a synchronous `BufferedOutput` makes only a best-effort flush. Asynchronous destructors cannot perform I/O, so call `flush_async` explicitly.
+- `AsyncClose::close_async` represents real transport shutdown; flushing is not closing.
+
+Named async futures retain their multi-poll state. Before dropping a pending `ReadFullyFuture`, `ReadExactFuture`, or `WriteFullyFuture`, inspect `items_read()` or `items_written()` if recovery needs the exact progress count. A `Pending` result or an error transfers no items; implementations must not expose `WouldBlock` or `Interrupted` through the async trait boundary.
+
+## 7. Case study: Map/Reduce records without byte plumbing
+
+An item stream can carry fixed-layout business records. The mapper below does not know whether records originated from an in-memory partition, a file-backed engine, or a network deserializer.
+
+```rust
+use std::io;
 use qubit_io::{Input, Output};
 
-fn main() -> Result<()> {
-    let mut input = Cursor::new(b"qubit".to_vec());
-    let mut bytes = [0_u8; 5];
-    input.read_exactly(&mut bytes)?;
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct Sale {
+    store_id: u32,
+    category_id: u16,
+    amount_cents: u64,
+}
 
-    let mut output = Vec::new();
-    output.write_fully(&bytes)?;
-    assert_eq!(b"qubit", output.as_slice());
-    Ok(())
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct CategoryRevenue {
+    category_id: u16,
+    amount_cents: u64,
+}
+
+fn map_partition<I, O>(input: &mut I, output: &mut O) -> io::Result<()>
+where
+    I: Input<Item = Sale>,
+    O: Output<Item = CategoryRevenue>,
+{
+    let mut sales = [Sale::default(); 2];
+    loop {
+        let count = input.read(&mut sales)?;
+        if count == 0 {
+            return Ok(());
+        }
+
+        let mut revenues = [CategoryRevenue::default(); 2];
+        for (sale, revenue) in sales[..count].iter().zip(&mut revenues) {
+            *revenue = CategoryRevenue {
+                category_id: sale.category_id,
+                amount_cents: sale.amount_cents,
+            };
+        }
+        output.write_fully(&revenues[..count])?;
+    }
 }
 ```
 
-`read` and `write` perform one operation and may make partial progress.
-`read_fully` stops at EOF and returns the number transferred;
-`read_exactly` returns `UnexpectedEof` unless it fills the destination.
-`write_fully` retries interrupted writes and returns `WriteZero` when the
-output reports zero progress before all items are accepted. `flush` asks an
-`Output` to deliver its internally buffered items; it is not a close operation.
-
-The item type is generic. Wrapper families such as limit, counting, and tee
-can therefore operate on inexpensive scalar items other than bytes. Checksum
-wrappers are intentionally byte-only because `std::hash::Hasher` consumes
-bytes.
-
-### Seeking and composite traits
-
-`Seekable` is the item-oriented counterpart of `std::io::Seek`; its positions
-are measured in the wrapped stream's unit. The standard-library `Seek`
-integration uses `u8` as that unit.
-`SeekableInput`, `SeekableOutput`, `ReadSeek`, `WriteSeek`, `ReadWrite`, and
-`ReadWriteSeek` express useful trait combinations without introducing new
-behavior. `SeekableInput` and `SeekableOutput` are crate-root traits; the
-standard-library combinations are exported from `qubit_io::std_io`.
-`PositionGuard` records a `Seekable` position and restores it on drop unless
-the guard is dismissed; call `restore` to observe a restoration error.
-
-## 4. `Buffer<T>` and synchronous buffering
-
-`Buffer<T>` owns initialized `Copy + Default` storage and tracks a readable
-window `position..limit`. `readable()` exposes the queued items,
-`spare_mut()` exposes free initialized storage, and `available()` and
-`spare_capacity()` report the two lengths. Its state-changing low-level methods
-are `unsafe`: the caller must prove the requested range fits. It is primarily a
-building block for buffered drivers and specialized encoders.
+The execution engine implements the I/O boundary once. These small in-memory adapters make the example runnable; application code normally receives its adapters from the engine.
 
 ```rust
-use qubit_io::Buffer;
+use std::io;
+use qubit_io::{Input, Output};
 
-fn main() {
-    let source = [10_u8, 20, 30];
-    let mut buffer = Buffer::with_capacity(4);
+struct SliceRecordInput<'a, T> {
+    items: &'a [T],
+    position: usize,
+}
 
-    // SAFETY: `source[0..3]` is valid and the new buffer has four spare slots.
-    unsafe { buffer.copy_from(&source, 0, source.len()) };
-    assert_eq!(&[10, 20, 30], buffer.readable());
+impl<T: Copy> Input for SliceRecordInput<'_, T> {
+    type Item = T;
 
-    // SAFETY: three items are readable, so consuming two stays in range.
-    unsafe { buffer.consume(2) };
-    assert_eq!(&[30], buffer.readable());
+    unsafe fn read_unchecked(
+        &mut self,
+        output: &mut [T],
+        index: usize,
+        count: usize,
+    ) -> io::Result<usize> {
+        let read = count.min(self.items.len() - self.position);
+        output[index..index + read]
+            .copy_from_slice(&self.items[self.position..self.position + read]);
+        self.position += read;
+        Ok(read)
+    }
+}
+
+#[derive(Default)]
+struct VecRecordOutput<T> {
+    items: Vec<T>,
+}
+
+impl<T: Copy> Output for VecRecordOutput<T> {
+    type Item = T;
+
+    unsafe fn write_unchecked(
+        &mut self,
+        input: &[T],
+        index: usize,
+        count: usize,
+    ) -> io::Result<usize> {
+        self.items.extend_from_slice(&input[index..index + count]);
+        Ok(count)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
 }
 ```
 
-`BufferedInput<I>` prefetches input items. Use `fill_more`, `fill_until`, or
-`ensure_available` before reading its unread window manually; then call
-`consume` exactly once for the items consumed. `BufferedOutput<O>` accumulates
-small writes and flushes when required. Both default to
-`DEFAULT_BUFFER_CAPACITY`; `with_capacity` clamps a zero capacity to one, while
-`try_with_capacity` and `try_reserve_capacity` report allocation failure.
+The `unsafe` methods are confined to the adapter implementation. Their callers have already proved the indexed ranges are valid; the implementation copies exactly `count` items and advances the source by the same amount. The mapper itself uses only safe operations.
 
-```rust
-use std::io::{Cursor, Result};
-use qubit_io::BufferedInput;
-
-fn main() -> Result<()> {
-    let mut input = BufferedInput::with_capacity(
-        Cursor::new(b"abcdef".to_vec()),
-        4,
-    );
-    assert!(input.fill_until(3)?);
-    assert_eq!(b"abcd", input.unread());
-
-    // SAFETY: `fill_until(3)` succeeded and four items are buffered.
-    unsafe { input.consume(2) };
-    let (_inner, unread) = input.into_parts();
-    assert_eq!(b"cd", unread.readable());
-    Ok(())
-}
-```
-
-`into_parts()` makes ownership decisions explicit. For input, it returns both
-the inner input and its unread `Buffer`; consume that readable window before
-reading from the inner input again. For output, it performs no I/O and returns
-the inner output with its pending `Buffer`. Call `flush` first for normal
-completion; if flushing fails, the wrapper remains owned and can be retried.
-
-Dropping a synchronous `BufferedOutput` makes a best-effort flush. Do not use
-drop as a delivery guarantee; explicitly `flush`, then use `into_parts` when
-ownership of the output is needed.
-
-```rust
-use std::io::Result;
-use qubit_io::BufferedOutput;
-
-fn main() -> Result<()> {
-    let mut output = BufferedOutput::with_capacity(Vec::<u8>::new(), 4);
-    output.write_fully(b"abc")?;
-    output.flush()?;
-
-    let (inner, pending) = output.into_parts();
-    assert_eq!(b"abc", inner.as_slice());
-    assert!(pending.is_empty());
-    Ok(())
-}
-```
-
-`BufferedInput::ensure` and `BufferedOutput::ensure` avoid another Qubit
-buffer only when `is_buffered()` says the value is buffered. They cannot detect
-`std::io::BufReader` or `BufWriter`, because those enter through the blanket
-`Read` and `Write` implementations. Do not pass an already standard-buffered
-stream to `ensure`.
-
-## 5. Wrappers and composition
-
-Wrappers forward the underlying contract while adding one focused policy:
-
-| Wrapper family | Meaning | Important boundary |
-| --- | --- | --- |
-| `LimitInput` / `LimitOutput` | exposes at most a remaining item count | reaching zero behaves as EOF for input or accepts no more output |
-| `CountingInput` / `CountingOutput` | saturating count of successful items | `bytes_*` is available for `u8`; `items_*` works for every item type |
-| `ChecksumInput` / `ChecksumOutput` | hashes successful byte prefixes | only `u8`; `Pending` and errors do not update it |
-| `TeeInput` / `TeeOutput` | mirrors source or primary transfer to a branch | ordered and non-transactional |
-| `SyncSeekTeeInput` | mirrors reads and synchronizes seeks | source is changed before a branch failure can be returned |
-
-`inner_mut()` and `branch_mut()` intentionally bypass wrapper bookkeeping.
-Reads and writes through such accessors are not counted, limited, hashed, or
-mirrored. Use them only when that is the desired escape hatch.
-
-```rust
-use std::io::Result;
-use qubit_io::{CountingOutput, Output, TeeOutput};
-
-fn main() -> Result<()> {
-    let tee = TeeOutput::new(Vec::<u8>::new(), Vec::<u8>::new());
-    let mut output = CountingOutput::new(tee);
-    output.write_fully(b"copy")?;
-    assert_eq!(4, output.bytes_written());
-
-    let (primary, branch) = output.into_inner().into_parts();
-    assert_eq!(b"copy", primary.as_slice());
-    assert_eq!(b"copy", branch.as_slice());
-    Ok(())
-}
-```
-
-Tee writes update the primary output before the branch. Tee reads advance the
-source before writing the branch. Flushes and synchronized seeks likewise act
-on the primary or source first. A later error never rolls back earlier work;
-add a transaction or recovery layer above Qubit IO when atomic replication is
-required.
-
-## 6. Standard I/O extensions and `Streams`
-
-The standard-library integrations are grouped under `qubit_io::std_io`; import
-extension traits from `qubit_io::std_io::ext`. They operate on standard byte
-streams and add explicit resource limits. `ReadExt` offers exact-or-EOF reads, bounded vectors and strings,
-bounded copy operations, and discard helpers. `BufReadExt` adds bounded line
-and delimiter reads. `ReadSeekExt`, `SeekExt`, and `WriteSeekExt` offer
-position-preserving operations. The unchecked extension methods have the same
-range obligations as their names indicate.
-
-`Streams` is a non-constructible namespace. Its `copy_input_to_output*`
-methods work with generic Qubit items, while `copy*` and comparison methods
-work with `std::io` byte streams.
-
-```rust
-use std::io::{Cursor, Result};
-use qubit_io::Streams;
-use qubit_io::std_io::ext::BufReadExt;
-
-fn main() -> Result<()> {
-    let mut input = Cursor::new(b"abcdef".to_vec());
-    let mut output = Vec::new();
-    let copied = Streams::copy_input_to_output_at_most(
-        &mut input,
-        &mut output,
-        3,
-    )?;
-    assert_eq!(3, copied);
-    assert_eq!(b"abc", output.as_slice());
-
-    let mut line_input = Cursor::new(b"hello\nrest".to_vec());
-    assert_eq!("hello\n", line_input.read_line_limited(6)?);
-    Ok(())
-}
-```
-
-For data whose size is controlled by another party, use a `*_limited` method
-instead of unbounded `read_to_end`, `read_to_string`, or delimiter reads. The
-limit is part of the caller's resource policy, not merely a convenience value.
-
-## 7. Asynchronous contract
-
-`AsyncInput` and `AsyncOutput` use `Pin`, `Context`, and `Poll`, but do not
-depend on a runtime. Implementers provide `poll_read_unchecked` or
-`poll_write_unchecked`; consumers usually call `read_async`,
-`read_fully_async`, `read_exactly_async`, `write_async`, `write_fully_async`,
-and `flush_async`.
-
-The contract is strict:
-
-- A zero-length transfer completes without polling the inner stream.
-- `Poll::Pending` and errors transfer no items; `Pending` must register the
-  current waker.
-- `WouldBlock` and `Interrupted` must not cross this boundary.
-- A non-empty read returning zero is EOF; a full write returning zero becomes
-  `WriteZero`.
-- Polling a named operation future after it completed is a caller error and
-  panics.
-
-`ReadFuture`, `ReadFullyFuture`, `ReadExactFuture`, `WriteFuture`,
-`WriteFullyFuture`, `FlushFuture`, and `CloseFuture` keep multi-poll state in
-the future itself. Before dropping a pending `ReadFullyFuture`,
-`ReadExactFuture`, or `WriteFullyFuture`, inspect `items_read()` or
-`items_written()` if recovery needs an exact progress count. Pinned `!Unpin`
-values and trait objects use `PinnedAsyncInputExt` and
-`PinnedAsyncOutputExt` instead of the `Unpin` convenience methods.
-
-`AsyncClose` is separate from flush. A close represents a real transport
-shutdown and is exposed through `close_async`.
-
-## 8. Asynchronous buffering and adapters
-
-`AsyncBufferedInput` retains prefetched items across `Pending` and exposes
-`poll_fill_more`, `poll_fill_until`, and `poll_ensure_available` for manual
-window management. `AsyncBufferedOutput` retains every accepted item until the
-inner output accepts it; partial flushes update retained progress before
-returning `Pending`. Both provide `try_with_capacity` and
-`try_reserve_capacity` for allocation-aware construction.
-
-Asynchronous destructors cannot perform I/O. Call `flush_async` to guarantee a
-flush, or `into_parts` to recover the inner stream and pending buffer.
-`AsyncBufferedOutput` drains its own pending items before delegating
-`AsyncClose` to an inner output that supports close.
-
-The Tokio adapters are explicit newtypes to avoid overlapping ecosystem trait
-implementations. The following complete program writes through an
-`AsyncBufferedOutput`, closes it, and reads through an `AsyncBufferedInput`.
-
-```toml
-[dependencies]
-qubit-io = { version = "0.14", features = ["tokio"] }
-tokio = { version = "1", features = ["macros", "rt", "io-util"] }
-```
+Now compose a record pipeline:
 
 ```rust
 use std::io;
 use qubit_io::{
-    AsyncBufferedInput, AsyncBufferedOutput, AsyncClose, AsyncInput,
-    AsyncOutput, TokioInput, TokioOutput,
+    BufferedInput, CountingInput, CountingOutput, LimitInput, TeeOutput,
 };
 
-#[tokio::main(flavor = "current_thread")]
-async fn main() -> io::Result<()> {
-    let (writer, reader) = tokio::io::duplex(64);
-    let mut output = AsyncBufferedOutput::with_capacity(TokioOutput::new(writer), 4);
-    output.write_fully_async(b"qubit").await?;
-    output.close_async().await?;
+fn run_mapper() -> io::Result<()> {
+    let source = SliceRecordInput {
+        items: &[
+            Sale { store_id: 1, category_id: 7, amount_cents: 300 },
+            Sale { store_id: 2, category_id: 7, amount_cents: 500 },
+            Sale { store_id: 3, category_id: 9, amount_cents: 900 },
+        ],
+        position: 0,
+    };
+    let limited = LimitInput::new(source, 2);
+    let buffered = BufferedInput::with_capacity(limited, 2);
+    let mut input = CountingInput::new(buffered);
 
-    let mut input = AsyncBufferedInput::with_capacity(TokioInput::new(reader), 4);
-    let mut received = [0_u8; 5];
-    input.read_exactly_async(&mut received).await?;
-    assert_eq!(b"qubit", &received);
+    let output = TeeOutput::new(
+        VecRecordOutput::default(),
+        VecRecordOutput::default(),
+    );
+    let mut output = CountingOutput::new(output);
+    map_partition(&mut input, &mut output)?;
+
+    assert_eq!(2, input.items_read());
+    assert_eq!(2, output.items_written());
+    let (shuffle, audit) = output.into_inner().into_parts();
+    assert_eq!(shuffle.items, audit.items);
+    assert_eq!(2, shuffle.items.len());
     Ok(())
 }
 ```
 
-`TokioInput` and `TokioOutput` adapt Tokio to Qubit IO; `TokioAsyncRead` and
-`TokioAsyncWrite` expose Qubit byte streams to Tokio. `FuturesInput`,
-`FuturesOutput`, `FuturesAsyncRead`, and `FuturesAsyncWrite` provide the same
-two directions for `futures-io`. Tokio close delegates to `poll_shutdown` and
-the futures-io close delegates to `poll_close`; neither is emulated with a
-flush.
+Here the limit, buffer, and counters operate in records, not bytes. `TeeOutput` sends the typed mapping result to both a shuffle sink and an audit sink without changing the mapper.
 
-## 9. Choosing and recovering the right owner
+The boundary is intentional:
 
-Use this checklist when composing stream layers:
+- `Input`/`Output`, limit, counting, and tee can move non-`u8` items.
+- Checksum wrappers are byte-only because `std::hash::Hasher` consumes bytes.
+- Qubit `Buffer<T>` and buffered wrappers require `Copy + Default`. The records above meet that condition.
+- Records containing `String` or another non-`Copy` field can still use core streams and the wrappers that do not require copying, but not the current generic buffer.
+- Network and disk boundaries still need encoding. The gain is avoiding repeated encode/decode work in every business operator.
 
-1. Pick `Input`/`Output` for blocking transfer and the async traits only when
-   the caller already owns an async execution path.
-2. Add a buffer at the outermost layer that benefits from batching. Avoid
-   wrapping a standard `BufReader` or `BufWriter` through `ensure`.
-3. Put a limit closest to untrusted input or the output quota it protects.
-4. Place counters and checksums according to the bytes or items that must be
-   observed, not simply according to construction convenience.
-5. Flush or close explicitly. When an operation fails, retain the wrapper and
-   retry or inspect it; use `into_parts` only when transferring responsibility
-   for pending data is intentional.
+## 8. Standard I/O, seek, and advanced tools
 
-The API documentation on docs.rs describes every method and its exact error,
-panic, ownership, and pinning constraints. This guide explains how those APIs
-fit together in an application.
+Standard-library integrations live under `qubit_io::std_io` and extension traits under `qubit_io::std_io::ext`. They add bounded reads, bounded strings and delimiter reads, copy helpers, discard helpers, and position-preserving operations for byte streams. For data controlled by another party, prefer a `*_limited` method over unbounded `read_to_end`, `read_to_string`, or delimiter reads; the limit is resource policy.
+
+`Seekable` measures positions in the wrapped stream's item unit. `SeekableInput` and `SeekableOutput` express useful combinations without adding behavior. `PositionGuard` restores a recorded position on drop unless dismissed; call `restore` when the restoration error must be observed.
+
+`Streams` is a non-constructible namespace. Its `copy_input_to_output*` methods work with generic Qubit items, while its `copy*` and comparison methods work with `std::io` byte streams.
+
+`Buffer<T>` owns initialized `Copy + Default` storage and exposes a readable window plus spare slots. Its low-level state-changing methods are `unsafe` because callers must prove the requested range fits. Use `BufferedInput` or `BufferedOutput` for ordinary buffering; use `Buffer<T>` directly only when implementing a specialized driver or encoder.
+
+`BufferedInput::ensure` and `BufferedOutput::ensure` avoid another Qubit buffer only when `is_buffered()` says the value is buffered. They cannot detect `std::io::BufReader` or `BufWriter` that entered through blanket `Read` and `Write` implementations.
+
+Pinned `!Unpin` async values and trait objects use `PinnedAsyncInputExt` and `PinnedAsyncOutputExt` instead of the `Unpin` convenience methods.
+
+## 9. Choose the narrowest boundary
+
+1. Use `Input`/`Output` for blocking transfer. Use async traits only when the caller already has an async execution path.
+2. Put a limit closest to untrusted input or an output quota.
+3. Add a buffer at the layer that benefits from batching. Do not use `ensure` to wrap a standard `BufReader` or `BufWriter` again.
+4. Place counters and checksums according to the bytes or items that must be observed.
+5. Flush or close explicitly. Retain wrappers after failure when recovery needs their unread or pending data.
+6. Use native I/O directly when no runtime-neutral boundary, item-generic transfer, or composable policy is needed.
+
+docs.rs documents each API's exact error, panic, ownership, and pinning constraints. This guide explains how those APIs fit into a library design.
