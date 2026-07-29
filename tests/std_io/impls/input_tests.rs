@@ -14,6 +14,7 @@ use std::io::{
     ErrorKind,
     Read,
 };
+#[cfg(debug_assertions)]
 use std::panic::{
     AssertUnwindSafe,
     catch_unwind,
@@ -85,6 +86,7 @@ fn test_read_blanket_impl_propagates_std_read_error() {
     assert_eq!(ErrorKind::PermissionDenied, error.kind());
 }
 
+#[cfg(debug_assertions)]
 #[test]
 fn test_read_blanket_impl_read_unchecked_panics_on_invalid_range() {
     let mut reader = Cursor::new(b"ab".to_vec());
@@ -105,6 +107,7 @@ fn test_read_blanket_impl_read_unchecked_panics_on_invalid_range() {
     );
 }
 
+#[cfg(debug_assertions)]
 #[test]
 fn test_read_blanket_impl_read_unchecked_panics_on_index_plus_count_overflow() {
     let mut reader = Cursor::new(b"ab".to_vec());
