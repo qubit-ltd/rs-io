@@ -5,6 +5,9 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
+
+//! Shared allocation, stream, and unchecked-slice utilities.
+
 // qubit-style: allow coverage-cfg
 mod allocation;
 mod streams;

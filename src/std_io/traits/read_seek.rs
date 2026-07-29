@@ -5,6 +5,9 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
+
+//! Composite read and seek capability.
+
 use std::io::{
     Read,
     Seek,

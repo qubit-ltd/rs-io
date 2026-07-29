@@ -74,6 +74,7 @@ impl<I> LimitInput<I> {
     ///
     /// Returns mutable access to the wrapped input.
     #[inline(always)]
+    #[must_use]
     pub fn inner_mut(&mut self) -> &mut I {
         &mut self.inner
     }
@@ -98,12 +99,26 @@ where
     type Item = I::Item;
 
     /// Returns the wrapped input's buffering declaration.
+    ///
+    /// # Returns
+    ///
+    /// Returns whether the wrapped input reports itself as buffered.
     #[inline(always)]
     fn is_buffered(&self) -> bool {
         self.inner.is_buffered()
     }
 
     /// Reads only the still-exposed prefix of the requested item range.
+    ///
+    /// # Parameters
+    ///
+    /// - `output`: Destination item slice.
+    /// - `index`: Starting destination index.
+    /// - `count`: Maximum number of items requested.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of items read within the remaining limit.
     ///
     /// # Errors
     ///
@@ -114,7 +129,7 @@ where
     /// # Safety
     ///
     /// `index..index + count` must be a valid range in `output`.
-    #[inline(always)]
+    #[inline]
     unsafe fn read_unchecked(
         &mut self,
         output: &mut [Self::Item],

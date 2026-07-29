@@ -5,6 +5,9 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
+
+//! Position-preserving extension operations for seekable standard writers.
+
 use std::io::{
     Result,
     Seek,

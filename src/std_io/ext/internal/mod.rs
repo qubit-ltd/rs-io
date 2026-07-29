@@ -5,4 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
+
+//! Crate-private implementations shared by standard I/O extension traits.
+
 pub(crate) mod read_ext_impl;

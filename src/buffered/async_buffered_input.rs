@@ -149,6 +149,7 @@ where
     ///
     /// Returns the wrapped asynchronous input.
     #[inline(always)]
+    #[must_use]
     pub fn inner_mut(&mut self) -> &mut I {
         &mut self.inner
     }

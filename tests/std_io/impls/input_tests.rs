@@ -6,6 +6,8 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
+//! Tests for the standard [`Read`](std::io::Read) bridge to [`Input`].
+
 use std::io::{
     Cursor,
     Error,

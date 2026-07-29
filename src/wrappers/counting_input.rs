@@ -83,6 +83,7 @@ impl<I> CountingInput<I> {
     ///
     /// Returns mutable access to the wrapped input.
     #[inline(always)]
+    #[must_use]
     pub fn inner_mut(&mut self) -> &mut I {
         &mut self.inner
     }
@@ -123,12 +124,26 @@ where
     type Item = I::Item;
 
     /// Returns the wrapped input's buffering declaration.
+    ///
+    /// # Returns
+    ///
+    /// Returns whether the wrapped input reports itself as buffered.
     #[inline(always)]
     fn is_buffered(&self) -> bool {
         self.inner.is_buffered()
     }
 
     /// Reads items and counts only a successful, validated result.
+    ///
+    /// # Parameters
+    ///
+    /// - `output`: Destination item slice.
+    /// - `index`: Starting destination index.
+    /// - `count`: Maximum number of items to read.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of items read and added to the counter.
     ///
     /// # Errors
     ///
@@ -138,7 +153,7 @@ where
     /// # Safety
     ///
     /// `index..index + count` must be a valid range in `output`.
-    #[inline(always)]
+    #[inline]
     unsafe fn read_unchecked(
         &mut self,
         output: &mut [Self::Item],
@@ -161,6 +176,18 @@ where
     type Unit = I::Unit;
 
     /// Seeks the wrapped input without changing the item count.
+    ///
+    /// # Parameters
+    ///
+    /// - `position`: Target stream position.
+    ///
+    /// # Returns
+    ///
+    /// Returns the resulting absolute stream position.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error reported by the wrapped input.
     #[inline(always)]
     fn seek_to(&mut self, position: SeekFrom) -> io::Result<u64> {
         self.inner.seek_to(position)

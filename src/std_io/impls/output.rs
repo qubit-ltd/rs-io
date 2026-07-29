@@ -6,6 +6,8 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
+//! Standard [`Write`](std::io::Write) implementations of item output traits.
+
 use std::io::{
     Result,
     Write,
@@ -27,7 +29,23 @@ where
 
     /// Writes bytes from a caller-validated indexed input range.
     ///
+    /// # Parameters
+    ///
+    /// - `input`: Source byte slice.
+    /// - `index`: Start offset inside `input`.
+    /// - `count`: Maximum number of bytes to write.
+    ///
+    /// # Returns
+    ///
+    /// The number of bytes reported by the standard writer.
+    ///
+    /// # Errors
+    ///
     /// Returns the error reported by the standard writer.
+    ///
+    /// # Panics
+    ///
+    /// Panics in debug builds if the requested source range does not fit.
     ///
     /// # Safety
     ///
@@ -47,8 +65,19 @@ where
 
     /// Writes bytes from the complete input slice.
     ///
-    /// Returns InvalidData if the writer reports more bytes than input
-    /// contains.
+    /// # Parameters
+    ///
+    /// - `input`: Source byte slice.
+    ///
+    /// # Returns
+    ///
+    /// The number of bytes written from `input`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`std::io::ErrorKind::InvalidData`] if the writer reports more
+    /// bytes than `input` contains, or the error reported by the standard
+    /// writer.
     #[inline(always)]
     fn write(&mut self, input: &[Self::Item]) -> Result<usize> {
         let written = Write::write(self, input)?;
@@ -57,6 +86,12 @@ where
     }
 
     /// Flushes the standard writer.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` after the standard writer is flushed.
+    ///
+    /// # Errors
     ///
     /// Returns the error reported by the standard writer.
     #[inline(always)]

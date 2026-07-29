@@ -86,6 +86,7 @@ where
     ///
     /// Returns mutable access to the wrapped input.
     #[inline(always)]
+    #[must_use]
     pub fn inner_mut(&mut self) -> &mut I {
         &mut self.inner
     }
@@ -110,6 +111,7 @@ where
     ///
     /// Returns mutable access to the wrapped hasher.
     #[inline(always)]
+    #[must_use]
     pub fn hasher_mut(&mut self) -> &mut H {
         &mut self.hasher
     }
@@ -135,12 +137,26 @@ where
     type Item = u8;
 
     /// Returns the wrapped input's buffering declaration.
+    ///
+    /// # Returns
+    ///
+    /// Returns whether the wrapped input reports itself as buffered.
     #[inline(always)]
     fn is_buffered(&self) -> bool {
         self.inner.is_buffered()
     }
 
     /// Reads bytes and hashes only the successful prefix.
+    ///
+    /// # Parameters
+    ///
+    /// - `output`: Destination byte slice.
+    /// - `index`: Starting destination index.
+    /// - `count`: Maximum number of bytes to read.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of bytes read and added to the hasher.
     ///
     /// # Errors
     ///
@@ -151,7 +167,7 @@ where
     /// # Safety
     ///
     /// `index..index + count` must be valid in `output`.
-    #[inline(always)]
+    #[inline]
     unsafe fn read_unchecked(
         &mut self,
         output: &mut [u8],
@@ -173,6 +189,18 @@ where
     type Unit = I::Unit;
 
     /// Seeks the wrapped input without changing the hasher.
+    ///
+    /// # Parameters
+    ///
+    /// - `position`: Target stream position.
+    ///
+    /// # Returns
+    ///
+    /// Returns the resulting absolute stream position.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error reported by the wrapped input.
     #[inline(always)]
     fn seek_to(&mut self, position: SeekFrom) -> io::Result<u64> {
         self.inner.seek_to(position)

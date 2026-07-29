@@ -5,6 +5,9 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
+
+//! Bounded extension operations for buffered standard readers.
+
 use std::io::{
     BufRead,
     Error,

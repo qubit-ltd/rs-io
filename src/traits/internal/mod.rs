@@ -5,6 +5,9 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
+
+//! Internal helpers that enforce synchronous and asynchronous I/O contracts.
+
 mod async_contract_error;
 mod io_contract;
 

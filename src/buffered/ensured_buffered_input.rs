@@ -83,7 +83,7 @@ where
     /// # Safety
     ///
     /// The range `index..index + count` must be valid for `output`.
-    #[inline(always)]
+    #[inline]
     unsafe fn read_unchecked(
         &mut self,
         output: &mut [Self::Item],
@@ -115,7 +115,7 @@ where
     /// # Errors
     ///
     /// Returns an error reported by the selected input.
-    #[inline(always)]
+    #[inline]
     fn read(&mut self, output: &mut [Self::Item]) -> Result<usize> {
         match self {
             Self::AlreadyBuffered(input) => input.read(output),
@@ -143,7 +143,7 @@ where
     /// # Safety
     ///
     /// The range `index..index + count` must be valid for `output`.
-    #[inline(always)]
+    #[inline]
     unsafe fn read_fully_unchecked(
         &mut self,
         output: &mut [Self::Item],
@@ -177,7 +177,7 @@ where
     /// # Errors
     ///
     /// Returns an error reported by the selected input.
-    #[inline(always)]
+    #[inline]
     fn read_fully(&mut self, output: &mut [Self::Item]) -> Result<usize> {
         match self {
             Self::AlreadyBuffered(input) => input.read_fully(output),
@@ -207,7 +207,7 @@ where
     /// # Errors
     ///
     /// Returns an error reported by the selected input.
-    #[inline(always)]
+    #[inline]
     fn seek_to(&mut self, position: SeekFrom) -> Result<u64> {
         match self {
             Self::AlreadyBuffered(input) => input.seek_to(position),

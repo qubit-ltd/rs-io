@@ -5,6 +5,9 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
+
+//! Fallible allocation helpers used by bounded I/O operations.
+
 // qubit-style: allow coverage-cfg
 #[cfg(coverage)]
 use std::cell::Cell;
@@ -25,7 +28,7 @@ use std::io::{
 ///
 /// Returns an [`ErrorKind::OutOfMemory`] error that preserves the allocation
 /// error as its source.
-#[inline]
+#[inline(always)]
 #[must_use]
 pub(crate) fn allocation_error(error: TryReserveError) -> Error {
     Error::new(ErrorKind::OutOfMemory, error)

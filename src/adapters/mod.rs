@@ -6,6 +6,9 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
+//! Adapters between Qubit I/O traits and boxed, borrowed, futures-io, or Tokio
+//! values.
+
 mod box_input;
 mod box_output;
 #[cfg(feature = "futures-io")]

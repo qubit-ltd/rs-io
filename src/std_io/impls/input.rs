@@ -6,6 +6,8 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
+//! Standard [`Read`](std::io::Read) implementations of item input traits.
+
 use std::io::{
     Read,
     Result,
@@ -27,7 +29,23 @@ where
 
     /// Reads bytes into a caller-validated indexed output range.
     ///
+    /// # Parameters
+    ///
+    /// - `output`: Destination byte slice.
+    /// - `index`: Start offset inside `output`.
+    /// - `count`: Maximum number of bytes to read.
+    ///
+    /// # Returns
+    ///
+    /// The number of bytes reported by the standard reader.
+    ///
+    /// # Errors
+    ///
     /// Returns the error reported by the standard reader.
+    ///
+    /// # Panics
+    ///
+    /// Panics in debug builds if the requested destination range does not fit.
     ///
     /// # Safety
     ///
@@ -48,7 +66,18 @@ where
 
     /// Reads bytes into the complete output slice.
     ///
-    /// Returns InvalidData if the reader reports more bytes than output holds.
+    /// # Parameters
+    ///
+    /// - `output`: Destination byte slice.
+    ///
+    /// # Returns
+    ///
+    /// The number of bytes read into `output`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`std::io::ErrorKind::InvalidData`] if the reader reports more
+    /// bytes than `output` holds, or the error reported by the standard reader.
     #[inline(always)]
     fn read(&mut self, output: &mut [Self::Item]) -> Result<usize> {
         let read = Read::read(self, output)?;

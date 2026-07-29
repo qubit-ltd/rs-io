@@ -5,6 +5,9 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
+
+//! Extension operations for inspecting standard seekable streams.
+
 use std::io::{
     Result,
     Seek,

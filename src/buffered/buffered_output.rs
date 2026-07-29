@@ -243,6 +243,7 @@ where
     ///
     /// Returns a mutable reference to the underlying writer.
     #[inline(always)]
+    #[must_use]
     pub fn inner_mut(&mut self) -> &mut O {
         &mut self.inner
     }
@@ -260,7 +261,7 @@ where
     ///
     /// Returns the wrapped output and the buffer holding pending items in
     /// logical write order.
-    #[inline(always)]
+    #[inline]
     #[must_use = "the returned inner output and pending buffer must be handled"]
     pub fn into_parts(self) -> (O, Buffer<O::Item>) {
         let this = ManuallyDrop::new(self);
@@ -471,7 +472,7 @@ where
     /// large input directly to the wrapped writer. Returns
     /// [`ErrorKind::InvalidData`] if the wrapped writer reports accepting more
     /// items than requested.
-    #[inline(always)]
+    #[inline]
     pub fn write(&mut self, input: &[O::Item]) -> Result<usize> {
         // SAFETY: The full input slice is a valid source range.
         let written = unsafe { self.write_unchecked(input, 0, input.len()) }?;
@@ -568,7 +569,7 @@ where
     /// progress while draining the buffer, [`ErrorKind::InvalidData`] if the
     /// writer reports an impossible item count, or any error returned by
     /// [`Output::flush`] on the wrapped output.
-    #[inline(always)]
+    #[inline]
     pub fn flush(&mut self) -> Result<()> {
         self.flush_buffer()
             .and_then(|()| Output::flush(&mut self.inner))
@@ -721,7 +722,7 @@ where
     /// in `input`, that `count <= self.spare_capacity()`, and that the copied
     /// source range does not overlap with the destination range in the internal
     /// buffer.
-    #[inline(always)]
+    #[inline]
     unsafe fn write_to_buffer(
         &mut self,
         input: &[O::Item],
@@ -765,7 +766,7 @@ where
     ///
     /// The caller must guarantee that `input_index..input_index + count` is a
     /// valid range inside `input` and that the addition does not overflow.
-    #[inline(always)]
+    #[inline]
     unsafe fn write_inner(
         &mut self,
         input: &[O::Item],

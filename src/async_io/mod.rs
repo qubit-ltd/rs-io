@@ -6,6 +6,8 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
+//! Future implementations backing the asynchronous I/O convenience methods.
+
 mod close_future;
 mod flush_future;
 mod read_exact_future;

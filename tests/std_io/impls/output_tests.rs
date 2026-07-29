@@ -6,6 +6,8 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
+//! Tests for the standard [`Write`](std::io::Write) bridge to [`Output`].
+
 use std::io::{
     Cursor,
     Error,

@@ -83,7 +83,7 @@ where
     /// # Safety
     ///
     /// The range `index..index + count` must be valid for `input`.
-    #[inline(always)]
+    #[inline]
     unsafe fn write_unchecked(
         &mut self,
         input: &[Self::Item],
@@ -115,7 +115,7 @@ where
     /// # Errors
     ///
     /// Returns an error reported by the selected output.
-    #[inline(always)]
+    #[inline]
     fn write(&mut self, input: &[Self::Item]) -> Result<usize> {
         match self {
             Self::AlreadyBuffered(output) => output.write(input),
@@ -143,7 +143,7 @@ where
     /// # Safety
     ///
     /// The range `index..index + count` must be valid for `input`.
-    #[inline(always)]
+    #[inline]
     unsafe fn write_fully_unchecked(
         &mut self,
         input: &[Self::Item],
@@ -176,7 +176,7 @@ where
     ///
     /// Returns an error reported by the selected output, including premature
     /// write-zero failures.
-    #[inline(always)]
+    #[inline]
     fn write_fully(&mut self, input: &[Self::Item]) -> Result<()> {
         match self {
             Self::AlreadyBuffered(output) => output.write_fully(input),
@@ -193,7 +193,7 @@ where
     /// # Errors
     ///
     /// Returns an error reported while flushing the selected output.
-    #[inline(always)]
+    #[inline]
     fn flush(&mut self) -> Result<()> {
         match self {
             Self::AlreadyBuffered(output) => output.flush(),
@@ -223,7 +223,7 @@ where
     /// # Errors
     ///
     /// Returns an error reported by the selected output.
-    #[inline(always)]
+    #[inline]
     fn seek_to(&mut self, position: SeekFrom) -> Result<u64> {
         match self {
             Self::AlreadyBuffered(output) => output.seek_to(position),

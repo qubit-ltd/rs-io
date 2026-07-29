@@ -74,6 +74,7 @@ impl<O> LimitOutput<O> {
     ///
     /// Returns mutable access to the wrapped output.
     #[inline(always)]
+    #[must_use]
     pub fn inner_mut(&mut self) -> &mut O {
         &mut self.inner
     }
@@ -98,12 +99,26 @@ where
     type Item = O::Item;
 
     /// Returns the wrapped output's buffering declaration.
+    ///
+    /// # Returns
+    ///
+    /// Returns whether the wrapped output reports itself as buffered.
     #[inline(always)]
     fn is_buffered(&self) -> bool {
         self.inner.is_buffered()
     }
 
     /// Writes only the still-accepted prefix of the requested item range.
+    ///
+    /// # Parameters
+    ///
+    /// - `input`: Source item slice.
+    /// - `index`: Starting source index.
+    /// - `count`: Maximum number of items offered.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of items written within the remaining limit.
     ///
     /// # Errors
     ///
@@ -114,7 +129,7 @@ where
     /// # Safety
     ///
     /// `index..index + count` must be a valid range in `input`.
-    #[inline(always)]
+    #[inline]
     unsafe fn write_unchecked(
         &mut self,
         input: &[Self::Item],
@@ -133,6 +148,14 @@ where
     }
 
     /// Flushes the wrapped output.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` after the wrapped output is flushed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error reported by the wrapped output.
     #[inline(always)]
     fn flush(&mut self) -> io::Result<()> {
         self.inner.flush()

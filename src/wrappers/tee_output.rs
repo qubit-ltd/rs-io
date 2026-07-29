@@ -69,6 +69,7 @@ impl<P, B> TeeOutput<P, B> {
     ///
     /// Returns mutable access to the primary output.
     #[inline(always)]
+    #[must_use]
     pub fn inner_mut(&mut self) -> &mut P {
         &mut self.inner
     }
@@ -92,6 +93,7 @@ impl<P, B> TeeOutput<P, B> {
     ///
     /// Returns mutable access to the branch output.
     #[inline(always)]
+    #[must_use]
     pub fn branch_mut(&mut self) -> &mut B {
         &mut self.branch
     }
@@ -120,12 +122,26 @@ where
     type Item = P::Item;
 
     /// Returns true only when both output paths are buffered.
+    ///
+    /// # Returns
+    ///
+    /// Returns `true` only when both outputs report themselves as buffered.
     #[inline(always)]
     fn is_buffered(&self) -> bool {
         self.inner.is_buffered() && self.branch.is_buffered()
     }
 
     /// Writes to the primary output and mirrors its successful item prefix.
+    ///
+    /// # Parameters
+    ///
+    /// - `input`: Source item slice.
+    /// - `index`: Starting source index.
+    /// - `count`: Maximum number of items to write.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of primary items written and mirrored.
     ///
     /// # Errors
     ///
@@ -136,7 +152,7 @@ where
     /// # Safety
     ///
     /// `index..index + count` must be valid in `input`.
-    #[inline(always)]
+    #[inline]
     unsafe fn write_unchecked(
         &mut self,
         input: &[Self::Item],
@@ -150,11 +166,15 @@ where
 
     /// Flushes the primary output and then the branch output.
     ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` after both outputs are flushed.
+    ///
     /// # Errors
     ///
     /// Returns the primary flush error without flushing the branch, or returns
     /// the branch flush error after the primary has flushed successfully.
-    #[inline(always)]
+    #[inline]
     fn flush(&mut self) -> io::Result<()> {
         self.inner.flush()?;
         self.branch.flush()
@@ -171,11 +191,19 @@ where
 
     /// Seeks the primary output and then aligns the branch output.
     ///
+    /// # Parameters
+    ///
+    /// - `position`: Target primary-output position.
+    ///
+    /// # Returns
+    ///
+    /// Returns the resulting absolute position after both outputs are aligned.
+    ///
     /// # Errors
     ///
     /// Returns a primary seek error without seeking the branch. If the branch
     /// seek fails, the primary remains at its new position.
-    #[inline(always)]
+    #[inline]
     fn seek_to(&mut self, position: SeekFrom) -> io::Result<u64> {
         let position = self.inner.seek_to(position)?;
         self.branch.seek_to(SeekFrom::Start(position))?;

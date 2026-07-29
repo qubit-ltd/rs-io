@@ -6,12 +6,6 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use super::support_tests::TestInput;
-use super::support_tests::{
-    PollResult,
-    ScriptedInput,
-};
-use qubit_io::ReadExactFuture;
 use std::{
     future::Future,
     io::ErrorKind,
@@ -26,6 +20,13 @@ use std::{
         Waker,
     },
 };
+
+use super::support_tests::{
+    PollResult,
+    ScriptedInput,
+    TestInput,
+};
+use qubit_io::ReadExactFuture;
 
 #[test]
 fn test_read_exact_future_type_is_public() {

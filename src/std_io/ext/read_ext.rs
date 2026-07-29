@@ -5,6 +5,9 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
+
+//! Extension operations for standard byte readers.
+
 use std::io::{
     ErrorKind,
     Read,
@@ -64,6 +67,9 @@ pub trait ReadExt: Read {
     /// # Errors
     /// Returns the error reported by [`Read::read`].
     ///
+    /// # Panics
+    /// Panics in debug builds if the requested destination range does not fit.
+    ///
     /// # Safety
     /// The caller must guarantee that `start_index..start_index + count` is a
     /// valid range within `buffer` and that `start_index + count` does not
@@ -94,6 +100,9 @@ pub trait ReadExt: Read {
     /// Returns the error reported by [`Read::read_exact`], including
     /// [`ErrorKind::UnexpectedEof`] when EOF is reached before `count` bytes
     /// are read.
+    ///
+    /// # Panics
+    /// Panics in debug builds if the requested destination range does not fit.
     ///
     /// # Safety
     /// The caller must guarantee that `start_index..start_index + count` is a
@@ -126,6 +135,9 @@ pub trait ReadExt: Read {
     /// # Errors
     /// Returns the first non-[`ErrorKind::Interrupted`] error reported by the
     /// underlying reader. Interrupted reads are retried.
+    ///
+    /// # Panics
+    /// Panics in debug builds if the requested destination range does not fit.
     ///
     /// # Safety
     /// The caller must guarantee that `start_index..start_index + count` is a

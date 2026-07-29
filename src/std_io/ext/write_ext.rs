@@ -6,6 +6,8 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
+//! Extension operations for standard byte writers.
+
 use std::io::{
     Result,
     Write,

@@ -70,6 +70,7 @@ impl<I, B> SyncSeekTeeInput<I, B> {
     ///
     /// Returns mutable access to the source input.
     #[inline(always)]
+    #[must_use]
     pub fn inner_mut(&mut self) -> &mut I {
         &mut self.inner
     }
@@ -93,6 +94,7 @@ impl<I, B> SyncSeekTeeInput<I, B> {
     ///
     /// Returns mutable access to the branch output.
     #[inline(always)]
+    #[must_use]
     pub fn branch_mut(&mut self) -> &mut B {
         &mut self.branch
     }
@@ -118,12 +120,26 @@ where
     type Item = I::Item;
 
     /// Returns the source input's buffering declaration.
+    ///
+    /// # Returns
+    ///
+    /// Returns whether the source input reports itself as buffered.
     #[inline(always)]
     fn is_buffered(&self) -> bool {
         self.inner.is_buffered()
     }
 
     /// Reads from the source and mirrors the successful item prefix.
+    ///
+    /// # Parameters
+    ///
+    /// - `output`: Destination item slice.
+    /// - `index`: Starting destination index.
+    /// - `count`: Maximum number of items to read.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of source items read and mirrored.
     ///
     /// # Errors
     ///
@@ -134,7 +150,7 @@ where
     /// # Safety
     ///
     /// `index..index + count` must be valid in `output`.
-    #[inline(always)]
+    #[inline]
     unsafe fn read_unchecked(
         &mut self,
         output: &mut [Self::Item],
@@ -157,11 +173,19 @@ where
 
     /// Seeks the source and then aligns the branch output.
     ///
+    /// # Parameters
+    ///
+    /// - `position`: Target source position.
+    ///
+    /// # Returns
+    ///
+    /// Returns the resulting absolute position after both streams are aligned.
+    ///
     /// # Errors
     ///
     /// Returns a source seek error without seeking the branch. If the branch
     /// seek fails, the source remains at its new position.
-    #[inline(always)]
+    #[inline]
     fn seek_to(&mut self, position: SeekFrom) -> io::Result<u64> {
         let position = self.inner.seek_to(position)?;
         self.branch.seek_to(SeekFrom::Start(position))?;
