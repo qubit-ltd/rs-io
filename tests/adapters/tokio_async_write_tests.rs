@@ -6,8 +6,9 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use qubit_io::TokioAsyncWrite;
 use std::io::Cursor;
+
+use qubit_io::TokioAsyncWrite;
 
 #[test]
 fn test_tokio_async_write_type_is_public() {

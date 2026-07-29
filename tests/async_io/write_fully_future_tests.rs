@@ -6,12 +6,6 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use super::support_tests::TestOutput;
-use super::support_tests::{
-    PollResult,
-    ScriptedOutput,
-};
-use qubit_io::WriteFullyFuture;
 use std::{
     future::Future,
     io::ErrorKind,
@@ -26,6 +20,13 @@ use std::{
         Waker,
     },
 };
+
+use super::support_tests::{
+    PollResult,
+    ScriptedOutput,
+    TestOutput,
+};
+use qubit_io::WriteFullyFuture;
 
 #[test]
 fn test_write_fully_future_type_is_public() {
@@ -45,7 +46,7 @@ fn test_write_fully_future_completes_immediately_for_empty_input() {
     match Future::poll(Pin::new(&mut future), &mut cx) {
         Poll::Ready(Ok(())) => {}
         Poll::Pending => {
-            panic!("empty destination should never return pending")
+            panic!("empty input should never return pending")
         }
         Poll::Ready(Err(error)) => {
             panic!("empty write_fully should not error, got: {error}")

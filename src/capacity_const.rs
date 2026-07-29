@@ -6,6 +6,8 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
+//! Default buffer capacities shared by public I/O helpers.
+
 /// Default capacity used by [`BufferedInput`] and [`BufferedOutput`].
 ///
 /// The value is intentionally shared by input and output buffering so callers

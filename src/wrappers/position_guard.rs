@@ -101,6 +101,7 @@ where
     /// # Returns
     /// The guarded stream reference.
     #[inline(always)]
+    #[must_use]
     pub fn inner_mut(&mut self) -> &mut S {
         self.stream
     }
@@ -117,7 +118,7 @@ where
     /// # Errors
     /// Returns the error reported by [`Seekable::seek_to`] when the stream
     /// cannot seek back to the captured position.
-    #[inline(always)]
+    #[inline]
     pub fn restore(&mut self) -> Result<()> {
         self.stream
             .seek_to(SeekFrom::Start(self.position))

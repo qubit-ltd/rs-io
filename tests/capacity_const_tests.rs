@@ -13,11 +13,8 @@ use qubit_io::{
 };
 
 #[test]
-fn test_default_capacities_are_non_zero() {
-    let capacities = std::hint::black_box([
-        DEFAULT_BUFFER_CAPACITY,
-        DEFAULT_COMPARE_BUFFER_SIZE,
-        DEFAULT_COPY_BUFFER_SIZE,
-    ]);
-    assert!(capacities.into_iter().all(|capacity| capacity > 0));
+fn test_default_capacities_match_documented_sizes() {
+    assert_eq!(8 * 1024, DEFAULT_BUFFER_CAPACITY);
+    assert_eq!(16 * 1024, DEFAULT_COMPARE_BUFFER_SIZE);
+    assert_eq!(16 * 1024, DEFAULT_COPY_BUFFER_SIZE);
 }

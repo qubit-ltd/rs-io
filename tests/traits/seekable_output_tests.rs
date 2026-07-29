@@ -6,8 +6,9 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use qubit_io::SeekableOutput;
 use std::io::Cursor;
+
+use qubit_io::SeekableOutput;
 
 #[test]
 fn test_cursor_implements_seekable_output() {

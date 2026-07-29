@@ -6,8 +6,9 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use qubit_io::FuturesAsyncRead;
 use std::io::Cursor;
+
+use qubit_io::FuturesAsyncRead;
 
 #[test]
 fn test_futures_async_read_type_is_public() {

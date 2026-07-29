@@ -5,6 +5,9 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
+
+//! Composite buffered-read and seek capability.
+
 use std::io::{
     BufRead,
     Seek,

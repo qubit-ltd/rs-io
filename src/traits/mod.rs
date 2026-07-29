@@ -5,6 +5,9 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
+
+//! Core synchronous, asynchronous, pinned, and seekable I/O traits.
+
 mod async_close;
 mod async_input;
 mod async_output;

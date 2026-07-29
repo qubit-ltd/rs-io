@@ -5,6 +5,12 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
+//! Synchronous and asynchronous item-stream wrappers.
+//!
+//! These adapters add counting, checksumming, transfer limits, tee behavior,
+//! and position restoration while preserving the item-oriented traits of the
+//! wrapped streams.
+
 mod async_checksum_input;
 mod async_checksum_output;
 mod async_counting_input;

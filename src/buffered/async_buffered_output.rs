@@ -151,6 +151,7 @@ where
     ///
     /// Returns the wrapped output.
     #[inline(always)]
+    #[must_use]
     pub fn inner_mut(&mut self) -> &mut O {
         &mut self.inner
     }

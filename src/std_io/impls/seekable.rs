@@ -6,6 +6,8 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
+//! Standard [`Seek`](std::io::Seek) implementations of item seeking traits.
+
 use std::io::{
     Result,
     Seek,
@@ -23,6 +25,16 @@ where
     type Unit = u8;
 
     /// Seeks using the standard byte offset semantics.
+    ///
+    /// # Parameters
+    ///
+    /// - `position`: Standard-library seek origin and byte offset.
+    ///
+    /// # Returns
+    ///
+    /// The resulting byte offset from the start of the stream.
+    ///
+    /// # Errors
     ///
     /// Returns the error reported by the standard seeker.
     #[inline(always)]

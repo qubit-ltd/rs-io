@@ -86,6 +86,7 @@ where
     ///
     /// Returns the wrapped asynchronous byte input.
     #[inline(always)]
+    #[must_use]
     pub fn inner_mut(&mut self) -> &mut I {
         &mut self.inner
     }
@@ -110,6 +111,7 @@ where
     ///
     /// Returns the current hasher state mutably.
     #[inline(always)]
+    #[must_use]
     pub fn hasher_mut(&mut self) -> &mut H {
         &mut self.hasher
     }

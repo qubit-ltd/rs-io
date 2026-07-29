@@ -16,8 +16,15 @@ use super::async_contract_error::AsyncContractError;
 
 /// Normalizes error kinds forbidden by the asynchronous I/O contract.
 ///
-/// Returns InvalidData with contract context for WouldBlock and Interrupted;
-/// returns every other error unchanged.
+/// # Parameters
+///
+/// - `error`: Error reported by an asynchronous I/O implementation.
+///
+/// # Returns
+///
+/// Returns an [`ErrorKind::InvalidData`] error retaining the original error for
+/// [`ErrorKind::WouldBlock`] and [`ErrorKind::Interrupted`]. Returns every other
+/// error unchanged.
 #[must_use]
 pub(crate) fn normalize_async_error(error: Error) -> Error {
     match error.kind() {
@@ -41,7 +48,18 @@ pub(crate) fn normalize_async_error(error: Error) -> Error {
 
 /// Validates a count reported by an input implementation.
 ///
-/// Returns InvalidData when read exceeds requested.
+/// # Parameters
+///
+/// - `read`: Item count reported by the implementation.
+/// - `requested`: Maximum item count requested by the caller.
+///
+/// # Returns
+///
+/// Returns `Ok(())` when `read` does not exceed `requested`.
+///
+/// # Errors
+///
+/// Returns [`ErrorKind::InvalidData`] when `read` exceeds `requested`.
 #[inline]
 pub(crate) fn validate_read_count(read: usize, requested: usize) -> Result<()> {
     if read > requested {
@@ -57,7 +75,18 @@ pub(crate) fn validate_read_count(read: usize, requested: usize) -> Result<()> {
 
 /// Validates a count reported by an output implementation.
 ///
-/// Returns InvalidData when written exceeds requested.
+/// # Parameters
+///
+/// - `written`: Item count reported by the implementation.
+/// - `requested`: Maximum item count requested by the caller.
+///
+/// # Returns
+///
+/// Returns `Ok(())` when `written` does not exceed `requested`.
+///
+/// # Errors
+///
+/// Returns [`ErrorKind::InvalidData`] when `written` exceeds `requested`.
 #[inline]
 pub(crate) fn validate_write_count(
     written: usize,

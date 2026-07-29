@@ -444,7 +444,7 @@ where
     /// valid range inside `input`, that the addition does not overflow, that
     /// `count <= self.spare_capacity()`, and that the source range does not
     /// overlap with this buffer's destination range.
-    #[inline(always)]
+    #[inline]
     pub unsafe fn copy_from(
         &mut self,
         input: &[T],
@@ -486,7 +486,7 @@ where
     /// a valid range inside `output`, that the addition does not overflow, that
     /// `count <= self.available()`, and that the source range does not overlap
     /// with the destination range.
-    #[inline(always)]
+    #[inline]
     pub unsafe fn copy_to(
         &mut self,
         output: &mut [T],

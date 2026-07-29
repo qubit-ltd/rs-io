@@ -6,12 +6,6 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use super::support_tests::TestInput;
-use super::support_tests::{
-    PollResult,
-    ScriptedInput,
-};
-use qubit_io::ReadFullyFuture;
 use std::{
     future::Future,
     io::ErrorKind,
@@ -26,6 +20,13 @@ use std::{
         Waker,
     },
 };
+
+use super::support_tests::{
+    PollResult,
+    ScriptedInput,
+    TestInput,
+};
+use qubit_io::ReadFullyFuture;
 
 #[test]
 fn test_read_fully_future_type_is_public() {
@@ -129,7 +130,7 @@ fn test_read_fully_future_pauses_when_ready_budget_is_exhausted() {
         }
         Poll::Ready(Err(error)) => {
             panic!(
-                "read-fuly future should complete after second poll, got error {error}"
+                "read-fully future should complete after second poll, got error {error}"
             )
         }
     }

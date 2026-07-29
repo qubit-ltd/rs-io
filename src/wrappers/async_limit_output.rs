@@ -118,6 +118,7 @@ impl<O> AsyncLimitOutput<O> {
     ///
     /// Returns the wrapped asynchronous output.
     #[inline(always)]
+    #[must_use]
     pub fn inner_mut(&mut self) -> &mut O {
         &mut self.inner
     }

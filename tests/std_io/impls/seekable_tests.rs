@@ -6,6 +6,8 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
+//! Tests for the standard [`Seek`](std::io::Seek) bridge to [`Seekable`].
+
 use qubit_io::Seekable;
 use std::io::Cursor;
 

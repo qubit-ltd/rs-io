@@ -82,6 +82,7 @@ impl<O> CountingOutput<O> {
     ///
     /// Returns mutable access to the wrapped output.
     #[inline(always)]
+    #[must_use]
     pub fn inner_mut(&mut self) -> &mut O {
         &mut self.inner
     }
@@ -122,12 +123,26 @@ where
     type Item = O::Item;
 
     /// Returns the wrapped output's buffering declaration.
+    ///
+    /// # Returns
+    ///
+    /// Returns whether the wrapped output reports itself as buffered.
     #[inline(always)]
     fn is_buffered(&self) -> bool {
         self.inner.is_buffered()
     }
 
     /// Writes items and counts only a successful, validated result.
+    ///
+    /// # Parameters
+    ///
+    /// - `input`: Source item slice.
+    /// - `index`: Starting source index.
+    /// - `count`: Maximum number of items to write.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of items written and added to the counter.
     ///
     /// # Errors
     ///
@@ -137,7 +152,7 @@ where
     /// # Safety
     ///
     /// `index..index + count` must be a valid range in `input`.
-    #[inline(always)]
+    #[inline]
     unsafe fn write_unchecked(
         &mut self,
         input: &[Self::Item],
@@ -152,6 +167,14 @@ where
     }
 
     /// Flushes the wrapped output.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` after the wrapped output is flushed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error reported by the wrapped output.
     #[inline(always)]
     fn flush(&mut self) -> io::Result<()> {
         self.inner.flush()
@@ -166,6 +189,18 @@ where
     type Unit = O::Unit;
 
     /// Seeks the wrapped output without changing the item count.
+    ///
+    /// # Parameters
+    ///
+    /// - `position`: Target stream position.
+    ///
+    /// # Returns
+    ///
+    /// Returns the resulting absolute stream position.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error reported by the wrapped output.
     #[inline(always)]
     fn seek_to(&mut self, position: SeekFrom) -> io::Result<u64> {
         self.inner.seek_to(position)
