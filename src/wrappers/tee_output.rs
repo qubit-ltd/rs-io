@@ -71,7 +71,14 @@ impl<P, B> TeeOutput<P, B> {
         &mut self.branch
     }
 
-    /// Consumes this wrapper and returns its primary and branch outputs.
+    /// Consumes this wrapper without flushing either output.
+    ///
+    /// This method performs no I/O. Any buffering owned by the returned primary
+    /// or branch output remains pending and unchanged.
+    ///
+    /// # Returns
+    ///
+    /// Returns the primary output and branch output.
     #[inline(always)]
     #[must_use]
     pub fn into_parts(self) -> (P, B) {

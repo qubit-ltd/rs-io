@@ -249,12 +249,12 @@ where
 
     /// Consumes this buffered output without flushing pending items.
     ///
-    /// This method performs no I/O. Pending items that have been accepted into
-    /// the internal buffer but not written to the wrapped writer remain in the
-    /// readable window of the returned buffer. Call [`Self::flush`] first for
-    /// normal completion; a successful flush leaves that buffer empty. Calling
-    /// this method first transfers responsibility for pending items to the
-    /// caller.
+    /// This method does not call [`Self::flush`] and performs no I/O. Pending
+    /// items that have been accepted into the internal buffer but not written
+    /// to the wrapped writer remain in the readable window of the returned
+    /// buffer. Call [`Self::flush`] first for normal completion; a successful
+    /// flush leaves that buffer empty. Calling this method first transfers
+    /// responsibility for pending items to the caller.
     ///
     /// # Returns
     ///

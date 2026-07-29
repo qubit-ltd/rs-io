@@ -152,7 +152,11 @@ where
         &mut self.hasher
     }
 
-    /// Consumes this wrapper and returns both owned parts.
+    /// Consumes this wrapper without flushing the wrapped output.
+    ///
+    /// This method does not call [`AsyncOutput::flush_async`] and performs no
+    /// asynchronous I/O. Any buffering owned by the returned output remains
+    /// pending and unchanged.
     ///
     /// # Returns
     ///
