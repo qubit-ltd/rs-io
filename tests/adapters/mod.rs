@@ -6,6 +6,8 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
+mod box_async_input_tests;
+mod box_async_output_tests;
 mod box_input_tests;
 mod box_output_tests;
 #[cfg(feature = "futures-io")]

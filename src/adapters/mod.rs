@@ -9,6 +9,8 @@
 //! Adapters between Qubit I/O traits and boxed, borrowed, futures-io, or Tokio
 //! values.
 
+mod box_async_input;
+mod box_async_output;
 mod box_input;
 mod box_output;
 #[cfg(feature = "futures-io")]
@@ -30,6 +32,8 @@ mod tokio_input;
 #[cfg(feature = "tokio")]
 mod tokio_output;
 
+pub use box_async_input::BoxAsyncInput;
+pub use box_async_output::BoxAsyncOutput;
 pub use box_input::BoxInput;
 pub use box_output::BoxOutput;
 #[cfg(feature = "futures-io")]
