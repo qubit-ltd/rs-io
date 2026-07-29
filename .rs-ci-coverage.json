@@ -5,9 +5,16 @@
       "src/async_io",
       "src/buffered",
       "src/std_io/ext",
+      "src/std_io/impls",
       "src/traits",
       "src/util",
       "src/wrappers"
+    ]
+  },
+  "threshold_exempt_files": {
+    "qubit-io": [
+      "src/std_io/impls/input.rs",
+      "src/std_io/impls/output.rs"
     ]
   }
 }
