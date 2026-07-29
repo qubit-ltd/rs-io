@@ -210,6 +210,15 @@ where
     ///
     /// Pending items are retained and this method performs no I/O.
     ///
+    /// # Parameters
+    ///
+    /// - `capacity`: Minimum total item capacity to reserve.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` after the backing buffer has at least `capacity`
+    /// item slots.
+    ///
     /// # Errors
     ///
     /// Returns the allocation error when the backing buffer cannot grow.
@@ -227,6 +236,10 @@ where
     }
 
     /// Returns the unused capacity in the internal buffer.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of items that can be buffered without draining.
     #[inline(always)]
     #[must_use]
     pub fn spare_capacity(&self) -> usize {
@@ -237,6 +250,11 @@ where
     ///
     /// Call [`Self::advance`] after writing initialized items into the returned
     /// spare range.
+    ///
+    /// # Returns
+    ///
+    /// Returns the backing storage together with the first and past-the-end
+    /// indexes of its spare range.
     #[inline(always)]
     #[must_use]
     pub fn spare_raw_parts_mut(&mut self) -> (&mut [O::Item], usize, usize) {
@@ -244,6 +262,10 @@ where
     }
 
     /// Advances the pending-item limit without checking bounds.
+    ///
+    /// # Parameters
+    ///
+    /// - `count`: Number of initialized spare items to mark as pending.
     ///
     /// # Safety
     ///
@@ -259,6 +281,16 @@ where
     }
 
     /// Polls delivery of pending items when `count` spare items are needed.
+    ///
+    /// # Parameters
+    ///
+    /// - `cx`: Task context used to register a wake-up.
+    /// - `count`: Minimum number of spare item slots to make available.
+    ///
+    /// # Returns
+    ///
+    /// Returns a ready success when the requested spare capacity is available,
+    /// or [`Poll::Pending`] while the wrapped output is not ready.
     ///
     /// # Errors
     ///
@@ -348,10 +380,21 @@ where
     /// `count` more items.
     ///
     /// Pending items are written to the wrapped output when necessary; this
-    /// does not flush the wrapped output itself. Returns `InvalidInput`
-    /// when `count` exceeds the buffer capacity, `WriteZero` when the
-    /// wrapped output makes no progress, or forwards errors from the wrapped
-    /// output.
+    /// does not flush the wrapped output itself.
+    ///
+    /// # Parameters
+    ///
+    /// - `count`: Minimum number of spare item slots to make available.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` when the requested spare capacity is available.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ErrorKind::InvalidInput`] when `count` exceeds the buffer
+    /// capacity, [`ErrorKind::WriteZero`] when the wrapped output makes no
+    /// progress, or an error from the wrapped output.
     pub async fn ensure_spare_capacity_async(
         &mut self,
         count: usize,

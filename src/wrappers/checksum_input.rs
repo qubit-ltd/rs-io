@@ -42,12 +42,25 @@ where
     H: Hasher,
 {
     /// Creates a checksum input around `inner` and `hasher`.
+    ///
+    /// # Parameters
+    ///
+    /// - `inner`: Input that supplies bytes.
+    /// - `hasher`: Hasher updated with successfully returned bytes.
+    ///
+    /// # Returns
+    ///
+    /// Returns a wrapper with the supplied input and hasher.
     #[inline(always)]
     pub const fn new(inner: I, hasher: H) -> Self {
         Self { inner, hasher }
     }
 
     /// Returns the current checksum value.
+    ///
+    /// # Returns
+    ///
+    /// Returns the value reported by the wrapped hasher.
     #[inline(always)]
     #[must_use]
     pub fn checksum(&self) -> u64 {
@@ -55,6 +68,10 @@ where
     }
 
     /// Returns a shared reference to the wrapped input.
+    ///
+    /// # Returns
+    ///
+    /// Returns the wrapped input without allowing mutation.
     #[inline(always)]
     #[must_use]
     pub const fn inner(&self) -> &I {
@@ -64,12 +81,20 @@ where
     /// Returns mutable access to the wrapped input.
     ///
     /// Reads made through the returned reference bypass the hasher.
+    ///
+    /// # Returns
+    ///
+    /// Returns mutable access to the wrapped input.
     #[inline(always)]
     pub fn inner_mut(&mut self) -> &mut I {
         &mut self.inner
     }
 
     /// Returns a shared reference to the wrapped hasher.
+    ///
+    /// # Returns
+    ///
+    /// Returns the wrapped hasher without allowing mutation.
     #[inline(always)]
     #[must_use]
     pub const fn hasher(&self) -> &H {
@@ -80,12 +105,20 @@ where
     ///
     /// Direct changes become part of the checksum state exposed by this
     /// wrapper.
+    ///
+    /// # Returns
+    ///
+    /// Returns mutable access to the wrapped hasher.
     #[inline(always)]
     pub fn hasher_mut(&mut self) -> &mut H {
         &mut self.hasher
     }
 
     /// Consumes this wrapper and returns its input and hasher.
+    ///
+    /// # Returns
+    ///
+    /// Returns the wrapped input and hasher.
     #[inline(always)]
     #[must_use]
     pub fn into_parts(self) -> (I, H) {

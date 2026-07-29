@@ -37,12 +37,25 @@ pub struct SyncSeekTeeInput<I, B> {
 
 impl<I, B> SyncSeekTeeInput<I, B> {
     /// Creates a synchronized-seek tee input.
+    ///
+    /// # Parameters
+    ///
+    /// - `inner`: Source input.
+    /// - `branch`: Seekable output that receives mirrored items.
+    ///
+    /// # Returns
+    ///
+    /// Returns a wrapper that keeps the branch position synchronized on seeks.
     #[inline(always)]
     pub const fn new(inner: I, branch: B) -> Self {
         Self { inner, branch }
     }
 
     /// Returns a shared reference to the source input.
+    ///
+    /// # Returns
+    ///
+    /// Returns the source input without allowing mutation.
     #[inline(always)]
     #[must_use]
     pub const fn inner(&self) -> &I {
@@ -52,12 +65,20 @@ impl<I, B> SyncSeekTeeInput<I, B> {
     /// Returns mutable access to the source input.
     ///
     /// Direct reads and seeks bypass branch synchronization.
+    ///
+    /// # Returns
+    ///
+    /// Returns mutable access to the source input.
     #[inline(always)]
     pub fn inner_mut(&mut self) -> &mut I {
         &mut self.inner
     }
 
     /// Returns a shared reference to the branch output.
+    ///
+    /// # Returns
+    ///
+    /// Returns the branch output without allowing mutation.
     #[inline(always)]
     #[must_use]
     pub const fn branch(&self) -> &B {
@@ -67,12 +88,20 @@ impl<I, B> SyncSeekTeeInput<I, B> {
     /// Returns mutable access to the branch output.
     ///
     /// Direct operations can make the branch diverge from the source.
+    ///
+    /// # Returns
+    ///
+    /// Returns mutable access to the branch output.
     #[inline(always)]
     pub fn branch_mut(&mut self) -> &mut B {
         &mut self.branch
     }
 
     /// Consumes this wrapper and returns its source and branch.
+    ///
+    /// # Returns
+    ///
+    /// Returns the source input and branch output.
     #[inline(always)]
     #[must_use]
     pub fn into_parts(self) -> (I, B) {

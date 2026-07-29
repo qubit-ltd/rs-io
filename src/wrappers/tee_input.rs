@@ -38,12 +38,30 @@ pub struct TeeInput<I, B> {
 
 impl<I, B> TeeInput<I, B> {
     /// Creates a tee input around `inner` and `branch`.
+    ///
+    /// # Parameters
+    ///
+    /// - `inner`: Source input.
+    /// - `branch`: Output that receives mirrored items.
+    ///
+    /// # Returns
+    ///
+    /// Returns a wrapper that mirrors successfully returned items.
     #[inline(always)]
     pub const fn new(inner: I, branch: B) -> Self {
         Self { inner, branch }
     }
 
     /// Creates a tee input whose branch position follows source seeks.
+    ///
+    /// # Parameters
+    ///
+    /// - `inner`: Source input.
+    /// - `branch`: Seekable output that receives mirrored items.
+    ///
+    /// # Returns
+    ///
+    /// Returns a synchronized-seek tee input.
     #[inline(always)]
     pub const fn with_sync_branch_seek(
         inner: I,
@@ -53,6 +71,10 @@ impl<I, B> TeeInput<I, B> {
     }
 
     /// Returns a shared reference to the source input.
+    ///
+    /// # Returns
+    ///
+    /// Returns the source input without allowing mutation.
     #[inline(always)]
     #[must_use]
     pub const fn inner(&self) -> &I {
@@ -62,12 +84,20 @@ impl<I, B> TeeInput<I, B> {
     /// Returns mutable access to the source input.
     ///
     /// Reads and seeks made through the returned reference bypass the branch.
+    ///
+    /// # Returns
+    ///
+    /// Returns mutable access to the source input.
     #[inline(always)]
     pub fn inner_mut(&mut self) -> &mut I {
         &mut self.inner
     }
 
     /// Returns a shared reference to the branch output.
+    ///
+    /// # Returns
+    ///
+    /// Returns the branch output without allowing mutation.
     #[inline(always)]
     #[must_use]
     pub const fn branch(&self) -> &B {
@@ -77,12 +107,20 @@ impl<I, B> TeeInput<I, B> {
     /// Returns mutable access to the branch output.
     ///
     /// Direct writes can make branch content diverge from the source.
+    ///
+    /// # Returns
+    ///
+    /// Returns mutable access to the branch output.
     #[inline(always)]
     pub fn branch_mut(&mut self) -> &mut B {
         &mut self.branch
     }
 
     /// Consumes this wrapper and returns the source input and branch output.
+    ///
+    /// # Returns
+    ///
+    /// Returns the source input and branch output.
     #[inline(always)]
     #[must_use]
     pub fn into_parts(self) -> (I, B) {
