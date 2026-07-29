@@ -165,7 +165,7 @@ Named async futures retain their multi-poll state. Before dropping a pending `Re
 
 ## 7. Case study: Map/Reduce records without byte plumbing
 
-An item stream can carry fixed-layout business records. The mapper below does not know whether records originated from an in-memory partition, a file-backed engine, or a network deserializer. The complete checked program, including its in-memory adapters and assertions, is [examples/typed_records.rs](../examples/typed_records.rs).
+An item stream can carry typed business records. The mapper below does not know whether records originated from an in-memory partition, a file-backed engine, or a network deserializer. The complete checked program, including its in-memory adapters and assertions, is [examples/typed_records.rs](../examples/typed_records.rs).
 
 ```rust
 use std::io;
