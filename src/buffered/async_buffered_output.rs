@@ -155,11 +155,13 @@ where
         &mut self.inner
     }
 
-    /// Consumes this wrapper without performing asynchronous I/O.
+    /// Consumes this wrapper without flushing the wrapped output.
     ///
-    /// Call [`AsyncOutput::flush_async`] before this method for normal
-    /// completion. Otherwise, the returned buffer contains the pending items
-    /// that the caller must write before continuing the logical stream.
+    /// This method does not call [`AsyncOutput::flush_async`] and performs no
+    /// asynchronous I/O. Call [`AsyncOutput::flush_async`] before this method
+    /// for normal completion. Otherwise, the returned buffer contains the
+    /// pending items that the caller must write before continuing the logical
+    /// stream.
     ///
     /// # Returns
     ///

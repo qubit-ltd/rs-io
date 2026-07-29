@@ -85,7 +85,14 @@ where
         &mut self.hasher
     }
 
-    /// Consumes this wrapper and returns its output and hasher.
+    /// Consumes this wrapper without flushing the wrapped output.
+    ///
+    /// This method performs no I/O. Any buffering owned by the returned output
+    /// remains pending and unchanged.
+    ///
+    /// # Returns
+    ///
+    /// Returns the wrapped output and its hasher state.
     #[inline(always)]
     #[must_use]
     pub fn into_parts(self) -> (O, H) {
