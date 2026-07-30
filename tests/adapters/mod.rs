@@ -10,25 +10,25 @@ mod box_async_input_tests;
 mod box_async_output_tests;
 mod box_input_tests;
 mod box_output_tests;
-#[cfg(feature = "futures-io")]
+#[cfg(all(feature = "futures-io", not(miri)))]
 mod futures_async_read_tests;
-#[cfg(feature = "futures-io")]
+#[cfg(all(feature = "futures-io", not(miri)))]
 mod futures_async_write_tests;
-#[cfg(feature = "futures-io")]
+#[cfg(all(feature = "futures-io", not(miri)))]
 mod futures_input_tests;
-#[cfg(feature = "futures-io")]
+#[cfg(all(feature = "futures-io", not(miri)))]
 mod futures_io_tests;
-#[cfg(feature = "futures-io")]
+#[cfg(all(feature = "futures-io", not(miri)))]
 mod futures_output_tests;
 mod input_ref_tests;
 mod output_ref_tests;
-#[cfg(feature = "tokio")]
+#[cfg(all(feature = "tokio", not(miri)))]
 mod tokio_async_read_tests;
-#[cfg(feature = "tokio")]
+#[cfg(all(feature = "tokio", not(miri)))]
 mod tokio_async_write_tests;
-#[cfg(feature = "tokio")]
+#[cfg(all(feature = "tokio", not(miri)))]
 mod tokio_input_tests;
-#[cfg(feature = "tokio")]
+#[cfg(all(feature = "tokio", not(miri)))]
 mod tokio_output_tests;
-#[cfg(feature = "tokio")]
+#[cfg(all(feature = "tokio", not(miri)))]
 mod tokio_tests;

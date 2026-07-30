@@ -48,14 +48,14 @@ pub use adapters::{
     InputRef,
     OutputRef,
 };
-#[cfg(feature = "futures-io")]
+#[cfg(all(feature = "futures-io", not(miri)))]
 pub use adapters::{
     FuturesAsyncRead,
     FuturesAsyncWrite,
     FuturesInput,
     FuturesOutput,
 };
-#[cfg(feature = "tokio")]
+#[cfg(all(feature = "tokio", not(miri)))]
 pub use adapters::{
     TokioAsyncRead,
     TokioAsyncWrite,
