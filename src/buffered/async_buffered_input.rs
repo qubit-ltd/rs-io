@@ -68,8 +68,8 @@ where
     ///
     /// # Panics
     ///
-    /// Panics if `I::Item::default()` panics or the default backing length
-    /// exceeds [`Vec`]'s supported capacity.
+    /// Panics if `I::Item::default()` or `I::Item::clone()` panics, or the
+    /// default backing length exceeds [`Vec`]'s supported capacity.
     #[inline(always)]
     pub fn new(inner: I) -> Self {
         Self::with_capacity(inner, DEFAULT_BUFFER_CAPACITY)
@@ -88,8 +88,8 @@ where
     ///
     /// # Panics
     ///
-    /// Panics if `I::Item::default()` panics or the requested backing length
-    /// exceeds [`Vec`]'s supported capacity.
+    /// Panics if `I::Item::default()` or `I::Item::clone()` panics, or the
+    /// requested backing length exceeds [`Vec`]'s supported capacity.
     #[inline]
     pub fn with_capacity(inner: I, capacity: usize) -> Self {
         Self {
@@ -117,7 +117,7 @@ where
     /// # Panics
     ///
     /// Panics if initializing the backing buffer requires
-    /// `I::Item::default()` and it panics.
+    /// `I::Item::default()` or `I::Item::clone()` and either operation panics.
     #[inline]
     pub fn try_with_capacity(
         inner: I,
@@ -222,8 +222,8 @@ where
     ///
     /// # Panics
     ///
-    /// Panics if growing the backing buffer requires `I::Item::default()` and
-    /// it panics.
+    /// Panics if growing the backing buffer requires `I::Item::default()` or
+    /// `I::Item::clone()` and either operation panics.
     #[inline(always)]
     pub fn try_reserve_capacity(
         &mut self,
