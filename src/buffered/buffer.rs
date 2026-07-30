@@ -162,7 +162,10 @@ where
     /// Panics if growing the backing storage requires `T::default()` and it
     /// panics.
     #[inline]
-    pub fn try_reserve_capacity(&mut self, capacity: usize) -> Result<(), TryReserveError> {
+    pub fn try_reserve_capacity(
+        &mut self,
+        capacity: usize,
+    ) -> Result<(), TryReserveError> {
         if capacity <= self.data.len() {
             return Ok(());
         }
@@ -431,7 +434,12 @@ where
     /// `count <= self.spare_capacity()`, and that the source range does not
     /// overlap with this buffer's destination range.
     #[inline]
-    pub unsafe fn copy_from(&mut self, input: &[T], input_index: usize, count: usize) {
+    pub unsafe fn copy_from(
+        &mut self,
+        input: &[T],
+        input_index: usize,
+        count: usize,
+    ) {
         debug_assert!(
             input_index <= input.len() && count <= input.len() - input_index,
             "unchecked source range exceeds input buffer"
@@ -473,9 +481,15 @@ where
     /// `count <= self.available()`, and that the source range does not overlap
     /// with the destination range.
     #[inline]
-    pub unsafe fn copy_to(&mut self, output: &mut [T], output_index: usize, count: usize) {
+    pub unsafe fn copy_to(
+        &mut self,
+        output: &mut [T],
+        output_index: usize,
+        count: usize,
+    ) {
         debug_assert!(
-            output_index <= output.len() && count <= output.len() - output_index,
+            output_index <= output.len()
+                && count <= output.len() - output_index,
             "unchecked destination range exceeds output buffer"
         );
         debug_assert!(
@@ -485,7 +499,8 @@ where
         unsafe {
             let position = self.position;
             let source = self.data.get_unchecked(position..position + count);
-            let output = output.get_unchecked_mut(output_index..output_index + count);
+            let output =
+                output.get_unchecked_mut(output_index..output_index + count);
             output.clone_from_slice(source);
             // SAFETY: The caller guarantees that the cloned range fits the
             // readable window, and the position advances only after cloning

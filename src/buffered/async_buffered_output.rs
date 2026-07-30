@@ -9,14 +9,25 @@
 use std::{
     collections::TryReserveError,
     future::poll_fn,
-    io::{self, Error, ErrorKind},
+    io::{
+        self,
+        Error,
+        ErrorKind,
+    },
     pin::Pin,
-    task::{Context, Poll},
+    task::{
+        Context,
+        Poll,
+    },
 };
 
 use crate::{
-    AsyncClose, AsyncOutput, Buffer, async_io::MAX_READY_OPERATIONS_PER_POLL,
-    buffered::DEFAULT_BUFFER_CAPACITY, traits::normalize_async_error,
+    AsyncClose,
+    AsyncOutput,
+    Buffer,
+    async_io::MAX_READY_OPERATIONS_PER_POLL,
+    buffered::DEFAULT_BUFFER_CAPACITY,
+    traits::normalize_async_error,
 };
 
 /// Buffered asynchronous item output.
@@ -111,7 +122,10 @@ where
     /// Panics if initializing the backing buffer requires
     /// `O::Item::default()` and it panics.
     #[inline]
-    pub fn try_with_capacity(inner: O, capacity: usize) -> Result<Self, TryReserveError> {
+    pub fn try_with_capacity(
+        inner: O,
+        capacity: usize,
+    ) -> Result<Self, TryReserveError> {
         Ok(Self {
             inner,
             buffer: Buffer::try_with_capacity(capacity)?,
@@ -215,7 +229,10 @@ where
     /// Panics if growing the backing buffer requires `O::Item::default()` and
     /// it panics.
     #[inline(always)]
-    pub fn try_reserve_capacity(&mut self, capacity: usize) -> Result<(), TryReserveError> {
+    pub fn try_reserve_capacity(
+        &mut self,
+        capacity: usize,
+    ) -> Result<(), TryReserveError> {
         self.buffer.try_reserve_capacity(capacity)
     }
 
@@ -313,7 +330,10 @@ where
     ///
     /// Returns [`io::ErrorKind::WriteZero`] if the inner output accepts no
     /// pending item. Other errors are propagated from the inner output.
-    fn poll_drain_buffer(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    fn poll_drain_buffer(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<io::Result<()>> {
         // SAFETY: `inner` is never moved after projecting from this pinned
         // wrapper. `buffer` does not structurally pin any value.
         let this = unsafe { self.as_mut().get_unchecked_mut() };
@@ -336,7 +356,8 @@ where
                         this.buffer.consume(written);
                     }
                     ready_operations += 1;
-                    if !this.buffer.is_empty() && ready_operations >= MAX_READY_OPERATIONS_PER_POLL
+                    if !this.buffer.is_empty()
+                        && ready_operations >= MAX_READY_OPERATIONS_PER_POLL
                     {
                         cx.waker().wake_by_ref();
                         return Poll::Pending;
@@ -375,8 +396,12 @@ where
     /// Returns [`ErrorKind::InvalidInput`] when `count` exceeds the buffer
     /// capacity, [`ErrorKind::WriteZero`] when the wrapped output makes no
     /// progress, or an error from the wrapped output.
-    pub async fn ensure_spare_capacity_async(&mut self, count: usize) -> io::Result<()> {
-        poll_fn(|cx| Pin::new(&mut *self).poll_ensure_spare_capacity(cx, count)).await
+    pub async fn ensure_spare_capacity_async(
+        &mut self,
+        count: usize,
+    ) -> io::Result<()> {
+        poll_fn(|cx| Pin::new(&mut *self).poll_ensure_spare_capacity(cx, count))
+            .await
     }
 }
 
@@ -499,7 +524,10 @@ where
     /// an error reported by the wrapped output. Invalid asynchronous error
     /// kinds from the flush operation are normalized to
     /// [`io::ErrorKind::InvalidData`].
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    fn poll_flush(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<io::Result<()>> {
         match self.as_mut().poll_drain_buffer(cx) {
             Poll::Ready(Ok(())) => {}
             Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
@@ -536,7 +564,10 @@ where
     /// an error reported by the wrapped output. Invalid asynchronous error
     /// kinds from the close operation are normalized to
     /// [`io::ErrorKind::InvalidData`].
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    fn poll_close(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<io::Result<()>> {
         match self.as_mut().poll_drain_buffer(cx) {
             Poll::Ready(Ok(())) => {}
             Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
