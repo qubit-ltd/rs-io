@@ -12,11 +12,7 @@
 #[cfg(coverage)]
 use std::cell::Cell;
 use std::collections::TryReserveError;
-use std::io::{
-    Error,
-    ErrorKind,
-    Result,
-};
+use std::io::{Error, ErrorKind, Result};
 
 /// Converts a fallible allocation error into an I/O error.
 ///
@@ -230,7 +226,7 @@ pub fn try_reserve_string(
 ///
 /// # Type Parameters
 ///
-/// - `T`: Copyable element type stored by the vector.
+/// - `T`: Cloneable element type stored by the vector.
 ///
 /// # Parameters
 ///
@@ -248,7 +244,7 @@ pub fn try_reserve_string(
 #[inline]
 pub(crate) fn create_vec<T>(len: usize, fill: T) -> Result<Vec<T>>
 where
-    T: Copy,
+    T: Clone,
 {
     let mut buffer = Vec::new();
     try_reserve_vec(&mut buffer, len).map_err(allocation_error)?;

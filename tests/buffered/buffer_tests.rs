@@ -68,8 +68,8 @@ fn test_with_capacity_initializes_empty_window() {
 
 #[test]
 fn test_try_with_capacity_initializes_empty_window() {
-    let buffer = Buffer::<u8>::try_with_capacity(0)
-        .expect("fallible buffer allocation should succeed");
+    let buffer =
+        Buffer::<u8>::try_with_capacity(0).expect("fallible buffer allocation should succeed");
 
     assert_eq!(1, buffer.capacity());
     assert!(buffer.is_empty());
@@ -192,6 +192,33 @@ fn test_compact_moves_unread_tail_to_front() {
     assert_eq!(3, buffer.available());
     assert_eq!(3, buffer.spare_capacity());
     assert_eq!(b"cde", buffer.readable());
+}
+
+#[test]
+fn test_buffer_supports_clone_only_items() {
+    let mut buffer = Buffer::<String>::with_capacity(4);
+    let input = [
+        String::from("alpha"),
+        String::from("beta"),
+        String::from("gamma"),
+    ];
+
+    // SAFETY: The source and spare ranges contain three distinct elements.
+    unsafe {
+        buffer.copy_from(&input, 0, input.len());
+        buffer.consume(1);
+    }
+    buffer.compact();
+
+    let mut output = vec![String::default(); 2];
+    let output_len = output.len();
+    // SAFETY: The readable range and the output range each contain two items.
+    unsafe {
+        buffer.copy_to(&mut output, 0, output_len);
+    }
+
+    assert_eq!(output, ["beta", "gamma"]);
+    assert!(buffer.is_empty());
 }
 
 #[test]

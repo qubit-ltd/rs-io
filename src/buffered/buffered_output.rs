@@ -10,26 +10,12 @@ use std::mem::ManuallyDrop;
 use std::ptr;
 use std::{
     collections::TryReserveError,
-    io::{
-        Error,
-        ErrorKind,
-        Result,
-        SeekFrom,
-    },
+    io::{Error, ErrorKind, Result, SeekFrom},
 };
 
-use crate::buffered::{
-    DEFAULT_BUFFER_CAPACITY,
-    EnsuredBufferedOutput,
-};
+use crate::buffered::{DEFAULT_BUFFER_CAPACITY, EnsuredBufferedOutput};
 use crate::traits::validate_write_count;
-use crate::util::UncheckedSlice;
-use crate::{
-    Buffer,
-    Output,
-    Seekable,
-    SeekableOutput,
-};
+use crate::{Buffer, Output, Seekable, SeekableOutput};
 
 /// Buffered item output over a wrapped output sink.
 ///
@@ -57,7 +43,7 @@ use crate::{
 pub struct BufferedOutput<O>
 where
     O: Output,
-    O::Item: Copy + Default,
+    O::Item: Clone + Default,
 {
     /// Output receiving buffered items.
     inner: O,
@@ -70,7 +56,7 @@ where
 impl<O> BufferedOutput<O>
 where
     O: Output,
-    O::Item: Copy + Default,
+    O::Item: Clone + Default,
 {
     /// Creates a buffered item output with the default capacity.
     ///
@@ -594,8 +580,7 @@ where
     where
         O: SeekableOutput,
     {
-        let position =
-            Seekable::seek_to(&mut self.inner, SeekFrom::Current(0))?;
+        let position = Seekable::seek_to(&mut self.inner, SeekFrom::Current(0))?;
         position
             .checked_add(self.buffer.available() as u64)
             .ok_or_else(|| {
@@ -666,11 +651,8 @@ where
             // range maintained by `Buffer`.
             self.panicked = true;
             let result = unsafe {
-                self.inner.write_unchecked(
-                    self.buffer.data(),
-                    position,
-                    available,
-                )
+                self.inner
+                    .write_unchecked(self.buffer.data(), position, available)
             };
             self.panicked = false;
             match result {
@@ -682,8 +664,7 @@ where
                     ));
                 }
                 Ok(written) => {
-                    if let Err(error) = validate_write_count(written, available)
-                    {
+                    if let Err(error) = validate_write_count(written, available) {
                         self.buffer.compact();
                         return Err(error);
                     }
@@ -723,25 +704,11 @@ where
     /// source range does not overlap with the destination range in the internal
     /// buffer.
     #[inline]
-    unsafe fn write_to_buffer(
-        &mut self,
-        input: &[O::Item],
-        input_index: usize,
-        count: usize,
-    ) {
-        let (destination, destination_index, _) =
-            self.buffer.spare_raw_parts_mut();
-        // SAFETY: The caller guarantees valid source and destination ranges and
-        // that they do not overlap.
+    unsafe fn write_to_buffer(&mut self, input: &[O::Item], input_index: usize, count: usize) {
+        // SAFETY: The caller guarantees valid source and spare destination
+        // ranges, and the buffer advances only after cloning succeeds.
         unsafe {
-            UncheckedSlice::copy_nonoverlapping(
-                input,
-                input_index,
-                destination,
-                destination_index,
-                count,
-            );
-            self.buffer.advance(count);
+            self.buffer.copy_from(input, input_index, count);
         }
     }
 
@@ -774,8 +741,7 @@ where
         count: usize,
     ) -> Result<usize> {
         // SAFETY: The caller guarantees the source range is valid.
-        let written =
-            unsafe { self.inner.write_unchecked(input, input_index, count) }?;
+        let written = unsafe { self.inner.write_unchecked(input, input_index, count) }?;
         validate_write_count(written, count)?;
         Ok(written)
     }
@@ -813,9 +779,7 @@ where
             let remaining = count - written;
             // SAFETY: `written < count`, so this suffix remains inside the
             // caller-validated source range.
-            match unsafe {
-                self.write_inner(input, input_index + written, remaining)
-            } {
+            match unsafe { self.write_inner(input, input_index + written, remaining) } {
                 Ok(0) => {
                     return Err(Error::new(
                         ErrorKind::WriteZero,
@@ -936,7 +900,7 @@ where
 impl<O> Output for BufferedOutput<O>
 where
     O: Output,
-    O::Item: Copy + Default,
+    O::Item: Clone + Default,
 {
     /// Item type accepted by the buffered output.
     type Item = O::Item;
@@ -984,9 +948,7 @@ where
         count: usize,
     ) -> Result<usize> {
         // SAFETY: Forwarded from the trait caller.
-        unsafe {
-            BufferedOutput::write_unchecked(self, input, input_index, count)
-        }
+        unsafe { BufferedOutput::write_unchecked(self, input, input_index, count) }
     }
 
     /// Writes items from the full input slice.
@@ -1042,9 +1004,7 @@ where
         count: usize,
     ) -> Result<()> {
         // SAFETY: Forwarded from the trait caller.
-        unsafe {
-            BufferedOutput::write_fully_unchecked(self, input, index, count)
-        }
+        unsafe { BufferedOutput::write_fully_unchecked(self, input, index, count) }
     }
 
     /// Writes all items from the full input slice through the internal buffer.
@@ -1087,7 +1047,7 @@ where
 impl<O> Seekable for BufferedOutput<O>
 where
     O: SeekableOutput,
-    <O as Output>::Item: Copy + Default,
+    <O as Output>::Item: Clone + Default,
 {
     /// Item unit used for seek offsets.
     type Unit = <O as Output>::Item;
@@ -1115,7 +1075,7 @@ where
 impl<O> Drop for BufferedOutput<O>
 where
     O: Output,
-    O::Item: Copy + Default,
+    O::Item: Clone + Default,
 {
     /// Attempts a best-effort drain unless another wrapped write is unwinding.
     ///

@@ -9,7 +9,6 @@
 use std::collections::TryReserveError;
 
 use crate::try_reserve_vec;
-use crate::util::UncheckedSlice;
 
 /// Low-level contiguous storage with a readable window and spare tail capacity.
 ///
@@ -19,10 +18,9 @@ use crate::util::UncheckedSlice;
 /// advancing the limit.
 ///
 /// The backing storage is fully initialized up front, so `T` is constrained to
-/// [`Copy`] + [`Default`]. This buffer is intended for scalar stream items such
-/// as `u8`, `u32`, or `char`, where default initialization is cheap and is
-/// usually optimized aggressively by the compiler. It is not intended to store
-/// expensive opaque values.
+/// [`Clone`] + [`Default`]. Cloning is used when values enter or leave the
+/// buffer, while default initialization keeps every spare slot valid for the
+/// slice-based stream traits.
 ///
 /// This type is intentionally a low-level, hot-path API. It exposes the full
 /// backing storage through [`Self::data`] and [`Self::data_mut`] so
@@ -64,12 +62,12 @@ use crate::util::UncheckedSlice;
 ///
 /// # Type Parameters
 ///
-/// - `T`: Copyable item type used for initialized backing storage.
+/// - `T`: Cloneable item type used for initialized backing storage.
 #[must_use]
 #[derive(Clone, Debug)]
 pub struct Buffer<T>
 where
-    T: Copy + Default,
+    T: Clone + Default,
 {
     /// Fully initialized backing storage.
     data: Vec<T>,
@@ -81,7 +79,7 @@ where
 
 impl<T> Buffer<T>
 where
-    T: Copy + Default,
+    T: Clone + Default,
 {
     /// Creates an empty buffer with at least the requested capacity.
     ///
@@ -103,7 +101,7 @@ where
     pub fn with_capacity(capacity: usize) -> Self {
         let capacity = capacity.max(1);
         Self {
-            data: vec![T::default(); capacity],
+            data: std::iter::repeat_with(T::default).take(capacity).collect(),
             position: 0,
             limit: 0,
         }
@@ -134,7 +132,7 @@ where
         let capacity = capacity.max(1);
         let mut data = Vec::new();
         try_reserve_vec(&mut data, capacity)?;
-        data.resize(capacity, T::default());
+        data.resize_with(capacity, T::default);
         Ok(Self {
             data,
             position: 0,
@@ -164,16 +162,13 @@ where
     /// Panics if growing the backing storage requires `T::default()` and it
     /// panics.
     #[inline]
-    pub fn try_reserve_capacity(
-        &mut self,
-        capacity: usize,
-    ) -> Result<(), TryReserveError> {
+    pub fn try_reserve_capacity(&mut self, capacity: usize) -> Result<(), TryReserveError> {
         if capacity <= self.data.len() {
             return Ok(());
         }
         let additional = capacity - self.data.len();
         try_reserve_vec(&mut self.data, additional)?;
-        self.data.resize(capacity, T::default());
+        self.data.resize_with(capacity, T::default);
         Ok(())
     }
 
@@ -408,16 +403,7 @@ where
             return;
         }
         if self.position != 0 {
-            // SAFETY: `available` unread elements at `position..limit` fit in
-            // `0..available` after compaction.
-            unsafe {
-                UncheckedSlice::copy_within(
-                    &mut self.data,
-                    self.position,
-                    0,
-                    available,
-                );
-            }
+            self.data[..self.limit].rotate_left(self.position);
         }
         self.position = 0;
         self.limit = available;
@@ -425,7 +411,7 @@ where
 
     /// Copies values from an external slice into the spare tail.
     ///
-    /// The copied values are made readable by advancing the limit by `count`.
+    /// The cloned values are made readable by advancing the limit by `count`.
     ///
     /// # Parameters
     ///
@@ -435,8 +421,8 @@ where
     ///
     /// # Panics
     ///
-    /// Panics in debug builds if the requested input range does not fit or
-    /// `count > self.spare_capacity()`.
+    /// Panics if cloning an input item panics. Debug builds also panic if the
+    /// requested input range does not fit or `count > self.spare_capacity()`.
     ///
     /// # Safety
     ///
@@ -445,29 +431,29 @@ where
     /// `count <= self.spare_capacity()`, and that the source range does not
     /// overlap with this buffer's destination range.
     #[inline]
-    pub unsafe fn copy_from(
-        &mut self,
-        input: &[T],
-        input_index: usize,
-        count: usize,
-    ) {
-        // SAFETY: The caller guarantees the source range and spare destination
-        // range are valid and non-overlapping.
+    pub unsafe fn copy_from(&mut self, input: &[T], input_index: usize, count: usize) {
+        debug_assert!(
+            input_index <= input.len() && count <= input.len() - input_index,
+            "unchecked source range exceeds input buffer"
+        );
+        debug_assert!(
+            count <= self.spare_capacity(),
+            "unchecked copy exceeds spare buffer capacity"
+        );
         unsafe {
-            UncheckedSlice::copy_nonoverlapping(
-                input,
-                input_index,
-                &mut self.data,
-                self.limit,
-                count,
-            );
+            let input = input.get_unchecked(input_index..input_index + count);
+            let limit = self.limit;
+            let destination = self.data.get_unchecked_mut(limit..limit + count);
+            destination.clone_from_slice(input);
+            // SAFETY: The caller guarantees that the cloned range fits the
+            // spare window, and the limit advances only after cloning succeeds.
             self.advance(count);
         }
     }
 
     /// Copies readable values into an external slice.
     ///
-    /// The copied values are consumed by advancing the position by `count`.
+    /// The cloned values are consumed by advancing the position by `count`.
     ///
     /// # Parameters
     ///
@@ -477,8 +463,8 @@ where
     ///
     /// # Panics
     ///
-    /// Panics in debug builds if the requested output range does not fit or
-    /// `count > self.available()`.
+    /// Panics if cloning a readable item panics. Debug builds also panic if the
+    /// requested output range does not fit or `count > self.available()`.
     ///
     /// # Safety
     ///
@@ -487,22 +473,23 @@ where
     /// `count <= self.available()`, and that the source range does not overlap
     /// with the destination range.
     #[inline]
-    pub unsafe fn copy_to(
-        &mut self,
-        output: &mut [T],
-        output_index: usize,
-        count: usize,
-    ) {
-        // SAFETY: The caller guarantees the readable source range and
-        // destination range are valid and non-overlapping.
+    pub unsafe fn copy_to(&mut self, output: &mut [T], output_index: usize, count: usize) {
+        debug_assert!(
+            output_index <= output.len() && count <= output.len() - output_index,
+            "unchecked destination range exceeds output buffer"
+        );
+        debug_assert!(
+            count <= self.available(),
+            "unchecked copy exceeds available buffer items"
+        );
         unsafe {
-            UncheckedSlice::copy_nonoverlapping(
-                &self.data,
-                self.position,
-                output,
-                output_index,
-                count,
-            );
+            let position = self.position;
+            let source = self.data.get_unchecked(position..position + count);
+            let output = output.get_unchecked_mut(output_index..output_index + count);
+            output.clone_from_slice(source);
+            // SAFETY: The caller guarantees that the cloned range fits the
+            // readable window, and the position advances only after cloning
+            // succeeds.
             self.consume(count);
         }
     }

@@ -6,17 +6,9 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Result,
-    SeekFrom,
-};
+use std::io::{Result, SeekFrom};
 
-use crate::{
-    BufferedInput,
-    Input,
-    Seekable,
-    SeekableInput,
-};
+use crate::{BufferedInput, Input, Seekable, SeekableInput};
 
 /// Input value that is guaranteed to report itself as buffered.
 ///
@@ -31,7 +23,7 @@ use crate::{
 pub enum EnsuredBufferedInput<I>
 where
     I: Input,
-    I::Item: Copy + Default,
+    I::Item: Clone + Default,
 {
     /// The original input already reported itself as buffered.
     AlreadyBuffered(
@@ -49,7 +41,7 @@ where
 impl<I> Input for EnsuredBufferedInput<I>
 where
     I: Input,
-    I::Item: Copy + Default,
+    I::Item: Clone + Default,
 {
     /// Item type produced by the selected input.
     type Item = I::Item;
@@ -189,7 +181,7 @@ where
 impl<I> Seekable for EnsuredBufferedInput<I>
 where
     I: SeekableInput,
-    <I as Input>::Item: Copy + Default,
+    <I as Input>::Item: Clone + Default,
 {
     /// Item unit used for seek offsets.
     type Unit = <I as Input>::Item;

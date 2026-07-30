@@ -7,21 +7,10 @@
 // =============================================================================
 use std::cmp::Ordering;
 use std::collections::VecDeque;
-use std::io::{
-    Cursor,
-    Error,
-    ErrorKind,
-    Read,
-    Write,
-};
+use std::io::{Cursor, Error, ErrorKind, Read, Write};
 
 use qubit_io::std_io::ext::ReadExt;
-use qubit_io::{
-    DEFAULT_BUFFER_CAPACITY,
-    Input,
-    Output,
-    Streams,
-};
+use qubit_io::{DEFAULT_BUFFER_CAPACITY, Input, Output, Streams};
 
 struct InterruptedOnceReader {
     interrupted: bool,
@@ -96,10 +85,7 @@ impl Read for InterruptThenEofReader {
         }
         if !self.interrupted {
             self.interrupted = true;
-            return Err(Error::new(
-                ErrorKind::Interrupted,
-                "interrupted at eof",
-            ));
+            return Err(Error::new(ErrorKind::Interrupted, "interrupted at eof"));
         }
         Ok(0)
     }
@@ -128,6 +114,38 @@ impl Read for FailAfterDataReader {
 
 struct ChunkInput {
     chunks: VecDeque<Vec<u16>>,
+}
+
+struct StringItemInput {
+    values: VecDeque<String>,
+}
+
+impl StringItemInput {
+    fn new(values: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        Self {
+            values: values.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl Input for StringItemInput {
+    type Item = String;
+
+    unsafe fn read_unchecked(
+        &mut self,
+        output: &mut [String],
+        index: usize,
+        count: usize,
+    ) -> std::io::Result<usize> {
+        let read = count.min(self.values.len());
+        for destination in &mut output[index..index + read] {
+            *destination = self
+                .values
+                .pop_front()
+                .expect("the read count is bounded by queued values");
+        }
+        Ok(read)
+    }
 }
 
 impl ChunkInput {
@@ -254,6 +272,29 @@ struct CollectOutput {
     values: Vec<u16>,
 }
 
+#[derive(Default)]
+struct StringItemOutput {
+    values: Vec<String>,
+}
+
+impl Output for StringItemOutput {
+    type Item = String;
+
+    unsafe fn write_unchecked(
+        &mut self,
+        input: &[String],
+        index: usize,
+        count: usize,
+    ) -> std::io::Result<usize> {
+        self.values.extend_from_slice(&input[index..index + count]);
+        Ok(count)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
 impl Output for CollectOutput {
     type Item = u16;
 
@@ -331,8 +372,7 @@ fn test_copy_at_most_copies_at_most_requested_bytes() {
     let mut input = Cursor::new(b"abcdef".to_vec());
     let mut output = Vec::new();
 
-    let copied = Streams::copy_at_most(&mut input, &mut output, 4)
-        .expect("copy should succeed");
+    let copied = Streams::copy_at_most(&mut input, &mut output, 4).expect("copy should succeed");
 
     assert_eq!(4, copied);
     assert_eq!(b"abcd", output.as_slice());
@@ -344,8 +384,8 @@ fn test_copy_at_most_returns_partial_count_at_eof() {
     let mut input = Cursor::new(b"abc".to_vec());
     let mut output = Vec::new();
 
-    let copied = Streams::copy_at_most(&mut input, &mut output, 5)
-        .expect("copy should stop at EOF");
+    let copied =
+        Streams::copy_at_most(&mut input, &mut output, 5).expect("copy should stop at EOF");
 
     assert_eq!(3, copied);
     assert_eq!(b"abc", output.as_slice());
@@ -356,8 +396,8 @@ fn test_copy_at_most_zero_bytes_does_not_read() {
     let mut input = PanicOnRead;
     let mut output = Vec::new();
 
-    let copied = Streams::copy_at_most(&mut input, &mut output, 0)
-        .expect("zero-byte copy should succeed");
+    let copied =
+        Streams::copy_at_most(&mut input, &mut output, 0).expect("zero-byte copy should succeed");
 
     assert_eq!(0, copied);
     assert!(output.is_empty());
@@ -404,9 +444,8 @@ fn test_copy_at_most_with_buffer_size_copies_at_most_requested_bytes() {
     let mut input = Cursor::new(b"abcdef".to_vec());
     let mut output = Vec::new();
 
-    let copied =
-        Streams::copy_at_most_with_buffer_size(&mut input, &mut output, 4, 1)
-            .expect("copy should succeed with a caller-selected buffer");
+    let copied = Streams::copy_at_most_with_buffer_size(&mut input, &mut output, 4, 1)
+        .expect("copy should succeed with a caller-selected buffer");
 
     assert_eq!(4, copied);
     assert_eq!(b"abcd", output.as_slice());
@@ -418,13 +457,8 @@ fn test_copy_at_most_with_large_buffer_allocates_only_active_limit() {
     let mut input = Cursor::new(b"a".to_vec());
     let mut output = Vec::new();
 
-    let copied = Streams::copy_at_most_with_buffer_size(
-        &mut input,
-        &mut output,
-        1,
-        usize::MAX,
-    )
-    .expect("copy should allocate only the active one-byte limit");
+    let copied = Streams::copy_at_most_with_buffer_size(&mut input, &mut output, 1, usize::MAX)
+        .expect("copy should allocate only the active one-byte limit");
 
     assert_eq!(1, copied);
     assert_eq!(b"a", output.as_slice());
@@ -435,13 +469,8 @@ fn test_copy_at_most_zero_limit_skips_large_buffer_allocation() {
     let mut input = PanicOnRead;
     let mut output = Vec::new();
 
-    let copied = Streams::copy_at_most_with_buffer_size(
-        &mut input,
-        &mut output,
-        0,
-        usize::MAX,
-    )
-    .expect("zero-byte copy should not allocate its copy buffer");
+    let copied = Streams::copy_at_most_with_buffer_size(&mut input, &mut output, 0, usize::MAX)
+        .expect("zero-byte copy should not allocate its copy buffer");
 
     assert_eq!(0, copied);
     assert!(output.is_empty());
@@ -452,9 +481,8 @@ fn test_copy_at_most_with_buffer_size_rejects_zero_size() {
     let mut input = Cursor::new(b"abc".to_vec());
     let mut output = Vec::new();
 
-    let error =
-        Streams::copy_at_most_with_buffer_size(&mut input, &mut output, 3, 0)
-            .expect_err("zero-sized copy buffers should be rejected");
+    let error = Streams::copy_at_most_with_buffer_size(&mut input, &mut output, 3, 0)
+        .expect_err("zero-sized copy buffers should be rejected");
 
     assert_eq!(ErrorKind::InvalidInput, error.kind());
     assert_eq!(
@@ -468,8 +496,7 @@ fn test_copy_copies_until_eof() {
     let mut input = Cursor::new(b"abcdef".to_vec());
     let mut output = Vec::new();
 
-    let copied =
-        Streams::copy(&mut input, &mut output).expect("copy should reach EOF");
+    let copied = Streams::copy(&mut input, &mut output).expect("copy should reach EOF");
 
     assert_eq!(6, copied);
     assert_eq!(b"abcdef", output.as_slice());
@@ -494,9 +521,8 @@ fn test_copy_functions_work_on_dyn_read_write() {
     let mut output = Vec::new();
     let writer: &mut dyn Write = &mut output;
 
-    let copied =
-        Streams::copy_at_most::<dyn Read, dyn Write>(reader, writer, 3)
-            .expect("dyn copy should succeed");
+    let copied = Streams::copy_at_most::<dyn Read, dyn Write>(reader, writer, 3)
+        .expect("dyn copy should succeed");
 
     assert_eq!(3, copied);
     assert_eq!(b"abc", output.as_slice());
@@ -506,9 +532,8 @@ fn test_copy_functions_work_on_dyn_read_write() {
     let mut output = Vec::new();
     let writer: &mut dyn Write = &mut output;
 
-    let copied =
-        Streams::copy_to_end_limited::<dyn Read, dyn Write>(reader, writer, 3)
-            .expect("dyn end-limited copy should succeed");
+    let copied = Streams::copy_to_end_limited::<dyn Read, dyn Write>(reader, writer, 3)
+        .expect("dyn end-limited copy should succeed");
 
     assert_eq!(3, copied);
     assert_eq!(b"xyz", output.as_slice());
@@ -533,12 +558,8 @@ fn test_copy_to_end_limited_returns_dyn_tail_probe_error() {
     let reader: &mut dyn Read = &mut input;
     let mut output = Vec::new();
 
-    let error = Streams::copy_to_end_limited::<dyn Read, Vec<u8>>(
-        reader,
-        &mut output,
-        0,
-    )
-    .expect_err("dyn tail probe errors should be returned");
+    let error = Streams::copy_to_end_limited::<dyn Read, Vec<u8>>(reader, &mut output, 0)
+        .expect_err("dyn tail probe errors should be returned");
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("read failed", error.to_string());
@@ -689,11 +710,42 @@ fn test_copy_input_to_output_copies_all_remaining_items() {
     let mut input = ChunkInput::new(vec![vec![1, 2], vec![3, 4]]);
     let mut output = CollectOutput::default();
 
-    let copied = Streams::copy_input_to_output(&mut input, &mut output)
-        .expect("item copy should reach EOF");
+    let copied =
+        Streams::copy_input_to_output(&mut input, &mut output).expect("item copy should reach EOF");
 
     assert_eq!(4, copied);
     assert_eq!(&[1, 2, 3, 4], output.values.as_slice());
+}
+
+#[test]
+fn test_copy_item_streams_support_clone_only_items() {
+    let mut input = StringItemInput::new(["alpha", "beta", "gamma"]);
+    let mut output = StringItemOutput::default();
+
+    assert_eq!(
+        3,
+        Streams::copy_input_to_output(&mut input, &mut output)
+            .expect("string item copy should succeed")
+    );
+    assert_eq!(output.values, ["alpha", "beta", "gamma"]);
+
+    let mut input = StringItemInput::new(["delta", "epsilon"]);
+    let mut output = StringItemOutput::default();
+    assert_eq!(
+        1,
+        Streams::copy_input_to_output_at_most(&mut input, &mut output, 1)
+            .expect("bounded string item copy should succeed")
+    );
+    assert_eq!(output.values, ["delta"]);
+
+    let mut input = StringItemInput::new(["zeta", "eta"]);
+    let mut output = StringItemOutput::default();
+    assert_eq!(
+        2,
+        Streams::copy_input_to_output_end_limited(&mut input, &mut output, 2)
+            .expect("length-limited string item copy should succeed")
+    );
+    assert_eq!(output.values, ["zeta", "eta"]);
 }
 
 #[test]
@@ -766,9 +818,8 @@ fn test_copy_input_to_output_at_most_copies_requested_items() {
     let mut input = ChunkInput::new(vec![vec![1, 2], vec![3, 4]]);
     let mut output = CollectOutput::default();
 
-    let copied =
-        Streams::copy_input_to_output_at_most(&mut input, &mut output, 3)
-            .expect("bounded item copy should stop at the limit");
+    let copied = Streams::copy_input_to_output_at_most(&mut input, &mut output, 3)
+        .expect("bounded item copy should stop at the limit");
 
     assert_eq!(3, copied);
     assert_eq!(&[1, 2, 3], output.values.as_slice());
@@ -779,9 +830,8 @@ fn test_copy_input_to_output_at_most_zero_returns_immediately() {
     let mut input = ChunkInput::new(vec![vec![1, 2, 3]]);
     let mut output = CollectOutput::default();
 
-    let copied =
-        Streams::copy_input_to_output_at_most(&mut input, &mut output, 0)
-            .expect("zero-length item copy should succeed");
+    let copied = Streams::copy_input_to_output_at_most(&mut input, &mut output, 0)
+        .expect("zero-length item copy should succeed");
 
     assert_eq!(0, copied);
     assert!(output.values.is_empty());
@@ -792,9 +842,8 @@ fn test_copy_input_to_output_at_most_stops_at_eof() {
     let mut input = ChunkInput::new(vec![vec![1, 2]]);
     let mut output = CollectOutput::default();
 
-    let copied =
-        Streams::copy_input_to_output_at_most(&mut input, &mut output, 10)
-            .expect("bounded item copy should stop at EOF");
+    let copied = Streams::copy_input_to_output_at_most(&mut input, &mut output, 10)
+        .expect("bounded item copy should stop at EOF");
 
     assert_eq!(2, copied);
     assert_eq!(&[1, 2], output.values.as_slice());
@@ -805,9 +854,8 @@ fn test_copy_input_to_output_at_most_returns_read_error() {
     let mut input = FailingItemInput;
     let mut output = CollectOutput::default();
 
-    let error =
-        Streams::copy_input_to_output_at_most(&mut input, &mut output, 3)
-            .expect_err("bounded item copy should propagate read errors");
+    let error = Streams::copy_input_to_output_at_most(&mut input, &mut output, 3)
+        .expect_err("bounded item copy should propagate read errors");
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("read failed", error.to_string());
@@ -822,9 +870,8 @@ fn test_copy_input_to_output_at_most_returns_write_error() {
         fail: true,
     };
 
-    let error =
-        Streams::copy_input_to_output_at_most(&mut input, &mut output, 3)
-            .expect_err("bounded item copy should propagate write errors");
+    let error = Streams::copy_input_to_output_at_most(&mut input, &mut output, 3)
+        .expect_err("bounded item copy should propagate write errors");
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("write failed", error.to_string());
@@ -835,9 +882,8 @@ fn test_copy_input_to_output_at_most_rejects_overridden_read_fully_count() {
     let mut input = OverreportingFullyItemInput;
     let mut output = CollectOutput::default();
 
-    let error =
-        Streams::copy_input_to_output_at_most(&mut input, &mut output, 3)
-            .expect_err("overridden read_fully count should be validated");
+    let error = Streams::copy_input_to_output_at_most(&mut input, &mut output, 3)
+        .expect_err("overridden read_fully count should be validated");
 
     assert_eq!(ErrorKind::InvalidData, error.kind());
     assert!(output.values.is_empty());
@@ -848,9 +894,8 @@ fn test_copy_input_to_output_end_limited_copies_within_limit() {
     let mut input = ChunkInput::new(vec![vec![1, 2], vec![3]]);
     let mut output = CollectOutput::default();
 
-    let copied =
-        Streams::copy_input_to_output_end_limited(&mut input, &mut output, 4)
-            .expect("end-limited item copy should accept short input");
+    let copied = Streams::copy_input_to_output_end_limited(&mut input, &mut output, 4)
+        .expect("end-limited item copy should accept short input");
 
     assert_eq!(3, copied);
     assert_eq!(&[1, 2, 3], output.values.as_slice());
@@ -861,9 +906,8 @@ fn test_copy_input_to_output_end_limited_accepts_empty_input() {
     let mut input = ChunkInput::new(vec![]);
     let mut output = CollectOutput::default();
 
-    let copied =
-        Streams::copy_input_to_output_end_limited(&mut input, &mut output, 3)
-            .expect("end-limited item copy should accept empty input");
+    let copied = Streams::copy_input_to_output_end_limited(&mut input, &mut output, 3)
+        .expect("end-limited item copy should accept empty input");
 
     assert_eq!(0, copied);
     assert!(output.values.is_empty());
@@ -874,9 +918,8 @@ fn test_copy_input_to_output_end_limited_rejects_oversized_input() {
     let mut input = ChunkInput::new(vec![vec![1, 2], vec![3, 4]]);
     let mut output = CollectOutput::default();
 
-    let error =
-        Streams::copy_input_to_output_end_limited(&mut input, &mut output, 3)
-            .expect_err("oversized item input should be rejected");
+    let error = Streams::copy_input_to_output_end_limited(&mut input, &mut output, 3)
+        .expect_err("oversized item input should be rejected");
 
     assert_eq!(ErrorKind::InvalidData, error.kind());
     assert_eq!("input exceeds maximum length of 3 items", error.to_string());
@@ -888,9 +931,8 @@ fn test_copy_input_to_output_end_limited_retries_interrupted_reads() {
     let mut input = InterruptedItemInput::new(vec![vec![1, 2, 3]]);
     let mut output = CollectOutput::default();
 
-    let copied =
-        Streams::copy_input_to_output_end_limited(&mut input, &mut output, 3)
-            .expect("end-limited item copy should retry interrupted reads");
+    let copied = Streams::copy_input_to_output_end_limited(&mut input, &mut output, 3)
+        .expect("end-limited item copy should retry interrupted reads");
 
     assert_eq!(3, copied);
     assert_eq!(&[1, 2, 3], output.values.as_slice());
@@ -901,9 +943,8 @@ fn test_copy_input_to_output_end_limited_returns_read_error() {
     let mut input = FailingItemInput;
     let mut output = CollectOutput::default();
 
-    let error =
-        Streams::copy_input_to_output_end_limited(&mut input, &mut output, 3)
-            .expect_err("end-limited item copy should propagate read errors");
+    let error = Streams::copy_input_to_output_end_limited(&mut input, &mut output, 3)
+        .expect_err("end-limited item copy should propagate read errors");
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("read failed", error.to_string());
@@ -918,9 +959,8 @@ fn test_copy_input_to_output_end_limited_returns_write_error() {
         fail: true,
     };
 
-    let error =
-        Streams::copy_input_to_output_end_limited(&mut input, &mut output, 3)
-            .expect_err("flush of collected items should propagate errors");
+    let error = Streams::copy_input_to_output_end_limited(&mut input, &mut output, 3)
+        .expect_err("flush of collected items should propagate errors");
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("write failed", error.to_string());
@@ -933,29 +973,23 @@ fn test_copy_input_to_output_end_limited_rejects_overridden_read_fully_count() {
     let mut output = CollectOutput::default();
     let max_items = DEFAULT_BUFFER_CAPACITY as u64 + 1;
 
-    let error = Streams::copy_input_to_output_end_limited(
-        &mut input,
-        &mut output,
-        max_items,
-    )
-    .expect_err("overridden read_fully count should be validated");
+    let error = Streams::copy_input_to_output_end_limited(&mut input, &mut output, max_items)
+        .expect_err("overridden read_fully count should be validated");
 
     assert_eq!(ErrorKind::InvalidData, error.kind());
     assert!(output.values.is_empty());
 }
 
 #[test]
-fn test_copy_input_to_output_end_limited_write_error_may_leave_partial_output()
-{
+fn test_copy_input_to_output_end_limited_write_error_may_leave_partial_output() {
     let mut input = ChunkInput::new(vec![vec![1, 2, 3]]);
     let mut output = PartialThenFailItemOutput {
         values: Vec::new(),
         fail_after: 1,
     };
 
-    let error =
-        Streams::copy_input_to_output_end_limited(&mut input, &mut output, 3)
-            .expect_err("write errors after EOF should be returned");
+    let error = Streams::copy_input_to_output_end_limited(&mut input, &mut output, 3)
+        .expect_err("write errors after EOF should be returned");
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("write failed after prefix", error.to_string());
@@ -967,17 +1001,13 @@ fn test_content_eq_compares_streams() {
     let mut left = Cursor::new(b"abc".to_vec());
     let mut same = Cursor::new(b"abc".to_vec());
 
-    assert!(
-        Streams::content_eq(&mut left, &mut same)
-            .expect("equal streams should compare")
-    );
+    assert!(Streams::content_eq(&mut left, &mut same).expect("equal streams should compare"));
 
     let mut left = Cursor::new(b"abc".to_vec());
     let mut different = Cursor::new(b"abd".to_vec());
 
     assert!(
-        !Streams::content_eq(&mut left, &mut different)
-            .expect("different streams should compare")
+        !Streams::content_eq(&mut left, &mut different).expect("different streams should compare")
     );
 }
 
@@ -1002,29 +1032,25 @@ fn test_compare_content_returns_lexicographic_ordering() {
 
     assert_eq!(
         Ordering::Less,
-        Streams::compare_content(&mut less, &mut greater)
-            .expect("streams should compare")
+        Streams::compare_content(&mut less, &mut greater).expect("streams should compare")
     );
     assert_eq!(
         Ordering::Less,
-        Streams::compare_content(&mut prefix, &mut full)
-            .expect("prefix should compare")
+        Streams::compare_content(&mut prefix, &mut full).expect("prefix should compare")
     );
 
     let mut full = Cursor::new(b"abc".to_vec());
     let mut prefix = Cursor::new(b"ab".to_vec());
     assert_eq!(
         Ordering::Greater,
-        Streams::compare_content(&mut full, &mut prefix)
-            .expect("full stream should compare")
+        Streams::compare_content(&mut full, &mut prefix).expect("full stream should compare")
     );
 
     let mut left = Cursor::new(b"abc".to_vec());
     let mut right = Cursor::new(b"abc".to_vec());
     assert_eq!(
         Ordering::Equal,
-        Streams::compare_content(&mut left, &mut right)
-            .expect("equal streams should compare")
+        Streams::compare_content(&mut left, &mut right).expect("equal streams should compare")
     );
 }
 
@@ -1047,9 +1073,8 @@ fn test_compare_content_with_buffer_size_rejects_zero_size() {
     let mut left = Cursor::new(b"abc".to_vec());
     let mut right = Cursor::new(b"abc".to_vec());
 
-    let error =
-        Streams::compare_content_with_buffer_size(&mut left, &mut right, 0)
-            .expect_err("zero-sized compare buffers should be rejected");
+    let error = Streams::compare_content_with_buffer_size(&mut left, &mut right, 0)
+        .expect_err("zero-sized compare buffers should be rejected");
 
     assert_eq!(ErrorKind::InvalidInput, error.kind());
     assert_eq!(
@@ -1125,12 +1150,8 @@ fn test_compare_content_with_buffer_size_returns_allocation_error() {
     let mut left = Cursor::new(b"a".to_vec());
     let mut right = Cursor::new(b"a".to_vec());
 
-    let error = Streams::compare_content_with_buffer_size(
-        &mut left,
-        &mut right,
-        usize::MAX,
-    )
-    .expect_err("absurd compare buffers should fail allocation");
+    let error = Streams::compare_content_with_buffer_size(&mut left, &mut right, usize::MAX)
+        .expect_err("absurd compare buffers should fail allocation");
 
     assert_eq!(ErrorKind::OutOfMemory, error.kind());
 }
@@ -1140,13 +1161,9 @@ fn test_copy_at_most_with_buffer_size_returns_allocation_error() {
     let mut input = Cursor::new(b"abc".to_vec());
     let mut output = Vec::new();
 
-    let error = Streams::copy_at_most_with_buffer_size(
-        &mut input,
-        &mut output,
-        u64::MAX,
-        usize::MAX,
-    )
-    .expect_err("absurd copy buffers should fail allocation");
+    let error =
+        Streams::copy_at_most_with_buffer_size(&mut input, &mut output, u64::MAX, usize::MAX)
+            .expect_err("absurd copy buffers should fail allocation");
 
     assert_eq!(ErrorKind::OutOfMemory, error.kind());
 }
