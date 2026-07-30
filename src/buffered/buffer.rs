@@ -95,13 +95,13 @@ where
     ///
     /// # Panics
     ///
-    /// Panics if `T::default()` panics or the requested backing length exceeds
-    /// [`Vec`]'s supported capacity.
+    /// Panics if `T::default()` or `T::clone()` panics, or the requested
+    /// backing length exceeds [`Vec`]'s supported capacity.
     #[inline]
     pub fn with_capacity(capacity: usize) -> Self {
         let capacity = capacity.max(1);
         Self {
-            data: std::iter::repeat_with(T::default).take(capacity).collect(),
+            data: vec![T::default(); capacity],
             position: 0,
             limit: 0,
         }

@@ -66,6 +66,17 @@ fn test_with_capacity_initializes_empty_window() {
     assert!(!buffer.is_full());
 }
 
+#[cfg(target_pointer_width = "64")]
+#[test]
+fn test_with_capacity_initializes_max_zst_window() {
+    let buffer = Buffer::<()>::with_capacity(usize::MAX);
+
+    assert_eq!(usize::MAX, buffer.capacity());
+    assert_eq!(0, buffer.available());
+    assert_eq!(usize::MAX, buffer.spare_capacity());
+    assert!(buffer.is_empty());
+}
+
 #[test]
 fn test_try_with_capacity_initializes_empty_window() {
     let buffer = Buffer::<u8>::try_with_capacity(0)
