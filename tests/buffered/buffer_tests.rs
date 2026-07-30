@@ -86,6 +86,18 @@ fn test_try_with_capacity_initializes_empty_window() {
     assert!(buffer.is_empty());
 }
 
+#[cfg(target_pointer_width = "64")]
+#[test]
+fn test_try_with_capacity_initializes_max_zst_window() {
+    let buffer = Buffer::<()>::try_with_capacity(usize::MAX)
+        .expect("zero-sized buffer allocation should succeed");
+
+    assert_eq!(usize::MAX, buffer.capacity());
+    assert_eq!(0, buffer.available());
+    assert_eq!(usize::MAX, buffer.spare_capacity());
+    assert!(buffer.is_empty());
+}
+
 #[test]
 fn test_try_with_capacity_preserves_allocation_error() {
     let error = Buffer::<u8>::try_with_capacity(usize::MAX)
@@ -123,6 +135,21 @@ fn test_try_reserve_capacity_is_noop_for_existing_capacity() {
         .expect("existing capacity should require no allocation");
 
     assert_eq!(4, buffer.capacity());
+}
+
+#[cfg(target_pointer_width = "64")]
+#[test]
+fn test_try_reserve_capacity_initializes_max_zst_window() {
+    let mut buffer = Buffer::<()>::with_capacity(1);
+
+    buffer
+        .try_reserve_capacity(usize::MAX)
+        .expect("zero-sized buffer growth should succeed");
+
+    assert_eq!(usize::MAX, buffer.capacity());
+    assert_eq!(0, buffer.available());
+    assert_eq!(usize::MAX, buffer.spare_capacity());
+    assert!(buffer.is_empty());
 }
 
 #[test]

@@ -126,13 +126,17 @@ where
     ///
     /// # Panics
     ///
-    /// Panics if `T::default()` panics.
+    /// Panics if `T::default()` or `T::clone()` panics.
     #[inline]
     pub fn try_with_capacity(capacity: usize) -> Result<Self, TryReserveError> {
         let capacity = capacity.max(1);
         let mut data = Vec::new();
         try_reserve_vec(&mut data, capacity)?;
-        data.resize_with(capacity, T::default);
+        if std::mem::size_of::<T>() == 0 {
+            data = vec![T::default(); capacity];
+        } else {
+            data.resize_with(capacity, T::default);
+        }
         Ok(Self {
             data,
             position: 0,
@@ -159,8 +163,8 @@ where
     ///
     /// # Panics
     ///
-    /// Panics if growing the backing storage requires `T::default()` and it
-    /// panics.
+    /// Panics if growing the backing storage requires `T::default()` or
+    /// `T::clone()` and either operation panics.
     #[inline]
     pub fn try_reserve_capacity(
         &mut self,
@@ -171,7 +175,12 @@ where
         }
         let additional = capacity - self.data.len();
         try_reserve_vec(&mut self.data, additional)?;
-        self.data.resize_with(capacity, T::default);
+        if std::mem::size_of::<T>() == 0 {
+            let mut additional_data = vec![T::default(); additional];
+            self.data.append(&mut additional_data);
+        } else {
+            self.data.resize_with(capacity, T::default);
+        }
         Ok(())
     }
 
