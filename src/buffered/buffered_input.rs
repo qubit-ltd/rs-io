@@ -8,26 +8,13 @@
 
 use std::{
     collections::TryReserveError,
-    io::{
-        Error,
-        ErrorKind,
-        Result,
-        SeekFrom,
-    },
+    io::{Error, ErrorKind, Result, SeekFrom},
 };
 
-use crate::buffered::{
-    DEFAULT_BUFFER_CAPACITY,
-    EnsuredBufferedInput,
-};
+use crate::buffered::{DEFAULT_BUFFER_CAPACITY, EnsuredBufferedInput};
 use crate::traits::validate_read_count;
 use crate::util::UncheckedSlice;
-use crate::{
-    Buffer,
-    Input,
-    Seekable,
-    SeekableInput,
-};
+use crate::{Buffer, Input, Seekable, SeekableInput};
 
 /// Buffered item input over a wrapped input source.
 ///
@@ -50,7 +37,7 @@ use crate::{
 pub struct BufferedInput<I>
 where
     I: Input,
-    I::Item: Copy + Default,
+    I::Item: Clone + Default,
 {
     /// Input supplying items to the buffer.
     inner: I,
@@ -64,7 +51,7 @@ where
 ///
 /// # Type Parameters
 ///
-/// - `T`: Copyable input item type.
+/// - `T`: Cloneable input item type.
 ///
 /// # Parameters
 ///
@@ -85,12 +72,9 @@ where
 /// # Panics
 ///
 /// Panics in debug builds if `buffer` has no spare capacity.
-fn read_more_impl<T>(
-    inner: &mut dyn Input<Item = T>,
-    buffer: &mut Buffer<T>,
-) -> Result<bool>
+fn read_more_impl<T>(inner: &mut dyn Input<Item = T>, buffer: &mut Buffer<T>) -> Result<bool>
 where
-    T: Copy + Default,
+    T: Clone + Default,
 {
     let count = buffer.spare_capacity();
     debug_assert!(count > 0, "buffer has no tail capacity");
@@ -118,7 +102,7 @@ where
 ///
 /// # Type Parameters
 ///
-/// - `T`: Copyable input item type.
+/// - `T`: Cloneable input item type.
 ///
 /// # Parameters
 ///
@@ -136,12 +120,9 @@ where
 /// consumed prefix to reclaim. Returns [`ErrorKind::InvalidData`] for an
 /// invalid count reported by `inner`; other non-interrupted errors are
 /// propagated.
-fn fill_more_impl<T>(
-    inner: &mut dyn Input<Item = T>,
-    buffer: &mut Buffer<T>,
-) -> Result<bool>
+fn fill_more_impl<T>(inner: &mut dyn Input<Item = T>, buffer: &mut Buffer<T>) -> Result<bool>
 where
-    T: Copy + Default,
+    T: Clone + Default,
 {
     if buffer.available() == 0 {
         buffer.clear();
@@ -161,7 +142,7 @@ where
 ///
 /// # Type Parameters
 ///
-/// - `T`: Copyable input item type.
+/// - `T`: Cloneable input item type.
 ///
 /// # Parameters
 ///
@@ -185,7 +166,7 @@ fn fill_until_impl<T>(
     count: usize,
 ) -> Result<bool>
 where
-    T: Copy + Default,
+    T: Clone + Default,
 {
     if count > buffer.capacity() {
         return Err(Error::new(
@@ -214,7 +195,7 @@ where
 ///
 /// # Type Parameters
 ///
-/// - `T`: Copyable input item type.
+/// - `T`: Cloneable input item type.
 ///
 /// # Parameters
 ///
@@ -238,7 +219,7 @@ fn ensure_available_impl<T>(
     count: usize,
 ) -> Result<()>
 where
-    T: Copy + Default,
+    T: Clone + Default,
 {
     if fill_until_impl(inner, buffer, count)? {
         return Ok(());
@@ -258,7 +239,7 @@ where
 ///
 /// # Type Parameters
 ///
-/// - `T`: Copyable input item type.
+/// - `T`: Cloneable input item type.
 ///
 /// # Parameters
 ///
@@ -293,7 +274,7 @@ unsafe fn read_unchecked_impl<T>(
     count: usize,
 ) -> Result<usize>
 where
-    T: Copy + Default,
+    T: Clone + Default,
 {
     debug_assert!(
         UncheckedSlice::range_fits(output.len(), output_index, count),
@@ -306,8 +287,7 @@ where
         buffer.clear();
         if count >= buffer.capacity() {
             // SAFETY: Forwarded from the caller.
-            let read =
-                unsafe { inner.read_unchecked(output, output_index, count) }?;
+            let read = unsafe { inner.read_unchecked(output, output_index, count) }?;
             validate_read_count(read, count)?;
             return Ok(read);
         }
@@ -323,11 +303,86 @@ where
     Ok(read_count)
 }
 
+/// Clones the available buffered prefix into an output range.
+///
+/// Returns the number of cloned items. The caller must guarantee that the
+/// output range contains at least `count` items after `output_index`.
+unsafe fn copy_available_to_output<T>(
+    buffer: &mut Buffer<T>,
+    output: &mut [T],
+    output_index: usize,
+    count: usize,
+) -> usize
+where
+    T: Clone + Default,
+{
+    let copied = count.min(buffer.available());
+    if copied != 0 {
+        // SAFETY: `copied` fits both the readable window and caller output.
+        unsafe {
+            buffer.copy_to(output, output_index, copied);
+        }
+    }
+    copied
+}
+
+/// Reads a requested suffix directly from the wrapped input, retrying on
+/// interruptions.
+///
+/// Returns the validated item count reported by the wrapped input. The caller
+/// must guarantee that the indexed output range is valid.
+unsafe fn read_direct_fully<T>(
+    inner: &mut dyn Input<Item = T>,
+    output: &mut [T],
+    output_index: usize,
+    count: usize,
+) -> Result<usize> {
+    loop {
+        // SAFETY: Forwarded from the caller.
+        match unsafe { inner.read_fully_unchecked(output, output_index, count) } {
+            Ok(read) => {
+                validate_read_count(read, count)?;
+                return Ok(read);
+            }
+            Err(error) if error.kind() == ErrorKind::Interrupted => continue,
+            Err(error) => return Err(error),
+        }
+    }
+}
+
+/// Reads a requested suffix through the internal buffer until EOF or full.
+///
+/// Returns the accumulated number of items read. The caller must guarantee
+/// that the indexed output range is valid.
+unsafe fn read_buffered_remainder<T>(
+    inner: &mut dyn Input<Item = T>,
+    buffer: &mut Buffer<T>,
+    output: &mut [T],
+    output_index: usize,
+    count: usize,
+) -> Result<usize>
+where
+    T: Clone + Default,
+{
+    let mut total = 0;
+    while total < count {
+        let remaining = count - total;
+        // SAFETY: `total` stays below `count`, so the suffix fits caller output.
+        match unsafe { read_unchecked_impl(inner, buffer, output, output_index + total, remaining) }
+        {
+            Ok(0) => break,
+            Ok(read) => total += read,
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(total)
+}
+
 /// Fills an indexed range through a type-erased input and retained buffer.
 ///
 /// # Type Parameters
 ///
-/// - `T`: Copyable input item type.
+/// - `T`: Cloneable input item type.
 ///
 /// # Parameters
 ///
@@ -363,7 +418,7 @@ unsafe fn read_fully_unchecked_impl<T>(
     count: usize,
 ) -> Result<usize>
 where
-    T: Copy + Default,
+    T: Clone + Default,
 {
     debug_assert!(
         UncheckedSlice::range_fits(output.len(), output_index, count),
@@ -373,72 +428,30 @@ where
         return Ok(0);
     }
 
-    let available = buffer.available();
-    if available >= count {
-        // SAFETY: Enough unread items and destination space are available.
-        unsafe {
-            buffer.copy_to(output, output_index, count);
-        }
-        return Ok(count);
-    }
-
-    let mut total = 0;
-    if available > 0 {
-        // SAFETY: The available items fit the caller's destination range.
-        unsafe {
-            buffer.copy_to(output, output_index, available);
-        }
-        total = available;
+    // SAFETY: The caller guarantees the complete output range is valid.
+    let total = unsafe { copy_available_to_output(buffer, output, output_index, count) };
+    if total == count {
+        return Ok(total);
     }
 
     let remaining = count - total;
     if remaining >= buffer.capacity() {
         buffer.clear();
-        loop {
-            // SAFETY: The remaining suffix is inside the caller's range.
-            match unsafe {
-                inner.read_fully_unchecked(
-                    output,
-                    output_index + total,
-                    remaining,
-                )
-            } {
-                Ok(read) => {
-                    validate_read_count(read, remaining)?;
-                    return Ok(total + read);
-                }
-                Err(error) if error.kind() == ErrorKind::Interrupted => {
-                    continue;
-                }
-                Err(error) => return Err(error),
-            }
-        }
+        // SAFETY: The remaining suffix is inside the caller's output range.
+        let read = unsafe { read_direct_fully(inner, output, output_index + total, remaining) }?;
+        return Ok(total + read);
     }
 
-    while total < count {
-        let remaining = count - total;
-        // SAFETY: The remaining suffix is inside the caller's range.
-        match unsafe {
-            read_unchecked_impl(
-                inner,
-                buffer,
-                output,
-                output_index + total,
-                remaining,
-            )
-        } {
-            Ok(0) => break,
-            Ok(read) => total += read,
-            Err(error) => return Err(error),
-        }
-    }
-    Ok(total)
+    // SAFETY: The remaining suffix is inside the caller's output range.
+    let read =
+        unsafe { read_buffered_remainder(inner, buffer, output, output_index + total, remaining) }?;
+    Ok(total + read)
 }
 
 impl<I> BufferedInput<I>
 where
     I: Input,
-    I::Item: Copy + Default,
+    I::Item: Clone + Default,
 {
     /// Creates a buffered item input with the default capacity.
     ///
@@ -723,8 +736,8 @@ where
     ///
     /// # Panics
     ///
-    /// Panics in debug builds if the output range does not fit or `count`
-    /// exceeds the unread item count.
+    /// Panics if cloning an unread item panics. Debug builds also panic if the
+    /// output range does not fit or `count` exceeds the unread item count.
     ///
     /// # Safety
     ///
@@ -733,23 +746,19 @@ where
     /// `count <= self.unread_len()`, and that the destination range does not
     /// overlap with the unread range stored inside this buffer.
     #[inline]
-    pub unsafe fn copy_unread_to(
-        &self,
-        output: &mut [I::Item],
-        output_index: usize,
-        count: usize,
-    ) {
-        // SAFETY: The caller guarantees that the destination range is valid,
-        // non-overlapping, and that `count` unread items are currently
-        // available.
+    pub unsafe fn copy_unread_to(&self, output: &mut [I::Item], output_index: usize, count: usize) {
+        debug_assert!(
+            UncheckedSlice::range_fits(output.len(), output_index, count),
+            "unchecked unread destination range exceeds output buffer"
+        );
+        debug_assert!(
+            count <= self.buffer.available(),
+            "unchecked unread copy exceeds available buffer items"
+        );
         unsafe {
-            UncheckedSlice::copy_nonoverlapping(
-                self.buffer.readable(),
-                0,
-                output,
-                output_index,
-                count,
-            );
+            let source = self.buffer.readable().get_unchecked(..count);
+            let output = output.get_unchecked_mut(output_index..output_index + count);
+            output.clone_from_slice(source);
         }
     }
 
@@ -1043,8 +1052,7 @@ where
     where
         I: SeekableInput,
     {
-        let position =
-            Seekable::seek_to(&mut self.inner, SeekFrom::Current(0))?;
+        let position = Seekable::seek_to(&mut self.inner, SeekFrom::Current(0))?;
         let unread = self.unread_len() as u64;
         position.checked_sub(unread).ok_or_else(|| {
             Error::new(
@@ -1145,7 +1153,7 @@ where
 impl<I> Input for BufferedInput<I>
 where
     I: Input,
-    I::Item: Copy + Default,
+    I::Item: Clone + Default,
 {
     /// Item type produced by the buffered input.
     type Item = I::Item;
@@ -1193,9 +1201,7 @@ where
         count: usize,
     ) -> Result<usize> {
         // SAFETY: Forwarded from the trait caller.
-        unsafe {
-            BufferedInput::read_unchecked(self, output, output_index, count)
-        }
+        unsafe { BufferedInput::read_unchecked(self, output, output_index, count) }
     }
 
     /// Reads items into the full output slice.
@@ -1252,9 +1258,7 @@ where
         count: usize,
     ) -> Result<usize> {
         // SAFETY: Forwarded from the trait caller.
-        unsafe {
-            BufferedInput::read_fully_unchecked(self, output, index, count)
-        }
+        unsafe { BufferedInput::read_fully_unchecked(self, output, index, count) }
     }
 
     /// Reads items into the full output slice through the internal buffer.
@@ -1282,7 +1286,7 @@ where
 impl<I> Seekable for BufferedInput<I>
 where
     I: SeekableInput,
-    <I as Input>::Item: Copy + Default,
+    <I as Input>::Item: Clone + Default,
 {
     /// Item unit used for seek offsets.
     type Unit = <I as Input>::Item;

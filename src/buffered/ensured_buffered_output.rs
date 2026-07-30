@@ -6,17 +6,9 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Result,
-    SeekFrom,
-};
+use std::io::{Result, SeekFrom};
 
-use crate::{
-    BufferedOutput,
-    Output,
-    Seekable,
-    SeekableOutput,
-};
+use crate::{BufferedOutput, Output, Seekable, SeekableOutput};
 
 /// Output value that is guaranteed to report itself as buffered.
 ///
@@ -31,7 +23,7 @@ use crate::{
 pub enum EnsuredBufferedOutput<O>
 where
     O: Output,
-    O::Item: Copy + Default,
+    O::Item: Clone + Default,
 {
     /// The original output already reported itself as buffered.
     AlreadyBuffered(
@@ -49,7 +41,7 @@ where
 impl<O> Output for EnsuredBufferedOutput<O>
 where
     O: Output,
-    O::Item: Copy + Default,
+    O::Item: Clone + Default,
 {
     /// Item type accepted by the selected output.
     type Item = O::Item;
@@ -205,7 +197,7 @@ where
 impl<O> Seekable for EnsuredBufferedOutput<O>
 where
     O: SeekableOutput,
-    <O as Output>::Item: Copy + Default,
+    <O as Output>::Item: Clone + Default,
 {
     /// Item unit used for seek offsets.
     type Unit = <O as Output>::Item;

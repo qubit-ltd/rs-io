@@ -76,7 +76,7 @@ transport adapter -> limit -> buffer -> counting -> frame decoder
 `Item` 是泛型。数据处理 operator 可以消费业务记录并输出映射记录，无需在每一个
 operator 边界重复序列化。此时 limit 与 counting 的单位是“记录”而不是字节，
 `TeeOutput` 也可把记录镜像到 shuffle sink 与 audit sink。[类型化记录示例](examples/typed_records.rs)
-展示完整管道及通用 buffer 对 `Copy + Default` item 的要求。
+展示完整管道及通用 buffer 对 `Clone + Default` item 的要求。
 
 ## 何时使用 Qubit IO
 

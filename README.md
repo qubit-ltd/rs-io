@@ -81,7 +81,7 @@ emit mapped records without serializing them at every operator boundary. Limits
 and counters are then measured in records rather than bytes, and `TeeOutput`
 can mirror those records to a shuffle sink and an audit sink. The
 [typed-record example](examples/typed_records.rs) demonstrates the full
-pipeline and the `Copy + Default` requirement of generic buffering.
+pipeline and the `Clone + Default` requirement of generic buffering.
 
 ## When to use Qubit IO
 
