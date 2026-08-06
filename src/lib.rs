@@ -98,8 +98,6 @@ pub use traits::{
     SeekableOutput,
 };
 pub use util::Streams;
-#[allow(unused_imports)]
-pub use util::UncheckedSlice;
 #[cfg(coverage)]
 #[doc(hidden)]
 pub use util::{
@@ -111,10 +109,6 @@ pub use util::{
     coverage_fail_reserve_after,
     coverage_reset_add_item_count_hooks,
     coverage_reset_reserve_hooks,
-};
-pub use util::{
-    try_reserve_string,
-    try_reserve_vec,
 };
 pub use wrappers::{
     AsyncChecksumInput,

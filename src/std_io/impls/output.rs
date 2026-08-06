@@ -13,9 +13,9 @@ use std::io::{
     Write,
 };
 
+use crate::util::UncheckedSlice;
 use crate::{
     Output,
-    UncheckedSlice,
     traits::validate_write_count,
 };
 

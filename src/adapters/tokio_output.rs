@@ -14,10 +14,10 @@ use std::task::{
 
 use tokio::io::AsyncWrite;
 
+use crate::util::UncheckedSlice;
 use crate::{
     AsyncClose,
     AsyncOutput,
-    UncheckedSlice,
     traits::normalize_async_error,
 };
 

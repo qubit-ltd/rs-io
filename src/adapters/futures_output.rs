@@ -14,10 +14,10 @@ use std::task::{
 
 use futures_io::AsyncWrite;
 
+use crate::util::UncheckedSlice;
 use crate::{
     AsyncClose,
     AsyncOutput,
-    UncheckedSlice,
     traits::normalize_async_error,
 };
 

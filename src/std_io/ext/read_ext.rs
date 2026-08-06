@@ -18,8 +18,8 @@ use std::io::{
 
 use crate::Streams;
 use crate::std_io::ext::internal::read_ext_impl;
+use crate::util::UncheckedSlice;
 use crate::util::{
-    UncheckedSlice,
     allocation_error,
     try_reserve_string,
 };

@@ -255,12 +255,17 @@ dependencies = [
 
 [[package]]
 name = "qubit-io"
-version = "0.14.1"
+version = "0.15.0"
 dependencies = [
  "criterion",
  "futures-io",
+ "qubit-utils",
  "tokio",
 ]
+
+[[package]]
+name = "qubit-utils"
+version = "0.2.0"
 
 [[package]]
 name = "quote"

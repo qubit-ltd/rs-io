@@ -22,10 +22,8 @@ use criterion::{
     criterion_group,
     criterion_main,
 };
-use qubit_io::{
-    Buffer,
-    UncheckedSlice,
-};
+use qubit_io::Buffer;
+use qubit_utils::UncheckedSlice;
 
 const BUFFER_CAPACITY: usize = 8 * 1024;
 const DATA_LEN: usize = 256 * 1024;

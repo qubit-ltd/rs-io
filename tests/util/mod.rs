@@ -6,7 +6,4 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-mod allocation_tests;
-mod slice_tests;
 mod streams_tests;
-mod unchecked_slice_tests;

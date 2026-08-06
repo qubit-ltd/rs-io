@@ -15,7 +15,7 @@ It is a transfer layer, not a file-system abstraction: it does not model paths, 
 
 ```toml
 [dependencies]
-qubit-io = "0.14"
+qubit-io = "0.15"
 ```
 
 All standard `Read` and `Write` values already implement the synchronous Qubit
