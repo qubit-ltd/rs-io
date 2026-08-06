@@ -9,7 +9,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use qubit_utils::UncheckedSlice;
+use qubit_utils::{SliceRange, UncheckedSlice};
 
 /// Bounds allocations even when the target is invoked without CI flags.
 const MAX_FUZZ_INPUT_LEN: usize = 4096;
@@ -29,10 +29,10 @@ fn fuzz_ranges(data: &[u8]) {
     let count = fuzz_usize(data, 2);
     let expected = start.checked_add(count).filter(|&end| end <= len);
 
-    assert_eq!(expected, UncheckedSlice::range_end(len, start, count));
+    assert_eq!(expected, SliceRange::range_end(len, start, count));
     assert_eq!(
         expected.is_some(),
-        UncheckedSlice::range_fits(len, start, count)
+        SliceRange::range_fits(len, start, count)
     );
 }
 

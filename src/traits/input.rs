@@ -6,14 +6,10 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Error,
-    ErrorKind,
-    Result,
-};
+use std::io::{Error, ErrorKind, Result};
 
 use super::validate_read_count;
-use crate::util::UncheckedSlice;
+use crate::util::SliceRange;
 
 /// Minimal indexed input interface over items.
 ///
@@ -134,7 +130,7 @@ pub trait Input {
         count: usize,
     ) -> Result<usize> {
         debug_assert!(
-            UncheckedSlice::range_fits(output.len(), index, count),
+            SliceRange::range_fits(output.len(), index, count),
             "unchecked read-fully range exceeds output buffer"
         );
         let mut total = 0;
@@ -142,9 +138,7 @@ pub trait Input {
             let remaining = count - total;
             // SAFETY: The caller guarantees the original destination range is
             // valid; `total < count`, so this suffix remains inside it.
-            match unsafe {
-                self.read_unchecked(output, index + total, remaining)
-            } {
+            match unsafe { self.read_unchecked(output, index + total, remaining) } {
                 Ok(0) => break,
                 Ok(read) => {
                     validate_read_count(read, remaining)?;
