@@ -29,14 +29,14 @@
 
 ```toml
 [dependencies]
-qubit-io = "0.14"
+qubit-io = "0.15"
 ```
 
 只有应用实际使用某个生态时才启用对应 adapter：
 
 ```toml
 [dependencies]
-qubit-io = { version = "0.14", features = ["tokio"] }
+qubit-io = { version = "0.15", features = ["tokio"] }
 ```
 
 `tokio` 启用 `TokioInput`、`TokioOutput`、`TokioAsyncRead` 和 `TokioAsyncWrite`；`futures-io` 启用对应的 `Futures*` 类型。核心 trait 不选择 executor，也不要求这两个 feature。

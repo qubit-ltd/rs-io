@@ -24,10 +24,10 @@ use std::{
 use crate::{
     AsyncInput,
     Buffer,
-    UncheckedSlice,
     async_io::MAX_READY_OPERATIONS_PER_POLL,
     buffered::DEFAULT_BUFFER_CAPACITY,
 };
+use qubit_utils::UncheckedSlice;
 
 /// Buffered asynchronous item input.
 ///

@@ -15,7 +15,7 @@ Qubit IO 让 codec、协议和存储库能够公开 I/O 能力而不替调用方
 
 ```toml
 [dependencies]
-qubit-io = "0.14"
+qubit-io = "0.15"
 ```
 
 所有标准 `Read` 与 `Write` 值已经实现同步 Qubit trait。因此，库可以接收

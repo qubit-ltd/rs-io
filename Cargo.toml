@@ -1,6 +1,6 @@
 [package]
 name = "qubit-io"
-version = "0.14.1"
+version = "0.15.0"
 edition = "2024"
 rust-version = "1.94"
 authors = ["Haixing Hu <starfish.hu@gmail.com>"]
@@ -44,6 +44,7 @@ futures-io = ["dep:futures-io"]
 tokio = ["dep:tokio"]
 
 [dependencies]
+qubit-utils = { path = "../rs-utils", version = "0.2" }
 futures-io = { version = "0.3", optional = true }
 tokio = { version = "1.53", features = ["io-util"], optional = true }
 

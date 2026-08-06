@@ -13,9 +13,9 @@ use std::io::{
     Result,
 };
 
+use crate::util::UncheckedSlice;
 use crate::{
     Input,
-    UncheckedSlice,
     traits::validate_read_count,
 };
 

@@ -8,7 +8,7 @@
 
 use std::collections::TryReserveError;
 
-use crate::try_reserve_vec;
+use qubit_utils::try_reserve_vec;
 
 /// Low-level contiguous storage with a readable window and spare tail capacity.
 ///

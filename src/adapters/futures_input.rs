@@ -14,9 +14,9 @@ use std::task::{
 
 use futures_io::AsyncRead;
 
+use crate::util::UncheckedSlice;
 use crate::{
     AsyncInput,
-    UncheckedSlice,
     traits::normalize_async_error,
 };
 
