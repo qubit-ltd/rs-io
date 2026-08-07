@@ -6,7 +6,11 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{Error, ErrorKind, Result};
+use std::io::{
+    Error,
+    ErrorKind,
+    Result,
+};
 
 use super::validate_read_count;
 use crate::util::SliceRange;
@@ -138,7 +142,9 @@ pub trait Input {
             let remaining = count - total;
             // SAFETY: The caller guarantees the original destination range is
             // valid; `total < count`, so this suffix remains inside it.
-            match unsafe { self.read_unchecked(output, index + total, remaining) } {
+            match unsafe {
+                self.read_unchecked(output, index + total, remaining)
+            } {
                 Ok(0) => break,
                 Ok(read) => {
                     validate_read_count(read, remaining)?;
