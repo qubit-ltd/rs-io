@@ -6,8 +6,9 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use super::support_tests::TestInput;
 use qubit_io::AsyncBufferedInput;
+
+use super::support_tests::TestInput;
 
 #[test]
 fn test_async_buffered_input_uses_requested_capacity() {

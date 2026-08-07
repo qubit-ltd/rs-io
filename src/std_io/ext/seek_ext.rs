@@ -8,11 +8,9 @@
 
 //! Extension operations for inspecting standard seekable streams.
 
-use std::io::{
-    Result,
-    Seek,
-    SeekFrom,
-};
+use std::io::Result;
+use std::io::Seek;
+use std::io::SeekFrom;
 
 /// Extension methods for [`Seek`] values.
 ///

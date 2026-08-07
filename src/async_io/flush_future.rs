@@ -9,15 +9,11 @@
 use std::future::Future;
 use std::io::Result;
 use std::pin::Pin;
-use std::task::{
-    Context,
-    Poll,
-};
+use std::task::Context;
+use std::task::Poll;
 
-use crate::{
-    AsyncOutput,
-    traits::normalize_async_error,
-};
+use crate::AsyncOutput;
+use crate::traits::normalize_async_error;
 
 /// Future that flushes an [`AsyncOutput`].
 ///

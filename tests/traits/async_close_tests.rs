@@ -8,16 +8,12 @@
 
 use std::future::Future;
 use std::pin::Pin;
-use std::task::{
-    Context,
-    Poll,
-    Waker,
-};
+use std::task::Context;
+use std::task::Poll;
+use std::task::Waker;
 
-use qubit_io::{
-    AsyncClose,
-    AsyncOutput,
-};
+use qubit_io::AsyncClose;
+use qubit_io::AsyncOutput;
 
 struct CloseOutput {
     /// Whether the output has been closed.

@@ -10,17 +10,13 @@ use std::cell::RefCell;
 use std::marker::PhantomPinned;
 use std::pin::Pin;
 use std::rc::Rc;
-use std::task::{
-    Context,
-    Poll,
-    Waker,
-};
+use std::task::Context;
+use std::task::Poll;
+use std::task::Waker;
 
-use qubit_io::{
-    AsyncClose,
-    AsyncOutput,
-    BoxAsyncOutput,
-};
+use qubit_io::AsyncClose;
+use qubit_io::AsyncOutput;
+use qubit_io::BoxAsyncOutput;
 
 /// State recorded by the pinned asynchronous output.
 #[derive(Default)]

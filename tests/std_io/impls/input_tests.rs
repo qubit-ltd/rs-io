@@ -8,17 +8,14 @@
 
 //! Tests for the standard [`Read`](std::io::Read) bridge to [`Input`].
 
-use std::io::{
-    Cursor,
-    Error,
-    ErrorKind,
-    Read,
-};
+use std::io::Cursor;
+use std::io::Error;
+use std::io::ErrorKind;
+use std::io::Read;
 #[cfg(debug_assertions)]
-use std::panic::{
-    AssertUnwindSafe,
-    catch_unwind,
-};
+use std::panic::AssertUnwindSafe;
+#[cfg(debug_assertions)]
+use std::panic::catch_unwind;
 
 use qubit_io::Input;
 

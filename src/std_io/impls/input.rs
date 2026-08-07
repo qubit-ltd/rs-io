@@ -8,16 +8,12 @@
 
 //! Standard [`Read`](std::io::Read) implementations of item input traits.
 
-use std::io::{
-    Read,
-    Result,
-};
+use std::io::Read;
+use std::io::Result;
 
+use crate::Input;
+use crate::traits::validate_read_count;
 use crate::util::UncheckedSlice;
-use crate::{
-    Input,
-    traits::validate_read_count,
-};
 
 /// Bridges byte-oriented standard readers to item-oriented input.
 impl<R> Input for R

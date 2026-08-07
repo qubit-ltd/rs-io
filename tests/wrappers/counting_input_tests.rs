@@ -7,17 +7,13 @@
 // =============================================================================
 //! Tests for [`qubit_io::CountingInput`].
 
-use std::io::{
-    Cursor,
-    ErrorKind,
-    SeekFrom,
-};
+use std::io::Cursor;
+use std::io::ErrorKind;
+use std::io::SeekFrom;
 
-use qubit_io::{
-    CountingInput,
-    Input,
-    Seekable,
-};
+use qubit_io::CountingInput;
+use qubit_io::Input;
+use qubit_io::Seekable;
 
 use super::support_tests::ScriptedInput;
 

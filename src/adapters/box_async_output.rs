@@ -7,15 +7,11 @@
 // =============================================================================
 
 use std::pin::Pin;
-use std::task::{
-    Context,
-    Poll,
-};
+use std::task::Context;
+use std::task::Poll;
 
-use crate::{
-    AsyncClose,
-    AsyncOutput,
-};
+use crate::AsyncClose;
+use crate::AsyncOutput;
 
 /// Adapts an owned pinned boxed asynchronous output, including a trait object.
 ///

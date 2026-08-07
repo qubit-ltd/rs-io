@@ -19,9 +19,8 @@ mod write_future;
 pub use close_future::CloseFuture;
 pub use flush_future::FlushFuture;
 pub use read_exact_future::ReadExactFuture;
+pub(crate) use read_fully_future::MAX_READY_OPERATIONS_PER_POLL;
 pub use read_fully_future::ReadFullyFuture;
 pub use read_future::ReadFuture;
 pub use write_fully_future::WriteFullyFuture;
 pub use write_future::WriteFuture;
-
-pub(crate) use read_fully_future::MAX_READY_OPERATIONS_PER_POLL;

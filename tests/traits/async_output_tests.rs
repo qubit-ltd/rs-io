@@ -8,30 +8,20 @@
 
 use std::collections::VecDeque;
 use std::future::Future;
-use std::io::{
-    Error,
-    ErrorKind,
-};
+use std::io::Error;
+use std::io::ErrorKind;
 use std::marker::PhantomPinned;
 use std::pin::Pin;
-use std::sync::{
-    Arc,
-    atomic::{
-        AtomicBool,
-        Ordering,
-    },
-};
-use std::task::{
-    Context,
-    Poll,
-    Wake,
-    Waker,
-};
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
+use std::task::Context;
+use std::task::Poll;
+use std::task::Wake;
+use std::task::Waker;
 
-use qubit_io::{
-    AsyncOutput,
-    WriteFullyFuture,
-};
+use qubit_io::AsyncOutput;
+use qubit_io::WriteFullyFuture;
 
 enum WriteStep {
     Accept(usize),

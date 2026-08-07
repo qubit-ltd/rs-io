@@ -6,23 +6,17 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Cursor,
-    Error,
-    ErrorKind,
-};
+use std::io::Cursor;
+use std::io::Error;
+use std::io::ErrorKind;
 use std::pin::Pin;
-use std::task::{
-    Context,
-    Poll,
-    Waker,
-};
+use std::task::Context;
+use std::task::Poll;
+use std::task::Waker;
 
 use futures_io::AsyncRead;
-use qubit_io::{
-    AsyncInput,
-    FuturesInput,
-};
+use qubit_io::AsyncInput;
+use qubit_io::FuturesInput;
 
 struct ErrorReader(ErrorKind);
 

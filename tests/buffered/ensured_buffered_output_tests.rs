@@ -6,11 +6,10 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use qubit_io::{
-    BufferedOutput,
-    EnsuredBufferedOutput,
-};
 use std::io::Cursor;
+
+use qubit_io::BufferedOutput;
+use qubit_io::EnsuredBufferedOutput;
 
 #[test]
 fn test_ensured_buffered_output_reports_buffered_variant() {

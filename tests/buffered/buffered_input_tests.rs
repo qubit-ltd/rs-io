@@ -7,21 +7,17 @@
 // =============================================================================
 
 use std::collections::VecDeque;
-use std::io::{
-    Cursor,
-    Error,
-    ErrorKind,
-    Read,
-    Seek,
-    SeekFrom,
-};
+use std::io::Cursor;
+use std::io::Error;
+use std::io::ErrorKind;
+use std::io::Read;
+use std::io::Seek;
+use std::io::SeekFrom;
 
-use qubit_io::{
-    BufferedInput,
-    EnsuredBufferedInput,
-    Input,
-    Seekable,
-};
+use qubit_io::BufferedInput;
+use qubit_io::EnsuredBufferedInput;
+use qubit_io::Input;
+use qubit_io::Seekable;
 
 #[test]
 fn test_buffered_input_try_with_capacity_reports_allocation_failure() {

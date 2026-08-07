@@ -8,12 +8,10 @@
 
 use std::pin::Pin;
 
-use crate::{
-    AsyncInput,
-    ReadExactFuture,
-    ReadFullyFuture,
-    ReadFuture,
-};
+use crate::AsyncInput;
+use crate::ReadExactFuture;
+use crate::ReadFullyFuture;
+use crate::ReadFuture;
 
 /// Convenience futures for an already pinned asynchronous input.
 ///

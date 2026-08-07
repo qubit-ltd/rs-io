@@ -6,17 +6,13 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    self,
-    SeekFrom,
-};
+use std::io;
+use std::io::SeekFrom;
 
-use crate::{
-    Input,
-    Output,
-    Seekable,
-    SyncSeekTeeInput,
-};
+use crate::Input;
+use crate::Output;
+use crate::Seekable;
+use crate::SyncSeekTeeInput;
 
 /// Input wrapper that mirrors successfully returned items to a branch output.
 ///

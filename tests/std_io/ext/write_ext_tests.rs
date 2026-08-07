@@ -6,11 +6,9 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Error,
-    ErrorKind,
-    Write,
-};
+use std::io::Error;
+use std::io::ErrorKind;
+use std::io::Write;
 
 use qubit_io::std_io::ext::WriteExt;
 

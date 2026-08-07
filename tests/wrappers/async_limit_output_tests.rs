@@ -6,8 +6,9 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use super::support_tests::TestStream;
 use qubit_io::AsyncLimitOutput;
+
+use super::support_tests::TestStream;
 
 #[test]
 fn test_async_limit_output_exposes_initial_limit() {

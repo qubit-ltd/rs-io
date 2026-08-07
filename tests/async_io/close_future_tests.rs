@@ -9,17 +9,14 @@
 use std::future::Future;
 use std::io::ErrorKind;
 use std::pin::Pin;
-use std::task::{
-    Context,
-    Poll,
-    Waker,
-};
+use std::task::Context;
+use std::task::Poll;
+use std::task::Waker;
 
-use super::support_tests::{
-    ForbiddenErrorOutput,
-    TestOutput,
-};
 use qubit_io::CloseFuture;
+
+use super::support_tests::ForbiddenErrorOutput;
+use super::support_tests::TestOutput;
 
 #[test]
 fn test_close_future_type_is_public_and_panics_after_completion() {

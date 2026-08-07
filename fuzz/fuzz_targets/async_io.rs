@@ -8,29 +8,21 @@
 
 #![no_main]
 
-use std::{
-    future::Future,
-    io::{
-        self,
-        Error,
-        ErrorKind,
-    },
-    pin::Pin,
-    task::{
-        Context,
-        Poll,
-        Waker,
-    },
-};
+use std::future::Future;
+use std::io::Error;
+use std::io::ErrorKind;
+use std::io::{self};
+use std::pin::Pin;
+use std::task::Context;
+use std::task::Poll;
+use std::task::Waker;
 
 use libfuzzer_sys::fuzz_target;
-use qubit_io::{
-    AsyncBufferedInput,
-    AsyncBufferedOutput,
-    AsyncClose,
-    AsyncInput,
-    AsyncOutput,
-};
+use qubit_io::AsyncBufferedInput;
+use qubit_io::AsyncBufferedOutput;
+use qubit_io::AsyncClose;
+use qubit_io::AsyncInput;
+use qubit_io::AsyncOutput;
 
 /// Keeps allocations and poll loops bounded outside the repository CI wrapper.
 const MAX_FUZZ_INPUT_LEN: usize = 4096;

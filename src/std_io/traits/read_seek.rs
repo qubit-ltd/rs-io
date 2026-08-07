@@ -8,10 +8,8 @@
 
 //! Composite read and seek capability.
 
-use std::io::{
-    Read,
-    Seek,
-};
+use std::io::Read;
+use std::io::Seek;
 
 /// Object-safe capability trait for values that can be read and repositioned.
 ///

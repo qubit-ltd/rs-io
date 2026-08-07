@@ -7,13 +7,15 @@
 // =============================================================================
 
 #[cfg(coverage)]
-use qubit_io::{
-    coverage_fail_next_reserve,
-    coverage_fail_next_string_reserve,
-    coverage_fail_reserve_above,
-    coverage_fail_reserve_after,
-    coverage_reset_reserve_hooks,
-};
+use qubit_io::coverage_fail_next_reserve;
+#[cfg(coverage)]
+use qubit_io::coverage_fail_next_string_reserve;
+#[cfg(coverage)]
+use qubit_io::coverage_fail_reserve_above;
+#[cfg(coverage)]
+use qubit_io::coverage_fail_reserve_after;
+#[cfg(coverage)]
+use qubit_io::coverage_reset_reserve_hooks;
 
 /// Verifies that allocation coverage hooks can be configured and reset.
 #[cfg(coverage)]

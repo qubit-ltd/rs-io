@@ -31,7 +31,6 @@ mod buffered_output;
 mod ensured_buffered_input;
 mod ensured_buffered_output;
 
-pub use crate::capacity_const::DEFAULT_BUFFER_CAPACITY;
 pub use async_buffered_input::AsyncBufferedInput;
 pub use async_buffered_output::AsyncBufferedOutput;
 pub use buffer::Buffer;
@@ -39,3 +38,5 @@ pub use buffered_input::BufferedInput;
 pub use buffered_output::BufferedOutput;
 pub use ensured_buffered_input::EnsuredBufferedInput;
 pub use ensured_buffered_output::EnsuredBufferedOutput;
+
+pub use crate::capacity_const::DEFAULT_BUFFER_CAPACITY;

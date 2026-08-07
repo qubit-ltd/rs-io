@@ -8,10 +8,8 @@
 
 //! Composite buffered-read and seek capability.
 
-use std::io::{
-    BufRead,
-    Seek,
-};
+use std::io::BufRead;
+use std::io::Seek;
 
 /// Object-safe capability trait for values that can be buffered-read and
 /// repositioned.

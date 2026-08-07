@@ -8,10 +8,8 @@
 
 //! Composite write and seek capability.
 
-use std::io::{
-    Seek,
-    Write,
-};
+use std::io::Seek;
+use std::io::Write;
 
 /// Object-safe capability trait for values that can be written and
 /// repositioned.

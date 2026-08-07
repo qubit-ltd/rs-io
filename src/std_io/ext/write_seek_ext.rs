@@ -8,12 +8,10 @@
 
 //! Position-preserving extension operations for seekable standard writers.
 
-use std::io::{
-    Result,
-    Seek,
-    SeekFrom,
-    Write,
-};
+use std::io::Result;
+use std::io::Seek;
+use std::io::SeekFrom;
+use std::io::Write;
 
 use crate::std_io::WriteSeek;
 

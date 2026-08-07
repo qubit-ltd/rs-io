@@ -6,28 +6,20 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::{
-    collections::TryReserveError,
-    io::{
-        Error,
-        ErrorKind,
-        Result,
-        SeekFrom,
-    },
-};
+use std::collections::TryReserveError;
+use std::io::Error;
+use std::io::ErrorKind;
+use std::io::Result;
+use std::io::SeekFrom;
 
-use crate::buffered::{
-    DEFAULT_BUFFER_CAPACITY,
-    EnsuredBufferedInput,
-};
+use crate::Buffer;
+use crate::Input;
+use crate::Seekable;
+use crate::SeekableInput;
+use crate::buffered::DEFAULT_BUFFER_CAPACITY;
+use crate::buffered::EnsuredBufferedInput;
 use crate::traits::validate_read_count;
 use crate::util::SliceRange;
-use crate::{
-    Buffer,
-    Input,
-    Seekable,
-    SeekableInput,
-};
 
 /// Buffered item input over a wrapped input source.
 ///

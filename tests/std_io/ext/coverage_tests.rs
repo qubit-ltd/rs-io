@@ -9,25 +9,21 @@
 #[cfg(coverage)]
 mod coverage_tests {
     use std::collections::VecDeque;
-    use std::io::{
-        Cursor,
-        ErrorKind,
-    };
+    use std::io::Cursor;
+    use std::io::ErrorKind;
 
+    use qubit_io::Input;
+    use qubit_io::Output;
+    use qubit_io::Streams;
+    use qubit_io::coverage_add_item_count_overflow;
+    use qubit_io::coverage_fail_next_add_item_count;
+    use qubit_io::coverage_fail_next_reserve;
+    use qubit_io::coverage_fail_next_string_reserve;
+    use qubit_io::coverage_fail_reserve_above;
+    use qubit_io::coverage_fail_reserve_after;
+    use qubit_io::coverage_reset_add_item_count_hooks;
+    use qubit_io::coverage_reset_reserve_hooks;
     use qubit_io::std_io::ext::ReadExt;
-    use qubit_io::{
-        Input,
-        Output,
-        Streams,
-        coverage_add_item_count_overflow,
-        coverage_fail_next_add_item_count,
-        coverage_fail_next_reserve,
-        coverage_fail_next_string_reserve,
-        coverage_fail_reserve_above,
-        coverage_fail_reserve_after,
-        coverage_reset_add_item_count_hooks,
-        coverage_reset_reserve_hooks,
-    };
 
     fn reset_coverage_hooks() {
         coverage_reset_add_item_count_hooks();

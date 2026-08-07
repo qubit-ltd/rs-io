@@ -9,10 +9,8 @@
 
 use std::io::ErrorKind;
 
-use qubit_io::{
-    LimitOutput,
-    Output,
-};
+use qubit_io::LimitOutput;
+use qubit_io::Output;
 
 use super::support_tests::ScriptedOutput;
 

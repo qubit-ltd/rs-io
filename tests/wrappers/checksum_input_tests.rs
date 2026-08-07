@@ -7,21 +7,15 @@
 // =============================================================================
 //! Tests for [`qubit_io::ChecksumInput`].
 
-use std::{
-    collections::hash_map::DefaultHasher,
-    hash::Hasher,
-    io::{
-        Cursor,
-        ErrorKind,
-        SeekFrom,
-    },
-};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::Hasher;
+use std::io::Cursor;
+use std::io::ErrorKind;
+use std::io::SeekFrom;
 
-use qubit_io::{
-    ChecksumInput,
-    Input,
-    Seekable,
-};
+use qubit_io::ChecksumInput;
+use qubit_io::Input;
+use qubit_io::Seekable;
 
 use super::support_tests::ScriptedInput;
 

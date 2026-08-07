@@ -8,10 +8,8 @@
 
 use std::io;
 
-use qubit_io::{
-    Output,
-    OutputRef,
-};
+use qubit_io::Output;
+use qubit_io::OutputRef;
 
 struct CharOutput {
     items: Vec<char>,

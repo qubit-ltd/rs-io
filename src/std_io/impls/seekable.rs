@@ -8,11 +8,9 @@
 
 //! Standard [`Seek`](std::io::Seek) implementations of item seeking traits.
 
-use std::io::{
-    Result,
-    Seek,
-    SeekFrom,
-};
+use std::io::Result;
+use std::io::Seek;
+use std::io::SeekFrom;
 
 use crate::Seekable;
 

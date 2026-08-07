@@ -8,17 +8,14 @@
 
 //! Tests for the standard [`Write`](std::io::Write) bridge to [`Output`].
 
-use std::io::{
-    Cursor,
-    Error,
-    ErrorKind,
-    Write,
-};
+use std::io::Cursor;
+use std::io::Error;
+use std::io::ErrorKind;
+use std::io::Write;
 #[cfg(debug_assertions)]
-use std::panic::{
-    AssertUnwindSafe,
-    catch_unwind,
-};
+use std::panic::AssertUnwindSafe;
+#[cfg(debug_assertions)]
+use std::panic::catch_unwind;
 
 use qubit_io::Output;
 

@@ -6,30 +6,22 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Error,
-    ErrorKind,
-};
+use std::io::Error;
+use std::io::ErrorKind;
 use std::pin::Pin;
-use std::task::{
-    Context,
-    Poll,
-    Waker,
-};
+use std::task::Context;
+use std::task::Poll;
+use std::task::Waker;
 
-use futures_io::{
-    AsyncRead,
-    AsyncWrite,
-};
-use qubit_io::{
-    AsyncClose,
-    AsyncInput,
-    AsyncOutput,
-    FuturesAsyncRead,
-    FuturesAsyncWrite,
-    FuturesInput,
-    FuturesOutput,
-};
+use futures_io::AsyncRead;
+use futures_io::AsyncWrite;
+use qubit_io::AsyncClose;
+use qubit_io::AsyncInput;
+use qubit_io::AsyncOutput;
+use qubit_io::FuturesAsyncRead;
+use qubit_io::FuturesAsyncWrite;
+use qubit_io::FuturesInput;
+use qubit_io::FuturesOutput;
 
 struct FuturesReader {
     data: Vec<u8>,

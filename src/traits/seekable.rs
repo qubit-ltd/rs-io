@@ -6,10 +6,8 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Result,
-    SeekFrom,
-};
+use std::io::Result;
+use std::io::SeekFrom;
 
 /// Minimal seek interface measured in stream items.
 ///

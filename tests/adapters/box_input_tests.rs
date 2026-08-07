@@ -8,10 +8,8 @@
 
 use std::io;
 
-use qubit_io::{
-    BoxInput,
-    Input,
-};
+use qubit_io::BoxInput;
+use qubit_io::Input;
 
 struct CharInput {
     items: Vec<char>,

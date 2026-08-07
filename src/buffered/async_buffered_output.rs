@@ -6,29 +6,21 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::{
-    collections::TryReserveError,
-    future::poll_fn,
-    io::{
-        self,
-        Error,
-        ErrorKind,
-    },
-    pin::Pin,
-    task::{
-        Context,
-        Poll,
-    },
-};
+use std::collections::TryReserveError;
+use std::future::poll_fn;
+use std::io;
+use std::io::Error;
+use std::io::ErrorKind;
+use std::pin::Pin;
+use std::task::Context;
+use std::task::Poll;
 
-use crate::{
-    AsyncClose,
-    AsyncOutput,
-    Buffer,
-    async_io::MAX_READY_OPERATIONS_PER_POLL,
-    buffered::DEFAULT_BUFFER_CAPACITY,
-    traits::normalize_async_error,
-};
+use crate::AsyncClose;
+use crate::AsyncOutput;
+use crate::Buffer;
+use crate::async_io::MAX_READY_OPERATIONS_PER_POLL;
+use crate::buffered::DEFAULT_BUFFER_CAPACITY;
+use crate::traits::normalize_async_error;
 
 /// Buffered asynchronous item output.
 ///

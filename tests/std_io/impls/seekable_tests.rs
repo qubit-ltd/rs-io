@@ -8,8 +8,9 @@
 
 //! Tests for the standard [`Seek`](std::io::Seek) bridge to [`Seekable`].
 
-use qubit_io::Seekable;
 use std::io::Cursor;
+
+use qubit_io::Seekable;
 
 #[test]
 fn test_cursor_implements_seekable() {
