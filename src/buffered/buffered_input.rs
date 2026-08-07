@@ -8,13 +8,26 @@
 
 use std::{
     collections::TryReserveError,
-    io::{Error, ErrorKind, Result, SeekFrom},
+    io::{
+        Error,
+        ErrorKind,
+        Result,
+        SeekFrom,
+    },
 };
 
-use crate::buffered::{DEFAULT_BUFFER_CAPACITY, EnsuredBufferedInput};
+use crate::buffered::{
+    DEFAULT_BUFFER_CAPACITY,
+    EnsuredBufferedInput,
+};
 use crate::traits::validate_read_count;
 use crate::util::SliceRange;
-use crate::{Buffer, Input, Seekable, SeekableInput};
+use crate::{
+    Buffer,
+    Input,
+    Seekable,
+    SeekableInput,
+};
 
 /// Buffered item input over a wrapped input source.
 ///
@@ -72,7 +85,10 @@ where
 /// # Panics
 ///
 /// Panics in debug builds if `buffer` has no spare capacity.
-fn read_more_impl<T>(inner: &mut dyn Input<Item = T>, buffer: &mut Buffer<T>) -> Result<bool>
+fn read_more_impl<T>(
+    inner: &mut dyn Input<Item = T>,
+    buffer: &mut Buffer<T>,
+) -> Result<bool>
 where
     T: Clone + Default,
 {
@@ -120,7 +136,10 @@ where
 /// consumed prefix to reclaim. Returns [`ErrorKind::InvalidData`] for an
 /// invalid count reported by `inner`; other non-interrupted errors are
 /// propagated.
-fn fill_more_impl<T>(inner: &mut dyn Input<Item = T>, buffer: &mut Buffer<T>) -> Result<bool>
+fn fill_more_impl<T>(
+    inner: &mut dyn Input<Item = T>,
+    buffer: &mut Buffer<T>,
+) -> Result<bool>
 where
     T: Clone + Default,
 {
@@ -287,7 +306,8 @@ where
         buffer.clear();
         if count >= buffer.capacity() {
             // SAFETY: Forwarded from the caller.
-            let read = unsafe { inner.read_unchecked(output, output_index, count) }?;
+            let read =
+                unsafe { inner.read_unchecked(output, output_index, count) }?;
             validate_read_count(read, count)?;
             return Ok(read);
         }
@@ -339,7 +359,8 @@ unsafe fn read_direct_fully<T>(
 ) -> Result<usize> {
     loop {
         // SAFETY: Forwarded from the caller.
-        match unsafe { inner.read_fully_unchecked(output, output_index, count) } {
+        match unsafe { inner.read_fully_unchecked(output, output_index, count) }
+        {
             Ok(read) => {
                 validate_read_count(read, count)?;
                 return Ok(read);
@@ -369,8 +390,15 @@ where
         let remaining = count - total;
         // SAFETY: `total` stays below `count`, so the suffix fits caller
         // output.
-        match unsafe { read_unchecked_impl(inner, buffer, output, output_index + total, remaining) }
-        {
+        match unsafe {
+            read_unchecked_impl(
+                inner,
+                buffer,
+                output,
+                output_index + total,
+                remaining,
+            )
+        } {
             Ok(0) => break,
             Ok(read) => total += read,
             Err(error) => return Err(error),
@@ -430,7 +458,9 @@ where
     }
 
     // SAFETY: The caller guarantees the complete output range is valid.
-    let total = unsafe { copy_available_to_output(buffer, output, output_index, count) };
+    let total = unsafe {
+        copy_available_to_output(buffer, output, output_index, count)
+    };
     if total == count {
         return Ok(total);
     }
@@ -439,13 +469,22 @@ where
     if remaining >= buffer.capacity() {
         buffer.clear();
         // SAFETY: The remaining suffix is inside the caller's output range.
-        let read = unsafe { read_direct_fully(inner, output, output_index + total, remaining) }?;
+        let read = unsafe {
+            read_direct_fully(inner, output, output_index + total, remaining)
+        }?;
         return Ok(total + read);
     }
 
     // SAFETY: The remaining suffix is inside the caller's output range.
-    let read =
-        unsafe { read_buffered_remainder(inner, buffer, output, output_index + total, remaining) }?;
+    let read = unsafe {
+        read_buffered_remainder(
+            inner,
+            buffer,
+            output,
+            output_index + total,
+            remaining,
+        )
+    }?;
     Ok(total + read)
 }
 
@@ -749,7 +788,12 @@ where
     /// `count <= self.unread_len()`, and that the destination range does not
     /// overlap with the unread range stored inside this buffer.
     #[inline]
-    pub unsafe fn copy_unread_to(&self, output: &mut [I::Item], output_index: usize, count: usize) {
+    pub unsafe fn copy_unread_to(
+        &self,
+        output: &mut [I::Item],
+        output_index: usize,
+        count: usize,
+    ) {
         debug_assert!(
             SliceRange::range_fits(output.len(), output_index, count),
             "unchecked unread destination range exceeds output buffer"
@@ -760,7 +804,8 @@ where
         );
         unsafe {
             let source = self.buffer.readable().get_unchecked(..count);
-            let output = output.get_unchecked_mut(output_index..output_index + count);
+            let output =
+                output.get_unchecked_mut(output_index..output_index + count);
             output.clone_from_slice(source);
         }
     }
@@ -1055,7 +1100,8 @@ where
     where
         I: SeekableInput,
     {
-        let position = Seekable::seek_to(&mut self.inner, SeekFrom::Current(0))?;
+        let position =
+            Seekable::seek_to(&mut self.inner, SeekFrom::Current(0))?;
         let unread = self.unread_len() as u64;
         position.checked_sub(unread).ok_or_else(|| {
             Error::new(
@@ -1204,7 +1250,9 @@ where
         count: usize,
     ) -> Result<usize> {
         // SAFETY: Forwarded from the trait caller.
-        unsafe { BufferedInput::read_unchecked(self, output, output_index, count) }
+        unsafe {
+            BufferedInput::read_unchecked(self, output, output_index, count)
+        }
     }
 
     /// Reads items into the full output slice.
@@ -1261,7 +1309,9 @@ where
         count: usize,
     ) -> Result<usize> {
         // SAFETY: Forwarded from the trait caller.
-        unsafe { BufferedInput::read_fully_unchecked(self, output, index, count) }
+        unsafe {
+            BufferedInput::read_fully_unchecked(self, output, index, count)
+        }
     }
 
     /// Reads items into the full output slice through the internal buffer.
