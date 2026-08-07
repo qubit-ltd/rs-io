@@ -44,7 +44,7 @@ futures-io = ["dep:futures-io"]
 tokio = ["dep:tokio"]
 
 [dependencies]
-qubit-utils = { path = "../rs-utils", version = "0.2" }
+qubit-utils = "0.2"
 futures-io = { version = "0.3", optional = true }
 tokio = { version = "1.53", features = ["io-util"], optional = true }
 
