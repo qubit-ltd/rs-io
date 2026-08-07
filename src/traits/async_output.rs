@@ -8,20 +8,14 @@
 
 use std::io::Result;
 use std::pin::Pin;
-use std::task::{
-    Context,
-    Poll,
-};
+use std::task::Context;
+use std::task::Poll;
 
-use crate::traits::{
-    normalize_async_error,
-    validate_write_count,
-};
-use crate::{
-    FlushFuture,
-    WriteFullyFuture,
-    WriteFuture,
-};
+use crate::FlushFuture;
+use crate::WriteFullyFuture;
+use crate::WriteFuture;
+use crate::traits::normalize_async_error;
+use crate::traits::validate_write_count;
 
 /// Minimal runtime-independent asynchronous output interface over items.
 ///

@@ -7,21 +7,17 @@
 // =============================================================================
 use std::cmp::Ordering;
 use std::collections::VecDeque;
-use std::io::{
-    Cursor,
-    Error,
-    ErrorKind,
-    Read,
-    Write,
-};
+use std::io::Cursor;
+use std::io::Error;
+use std::io::ErrorKind;
+use std::io::Read;
+use std::io::Write;
 
+use qubit_io::DEFAULT_BUFFER_CAPACITY;
+use qubit_io::Input;
+use qubit_io::Output;
+use qubit_io::Streams;
 use qubit_io::std_io::ext::ReadExt;
-use qubit_io::{
-    DEFAULT_BUFFER_CAPACITY,
-    Input,
-    Output,
-    Streams,
-};
 
 struct InterruptedOnceReader {
     interrupted: bool,

@@ -7,20 +7,15 @@
 // =============================================================================
 
 use std::future::Future;
-use std::io::{
-    Error,
-    ErrorKind,
-    Result,
-};
+use std::io::Error;
+use std::io::ErrorKind;
+use std::io::Result;
 use std::pin::Pin;
-use std::task::{
-    Context,
-    Poll,
-};
-
-use crate::AsyncOutput;
+use std::task::Context;
+use std::task::Poll;
 
 use super::read_fully_future::MAX_READY_OPERATIONS_PER_POLL;
+use crate::AsyncOutput;
 
 /// Future that writes every item from its source slice.
 ///

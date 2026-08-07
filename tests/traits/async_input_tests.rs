@@ -8,31 +8,22 @@
 
 use std::collections::VecDeque;
 use std::future::Future;
-use std::io::{
-    Error,
-    ErrorKind,
-};
+use std::io::Error;
+use std::io::ErrorKind;
 use std::marker::PhantomPinned;
 use std::pin::Pin;
-use std::sync::{
-    Arc,
-    atomic::{
-        AtomicBool,
-        Ordering,
-    },
-};
-use std::task::{
-    Context,
-    Poll,
-    Wake,
-    Waker,
-};
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
+use std::task::Context;
+use std::task::Poll;
+use std::task::Wake;
+use std::task::Waker;
 
-use qubit_io::{
-    AsyncInput,
-    ReadExactFuture,
-    ReadFullyFuture,
-};
+use qubit_io::AsyncInput;
+use qubit_io::ReadExactFuture;
+use qubit_io::ReadFullyFuture;
+use qubit_io::ReadFuture;
 
 enum ReadStep {
     Data(Vec<u8>),
@@ -220,7 +211,7 @@ fn test_read_async_preserves_pending_then_returns_partial_read() {
         ReadStep::Data(vec![1, 2]),
     ]));
     let mut output = [0_u8; 4];
-    let mut future = qubit_io::ReadFuture::new(input.as_mut(), &mut output);
+    let mut future = ReadFuture::new(input.as_mut(), &mut output);
     let mut cx = context();
 
     assert!(Future::poll(Pin::new(&mut future), &mut cx).is_pending());

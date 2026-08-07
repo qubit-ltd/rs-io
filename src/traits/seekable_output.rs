@@ -6,10 +6,8 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use super::{
-    Output,
-    Seekable,
-};
+use super::Output;
+use super::Seekable;
 
 /// Object-safe capability trait for outputs that can be written and
 /// repositioned in the same item space.

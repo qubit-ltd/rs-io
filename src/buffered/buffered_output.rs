@@ -6,29 +6,21 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
+use std::collections::TryReserveError;
+use std::io::Error;
+use std::io::ErrorKind;
+use std::io::Result;
+use std::io::SeekFrom;
 use std::mem::ManuallyDrop;
 use std::ptr;
-use std::{
-    collections::TryReserveError,
-    io::{
-        Error,
-        ErrorKind,
-        Result,
-        SeekFrom,
-    },
-};
 
-use crate::buffered::{
-    DEFAULT_BUFFER_CAPACITY,
-    EnsuredBufferedOutput,
-};
+use crate::Buffer;
+use crate::Output;
+use crate::Seekable;
+use crate::SeekableOutput;
+use crate::buffered::DEFAULT_BUFFER_CAPACITY;
+use crate::buffered::EnsuredBufferedOutput;
 use crate::traits::validate_write_count;
-use crate::{
-    Buffer,
-    Output,
-    Seekable,
-    SeekableOutput,
-};
 
 /// Buffered item output over a wrapped output sink.
 ///

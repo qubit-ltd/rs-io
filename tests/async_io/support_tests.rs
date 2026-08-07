@@ -7,22 +7,16 @@
 // =============================================================================
 
 use std::collections::VecDeque;
-use std::io::{
-    Error,
-    ErrorKind,
-    Result,
-};
+use std::io::Error;
+use std::io::ErrorKind;
+use std::io::Result;
 use std::pin::Pin;
-use std::task::{
-    Context,
-    Poll,
-};
+use std::task::Context;
+use std::task::Poll;
 
-use qubit_io::{
-    AsyncClose,
-    AsyncInput,
-    AsyncOutput,
-};
+use qubit_io::AsyncClose;
+use qubit_io::AsyncInput;
+use qubit_io::AsyncOutput;
 
 pub(super) struct TestInput;
 

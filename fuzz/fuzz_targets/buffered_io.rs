@@ -11,10 +11,8 @@
 use std::io::Cursor;
 
 use libfuzzer_sys::fuzz_target;
-use qubit_io::{
-    BufferedInput,
-    BufferedOutput,
-};
+use qubit_io::BufferedInput;
+use qubit_io::BufferedOutput;
 
 /// Bounds allocations even when the target is invoked without CI flags.
 const MAX_FUZZ_INPUT_LEN: usize = 4096;

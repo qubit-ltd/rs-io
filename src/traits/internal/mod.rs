@@ -11,8 +11,6 @@
 mod async_contract_error;
 mod io_contract;
 
-pub(crate) use io_contract::{
-    normalize_async_error,
-    validate_read_count,
-    validate_write_count,
-};
+pub(crate) use io_contract::normalize_async_error;
+pub(crate) use io_contract::validate_read_count;
+pub(crate) use io_contract::validate_write_count;

@@ -6,10 +6,8 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use super::{
-    Input,
-    Seekable,
-};
+use super::Input;
+use super::Seekable;
 
 /// Object-safe capability trait for inputs that can be read and repositioned
 /// in the same item space.

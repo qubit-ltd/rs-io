@@ -8,10 +8,8 @@
 
 //! Extension operations for standard byte writers.
 
-use std::io::{
-    Result,
-    Write,
-};
+use std::io::Result;
+use std::io::Write;
 
 use crate::util::UncheckedSlice;
 

@@ -8,14 +8,10 @@
 
 use std::io::Cursor;
 
-use qubit_io::std_io::ext::{
-    ReadExt,
-    WriteExt,
-};
-use qubit_io::std_io::{
-    ReadSeek,
-    ReadWrite,
-};
+use qubit_io::std_io::ReadSeek;
+use qubit_io::std_io::ReadWrite;
+use qubit_io::std_io::ext::ReadExt;
+use qubit_io::std_io::ext::WriteExt;
 
 /// Verifies that standard I/O integrations are available only through the
 /// dedicated public module.

@@ -8,16 +8,12 @@
 
 //! Standard [`Write`](std::io::Write) implementations of item output traits.
 
-use std::io::{
-    Result,
-    Write,
-};
+use std::io::Result;
+use std::io::Write;
 
+use crate::Output;
+use crate::traits::validate_write_count;
 use crate::util::UncheckedSlice;
-use crate::{
-    Output,
-    traits::validate_write_count,
-};
 
 /// Bridges byte-oriented standard writers to item-oriented output.
 impl<W> Output for W

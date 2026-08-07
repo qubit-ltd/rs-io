@@ -6,19 +6,15 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Cursor,
-    Error,
-    ErrorKind,
-    Read,
-    Seek,
-    SeekFrom,
-};
+use std::io::Cursor;
+use std::io::Error;
+use std::io::ErrorKind;
+use std::io::Read;
+use std::io::Seek;
+use std::io::SeekFrom;
 
-use qubit_io::std_io::{
-    ReadSeek,
-    ext::ReadSeekExt,
-};
+use qubit_io::std_io::ReadSeek;
+use qubit_io::std_io::ext::ReadSeekExt;
 
 struct RestoreFailingReader {
     restored_position: u64,

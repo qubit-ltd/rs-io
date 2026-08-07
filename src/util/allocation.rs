@@ -9,16 +9,13 @@
 //! Allocation helpers owned by `qubit-io`.
 
 // qubit-style: allow coverage-cfg
-use std::collections::TryReserveError;
-
-use qubit_utils::{
-    allocation_error as qubit_allocation_error,
-    try_reserve_string as qubit_try_reserve_string,
-    try_reserve_vec as qubit_try_reserve_vec,
-};
-
 #[cfg(coverage)]
 use std::cell::Cell;
+use std::collections::TryReserveError;
+
+use qubit_utils::allocation_error as qubit_allocation_error;
+use qubit_utils::try_reserve_string as qubit_try_reserve_string;
+use qubit_utils::try_reserve_vec as qubit_try_reserve_vec;
 
 #[cfg(coverage)]
 thread_local! {

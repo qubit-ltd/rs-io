@@ -7,16 +7,12 @@
 // =============================================================================
 
 use std::error::Error as StdError;
-use std::io::{
-    Error,
-    ErrorKind,
-};
+use std::io::Error;
+use std::io::ErrorKind;
 use std::pin::Pin;
-use std::task::{
-    Context,
-    Poll,
-    Waker,
-};
+use std::task::Context;
+use std::task::Poll;
+use std::task::Waker;
 
 use qubit_io::AsyncInput;
 

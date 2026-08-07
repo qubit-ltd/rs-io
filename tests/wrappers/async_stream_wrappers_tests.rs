@@ -6,29 +6,19 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::{
-    collections::{
-        VecDeque,
-        hash_map::DefaultHasher,
-    },
-    future::Future,
-    hash::Hasher,
-    io::{
-        self,
-        Error,
-        ErrorKind,
-    },
-    pin::Pin,
-    sync::{
-        Arc,
-        Mutex,
-    },
-    task::{
-        Context,
-        Poll,
-        Waker,
-    },
-};
+use std::collections::VecDeque;
+use std::collections::hash_map::DefaultHasher;
+use std::future::Future;
+use std::hash::Hasher;
+use std::io;
+use std::io::Error;
+use std::io::ErrorKind;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::task::Context;
+use std::task::Poll;
+use std::task::Waker;
 
 enum ReadStep {
     Data(Vec<u8>),
@@ -188,17 +178,15 @@ impl AsyncOutput for ScriptedOutput {
     }
 }
 
-use qubit_io::{
-    AsyncChecksumInput,
-    AsyncChecksumOutput,
-    AsyncClose,
-    AsyncCountingInput,
-    AsyncCountingOutput,
-    AsyncInput,
-    AsyncLimitInput,
-    AsyncLimitOutput,
-    AsyncOutput,
-};
+use qubit_io::AsyncChecksumInput;
+use qubit_io::AsyncChecksumOutput;
+use qubit_io::AsyncClose;
+use qubit_io::AsyncCountingInput;
+use qubit_io::AsyncCountingOutput;
+use qubit_io::AsyncInput;
+use qubit_io::AsyncLimitInput;
+use qubit_io::AsyncLimitOutput;
+use qubit_io::AsyncOutput;
 
 #[test]
 fn test_async_output_wrappers_propagate_close() {

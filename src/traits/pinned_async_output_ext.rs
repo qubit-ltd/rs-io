@@ -8,14 +8,12 @@
 
 use std::pin::Pin;
 
-use crate::{
-    AsyncClose,
-    AsyncOutput,
-    CloseFuture,
-    FlushFuture,
-    WriteFullyFuture,
-    WriteFuture,
-};
+use crate::AsyncClose;
+use crate::AsyncOutput;
+use crate::CloseFuture;
+use crate::FlushFuture;
+use crate::WriteFullyFuture;
+use crate::WriteFuture;
 
 /// Convenience futures for an already pinned asynchronous output.
 ///

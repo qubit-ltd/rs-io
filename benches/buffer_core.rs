@@ -14,14 +14,12 @@
 
 use std::hint::black_box;
 
-use criterion::{
-    BatchSize,
-    BenchmarkId,
-    Criterion,
-    Throughput,
-    criterion_group,
-    criterion_main,
-};
+use criterion::BatchSize;
+use criterion::BenchmarkId;
+use criterion::Criterion;
+use criterion::Throughput;
+use criterion::criterion_group;
+use criterion::criterion_main;
 use qubit_io::Buffer;
 use qubit_utils::UncheckedSlice;
 

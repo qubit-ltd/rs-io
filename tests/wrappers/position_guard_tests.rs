@@ -6,18 +6,14 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Cursor,
-    Error,
-    ErrorKind,
-    Seek,
-    SeekFrom,
-};
+use std::io::Cursor;
+use std::io::Error;
+use std::io::ErrorKind;
+use std::io::Seek;
+use std::io::SeekFrom;
 
-use qubit_io::{
-    PositionGuard,
-    Seekable,
-};
+use qubit_io::PositionGuard;
+use qubit_io::Seekable;
 
 /// Seekable stream that does not implement `std::io::Seek`.
 struct SeekableOnly {

@@ -6,31 +6,23 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Error,
-    ErrorKind,
-};
+use std::io::Error;
+use std::io::ErrorKind;
 use std::pin::Pin;
-use std::task::{
-    Context,
-    Poll,
-    Waker,
-};
+use std::task::Context;
+use std::task::Poll;
+use std::task::Waker;
 
-use qubit_io::{
-    AsyncClose,
-    AsyncInput,
-    AsyncOutput,
-    TokioAsyncRead,
-    TokioAsyncWrite,
-    TokioInput,
-    TokioOutput,
-};
-use tokio::io::{
-    AsyncRead,
-    AsyncWrite,
-    ReadBuf,
-};
+use qubit_io::AsyncClose;
+use qubit_io::AsyncInput;
+use qubit_io::AsyncOutput;
+use qubit_io::TokioAsyncRead;
+use qubit_io::TokioAsyncWrite;
+use qubit_io::TokioInput;
+use qubit_io::TokioOutput;
+use tokio::io::AsyncRead;
+use tokio::io::AsyncWrite;
+use tokio::io::ReadBuf;
 
 struct TokioReader {
     data: Vec<u8>,

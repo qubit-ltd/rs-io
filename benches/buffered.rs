@@ -13,27 +13,21 @@
 //! buffered and unbuffered baselines.
 
 use std::hint::black_box;
-use std::io::{
-    BufReader,
-    BufWriter,
-    Cursor,
-    Read,
-    Write,
-};
+use std::io::BufReader;
+use std::io::BufWriter;
+use std::io::Cursor;
+use std::io::Read;
+use std::io::Write;
 
-use criterion::{
-    BatchSize,
-    BenchmarkId,
-    Criterion,
-    Throughput,
-    criterion_group,
-    criterion_main,
-};
-use qubit_io::{
-    BufferedInput,
-    BufferedOutput,
-    Input,
-};
+use criterion::BatchSize;
+use criterion::BenchmarkId;
+use criterion::Criterion;
+use criterion::Throughput;
+use criterion::criterion_group;
+use criterion::criterion_main;
+use qubit_io::BufferedInput;
+use qubit_io::BufferedOutput;
+use qubit_io::Input;
 
 const BUFFER_CAPACITY: usize = 8 * 1024;
 const DATA_LEN: usize = 256 * 1024;

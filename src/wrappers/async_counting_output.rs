@@ -6,20 +6,14 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::{
-    io,
-    pin::Pin,
-    task::{
-        Context,
-        Poll,
-    },
-};
+use std::io;
+use std::pin::Pin;
+use std::task::Context;
+use std::task::Poll;
 
-use crate::{
-    AsyncClose,
-    AsyncOutput,
-    traits::normalize_async_error,
-};
+use crate::AsyncClose;
+use crate::AsyncOutput;
+use crate::traits::normalize_async_error;
 
 /// Asynchronous output that counts successfully accepted items.
 ///

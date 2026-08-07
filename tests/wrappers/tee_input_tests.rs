@@ -7,22 +7,16 @@
 // =============================================================================
 //! Tests for [`qubit_io::TeeInput`].
 
-use std::io::{
-    ErrorKind,
-    SeekFrom,
-};
+use std::io::ErrorKind;
+use std::io::SeekFrom;
 
-use qubit_io::{
-    Input,
-    Seekable,
-    TeeInput,
-};
+use qubit_io::Input;
+use qubit_io::Seekable;
+use qubit_io::TeeInput;
 
-use super::support_tests::{
-    InputAction,
-    ScriptedInput,
-    ScriptedOutput,
-};
+use super::support_tests::InputAction;
+use super::support_tests::ScriptedInput;
+use super::support_tests::ScriptedOutput;
 
 #[test]
 fn test_tee_input_mirrors_generic_items_and_exposes_parts() {

@@ -6,21 +6,15 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::{
-    collections::VecDeque,
-    future::Future,
-    io::{
-        self,
-        Error,
-        ErrorKind,
-    },
-    pin::Pin,
-    task::{
-        Context,
-        Poll,
-        Waker,
-    },
-};
+use std::collections::VecDeque;
+use std::future::Future;
+use std::io;
+use std::io::Error;
+use std::io::ErrorKind;
+use std::pin::Pin;
+use std::task::Context;
+use std::task::Poll;
+use std::task::Waker;
 
 enum ReadStep {
     Data(Vec<u16>),
@@ -230,13 +224,11 @@ impl AsyncOutput for ScriptedOutput {
     }
 }
 
-use qubit_io::{
-    AsyncBufferedInput,
-    AsyncBufferedOutput,
-    AsyncClose,
-    AsyncInput,
-    AsyncOutput,
-};
+use qubit_io::AsyncBufferedInput;
+use qubit_io::AsyncBufferedOutput;
+use qubit_io::AsyncClose;
+use qubit_io::AsyncInput;
+use qubit_io::AsyncOutput;
 
 fn complete<F>(future: F) -> F::Output
 where

@@ -8,17 +8,13 @@
 
 //! Position-preserving extension operations for seekable standard readers.
 
-use std::io::{
-    Read,
-    Result,
-    Seek,
-    SeekFrom,
-};
+use std::io::Read;
+use std::io::Result;
+use std::io::Seek;
+use std::io::SeekFrom;
 
-use crate::std_io::{
-    ReadSeek,
-    ext::internal::read_ext_impl,
-};
+use crate::std_io::ReadSeek;
+use crate::std_io::ext::internal::read_ext_impl;
 
 /// Extension methods for values that implement both [`Read`] and [`Seek`].
 ///

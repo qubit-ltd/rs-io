@@ -7,20 +7,14 @@
 // =============================================================================
 //! Tests for [`qubit_io::ChecksumOutput`].
 
-use std::{
-    collections::hash_map::DefaultHasher,
-    hash::Hasher,
-    io::{
-        ErrorKind,
-        SeekFrom,
-    },
-};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::Hasher;
+use std::io::ErrorKind;
+use std::io::SeekFrom;
 
-use qubit_io::{
-    ChecksumOutput,
-    Output,
-    Seekable,
-};
+use qubit_io::ChecksumOutput;
+use qubit_io::Output;
+use qubit_io::Seekable;
 
 use super::support_tests::ScriptedOutput;
 

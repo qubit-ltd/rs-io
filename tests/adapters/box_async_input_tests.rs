@@ -8,16 +8,12 @@
 
 use std::marker::PhantomPinned;
 use std::pin::Pin;
-use std::task::{
-    Context,
-    Poll,
-    Waker,
-};
+use std::task::Context;
+use std::task::Poll;
+use std::task::Waker;
 
-use qubit_io::{
-    AsyncInput,
-    BoxAsyncInput,
-};
+use qubit_io::AsyncInput;
+use qubit_io::BoxAsyncInput;
 
 /// Non-`Unpin` byte input used to exercise pinned trait-object forwarding.
 struct PinnedByteInput {

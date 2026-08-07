@@ -6,17 +6,13 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Result,
-    SeekFrom,
-};
+use std::io::Result;
+use std::io::SeekFrom;
 
-use crate::{
-    BufferedInput,
-    Input,
-    Seekable,
-    SeekableInput,
-};
+use crate::BufferedInput;
+use crate::Input;
+use crate::Seekable;
+use crate::SeekableInput;
 
 /// Input value that is guaranteed to report itself as buffered.
 ///

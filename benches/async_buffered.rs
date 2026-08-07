@@ -14,26 +14,20 @@
 use std::hint::black_box;
 use std::io;
 use std::pin::Pin;
-use std::task::{
-    Context,
-    Poll,
-    Waker,
-};
+use std::task::Context;
+use std::task::Poll;
+use std::task::Waker;
 
-use criterion::{
-    BatchSize,
-    BenchmarkId,
-    Criterion,
-    Throughput,
-    criterion_group,
-    criterion_main,
-};
-use qubit_io::{
-    AsyncBufferedInput,
-    AsyncBufferedOutput,
-    AsyncInput,
-    AsyncOutput,
-};
+use criterion::BatchSize;
+use criterion::BenchmarkId;
+use criterion::Criterion;
+use criterion::Throughput;
+use criterion::criterion_group;
+use criterion::criterion_main;
+use qubit_io::AsyncBufferedInput;
+use qubit_io::AsyncBufferedOutput;
+use qubit_io::AsyncInput;
+use qubit_io::AsyncOutput;
 
 const BUFFER_CAPACITY: usize = 8 * 1024;
 const DATA_LEN: usize = 256 * 1024;

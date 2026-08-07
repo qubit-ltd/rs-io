@@ -6,8 +6,9 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use super::support_tests::TestStream;
 use qubit_io::AsyncCountingOutput;
+
+use super::support_tests::TestStream;
 
 #[test]
 fn test_async_counting_output_starts_at_zero() {

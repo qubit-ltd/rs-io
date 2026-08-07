@@ -6,15 +6,11 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    self,
-    SeekFrom,
-};
+use std::io;
+use std::io::SeekFrom;
 
-use crate::{
-    Output,
-    Seekable,
-};
+use crate::Output;
+use crate::Seekable;
 
 /// Output wrapper that counts successfully accepted items.
 ///

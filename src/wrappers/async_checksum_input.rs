@@ -6,15 +6,11 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::{
-    hash::Hasher,
-    io,
-    pin::Pin,
-    task::{
-        Context,
-        Poll,
-    },
-};
+use std::hash::Hasher;
+use std::io;
+use std::pin::Pin;
+use std::task::Context;
+use std::task::Poll;
 
 use crate::AsyncInput;
 

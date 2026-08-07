@@ -8,15 +8,11 @@
 
 use std::io::Result;
 use std::pin::Pin;
-use std::task::{
-    Context,
-    Poll,
-};
+use std::task::Context;
+use std::task::Poll;
 
-use crate::{
-    AsyncOutput,
-    CloseFuture,
-};
+use crate::AsyncOutput;
+use crate::CloseFuture;
 
 /// Optional asynchronous capability for gracefully closing an output.
 ///

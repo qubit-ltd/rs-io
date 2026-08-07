@@ -13,15 +13,13 @@
 
 use std::io;
 
-use qubit_io::{
-    BufferedInput,
-    CountingInput,
-    CountingOutput,
-    Input,
-    LimitInput,
-    Output,
-    TeeOutput,
-};
+use qubit_io::BufferedInput;
+use qubit_io::CountingInput;
+use qubit_io::CountingOutput;
+use qubit_io::Input;
+use qubit_io::LimitInput;
+use qubit_io::Output;
+use qubit_io::TeeOutput;
 
 /// A typed sales record consumed by the mapper.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]

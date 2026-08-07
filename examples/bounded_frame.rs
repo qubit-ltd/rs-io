@@ -11,12 +11,10 @@
 //! declared size before allocating and uses checked [`Input`] helpers so
 //! truncated headers and payloads are reported as errors.
 
-use std::io::{
-    self,
-    Cursor,
-    Error,
-    ErrorKind,
-};
+use std::io::Cursor;
+use std::io::Error;
+use std::io::ErrorKind;
+use std::io::{self};
 
 use qubit_io::Input;
 

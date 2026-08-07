@@ -7,19 +7,15 @@
 // =============================================================================
 
 use std::pin::Pin;
-use std::task::{
-    Context,
-    Poll,
-};
+use std::task::Context;
+use std::task::Poll;
 
 use tokio::io::AsyncWrite;
 
+use crate::AsyncClose;
+use crate::AsyncOutput;
+use crate::traits::normalize_async_error;
 use crate::util::UncheckedSlice;
-use crate::{
-    AsyncClose,
-    AsyncOutput,
-    traits::normalize_async_error,
-};
 
 /// Adapts a Tokio [`AsyncWrite`] value to Qubit's [`AsyncOutput`].
 ///

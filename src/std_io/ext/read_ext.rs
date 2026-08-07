@@ -8,24 +8,18 @@
 
 //! Extension operations for standard byte readers.
 
-use std::io::{
-    ErrorKind,
-    Read,
-    Result,
-    Write,
-    copy as copy_all,
-};
+use std::io::ErrorKind;
+use std::io::Read;
+use std::io::Result;
+use std::io::Write;
+use std::io::copy as copy_all;
 
 use crate::Streams;
 use crate::std_io::ext::internal::read_ext_impl;
-use crate::util::{
-    SliceRange,
-    UncheckedSlice,
-};
-use crate::util::{
-    allocation_error,
-    try_reserve_string,
-};
+use crate::util::SliceRange;
+use crate::util::UncheckedSlice;
+use crate::util::allocation_error;
+use crate::util::try_reserve_string;
 
 /// Default stack buffer size used by discard operations.
 const DISCARD_BUFFER_SIZE: usize = 8 * 1024;

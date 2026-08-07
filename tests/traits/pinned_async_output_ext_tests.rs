@@ -9,17 +9,13 @@
 use std::future::Future;
 use std::marker::PhantomPinned;
 use std::pin::Pin;
-use std::task::{
-    Context,
-    Poll,
-    Waker,
-};
+use std::task::Context;
+use std::task::Poll;
+use std::task::Waker;
 
-use qubit_io::{
-    AsyncClose,
-    AsyncOutput,
-    PinnedAsyncOutputExt,
-};
+use qubit_io::AsyncClose;
+use qubit_io::AsyncOutput;
+use qubit_io::PinnedAsyncOutputExt;
 
 struct PinnedOutput {
     closed: bool,

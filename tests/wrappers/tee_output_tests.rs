@@ -7,16 +7,12 @@
 // =============================================================================
 //! Tests for [`qubit_io::TeeOutput`].
 
-use std::io::{
-    ErrorKind,
-    SeekFrom,
-};
+use std::io::ErrorKind;
+use std::io::SeekFrom;
 
-use qubit_io::{
-    Output,
-    Seekable,
-    TeeOutput,
-};
+use qubit_io::Output;
+use qubit_io::Seekable;
+use qubit_io::TeeOutput;
 
 use super::support_tests::ScriptedOutput;
 

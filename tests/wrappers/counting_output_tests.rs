@@ -7,16 +7,12 @@
 // =============================================================================
 //! Tests for [`qubit_io::CountingOutput`].
 
-use std::io::{
-    ErrorKind,
-    SeekFrom,
-};
+use std::io::ErrorKind;
+use std::io::SeekFrom;
 
-use qubit_io::{
-    CountingOutput,
-    Output,
-    Seekable,
-};
+use qubit_io::CountingOutput;
+use qubit_io::Output;
+use qubit_io::Seekable;
 
 use super::support_tests::ScriptedOutput;
 

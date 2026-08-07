@@ -6,27 +6,20 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::{
-    future::Future,
-    io::ErrorKind,
-    panic::{
-        AssertUnwindSafe,
-        catch_unwind,
-    },
-    pin::Pin,
-    task::{
-        Context,
-        Poll,
-        Waker,
-    },
-};
+use std::future::Future;
+use std::io::ErrorKind;
+use std::panic::AssertUnwindSafe;
+use std::panic::catch_unwind;
+use std::pin::Pin;
+use std::task::Context;
+use std::task::Poll;
+use std::task::Waker;
 
-use super::support_tests::{
-    PollResult,
-    ScriptedInput,
-    TestInput,
-};
 use qubit_io::ReadFullyFuture;
+
+use super::support_tests::PollResult;
+use super::support_tests::ScriptedInput;
+use super::support_tests::TestInput;
 
 #[test]
 fn test_read_fully_future_type_is_public() {

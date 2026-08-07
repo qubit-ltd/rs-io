@@ -6,10 +6,12 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use super::support_tests::TestStream;
-use qubit_io::AsyncChecksumInput;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::Hasher;
+
+use qubit_io::AsyncChecksumInput;
+
+use super::support_tests::TestStream;
 
 #[test]
 fn test_async_checksum_input_starts_with_hasher_checksum() {

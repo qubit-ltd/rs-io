@@ -8,19 +8,15 @@
 
 //! Bounded extension operations for buffered standard readers.
 
-use std::io::{
-    BufRead,
-    Error,
-    ErrorKind,
-    Result,
-};
+use std::io::BufRead;
+use std::io::Error;
+use std::io::ErrorKind;
+use std::io::Result;
 
 use crate::std_io::ext::internal::read_ext_impl;
-use crate::util::{
-    allocation_error,
-    try_reserve_string,
-    try_reserve_vec,
-};
+use crate::util::allocation_error;
+use crate::util::try_reserve_string;
+use crate::util::try_reserve_vec;
 
 /// Extension methods for [`BufRead`] values.
 ///

@@ -7,10 +7,8 @@
 // =============================================================================
 
 use std::collections::VecDeque;
-use std::io::{
-    Error,
-    ErrorKind,
-};
+use std::io::Error;
+use std::io::ErrorKind;
 
 use qubit_io::Input;
 

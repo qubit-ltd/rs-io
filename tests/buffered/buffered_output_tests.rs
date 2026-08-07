@@ -6,26 +6,20 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::cell::{
-    Cell,
-    RefCell,
-};
+use std::cell::Cell;
+use std::cell::RefCell;
 use std::collections::VecDeque;
-use std::io::{
-    Cursor,
-    Error,
-    ErrorKind,
-    SeekFrom,
-    Write,
-};
+use std::io::Cursor;
+use std::io::Error;
+use std::io::ErrorKind;
+use std::io::SeekFrom;
+use std::io::Write;
 use std::rc::Rc;
 
-use qubit_io::{
-    BufferedOutput,
-    EnsuredBufferedOutput,
-    Output,
-    Seekable,
-};
+use qubit_io::BufferedOutput;
+use qubit_io::EnsuredBufferedOutput;
+use qubit_io::Output;
+use qubit_io::Seekable;
 
 #[test]
 fn test_buffered_output_try_with_capacity_reports_allocation_failure() {
@@ -82,7 +76,7 @@ impl Output for U16SeekOutput {
     }
 }
 
-impl qubit_io::Seekable for U16SeekOutput {
+impl Seekable for U16SeekOutput {
     type Unit = u16;
 
     fn seek_to(&mut self, position: SeekFrom) -> std::io::Result<u64> {
@@ -1506,7 +1500,7 @@ impl Output for OverflowPositionOutput {
     }
 }
 
-impl qubit_io::Seekable for OverflowPositionOutput {
+impl Seekable for OverflowPositionOutput {
     type Unit = u16;
 
     fn seek_to(&mut self, position: SeekFrom) -> std::io::Result<u64> {

@@ -6,8 +6,9 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use super::support_tests::TestOutput;
 use qubit_io::WriteFuture;
+
+use super::support_tests::TestOutput;
 
 #[test]
 fn test_write_future_type_is_public() {

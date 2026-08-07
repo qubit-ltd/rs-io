@@ -6,11 +6,9 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    BufReader,
-    Cursor,
-    SeekFrom,
-};
+use std::io::BufReader;
+use std::io::Cursor;
+use std::io::SeekFrom;
 
 use qubit_io::std_io::BufReadSeek;
 

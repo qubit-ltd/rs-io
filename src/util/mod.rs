@@ -12,29 +12,29 @@
 mod allocation;
 mod streams;
 
-pub(crate) use allocation::{
-    allocation_error,
-    create_vec,
-    try_reserve_string,
-    try_reserve_vec,
-};
+pub(crate) use allocation::allocation_error;
 #[cfg(coverage)]
-pub use allocation::{
-    coverage_fail_next_reserve,
-    coverage_fail_next_string_reserve,
-    coverage_fail_reserve_above,
-    coverage_fail_reserve_after,
-    coverage_reset_reserve_hooks,
-};
-pub(crate) use qubit_utils::{
-    SliceRange,
-    UncheckedSlice,
-};
+pub use allocation::coverage_fail_next_reserve;
+#[cfg(coverage)]
+pub use allocation::coverage_fail_next_string_reserve;
+#[cfg(coverage)]
+pub use allocation::coverage_fail_reserve_above;
+#[cfg(coverage)]
+pub use allocation::coverage_fail_reserve_after;
+#[cfg(coverage)]
+pub use allocation::coverage_reset_reserve_hooks;
+pub(crate) use allocation::create_vec;
+pub(crate) use allocation::try_reserve_string;
+pub(crate) use allocation::try_reserve_vec;
+pub(crate) use qubit_utils::SliceRange;
+pub(crate) use qubit_utils::UncheckedSlice;
 pub use streams::Streams;
 #[cfg(coverage)]
 #[doc(hidden)]
-pub use streams::{
-    coverage_add_item_count_overflow,
-    coverage_fail_next_add_item_count,
-    coverage_reset_add_item_count_hooks,
-};
+pub use streams::coverage_add_item_count_overflow;
+#[cfg(coverage)]
+#[doc(hidden)]
+pub use streams::coverage_fail_next_add_item_count;
+#[cfg(coverage)]
+#[doc(hidden)]
+pub use streams::coverage_reset_add_item_count_hooks;

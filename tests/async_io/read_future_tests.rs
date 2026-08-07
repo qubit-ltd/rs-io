@@ -6,8 +6,9 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use super::support_tests::TestInput;
 use qubit_io::ReadFuture;
+
+use super::support_tests::TestInput;
 
 #[test]
 fn test_read_future_type_is_public() {

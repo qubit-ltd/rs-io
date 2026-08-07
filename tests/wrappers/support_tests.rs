@@ -6,18 +6,14 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    self,
-    Error,
-    ErrorKind,
-    SeekFrom,
-};
+use std::io;
+use std::io::Error;
+use std::io::ErrorKind;
+use std::io::SeekFrom;
 
-use qubit_io::{
-    Input,
-    Output,
-    Seekable,
-};
+use qubit_io::Input;
+use qubit_io::Output;
+use qubit_io::Seekable;
 
 /// Marker used by compile-time async wrapper surface tests.
 pub(crate) struct TestStream;

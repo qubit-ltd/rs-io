@@ -6,17 +6,13 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::io::{
-    Result,
-    SeekFrom,
-};
+use std::io::Result;
+use std::io::SeekFrom;
 
-use crate::{
-    BufferedOutput,
-    Output,
-    Seekable,
-    SeekableOutput,
-};
+use crate::BufferedOutput;
+use crate::Output;
+use crate::Seekable;
+use crate::SeekableOutput;
 
 /// Output value that is guaranteed to report itself as buffered.
 ///

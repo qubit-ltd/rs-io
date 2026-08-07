@@ -13,30 +13,22 @@
 use std::cell::Cell;
 use std::cmp::Ordering;
 use std::convert::Infallible;
-use std::io::{
-    Error,
-    ErrorKind,
-    Read,
-    Result,
-    Write,
-};
+use std::io::Error;
+use std::io::ErrorKind;
+use std::io::Read;
+use std::io::Result;
+use std::io::Write;
 
-use crate::capacity_const::{
-    DEFAULT_BUFFER_CAPACITY,
-    DEFAULT_COMPARE_BUFFER_SIZE,
-    DEFAULT_COPY_BUFFER_SIZE,
-};
+use crate::Input;
+use crate::Output;
+use crate::capacity_const::DEFAULT_BUFFER_CAPACITY;
+use crate::capacity_const::DEFAULT_COMPARE_BUFFER_SIZE;
+use crate::capacity_const::DEFAULT_COPY_BUFFER_SIZE;
 use crate::std_io::ext::ReadExt;
 use crate::traits::validate_read_count;
-use crate::util::{
-    allocation_error,
-    create_vec,
-    try_reserve_vec,
-};
-use crate::{
-    Input,
-    Output,
-};
+use crate::util::allocation_error;
+use crate::util::create_vec;
+use crate::util::try_reserve_vec;
 
 /// Stream utility namespace.
 ///

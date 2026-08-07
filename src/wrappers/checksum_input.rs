@@ -6,18 +6,12 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use std::{
-    hash::Hasher,
-    io::{
-        self,
-        SeekFrom,
-    },
-};
+use std::hash::Hasher;
+use std::io;
+use std::io::SeekFrom;
 
-use crate::{
-    Input,
-    Seekable,
-};
+use crate::Input;
+use crate::Seekable;
 
 /// Byte input wrapper that hashes successfully returned bytes.
 ///

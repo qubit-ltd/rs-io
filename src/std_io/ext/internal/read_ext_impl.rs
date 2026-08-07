@@ -13,19 +13,15 @@
 //! functions are public within the crate so sibling modules and tests can call
 //! them, but they are not re-exported from the crate root and are intended for
 //! internal use only.
-use std::io::{
-    BufRead,
-    Error,
-    ErrorKind,
-    Read,
-    Result,
-};
+use std::io::BufRead;
+use std::io::Error;
+use std::io::ErrorKind;
+use std::io::Read;
+use std::io::Result;
 use std::string::FromUtf8Error;
 
-use crate::util::{
-    allocation_error,
-    try_reserve_vec,
-};
+use crate::util::allocation_error;
+use crate::util::try_reserve_vec;
 
 /// Default stack buffer size used by bounded read operations.
 pub(crate) const READ_TO_END_BUFFER_SIZE: usize = 8 * 1024;

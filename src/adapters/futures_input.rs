@@ -7,18 +7,14 @@
 // =============================================================================
 
 use std::pin::Pin;
-use std::task::{
-    Context,
-    Poll,
-};
+use std::task::Context;
+use std::task::Poll;
 
 use futures_io::AsyncRead;
 
+use crate::AsyncInput;
+use crate::traits::normalize_async_error;
 use crate::util::UncheckedSlice;
-use crate::{
-    AsyncInput,
-    traits::normalize_async_error,
-};
 
 /// Adapts a futures-io [`AsyncRead`] value to Qubit's [`AsyncInput`].
 ///

@@ -8,10 +8,8 @@
 
 //! Composite read and write capability.
 
-use std::io::{
-    Read,
-    Write,
-};
+use std::io::Read;
+use std::io::Write;
 
 /// Object-safe capability trait for values that can be both read and written.
 ///
