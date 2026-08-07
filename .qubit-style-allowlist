@@ -1,3 +1,4 @@
 coverage-cfg | src/lib.rs | Re-export coverage-only allocation and copy helpers for cfg(coverage) integration tests.
 coverage-cfg | src/util/mod.rs | Re-export coverage-only helpers from private utility modules for cfg(coverage) integration tests.
 coverage-cfg | src/util/streams.rs | Expose a coverage-only entry point for the copied-item count overflow branch that cannot be reached with practical test input.
+coverage-cfg | src/util/allocation.rs | Keep deterministic allocation failure hooks local to rs-io because cfg(coverage) does not propagate into registry dependencies.

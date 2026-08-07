@@ -9,19 +9,26 @@
 //! Shared allocation, stream, and unchecked-slice utilities.
 
 // qubit-style: allow coverage-cfg
+mod allocation;
 mod streams;
 
+pub(crate) use allocation::{
+    allocation_error,
+    create_vec,
+    try_reserve_string,
+    try_reserve_vec,
+};
+#[cfg(coverage)]
+pub use allocation::{
+    coverage_fail_next_reserve,
+    coverage_fail_next_string_reserve,
+    coverage_fail_reserve_above,
+    coverage_fail_reserve_after,
+    coverage_reset_reserve_hooks,
+};
 pub(crate) use qubit_utils::{
     SliceRange,
     UncheckedSlice,
-};
-pub(crate) use qubit_utils::{
-    allocation_error,
-    create_vec,
-};
-pub(crate) use qubit_utils::{
-    try_reserve_string,
-    try_reserve_vec,
 };
 pub use streams::Streams;
 #[cfg(coverage)]

@@ -21,13 +21,11 @@ mod coverage_tests {
         Streams,
         coverage_add_item_count_overflow,
         coverage_fail_next_add_item_count,
-        coverage_reset_add_item_count_hooks,
-    };
-    use qubit_utils::{
         coverage_fail_next_reserve,
         coverage_fail_next_string_reserve,
         coverage_fail_reserve_above,
         coverage_fail_reserve_after,
+        coverage_reset_add_item_count_hooks,
         coverage_reset_reserve_hooks,
     };
 
