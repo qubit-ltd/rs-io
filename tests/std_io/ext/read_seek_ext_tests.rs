@@ -45,13 +45,9 @@ impl Seek for RestoreFailingReader {
     fn seek(&mut self, position: SeekFrom) -> std::io::Result<u64> {
         match position {
             SeekFrom::Current(0) => Ok(self.restored_position),
-            SeekFrom::Start(position) if position == self.restored_position => {
-                Err(Error::other("restore failed"))
-            }
+            SeekFrom::Start(position) if position == self.restored_position => Err(Error::other("restore failed")),
             SeekFrom::Start(position) => Ok(position),
-            SeekFrom::Current(_) | SeekFrom::End(_) => {
-                Err(Error::new(ErrorKind::Unsupported, "unsupported seek"))
-            }
+            SeekFrom::Current(_) | SeekFrom::End(_) => Err(Error::new(ErrorKind::Unsupported, "unsupported seek")),
         }
     }
 }
@@ -87,15 +83,11 @@ impl Seek for ReadFailingReadSeek {
     fn seek(&mut self, position: SeekFrom) -> std::io::Result<u64> {
         match position {
             SeekFrom::Current(0) => Ok(self.original_position),
-            SeekFrom::Start(position)
-                if position == self.original_position && self.fail_restore =>
-            {
+            SeekFrom::Start(position) if position == self.original_position && self.fail_restore => {
                 Err(Error::other("restore failed"))
             }
             SeekFrom::Start(position) => Ok(position),
-            SeekFrom::Current(_) | SeekFrom::End(_) => {
-                Err(Error::new(ErrorKind::Unsupported, "unsupported seek"))
-            }
+            SeekFrom::Current(_) | SeekFrom::End(_) => Err(Error::new(ErrorKind::Unsupported, "unsupported seek")),
         }
     }
 }
@@ -115,10 +107,7 @@ impl OffsetSeekFailingReadSeek {
         }
     }
 
-    fn with_restore_error(
-        original_position: u64,
-        rejected_offset: u64,
-    ) -> Self {
+    fn with_restore_error(original_position: u64, rejected_offset: u64) -> Self {
         Self {
             original_position,
             rejected_offset,
@@ -137,18 +126,12 @@ impl Seek for OffsetSeekFailingReadSeek {
     fn seek(&mut self, position: SeekFrom) -> std::io::Result<u64> {
         match position {
             SeekFrom::Current(0) => Ok(self.original_position),
-            SeekFrom::Start(position)
-                if position == self.original_position && self.fail_restore =>
-            {
+            SeekFrom::Start(position) if position == self.original_position && self.fail_restore => {
                 Err(Error::other("restore failed"))
             }
-            SeekFrom::Start(position) if position == self.rejected_offset => {
-                Err(Error::other("offset seek failed"))
-            }
+            SeekFrom::Start(position) if position == self.rejected_offset => Err(Error::other("offset seek failed")),
             SeekFrom::Start(position) => Ok(position),
-            SeekFrom::Current(_) | SeekFrom::End(_) => {
-                Err(Error::new(ErrorKind::Unsupported, "unsupported seek"))
-            }
+            SeekFrom::Current(_) | SeekFrom::End(_) => Err(Error::new(ErrorKind::Unsupported, "unsupported seek")),
         }
     }
 }
@@ -166,9 +149,7 @@ impl Seek for PositionFailingReadSeek {
         match position {
             SeekFrom::Current(0) => Err(Error::other("position failed")),
             SeekFrom::Start(position) => Ok(position),
-            SeekFrom::Current(_) | SeekFrom::End(_) => {
-                Err(Error::new(ErrorKind::Unsupported, "unsupported seek"))
-            }
+            SeekFrom::Current(_) | SeekFrom::End(_) => Err(Error::new(ErrorKind::Unsupported, "unsupported seek")),
         }
     }
 }
@@ -209,9 +190,7 @@ impl Seek for InterruptedReadSeek {
         match position {
             SeekFrom::Current(0) => Ok(self.original_position),
             SeekFrom::Start(position) => Ok(position),
-            SeekFrom::Current(_) | SeekFrom::End(_) => {
-                Err(Error::new(ErrorKind::Unsupported, "unsupported seek"))
-            }
+            SeekFrom::Current(_) | SeekFrom::End(_) => Err(Error::new(ErrorKind::Unsupported, "unsupported seek")),
         }
     }
 }
@@ -230,12 +209,7 @@ fn test_peek_exact_or_eof_reads_prefix_without_moving_cursor() {
 
     assert_eq!(3, count);
     assert_eq!(b"cde", &buffer);
-    assert_eq!(
-        2,
-        cursor
-            .stream_position()
-            .expect("cursor position should be readable"),
-    );
+    assert_eq!(2, cursor.stream_position().expect("cursor position should be readable"),);
 }
 
 #[test]
@@ -252,12 +226,7 @@ fn test_peek_exact_or_eof_returns_partial_count_at_eof() {
 
     assert_eq!(2, count);
     assert_eq!(b"bcxx", &buffer);
-    assert_eq!(
-        1,
-        cursor
-            .stream_position()
-            .expect("cursor position should be restored"),
-    );
+    assert_eq!(1, cursor.stream_position().expect("cursor position should be restored"),);
 }
 
 #[test]
@@ -339,12 +308,7 @@ fn test_read_exact_or_eof_at_reads_from_offset_without_moving_cursor() {
 
     assert_eq!(4, count);
     assert_eq!(b"bcde", &buffer);
-    assert_eq!(
-        2,
-        cursor
-            .stream_position()
-            .expect("cursor position should be restored"),
-    );
+    assert_eq!(2, cursor.stream_position().expect("cursor position should be restored"),);
 }
 
 #[test]
@@ -362,12 +326,7 @@ fn test_read_exact_or_eof_at_works_on_dyn_read_seek() {
 
     assert_eq!(3, count);
     assert_eq!(b"bcd", &buffer);
-    assert_eq!(
-        4,
-        stream
-            .stream_position()
-            .expect("stream position should be restored"),
-    );
+    assert_eq!(4, stream.stream_position().expect("stream position should be restored"),);
 }
 
 #[test]
@@ -379,35 +338,18 @@ fn test_read_seek_ext_ufcs_methods_work_on_dyn_read_seek() {
     let stream: &mut dyn ReadSeek = &mut cursor;
 
     let mut peek_buffer = [0; 2];
-    let count = <dyn ReadSeek as ReadSeekExt>::peek_exact_or_eof(
-        stream,
-        &mut peek_buffer,
-    )
-    .expect("UFCS peek extension should work on dyn ReadSeek");
+    let count = <dyn ReadSeek as ReadSeekExt>::peek_exact_or_eof(stream, &mut peek_buffer)
+        .expect("UFCS peek extension should work on dyn ReadSeek");
     assert_eq!(2, count);
     assert_eq!(b"ef", &peek_buffer);
-    assert_eq!(
-        4,
-        stream
-            .stream_position()
-            .expect("stream position should be restored")
-    );
+    assert_eq!(4, stream.stream_position().expect("stream position should be restored"));
 
     let mut offset_buffer = [0; 3];
-    let count = <dyn ReadSeek as ReadSeekExt>::read_exact_or_eof_at(
-        stream,
-        1,
-        &mut offset_buffer,
-    )
-    .expect("UFCS offset read extension should work on dyn ReadSeek");
+    let count = <dyn ReadSeek as ReadSeekExt>::read_exact_or_eof_at(stream, 1, &mut offset_buffer)
+        .expect("UFCS offset read extension should work on dyn ReadSeek");
     assert_eq!(3, count);
     assert_eq!(b"bcd", &offset_buffer);
-    assert_eq!(
-        4,
-        stream
-            .stream_position()
-            .expect("stream position should be restored")
-    );
+    assert_eq!(4, stream.stream_position().expect("stream position should be restored"));
 }
 
 #[test]
@@ -415,9 +357,9 @@ fn test_read_exact_or_eof_at_returns_offset_seek_error_after_restore() {
     let mut reader = OffsetSeekFailingReadSeek::new(5, 2);
     let mut buffer = [0; 1];
 
-    let error = reader.read_exact_or_eof_at(2, &mut buffer).expect_err(
-        "offset seek errors should be returned after restoring position",
-    );
+    let error = reader
+        .read_exact_or_eof_at(2, &mut buffer)
+        .expect_err("offset seek errors should be returned after restoring position");
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("offset seek failed", error.to_string());
@@ -428,9 +370,9 @@ fn test_read_exact_or_eof_at_prefers_restore_error_over_offset_seek_error() {
     let mut reader = OffsetSeekFailingReadSeek::with_restore_error(5, 2);
     let mut buffer = [0; 1];
 
-    let error = reader.read_exact_or_eof_at(2, &mut buffer).expect_err(
-        "restore errors should take precedence over offset seek errors",
-    );
+    let error = reader
+        .read_exact_or_eof_at(2, &mut buffer)
+        .expect_err("restore errors should take precedence over offset seek errors");
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("restore failed", error.to_string());
@@ -503,10 +445,5 @@ fn test_peek_exact_or_eof_works_on_dyn_read_seek() {
 
     assert_eq!(2, count);
     assert_eq!(b"bc", &buffer);
-    assert_eq!(
-        1,
-        stream
-            .stream_position()
-            .expect("stream position should be restored"),
-    );
+    assert_eq!(1, stream.stream_position().expect("stream position should be restored"),);
 }

@@ -94,23 +94,15 @@ pub trait AsyncInput {
     /// [`std::io::ErrorKind::InvalidData`] if the implementation reports more
     /// items than requested.
     #[inline]
-    fn poll_read(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        output: &mut [Self::Item],
-    ) -> Poll<Result<usize>> {
+    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, output: &mut [Self::Item]) -> Poll<Result<usize>> {
         if output.is_empty() {
             return Poll::Ready(Ok(0));
         }
         let requested = output.len();
         // SAFETY: The full output slice is a valid destination range.
         match unsafe { self.poll_read_unchecked(cx, output, 0, requested) } {
-            Poll::Ready(Ok(read)) => {
-                Poll::Ready(validate_read_count(read, requested).map(|()| read))
-            }
-            Poll::Ready(Err(error)) => {
-                Poll::Ready(Err(normalize_async_error(error)))
-            }
+            Poll::Ready(Ok(read)) => Poll::Ready(validate_read_count(read, requested).map(|()| read)),
+            Poll::Ready(Err(error)) => Poll::Ready(Err(normalize_async_error(error))),
             Poll::Pending => Poll::Pending,
         }
     }
@@ -129,10 +121,7 @@ pub trait AsyncInput {
     ///
     /// A future that resolves with the number of items read.
     #[inline(always)]
-    fn read_async<'a>(
-        &'a mut self,
-        output: &'a mut [Self::Item],
-    ) -> ReadFuture<'a, Self>
+    fn read_async<'a>(&'a mut self, output: &'a mut [Self::Item]) -> ReadFuture<'a, Self>
     where
         Self: Sized + Unpin,
     {
@@ -156,10 +145,7 @@ pub trait AsyncInput {
     ///
     /// A future that resolves with the total number of items read.
     #[inline(always)]
-    fn read_fully_async<'a>(
-        &'a mut self,
-        output: &'a mut [Self::Item],
-    ) -> ReadFullyFuture<'a, Self>
+    fn read_fully_async<'a>(&'a mut self, output: &'a mut [Self::Item]) -> ReadFullyFuture<'a, Self>
     where
         Self: Sized + Unpin,
     {
@@ -183,10 +169,7 @@ pub trait AsyncInput {
     ///
     /// A future that resolves after filling `output` or encountering an error.
     #[inline(always)]
-    fn read_exactly_async<'a>(
-        &'a mut self,
-        output: &'a mut [Self::Item],
-    ) -> ReadExactFuture<'a, Self>
+    fn read_exactly_async<'a>(&'a mut self, output: &'a mut [Self::Item]) -> ReadExactFuture<'a, Self>
     where
         Self: Sized + Unpin,
     {

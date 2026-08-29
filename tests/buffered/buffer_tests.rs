@@ -79,8 +79,7 @@ fn test_with_capacity_initializes_max_zst_window() {
 
 #[test]
 fn test_try_with_capacity_initializes_empty_window() {
-    let buffer = Buffer::<u8>::try_with_capacity(0)
-        .expect("fallible buffer allocation should succeed");
+    let buffer = Buffer::<u8>::try_with_capacity(0).expect("fallible buffer allocation should succeed");
 
     assert_eq!(1, buffer.capacity());
     assert!(buffer.is_empty());
@@ -89,8 +88,7 @@ fn test_try_with_capacity_initializes_empty_window() {
 #[cfg(target_pointer_width = "64")]
 #[test]
 fn test_try_with_capacity_initializes_max_zst_window() {
-    let buffer = Buffer::<()>::try_with_capacity(usize::MAX)
-        .expect("zero-sized buffer allocation should succeed");
+    let buffer = Buffer::<()>::try_with_capacity(usize::MAX).expect("zero-sized buffer allocation should succeed");
 
     assert_eq!(usize::MAX, buffer.capacity());
     assert_eq!(0, buffer.available());
@@ -100,8 +98,7 @@ fn test_try_with_capacity_initializes_max_zst_window() {
 
 #[test]
 fn test_try_with_capacity_preserves_allocation_error() {
-    let error = Buffer::<u8>::try_with_capacity(usize::MAX)
-        .expect_err("oversized buffer allocation should fail");
+    let error = Buffer::<u8>::try_with_capacity(usize::MAX).expect_err("oversized buffer allocation should fail");
 
     assert!(!error.to_string().is_empty());
 }
@@ -115,9 +112,7 @@ fn test_try_reserve_capacity_preserves_window() {
         buffer.consume(1);
     }
 
-    buffer
-        .try_reserve_capacity(8)
-        .expect("buffer growth should succeed");
+    buffer.try_reserve_capacity(8).expect("buffer growth should succeed");
 
     assert_eq!(8, buffer.capacity());
     assert_eq!(1, buffer.position());
@@ -235,11 +230,7 @@ fn test_compact_moves_unread_tail_to_front() {
 #[test]
 fn test_buffer_supports_clone_only_items() {
     let mut buffer = Buffer::<String>::with_capacity(4);
-    let input = [
-        String::from("alpha"),
-        String::from("beta"),
-        String::from("gamma"),
-    ];
+    let input = [String::from("alpha"), String::from("beta"), String::from("gamma")];
 
     // SAFETY: The source and spare ranges contain three distinct elements.
     unsafe {

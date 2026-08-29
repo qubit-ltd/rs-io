@@ -17,12 +17,7 @@ struct OverreportingInput;
 impl Input for OverreportingInput {
     type Item = u8;
 
-    unsafe fn read_unchecked(
-        &mut self,
-        _output: &mut [u8],
-        _index: usize,
-        count: usize,
-    ) -> std::io::Result<usize> {
+    unsafe fn read_unchecked(&mut self, _output: &mut [u8], _index: usize, count: usize) -> std::io::Result<usize> {
         Ok(count + 1)
     }
 }
@@ -49,21 +44,14 @@ impl ScriptedInput {
 impl Input for ScriptedInput {
     type Item = u8;
 
-    unsafe fn read_unchecked(
-        &mut self,
-        output: &mut [u8],
-        index: usize,
-        count: usize,
-    ) -> std::io::Result<usize> {
+    unsafe fn read_unchecked(&mut self, output: &mut [u8], index: usize, count: usize) -> std::io::Result<usize> {
         match self.steps.pop_front().unwrap_or(ReadStep::Eof) {
             ReadStep::Data(data) => {
                 let read = count.min(data.len());
                 output[index..index + read].copy_from_slice(&data[..read]);
                 Ok(read)
             }
-            ReadStep::Interrupted => {
-                Err(Error::new(ErrorKind::Interrupted, "interrupted"))
-            }
+            ReadStep::Interrupted => Err(Error::new(ErrorKind::Interrupted, "interrupted")),
             ReadStep::Error(kind, message) => Err(Error::new(kind, message)),
             ReadStep::Eof => Ok(0),
         }
@@ -104,10 +92,7 @@ fn test_input_read_returns_successful_count() {
 
 #[test]
 fn test_input_read_propagates_implementation_error() {
-    let mut input = ScriptedInput::new(vec![ReadStep::Error(
-        ErrorKind::PermissionDenied,
-        "read failed",
-    )]);
+    let mut input = ScriptedInput::new(vec![ReadStep::Error(ErrorKind::PermissionDenied, "read failed")]);
     let mut output = [0_u8; 4];
 
     let error = input
@@ -137,10 +122,7 @@ fn test_input_read_fully_reads_until_buffer_full_or_eof() {
 
 #[test]
 fn test_input_read_fully_returns_non_interrupted_error() {
-    let mut input = ScriptedInput::new(vec![ReadStep::Error(
-        ErrorKind::PermissionDenied,
-        "read failed",
-    )]);
+    let mut input = ScriptedInput::new(vec![ReadStep::Error(ErrorKind::PermissionDenied, "read failed")]);
     let mut output = [0_u8; 3];
 
     let error = input
@@ -181,8 +163,7 @@ fn test_input_read_exactly_fills_destination() {
 
 #[test]
 fn test_input_read_exactly_reports_unexpected_eof() {
-    let mut input =
-        ScriptedInput::new(vec![ReadStep::Data(vec![1, 2]), ReadStep::Eof]);
+    let mut input = ScriptedInput::new(vec![ReadStep::Data(vec![1, 2]), ReadStep::Eof]);
     let mut output = [0_u8; 3];
 
     let error = input

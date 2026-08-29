@@ -59,9 +59,7 @@ fn test_tee_input_returns_source_errors_without_writing_branch() {
         ScriptedOutput::accepting(),
     );
     let mut output = [0_u16; 2];
-    let error = input
-        .read(&mut output)
-        .expect_err("source error should be returned");
+    let error = input.read(&mut output).expect_err("source error should be returned");
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert!(input.branch().items.is_empty());
@@ -74,9 +72,7 @@ fn test_tee_input_returns_branch_error_after_source_progress() {
         ScriptedOutput::failing_write("branch failed"),
     );
     let mut output = [0_u16; 2];
-    let error = input
-        .read(&mut output)
-        .expect_err("branch error should be returned");
+    let error = input.read(&mut output).expect_err("branch error should be returned");
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!([1, 2], output);
@@ -85,10 +81,7 @@ fn test_tee_input_returns_branch_error_after_source_progress() {
 
 #[test]
 fn test_tee_input_rejects_invalid_source_progress() {
-    let mut input = TeeInput::new(
-        ScriptedInput::<u16>::invalid_count(),
-        ScriptedOutput::accepting(),
-    );
+    let mut input = TeeInput::new(ScriptedInput::<u16>::invalid_count(), ScriptedOutput::accepting());
     let mut output = [0_u16; 2];
     let error = input
         .read(&mut output)
@@ -100,34 +93,19 @@ fn test_tee_input_rejects_invalid_source_progress() {
 
 #[test]
 fn test_tee_input_forwards_seek_only_to_source() {
-    let mut input = TeeInput::new(
-        ScriptedInput::items(vec![1_u16]),
-        ScriptedOutput::<u16>::accepting(),
-    );
+    let mut input = TeeInput::new(ScriptedInput::items(vec![1_u16]), ScriptedOutput::<u16>::accepting());
 
-    assert_eq!(
-        9,
-        input
-            .seek_to(SeekFrom::Start(9))
-            .expect("seek should succeed")
-    );
+    assert_eq!(9, input.seek_to(SeekFrom::Start(9)).expect("seek should succeed"));
     assert_eq!(9, input.inner().position);
     assert_eq!(0, input.branch().position);
 }
 
 #[test]
 fn test_tee_input_can_create_synchronized_seek_variant() {
-    let mut input = TeeInput::with_sync_branch_seek(
-        ScriptedInput::items(vec![1_u16]),
-        ScriptedOutput::<u16>::accepting(),
-    );
+    let mut input =
+        TeeInput::with_sync_branch_seek(ScriptedInput::items(vec![1_u16]), ScriptedOutput::<u16>::accepting());
 
-    assert_eq!(
-        3,
-        input
-            .seek_to(SeekFrom::Start(3))
-            .expect("seek should succeed")
-    );
+    assert_eq!(3, input.seek_to(SeekFrom::Start(3)).expect("seek should succeed"));
     assert_eq!(3, input.inner().position);
     assert_eq!(3, input.branch().position);
 }

@@ -90,12 +90,7 @@ where
         self.buffered
     }
 
-    unsafe fn read_unchecked(
-        &mut self,
-        output: &mut [Self::Item],
-        index: usize,
-        count: usize,
-    ) -> io::Result<usize> {
+    unsafe fn read_unchecked(&mut self, output: &mut [Self::Item], index: usize, count: usize) -> io::Result<usize> {
         match &mut self.action {
             InputAction::Items(items) => {
                 let read = items.len().min(count);
@@ -200,12 +195,7 @@ where
         self.buffered
     }
 
-    unsafe fn write_unchecked(
-        &mut self,
-        input: &[Self::Item],
-        index: usize,
-        count: usize,
-    ) -> io::Result<usize> {
+    unsafe fn write_unchecked(&mut self, input: &[Self::Item], index: usize, count: usize) -> io::Result<usize> {
         if let Some(message) = self.write_error {
             return Err(Error::other(message));
         }
@@ -246,14 +236,9 @@ fn seek_position(current: u64, position: SeekFrom) -> io::Result<u64> {
         SeekFrom::Start(position) => Ok(position),
         SeekFrom::Current(offset) => {
             let target = i128::from(current) + i128::from(offset);
-            u64::try_from(target).map_err(|_| {
-                Error::new(ErrorKind::InvalidInput, "negative seek")
-            })
+            u64::try_from(target).map_err(|_| Error::new(ErrorKind::InvalidInput, "negative seek"))
         }
-        SeekFrom::End(_) => Err(Error::new(
-            ErrorKind::Unsupported,
-            "end-relative seek is unsupported",
-        )),
+        SeekFrom::End(_) => Err(Error::new(ErrorKind::Unsupported, "end-relative seek is unsupported")),
     }
 }
 

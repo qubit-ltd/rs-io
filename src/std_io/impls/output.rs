@@ -48,12 +48,7 @@ where
     /// The caller must ensure that index through index plus count is a valid
     /// range inside input without overflowing.
     #[inline(always)]
-    unsafe fn write_unchecked(
-        &mut self,
-        input: &[u8],
-        index: usize,
-        count: usize,
-    ) -> Result<usize> {
+    unsafe fn write_unchecked(&mut self, input: &[u8], index: usize, count: usize) -> Result<usize> {
         // SAFETY: The caller guarantees that the range is valid inside input.
         let source = unsafe { UncheckedSlice::subslice(input, index, count) };
         Write::write(self, source)

@@ -71,13 +71,11 @@ fn main() -> io::Result<()> {
             .expect("frame limit fits in a u32")
             .to_be_bytes(),
     );
-    let oversized_error = read_frame(&mut oversized)
-        .expect_err("oversized frame must be rejected before allocation");
+    let oversized_error = read_frame(&mut oversized).expect_err("oversized frame must be rejected before allocation");
     assert_eq!(ErrorKind::InvalidData, oversized_error.kind());
 
     let mut truncated = Cursor::new([0, 0, 0, 2, b'x']);
-    let truncated_error =
-        read_frame(&mut truncated).expect_err("truncated payload must fail");
+    let truncated_error = read_frame(&mut truncated).expect_err("truncated payload must fail");
     assert_eq!(ErrorKind::UnexpectedEof, truncated_error.kind());
     Ok(())
 }

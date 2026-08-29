@@ -23,10 +23,7 @@ use super::support_tests::TestOutput;
 
 #[test]
 fn test_write_fully_future_type_is_public() {
-    assert!(
-        std::any::type_name::<WriteFullyFuture<'static, TestOutput>>()
-            .contains("WriteFullyFuture")
-    );
+    assert!(std::any::type_name::<WriteFullyFuture<'static, TestOutput>>().contains("WriteFullyFuture"));
 }
 
 #[test]
@@ -70,19 +67,12 @@ fn test_write_fully_future_constructs_and_reports_progress() {
 
 #[test]
 fn test_write_fully_future_supports_pending_writes_before_progress() {
-    let mut output = ScriptedOutput::new([
-        PollResult::Pending,
-        PollResult::Write(1),
-        PollResult::Write(1),
-    ]);
+    let mut output = ScriptedOutput::new([PollResult::Pending, PollResult::Write(1), PollResult::Write(1)]);
     let input = [0_u8; 2];
     let mut future = WriteFullyFuture::new(Pin::new(&mut output), &input);
     let mut cx = Context::from_waker(Waker::noop());
 
-    assert!(matches!(
-        Future::poll(Pin::new(&mut future), &mut cx),
-        Poll::Pending
-    ));
+    assert!(matches!(Future::poll(Pin::new(&mut future), &mut cx), Poll::Pending));
     assert!(matches!(
         Future::poll(Pin::new(&mut future), &mut cx),
         Poll::Ready(Ok(()))
@@ -93,10 +83,7 @@ fn test_write_fully_future_supports_pending_writes_before_progress() {
 fn test_write_fully_future_constructs_and_propagates_io_error() {
     let mut output = ScriptedOutput::new([
         PollResult::Write(1),
-        PollResult::Error(std::io::Error::new(
-            ErrorKind::BrokenPipe,
-            "pipe broken",
-        )),
+        PollResult::Error(std::io::Error::new(ErrorKind::BrokenPipe, "pipe broken")),
     ]);
     let input = [0_u8; 3];
     let mut future = WriteFullyFuture::new(Pin::new(&mut output), &input);
@@ -113,17 +100,12 @@ fn test_write_fully_future_constructs_and_propagates_io_error() {
 
 #[test]
 fn test_write_fully_future_pauses_when_ready_budget_is_exhausted() {
-    let mut output = ScriptedOutput::new(
-        std::iter::repeat_with(|| PollResult::Write(1)).take(65),
-    );
+    let mut output = ScriptedOutput::new(std::iter::repeat_with(|| PollResult::Write(1)).take(65));
     let input = [0_u8; 65];
     let mut future = WriteFullyFuture::new(Pin::new(&mut output), &input);
     let mut cx = Context::from_waker(Waker::noop());
 
-    assert!(matches!(
-        Future::poll(Pin::new(&mut future), &mut cx),
-        Poll::Pending
-    ));
+    assert!(matches!(Future::poll(Pin::new(&mut future), &mut cx), Poll::Pending));
     assert!(matches!(
         Future::poll(Pin::new(&mut future), &mut cx),
         Poll::Ready(Ok(()))
@@ -132,8 +114,7 @@ fn test_write_fully_future_pauses_when_ready_budget_is_exhausted() {
 
 #[test]
 fn test_write_fully_future_reports_write_zero_after_progress() {
-    let mut output =
-        ScriptedOutput::new([PollResult::Write(1), PollResult::Write(0)]);
+    let mut output = ScriptedOutput::new([PollResult::Write(1), PollResult::Write(0)]);
     let input = [1_u8; 2];
     let mut future = WriteFullyFuture::new(Pin::new(&mut output), &input);
     let mut cx = Context::from_waker(Waker::noop());

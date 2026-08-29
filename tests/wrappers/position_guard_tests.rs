@@ -27,19 +27,12 @@ impl Seekable for SeekableOnly {
     fn seek_to(&mut self, position: SeekFrom) -> Result<u64, Error> {
         self.position = match position {
             SeekFrom::Start(position) => position,
-            SeekFrom::Current(offset) => {
-                self.position.checked_add_signed(offset).ok_or_else(|| {
-                    Error::new(
-                        ErrorKind::InvalidInput,
-                        "seek position out of range",
-                    )
-                })?
-            }
+            SeekFrom::Current(offset) => self
+                .position
+                .checked_add_signed(offset)
+                .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "seek position out of range"))?,
             SeekFrom::End(_) => {
-                return Err(Error::new(
-                    ErrorKind::Unsupported,
-                    "end-relative seeks are unsupported",
-                ));
+                return Err(Error::new(ErrorKind::Unsupported, "end-relative seeks are unsupported"));
             }
         };
         Ok(self.position)
@@ -51,8 +44,7 @@ fn test_position_guard_accepts_seekable_without_std_seek() {
     let mut stream = SeekableOnly { position: 3 };
 
     {
-        let mut guard = PositionGuard::new(&mut stream)
-            .expect("guard should capture position");
+        let mut guard = PositionGuard::new(&mut stream).expect("guard should capture position");
         guard
             .inner_mut()
             .seek_to(SeekFrom::Start(8))
@@ -69,9 +61,7 @@ impl Seek for PositionFailingSeek {
         match position {
             SeekFrom::Current(0) => Err(Error::other("position failed")),
             SeekFrom::Start(position) => Ok(position),
-            SeekFrom::Current(_) | SeekFrom::End(_) => {
-                Err(Error::new(ErrorKind::Unsupported, "unsupported seek"))
-            }
+            SeekFrom::Current(_) | SeekFrom::End(_) => Err(Error::new(ErrorKind::Unsupported, "unsupported seek")),
         }
     }
 }
@@ -90,16 +80,12 @@ impl Seek for RestoreFailingSeek {
     fn seek(&mut self, position: SeekFrom) -> std::io::Result<u64> {
         match position {
             SeekFrom::Current(0) => Ok(self.position),
-            SeekFrom::Start(position) if position == self.position => {
-                Err(Error::other("restore failed"))
-            }
+            SeekFrom::Start(position) if position == self.position => Err(Error::other("restore failed")),
             SeekFrom::Start(position) => {
                 self.position = position;
                 Ok(position)
             }
-            SeekFrom::Current(_) | SeekFrom::End(_) => {
-                Err(Error::new(ErrorKind::Unsupported, "unsupported seek"))
-            }
+            SeekFrom::Current(_) | SeekFrom::End(_) => Err(Error::new(ErrorKind::Unsupported, "unsupported seek")),
         }
     }
 }
@@ -107,13 +93,10 @@ impl Seek for RestoreFailingSeek {
 #[test]
 fn test_position_guard_restores_on_drop() {
     let mut cursor = Cursor::new(b"abcdef".to_vec());
-    cursor
-        .seek(SeekFrom::Start(2))
-        .expect("initial seek should succeed");
+    cursor.seek(SeekFrom::Start(2)).expect("initial seek should succeed");
 
     {
-        let mut guard = PositionGuard::new(&mut cursor)
-            .expect("guard should capture position");
+        let mut guard = PositionGuard::new(&mut cursor).expect("guard should capture position");
         assert_eq!(2, guard.position());
         guard
             .inner_mut()
@@ -123,20 +106,15 @@ fn test_position_guard_restores_on_drop() {
 
     assert_eq!(
         2,
-        cursor
-            .stream_position()
-            .expect("drop should restore original position")
+        cursor.stream_position().expect("drop should restore original position")
     );
 }
 
 #[test]
 fn test_position_guard_restore_restores_immediately() {
     let mut cursor = Cursor::new(b"abcdef".to_vec());
-    cursor
-        .seek(SeekFrom::Start(1))
-        .expect("initial seek should succeed");
-    let mut guard =
-        PositionGuard::new(&mut cursor).expect("guard should capture position");
+    cursor.seek(SeekFrom::Start(1)).expect("initial seek should succeed");
+    let mut guard = PositionGuard::new(&mut cursor).expect("guard should capture position");
 
     guard
         .inner_mut()
@@ -156,13 +134,10 @@ fn test_position_guard_restore_restores_immediately() {
 #[test]
 fn test_position_guard_dismiss_skips_drop_restore() {
     let mut cursor = Cursor::new(b"abcdef".to_vec());
-    cursor
-        .seek(SeekFrom::Start(1))
-        .expect("initial seek should succeed");
+    cursor.seek(SeekFrom::Start(1)).expect("initial seek should succeed");
 
     {
-        let mut guard = PositionGuard::new(&mut cursor)
-            .expect("guard should capture position");
+        let mut guard = PositionGuard::new(&mut cursor).expect("guard should capture position");
         guard
             .inner_mut()
             .seek(SeekFrom::Start(4))
@@ -170,12 +145,7 @@ fn test_position_guard_dismiss_skips_drop_restore() {
         guard.dismiss();
     }
 
-    assert_eq!(
-        4,
-        cursor
-            .stream_position()
-            .expect("dismissed guard should not restore")
-    );
+    assert_eq!(4, cursor.stream_position().expect("dismissed guard should not restore"));
 }
 
 #[test]
@@ -194,12 +164,9 @@ fn test_position_guard_returns_position_error() {
 #[test]
 fn test_position_guard_restore_returns_restore_error() {
     let mut stream = RestoreFailingSeek::new(2);
-    let mut guard =
-        PositionGuard::new(&mut stream).expect("guard should capture position");
+    let mut guard = PositionGuard::new(&mut stream).expect("guard should capture position");
 
-    let error = guard
-        .restore()
-        .expect_err("restore error should be returned");
+    let error = guard.restore().expect_err("restore error should be returned");
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("restore failed", error.to_string());
@@ -210,7 +177,6 @@ fn test_position_guard_drop_ignores_restore_error() {
     let mut stream = RestoreFailingSeek::new(2);
 
     {
-        let _guard = PositionGuard::new(&mut stream)
-            .expect("guard should capture position");
+        let _guard = PositionGuard::new(&mut stream).expect("guard should capture position");
     }
 }

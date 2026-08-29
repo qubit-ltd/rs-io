@@ -118,11 +118,9 @@ where
     /// cannot seek back to the captured position.
     #[inline]
     pub fn restore(&mut self) -> Result<()> {
-        self.stream
-            .seek_to(SeekFrom::Start(self.position))
-            .map(|_| {
-                self.done = true;
-            })
+        self.stream.seek_to(SeekFrom::Start(self.position)).map(|_| {
+            self.done = true;
+        })
     }
 
     /// Disables drop-time restoration without moving the stream.

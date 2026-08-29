@@ -63,9 +63,7 @@ impl AsyncInput for ScriptedInput {
                 output[index..index + read].copy_from_slice(&bytes[..read]);
                 Poll::Ready(Ok(read))
             }
-            ReadStep::Error(kind) => {
-                Poll::Ready(Err(Error::new(kind, "scripted read failure")))
-            }
+            ReadStep::Error(kind) => Poll::Ready(Err(Error::new(kind, "scripted read failure"))),
             ReadStep::Pending => Poll::Pending,
             ReadStep::Eof => Poll::Ready(Ok(0)),
         }
@@ -118,15 +116,9 @@ impl ScriptedOutput {
 }
 
 impl AsyncClose for ScriptedOutput {
-    fn poll_close(
-        mut self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-    ) -> Poll<io::Result<()>> {
+    fn poll_close(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         if let Some(kind) = self.close_error.take() {
-            return Poll::Ready(Err(Error::new(
-                kind,
-                "scripted close failure",
-            )));
+            return Poll::Ready(Err(Error::new(kind, "scripted close failure")));
         }
         self.closed = true;
         Poll::Ready(Ok(()))
@@ -147,32 +139,21 @@ impl AsyncOutput for ScriptedOutput {
         index: usize,
         count: usize,
     ) -> Poll<io::Result<usize>> {
-        match self
-            .write_steps
-            .pop_front()
-            .unwrap_or(WriteStep::Accept(count))
-        {
+        match self.write_steps.pop_front().unwrap_or(WriteStep::Accept(count)) {
             WriteStep::Accept(maximum) => {
                 let written = count.min(maximum);
                 self.bytes.extend_from_slice(&input[index..index + written]);
                 Poll::Ready(Ok(written))
             }
-            WriteStep::Error(kind) => {
-                Poll::Ready(Err(Error::new(kind, "scripted write failure")))
-            }
+            WriteStep::Error(kind) => Poll::Ready(Err(Error::new(kind, "scripted write failure"))),
             WriteStep::Pending => Poll::Pending,
         }
     }
 
-    fn poll_flush(
-        mut self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-    ) -> Poll<io::Result<()>> {
+    fn poll_flush(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         match self.flush_steps.pop_front().unwrap_or(FlushStep::Ready) {
             FlushStep::Ready => Poll::Ready(Ok(())),
-            FlushStep::Error(kind) => {
-                Poll::Ready(Err(Error::new(kind, "scripted flush failure")))
-            }
+            FlushStep::Error(kind) => Poll::Ready(Err(Error::new(kind, "scripted flush failure"))),
             FlushStep::Pending => Poll::Pending,
         }
     }
@@ -209,15 +190,8 @@ fn test_async_output_wrappers_propagate_close() {
 #[test]
 fn test_async_output_wrappers_reject_forbidden_flush_error_kinds() {
     for kind in [ErrorKind::WouldBlock, ErrorKind::Interrupted] {
-        let mut counting = AsyncCountingOutput::new(ScriptedOutput::new(
-            [],
-            [FlushStep::Error(kind)],
-            false,
-        ));
-        let mut limit = AsyncLimitOutput::new(
-            ScriptedOutput::new([], [FlushStep::Error(kind)], false),
-            1,
-        );
+        let mut counting = AsyncCountingOutput::new(ScriptedOutput::new([], [FlushStep::Error(kind)], false));
+        let mut limit = AsyncLimitOutput::new(ScriptedOutput::new([], [FlushStep::Error(kind)], false), 1);
         let mut checksum = AsyncChecksumOutput::new(
             ScriptedOutput::new([], [FlushStep::Error(kind)], false),
             DefaultHasher::new(),
@@ -246,13 +220,8 @@ fn test_async_output_wrappers_reject_forbidden_flush_error_kinds() {
 #[test]
 fn test_async_output_wrappers_reject_forbidden_close_error_kinds() {
     for kind in [ErrorKind::WouldBlock, ErrorKind::Interrupted] {
-        let mut counting = AsyncCountingOutput::new(
-            ScriptedOutput::new([], [], false).with_close_error(kind),
-        );
-        let mut limit = AsyncLimitOutput::new(
-            ScriptedOutput::new([], [], false).with_close_error(kind),
-            1,
-        );
+        let mut counting = AsyncCountingOutput::new(ScriptedOutput::new([], [], false).with_close_error(kind));
+        let mut limit = AsyncLimitOutput::new(ScriptedOutput::new([], [], false).with_close_error(kind), 1);
         let mut checksum = AsyncChecksumOutput::new(
             ScriptedOutput::new([], [], false).with_close_error(kind),
             DefaultHasher::new(),
@@ -299,8 +268,7 @@ impl AsyncInput for ByteInput {
         self.pending = true;
         let available = self.bytes.len().saturating_sub(self.position);
         let read = available.min(count).min(2);
-        output[index..index + read]
-            .copy_from_slice(&self.bytes[self.position..self.position + read]);
+        output[index..index + read].copy_from_slice(&self.bytes[self.position..self.position + read]);
         self.position += read;
         Poll::Ready(Ok(read))
     }
@@ -335,10 +303,7 @@ impl AsyncOutput for ByteOutput {
         Poll::Ready(Ok(written))
     }
 
-    fn poll_flush(
-        self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-    ) -> Poll<io::Result<()>> {
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         Poll::Ready(Ok(()))
     }
 }
@@ -358,8 +323,7 @@ where
 }
 
 #[test]
-fn test_async_input_wrappers_limit_count_and_hash_successful_reads()
--> io::Result<()> {
+fn test_async_input_wrappers_limit_count_and_hash_successful_reads() -> io::Result<()> {
     let input = ByteInput {
         bytes: b"abcdef".to_vec(),
         position: 0,
@@ -382,8 +346,7 @@ fn test_async_input_wrappers_limit_count_and_hash_successful_reads()
 }
 
 #[test]
-fn test_async_output_wrappers_limit_count_and_hash_successful_writes()
--> io::Result<()> {
+fn test_async_output_wrappers_limit_count_and_hash_successful_writes() -> io::Result<()> {
     let bytes = Arc::new(Mutex::new(Vec::new()));
     let output = ByteOutput {
         bytes: bytes.clone(),
@@ -396,10 +359,7 @@ fn test_async_output_wrappers_limit_count_and_hash_successful_writes()
     complete(output.write_fully_async(b"abcd"))?;
     assert_eq!(0, complete(output.write_async(b"ef"))?);
     complete(output.flush_async())?;
-    assert_eq!(
-        b"abcd",
-        bytes.lock().expect("lock should succeed").as_slice()
-    );
+    assert_eq!(b"abcd", bytes.lock().expect("lock should succeed").as_slice());
     assert_eq!(4, output.items_written());
     assert_eq!(0, output.inner().inner().remaining());
 
@@ -428,11 +388,7 @@ fn test_async_counting_input_counts_only_successful_reads_and_exposes_inner() {
 
     let mut cx = Context::from_waker(Waker::noop());
     let mut output = [0_u8; 3];
-    assert!(
-        Pin::new(&mut input)
-            .poll_read(&mut cx, &mut output)
-            .is_pending()
-    );
+    assert!(Pin::new(&mut input).poll_read(&mut cx, &mut output).is_pending());
     let error = Pin::new(&mut input)
         .poll_read(&mut cx, &mut output)
         .expect_ready("counting read error should be ready")
@@ -453,8 +409,7 @@ fn test_async_counting_input_counts_only_successful_reads_and_exposes_inner() {
 }
 
 #[test]
-fn test_async_counting_output_counts_only_successful_writes_and_delegates_flush()
- {
+fn test_async_counting_output_counts_only_successful_writes_and_delegates_flush() {
     let inner = ScriptedOutput::new(
         [
             WriteStep::Pending,
@@ -472,11 +427,7 @@ fn test_async_counting_output_counts_only_successful_writes_and_delegates_flush(
     output.inner_mut().marker = 1;
 
     let mut cx = Context::from_waker(Waker::noop());
-    assert!(
-        Pin::new(&mut output)
-            .poll_write(&mut cx, b"abc")
-            .is_pending()
-    );
+    assert!(Pin::new(&mut output).poll_write(&mut cx, b"abc").is_pending());
     let error = Pin::new(&mut output)
         .poll_write(&mut cx, b"abc")
         .expect_ready("counting write error should be ready")
@@ -504,8 +455,7 @@ fn test_async_counting_output_counts_only_successful_writes_and_delegates_flush(
 }
 
 #[test]
-fn test_async_limit_input_bounds_reads_and_preserves_state_on_pending_or_error()
-{
+fn test_async_limit_input_bounds_reads_and_preserves_state_on_pending_or_error() {
     let inner = ScriptedInput::new(
         [
             ReadStep::Pending,
@@ -530,11 +480,7 @@ fn test_async_limit_input_bounds_reads_and_preserves_state_on_pending_or_error()
             .expect("empty limited read should succeed")
     );
     let mut output = [0_u8; 4];
-    assert!(
-        Pin::new(&mut input)
-            .poll_read(&mut cx, &mut output)
-            .is_pending()
-    );
+    assert!(Pin::new(&mut input).poll_read(&mut cx, &mut output).is_pending());
     assert_eq!(2, input.remaining());
     let error = Pin::new(&mut input)
         .poll_read(&mut cx, &mut output)
@@ -561,8 +507,7 @@ fn test_async_limit_input_bounds_reads_and_preserves_state_on_pending_or_error()
 }
 
 #[test]
-fn test_async_limit_output_bounds_writes_and_preserves_state_on_pending_or_error()
- {
+fn test_async_limit_output_bounds_writes_and_preserves_state_on_pending_or_error() {
     let inner = ScriptedOutput::new(
         [
             WriteStep::Pending,
@@ -586,11 +531,7 @@ fn test_async_limit_output_bounds_writes_and_preserves_state_on_pending_or_error
             .expect_ready("empty limited write should be ready")
             .expect("empty limited write should succeed")
     );
-    assert!(
-        Pin::new(&mut output)
-            .poll_write(&mut cx, b"abcd")
-            .is_pending()
-    );
+    assert!(Pin::new(&mut output).poll_write(&mut cx, b"abcd").is_pending());
     assert_eq!(2, output.remaining());
     let error = Pin::new(&mut output)
         .poll_write(&mut cx, b"abcd")
@@ -644,11 +585,7 @@ fn test_async_checksum_input_hashes_only_successful_reads_and_exposes_parts() {
 
     let mut cx = Context::from_waker(Waker::noop());
     let mut output = [0_u8; 3];
-    assert!(
-        Pin::new(&mut input)
-            .poll_read(&mut cx, &mut output)
-            .is_pending()
-    );
+    assert!(Pin::new(&mut input).poll_read(&mut cx, &mut output).is_pending());
     assert_eq!(initial, input.checksum());
     let error = Pin::new(&mut input)
         .poll_read(&mut cx, &mut output)
@@ -674,8 +611,7 @@ fn test_async_checksum_input_hashes_only_successful_reads_and_exposes_parts() {
 }
 
 #[test]
-fn test_async_checksum_output_hashes_only_successful_writes_and_exposes_parts()
-{
+fn test_async_checksum_output_hashes_only_successful_writes_and_exposes_parts() {
     let inner = ScriptedOutput::new(
         [
             WriteStep::Pending,
@@ -694,11 +630,7 @@ fn test_async_checksum_output_hashes_only_successful_writes_and_exposes_parts()
     assert_eq!(initial, output.checksum());
 
     let mut cx = Context::from_waker(Waker::noop());
-    assert!(
-        Pin::new(&mut output)
-            .poll_write(&mut cx, b"abc")
-            .is_pending()
-    );
+    assert!(Pin::new(&mut output).poll_write(&mut cx, b"abc").is_pending());
     assert_eq!(initial, output.checksum());
     let error = Pin::new(&mut output)
         .poll_write(&mut cx, b"abc")

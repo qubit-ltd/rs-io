@@ -77,10 +77,7 @@ where
 /// # Panics
 ///
 /// Panics in debug builds if `buffer` has no spare capacity.
-fn read_more_impl<T>(
-    inner: &mut dyn Input<Item = T>,
-    buffer: &mut Buffer<T>,
-) -> Result<bool>
+fn read_more_impl<T>(inner: &mut dyn Input<Item = T>, buffer: &mut Buffer<T>) -> Result<bool>
 where
     T: Clone + Default,
 {
@@ -128,10 +125,7 @@ where
 /// consumed prefix to reclaim. Returns [`ErrorKind::InvalidData`] for an
 /// invalid count reported by `inner`; other non-interrupted errors are
 /// propagated.
-fn fill_more_impl<T>(
-    inner: &mut dyn Input<Item = T>,
-    buffer: &mut Buffer<T>,
-) -> Result<bool>
+fn fill_more_impl<T>(inner: &mut dyn Input<Item = T>, buffer: &mut Buffer<T>) -> Result<bool>
 where
     T: Clone + Default,
 {
@@ -171,11 +165,7 @@ where
 /// Returns [`ErrorKind::InvalidInput`] when `count` exceeds the buffer
 /// capacity. Returns [`ErrorKind::InvalidData`] for an invalid count reported
 /// by `inner`; other non-interrupted input errors are propagated.
-fn fill_until_impl<T>(
-    inner: &mut dyn Input<Item = T>,
-    buffer: &mut Buffer<T>,
-    count: usize,
-) -> Result<bool>
+fn fill_until_impl<T>(inner: &mut dyn Input<Item = T>, buffer: &mut Buffer<T>, count: usize) -> Result<bool>
 where
     T: Clone + Default,
 {
@@ -224,11 +214,7 @@ where
 /// [`ErrorKind::InvalidInput`] when `count` exceeds the buffer capacity, or
 /// [`ErrorKind::InvalidData`] for an invalid count reported by `inner`. Other
 /// non-interrupted input errors are propagated.
-fn ensure_available_impl<T>(
-    inner: &mut dyn Input<Item = T>,
-    buffer: &mut Buffer<T>,
-    count: usize,
-) -> Result<()>
+fn ensure_available_impl<T>(inner: &mut dyn Input<Item = T>, buffer: &mut Buffer<T>, count: usize) -> Result<()>
 where
     T: Clone + Default,
 {
@@ -240,10 +226,7 @@ where
     unsafe {
         buffer.consume(available);
     }
-    Err(Error::new(
-        ErrorKind::UnexpectedEof,
-        "failed to fill whole buffer",
-    ))
+    Err(Error::new(ErrorKind::UnexpectedEof, "failed to fill whole buffer"))
 }
 
 /// Reads an indexed range through a type-erased input and retained buffer.
@@ -298,8 +281,7 @@ where
         buffer.clear();
         if count >= buffer.capacity() {
             // SAFETY: Forwarded from the caller.
-            let read =
-                unsafe { inner.read_unchecked(output, output_index, count) }?;
+            let read = unsafe { inner.read_unchecked(output, output_index, count) }?;
             validate_read_count(read, count)?;
             return Ok(read);
         }
@@ -351,8 +333,7 @@ unsafe fn read_direct_fully<T>(
 ) -> Result<usize> {
     loop {
         // SAFETY: Forwarded from the caller.
-        match unsafe { inner.read_fully_unchecked(output, output_index, count) }
-        {
+        match unsafe { inner.read_fully_unchecked(output, output_index, count) } {
             Ok(read) => {
                 validate_read_count(read, count)?;
                 return Ok(read);
@@ -382,15 +363,7 @@ where
         let remaining = count - total;
         // SAFETY: `total` stays below `count`, so the suffix fits caller
         // output.
-        match unsafe {
-            read_unchecked_impl(
-                inner,
-                buffer,
-                output,
-                output_index + total,
-                remaining,
-            )
-        } {
+        match unsafe { read_unchecked_impl(inner, buffer, output, output_index + total, remaining) } {
             Ok(0) => break,
             Ok(read) => total += read,
             Err(error) => return Err(error),
@@ -450,9 +423,7 @@ where
     }
 
     // SAFETY: The caller guarantees the complete output range is valid.
-    let total = unsafe {
-        copy_available_to_output(buffer, output, output_index, count)
-    };
+    let total = unsafe { copy_available_to_output(buffer, output, output_index, count) };
     if total == count {
         return Ok(total);
     }
@@ -461,22 +432,12 @@ where
     if remaining >= buffer.capacity() {
         buffer.clear();
         // SAFETY: The remaining suffix is inside the caller's output range.
-        let read = unsafe {
-            read_direct_fully(inner, output, output_index + total, remaining)
-        }?;
+        let read = unsafe { read_direct_fully(inner, output, output_index + total, remaining) }?;
         return Ok(total + read);
     }
 
     // SAFETY: The remaining suffix is inside the caller's output range.
-    let read = unsafe {
-        read_buffered_remainder(
-            inner,
-            buffer,
-            output,
-            output_index + total,
-            remaining,
-        )
-    }?;
+    let read = unsafe { read_buffered_remainder(inner, buffer, output, output_index + total, remaining) }?;
     Ok(total + read)
 }
 
@@ -553,10 +514,7 @@ where
     /// Panics if initializing the backing buffer requires
     /// `I::Item::default()` or `I::Item::clone()` and either operation panics.
     #[inline]
-    pub fn try_with_capacity(
-        inner: I,
-        capacity: usize,
-    ) -> std::result::Result<Self, TryReserveError> {
+    pub fn try_with_capacity(inner: I, capacity: usize) -> std::result::Result<Self, TryReserveError> {
         Ok(Self {
             inner,
             buffer: Buffer::try_with_capacity(capacity)?,
@@ -780,12 +738,7 @@ where
     /// `count <= self.unread_len()`, and that the destination range does not
     /// overlap with the unread range stored inside this buffer.
     #[inline]
-    pub unsafe fn copy_unread_to(
-        &self,
-        output: &mut [I::Item],
-        output_index: usize,
-        count: usize,
-    ) {
+    pub unsafe fn copy_unread_to(&self, output: &mut [I::Item], output_index: usize, count: usize) {
         debug_assert!(
             SliceRange::range_fits(output.len(), output_index, count),
             "unchecked unread destination range exceeds output buffer"
@@ -796,8 +749,7 @@ where
         );
         unsafe {
             let source = self.buffer.readable().get_unchecked(..count);
-            let output =
-                output.get_unchecked_mut(output_index..output_index + count);
+            let output = output.get_unchecked_mut(output_index..output_index + count);
             output.clone_from_slice(source);
         }
     }
@@ -924,15 +876,7 @@ where
         count: usize,
     ) -> Result<usize> {
         // SAFETY: Forwarded from the caller.
-        unsafe {
-            read_unchecked_impl(
-                &mut self.inner,
-                &mut self.buffer,
-                output,
-                output_index,
-                count,
-            )
-        }
+        unsafe { read_unchecked_impl(&mut self.inner, &mut self.buffer, output, output_index, count) }
     }
 
     /// Reads items into the full output slice.
@@ -995,15 +939,7 @@ where
         count: usize,
     ) -> Result<usize> {
         // SAFETY: Forwarded from the caller.
-        unsafe {
-            read_fully_unchecked_impl(
-                &mut self.inner,
-                &mut self.buffer,
-                output,
-                output_index,
-                count,
-            )
-        }
+        unsafe { read_fully_unchecked_impl(&mut self.inner, &mut self.buffer, output, output_index, count) }
     }
 
     /// Reads items into the full output slice until it is full or EOF is
@@ -1092,8 +1028,7 @@ where
     where
         I: SeekableInput,
     {
-        let position =
-            Seekable::seek_to(&mut self.inner, SeekFrom::Current(0))?;
+        let position = Seekable::seek_to(&mut self.inner, SeekFrom::Current(0))?;
         let unread = self.unread_len() as u64;
         position.checked_sub(unread).ok_or_else(|| {
             Error::new(
@@ -1123,12 +1058,8 @@ where
     where
         I: SeekableInput,
     {
-        let unread = i64::try_from(self.unread_len()).map_err(|_| {
-            Error::new(
-                ErrorKind::InvalidInput,
-                "buffered unread item count exceeds i64",
-            )
-        })?;
+        let unread = i64::try_from(self.unread_len())
+            .map_err(|_| Error::new(ErrorKind::InvalidInput, "buffered unread item count exceeds i64"))?;
         let adjusted = offset.checked_sub(unread).ok_or_else(|| {
             Error::new(
                 ErrorKind::InvalidInput,
@@ -1235,16 +1166,9 @@ where
     /// The range `output_index..output_index + count` must be valid for
     /// `output`.
     #[inline(always)]
-    unsafe fn read_unchecked(
-        &mut self,
-        output: &mut [I::Item],
-        output_index: usize,
-        count: usize,
-    ) -> Result<usize> {
+    unsafe fn read_unchecked(&mut self, output: &mut [I::Item], output_index: usize, count: usize) -> Result<usize> {
         // SAFETY: Forwarded from the trait caller.
-        unsafe {
-            BufferedInput::read_unchecked(self, output, output_index, count)
-        }
+        unsafe { BufferedInput::read_unchecked(self, output, output_index, count) }
     }
 
     /// Reads items into the full output slice.
@@ -1294,16 +1218,9 @@ where
     ///
     /// The range `index..index + count` must be valid for `output`.
     #[inline(always)]
-    unsafe fn read_fully_unchecked(
-        &mut self,
-        output: &mut [Self::Item],
-        index: usize,
-        count: usize,
-    ) -> Result<usize> {
+    unsafe fn read_fully_unchecked(&mut self, output: &mut [Self::Item], index: usize, count: usize) -> Result<usize> {
         // SAFETY: Forwarded from the trait caller.
-        unsafe {
-            BufferedInput::read_fully_unchecked(self, output, index, count)
-        }
+        unsafe { BufferedInput::read_fully_unchecked(self, output, index, count) }
     }
 
     /// Reads items into the full output slice through the internal buffer.

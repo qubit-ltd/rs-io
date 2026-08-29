@@ -109,23 +109,14 @@ impl Streams {
     /// be allocated. Returns the first non-interrupted read error or write
     /// error reported by the underlying streams. Interrupted reads are retried.
     #[inline(always)]
-    pub fn copy_at_most<R, W>(
-        reader: &mut R,
-        writer: &mut W,
-        max_bytes: u64,
-    ) -> Result<u64>
+    pub fn copy_at_most<R, W>(reader: &mut R, writer: &mut W, max_bytes: u64) -> Result<u64>
     where
         R: Read + ?Sized,
         W: Write + ?Sized,
     {
         let mut reader = reader;
         let mut writer = writer;
-        copy_at_most_impl(
-            &mut reader,
-            &mut writer,
-            max_bytes,
-            DEFAULT_COPY_BUFFER_SIZE,
-        )
+        copy_at_most_impl(&mut reader, &mut writer, max_bytes, DEFAULT_COPY_BUFFER_SIZE)
     }
 
     /// Copies at most `max_bytes` bytes from `reader` to `writer` using a
@@ -202,11 +193,7 @@ impl Streams {
     /// non-interrupted read error or write error reported by the underlying
     /// streams. Interrupted reads are retried.
     #[inline(always)]
-    pub fn copy_to_end_limited<R, W>(
-        reader: &mut R,
-        writer: &mut W,
-        max_bytes: u64,
-    ) -> Result<u64>
+    pub fn copy_to_end_limited<R, W>(reader: &mut R, writer: &mut W, max_bytes: u64) -> Result<u64>
     where
         R: Read + ?Sized,
         W: Write + ?Sized,
@@ -240,10 +227,7 @@ impl Streams {
     ///
     /// # Panics
     /// Panics if `T::default()` or `T::clone()` panics.
-    pub fn copy_input_to_output<T>(
-        input: &mut dyn Input<Item = T>,
-        output: &mut dyn Output<Item = T>,
-    ) -> Result<u64>
+    pub fn copy_input_to_output<T>(input: &mut dyn Input<Item = T>, output: &mut dyn Output<Item = T>) -> Result<u64>
     where
         T: Clone + Default,
     {
@@ -307,9 +291,7 @@ impl Streams {
         while remaining > 0 {
             let requested = remaining.min(buffer.len() as u64) as usize;
             // SAFETY: `requested` is a valid prefix length inside `buffer`.
-            let read = unsafe {
-                input.read_fully_unchecked(&mut buffer, 0, requested)?
-            };
+            let read = unsafe { input.read_fully_unchecked(&mut buffer, 0, requested)? };
             validate_read_count(read, requested)?;
             if read == 0 {
                 break;
@@ -377,12 +359,9 @@ impl Streams {
         let mut remaining = max_items;
         let mut copied = 0_u64;
         loop {
-            let requested =
-                remaining.saturating_add(1).min(buffer.len() as u64) as usize;
+            let requested = remaining.saturating_add(1).min(buffer.len() as u64) as usize;
             // SAFETY: `requested` is a valid prefix length inside `buffer`.
-            let read = unsafe {
-                input.read_fully_unchecked(&mut buffer, 0, requested)?
-            };
+            let read = unsafe { input.read_fully_unchecked(&mut buffer, 0, requested)? };
             validate_read_count(read, requested)?;
             if read == 0 {
                 let count = collected.len();
@@ -398,9 +377,7 @@ impl Streams {
             if (read as u64) > remaining {
                 return Err(Error::new(
                     ErrorKind::InvalidData,
-                    format!(
-                        "input exceeds maximum length of {max_items} items"
-                    ),
+                    format!("input exceeds maximum length of {max_items} items"),
                 ));
             }
             try_reserve_vec(&mut collected, read).map_err(allocation_error)?;
@@ -429,10 +406,7 @@ impl Streams {
     /// Returns [`ErrorKind::OutOfMemory`] if the comparison buffers cannot be
     /// allocated. Returns the first read error reported by either stream.
     #[inline(always)]
-    pub fn content_eq(
-        left: &mut dyn Read,
-        right: &mut dyn Read,
-    ) -> Result<bool> {
+    pub fn content_eq(left: &mut dyn Read, right: &mut dyn Read) -> Result<bool> {
         Ok(Self::compare_content(left, right)? == Ordering::Equal)
     }
 
@@ -455,15 +429,8 @@ impl Streams {
     /// Returns [`ErrorKind::OutOfMemory`] if the comparison buffers cannot be
     /// allocated. Returns the first read error reported by either stream.
     #[inline(always)]
-    pub fn compare_content(
-        left: &mut dyn Read,
-        right: &mut dyn Read,
-    ) -> Result<Ordering> {
-        Self::compare_content_with_buffer_size(
-            left,
-            right,
-            DEFAULT_COMPARE_BUFFER_SIZE,
-        )
+    pub fn compare_content(left: &mut dyn Read, right: &mut dyn Read) -> Result<Ordering> {
+        Self::compare_content_with_buffer_size(left, right, DEFAULT_COMPARE_BUFFER_SIZE)
     }
 
     /// Lexicographically compares the remaining contents of two readable
@@ -508,10 +475,7 @@ impl Streams {
             right_buffer.len(),
             "compare buffers must have identical lengths",
         );
-        debug_assert!(
-            !left_buffer.is_empty(),
-            "compare buffers must not be empty",
-        );
+        debug_assert!(!left_buffer.is_empty(), "compare buffers must not be empty",);
         loop {
             let left_count = left.read_exact_or_eof(&mut left_buffer)?;
             let right_count = right.read_exact_or_eof(&mut right_buffer)?;
@@ -547,12 +511,7 @@ impl Streams {
 /// [`ErrorKind::OutOfMemory`] error if the copy buffer cannot be allocated.
 /// Returns the first non-interrupted read error or write error reported by the
 /// underlying streams. Interrupted reads are retried.
-fn copy_at_most_impl(
-    reader: &mut dyn Read,
-    writer: &mut dyn Write,
-    max_bytes: u64,
-    buffer_size: usize,
-) -> Result<u64> {
+fn copy_at_most_impl(reader: &mut dyn Read, writer: &mut dyn Write, max_bytes: u64, buffer_size: usize) -> Result<u64> {
     if buffer_size == 0 {
         return Err(Error::new(
             ErrorKind::InvalidInput,
@@ -562,9 +521,7 @@ fn copy_at_most_impl(
     if max_bytes == 0 {
         return Ok(0);
     }
-    let buffer_size = usize::try_from(max_bytes)
-        .unwrap_or(usize::MAX)
-        .min(buffer_size);
+    let buffer_size = usize::try_from(max_bytes).unwrap_or(usize::MAX).min(buffer_size);
     let mut buffer = create_vec(buffer_size, 0)?;
     let mut remaining = max_bytes;
     let mut copied = 0;
@@ -603,13 +560,8 @@ fn copy_at_most_impl(
 /// Returns [`ErrorKind::OutOfMemory`] if the temporary copy buffer cannot be
 /// allocated, a read or write error, or [`ErrorKind::InvalidData`] when the
 /// remaining input exceeds `max_bytes`.
-fn copy_to_end_limited_impl(
-    reader: &mut dyn Read,
-    writer: &mut dyn Write,
-    max_bytes: u64,
-) -> Result<u64> {
-    let copied =
-        copy_at_most_impl(reader, writer, max_bytes, DEFAULT_COPY_BUFFER_SIZE)?;
+fn copy_to_end_limited_impl(reader: &mut dyn Read, writer: &mut dyn Write, max_bytes: u64) -> Result<u64> {
+    let copied = copy_at_most_impl(reader, writer, max_bytes, DEFAULT_COPY_BUFFER_SIZE)?;
     if copied < max_bytes {
         return Ok(copied);
     }
@@ -620,9 +572,7 @@ fn copy_to_end_limited_impl(
             Ok(_) => {
                 return Err(Error::new(
                     ErrorKind::InvalidData,
-                    format!(
-                        "input exceeds maximum length of {max_bytes} bytes"
-                    ),
+                    format!("input exceeds maximum length of {max_bytes} bytes"),
                 ));
             }
             Err(error) => {
@@ -680,14 +630,11 @@ fn add_item_count(copied: u64, count: usize) -> Result<u64> {
         }
         fail
     }) {
-        return Err(Error::new(
-            ErrorKind::InvalidData,
-            "copied item count overflows u64",
-        ));
+        return Err(Error::new(ErrorKind::InvalidData, "copied item count overflows u64"));
     }
-    copied.checked_add(count as u64).ok_or_else(|| {
-        Error::new(ErrorKind::InvalidData, "copied item count overflows u64")
-    })
+    copied
+        .checked_add(count as u64)
+        .ok_or_else(|| Error::new(ErrorKind::InvalidData, "copied item count overflows u64"))
 }
 
 /// Exercises the copied-item overflow branch in coverage builds.

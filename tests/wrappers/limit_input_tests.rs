@@ -41,12 +41,9 @@ fn test_limit_input_zero_count_does_not_call_inner_input() {
 
 #[test]
 fn test_limit_input_preserves_remaining_on_error_and_invalid_progress() {
-    let mut failing =
-        LimitInput::new(ScriptedInput::<u16>::failing("read failed"), 3);
+    let mut failing = LimitInput::new(ScriptedInput::<u16>::failing("read failed"), 3);
     let mut items = [0_u16; 2];
-    let error = failing
-        .read(&mut items)
-        .expect_err("read error should be returned");
+    let error = failing.read(&mut items).expect_err("read error should be returned");
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!(3, failing.remaining());
 

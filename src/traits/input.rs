@@ -67,12 +67,7 @@ pub trait Input {
     ///
     /// The caller must guarantee that `index..index + count` is a valid range
     /// inside `output` and that the addition does not overflow.
-    unsafe fn read_unchecked(
-        &mut self,
-        output: &mut [Self::Item],
-        index: usize,
-        count: usize,
-    ) -> Result<usize>;
+    unsafe fn read_unchecked(&mut self, output: &mut [Self::Item], index: usize, count: usize) -> Result<usize>;
 
     /// Reads items into the full output slice.
     ///
@@ -125,12 +120,7 @@ pub trait Input {
     ///
     /// The caller must guarantee that `index..index + count` is a valid range
     /// inside `output` and that the addition does not overflow.
-    unsafe fn read_fully_unchecked(
-        &mut self,
-        output: &mut [Self::Item],
-        index: usize,
-        count: usize,
-    ) -> Result<usize> {
+    unsafe fn read_fully_unchecked(&mut self, output: &mut [Self::Item], index: usize, count: usize) -> Result<usize> {
         debug_assert!(
             SliceRange::range_fits(output.len(), index, count),
             "unchecked read-fully range exceeds output buffer"
@@ -140,9 +130,7 @@ pub trait Input {
             let remaining = count - total;
             // SAFETY: The caller guarantees the original destination range is
             // valid; `total < count`, so this suffix remains inside it.
-            match unsafe {
-                self.read_unchecked(output, index + total, remaining)
-            } {
+            match unsafe { self.read_unchecked(output, index + total, remaining) } {
                 Ok(0) => break,
                 Ok(read) => {
                     validate_read_count(read, remaining)?;

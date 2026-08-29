@@ -43,12 +43,6 @@ use super::Seekable;
 /// assert_eq!(0, output.seek_to(SeekFrom::Start(0))?);
 /// # Ok::<(), std::io::Error>(())
 /// ```
-pub trait SeekableOutput:
-    Output + Seekable<Unit = <Self as Output>::Item>
-{
-}
+pub trait SeekableOutput: Output + Seekable<Unit = <Self as Output>::Item> {}
 
-impl<T> SeekableOutput for T where
-    T: Output + Seekable<Unit = <T as Output>::Item>
-{
-}
+impl<T> SeekableOutput for T where T: Output + Seekable<Unit = <T as Output>::Item> {}

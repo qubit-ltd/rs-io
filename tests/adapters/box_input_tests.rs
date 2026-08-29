@@ -23,16 +23,10 @@ impl Input for CharInput {
         true
     }
 
-    unsafe fn read_unchecked(
-        &mut self,
-        output: &mut [char],
-        index: usize,
-        count: usize,
-    ) -> io::Result<usize> {
+    unsafe fn read_unchecked(&mut self, output: &mut [char], index: usize, count: usize) -> io::Result<usize> {
         let remaining = self.items.len() - self.position;
         let read = remaining.min(count);
-        output[index..index + read]
-            .copy_from_slice(&self.items[self.position..self.position + read]);
+        output[index..index + read].copy_from_slice(&self.items[self.position..self.position + read]);
         self.position += read;
         Ok(read)
     }
@@ -53,20 +47,15 @@ fn test_box_input_forwards_trait_object_input() {
     // SAFETY: `output[1..2]` is a valid destination range.
     assert_eq!(
         1,
-        unsafe { input.read_unchecked(&mut output, 1, 1) }
-            .expect("unchecked read should succeed")
+        unsafe { input.read_unchecked(&mut output, 1, 1) }.expect("unchecked read should succeed")
     );
     assert_eq!(['\0', 'a'], output);
-    assert_eq!(
-        1,
-        input.read(&mut output[..1]).expect("read should succeed")
-    );
+    assert_eq!(1, input.read(&mut output[..1]).expect("read should succeed"));
     assert_eq!(['b', 'a'], output);
     // SAFETY: `output[1..2]` is a valid destination range.
     assert_eq!(
         1,
-        unsafe { input.read_fully_unchecked(&mut output, 1, 1) }
-            .expect("unchecked complete read should succeed")
+        unsafe { input.read_fully_unchecked(&mut output, 1, 1) }.expect("unchecked complete read should succeed")
     );
     assert_eq!(['b', 'c'], output);
     assert_eq!(
@@ -78,9 +67,6 @@ fn test_box_input_forwards_trait_object_input() {
     assert_eq!('d', output[0]);
 
     let mut inner = input.into_inner();
-    assert_eq!(
-        1,
-        inner.read(&mut output[..1]).expect("read should succeed")
-    );
+    assert_eq!(1, inner.read(&mut output[..1]).expect("read should succeed"));
     assert_eq!('e', output[0]);
 }

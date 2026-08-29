@@ -32,11 +32,7 @@ struct TokioReader {
 struct PendingTokioReader;
 
 impl AsyncRead for PendingTokioReader {
-    fn poll_read(
-        self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-        _output: &mut ReadBuf<'_>,
-    ) -> Poll<std::io::Result<()>> {
+    fn poll_read(self: Pin<&mut Self>, _cx: &mut Context<'_>, _output: &mut ReadBuf<'_>) -> Poll<std::io::Result<()>> {
         Poll::Pending
     }
 }
@@ -44,11 +40,7 @@ impl AsyncRead for PendingTokioReader {
 struct ErrorTokioReader;
 
 impl AsyncRead for ErrorTokioReader {
-    fn poll_read(
-        self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-        _output: &mut ReadBuf<'_>,
-    ) -> Poll<std::io::Result<()>> {
+    fn poll_read(self: Pin<&mut Self>, _cx: &mut Context<'_>, _output: &mut ReadBuf<'_>) -> Poll<std::io::Result<()>> {
         Poll::Ready(Err(Error::new(ErrorKind::PermissionDenied, "read failed")))
     }
 }
@@ -74,26 +66,16 @@ struct TokioWriter {
 }
 
 impl AsyncWrite for TokioWriter {
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-        input: &[u8],
-    ) -> Poll<std::io::Result<usize>> {
+    fn poll_write(mut self: Pin<&mut Self>, _cx: &mut Context<'_>, input: &[u8]) -> Poll<std::io::Result<usize>> {
         self.data.extend_from_slice(input);
         Poll::Ready(Ok(input.len()))
     }
 
-    fn poll_flush(
-        self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-    ) -> Poll<std::io::Result<()>> {
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         Poll::Ready(Ok(()))
     }
 
-    fn poll_shutdown(
-        mut self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-    ) -> Poll<std::io::Result<()>> {
+    fn poll_shutdown(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         self.closed = true;
         Poll::Ready(Ok(()))
     }
@@ -161,10 +143,7 @@ struct QubitOutput {
 }
 
 impl AsyncClose for QubitOutput {
-    fn poll_close(
-        mut self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-    ) -> Poll<std::io::Result<()>> {
+    fn poll_close(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         self.closed = true;
         Poll::Ready(Ok(()))
     }
@@ -184,10 +163,7 @@ impl AsyncOutput for QubitOutput {
         Poll::Ready(Ok(count))
     }
 
-    fn poll_flush(
-        self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-    ) -> Poll<std::io::Result<()>> {
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         Poll::Ready(Ok(()))
     }
 }
@@ -205,18 +181,16 @@ fn test_tokio_types_adapt_to_qubit_async_io() {
     let mut output = [0_u8; 4];
     let mut cx = context();
 
-    let read =
-        AsyncInput::poll_read(Pin::new(&mut input), &mut cx, &mut output)
-            .expect_ready("Tokio reader should be ready")
-            .expect("Tokio read should succeed");
+    let read = AsyncInput::poll_read(Pin::new(&mut input), &mut cx, &mut output)
+        .expect_ready("Tokio reader should be ready")
+        .expect("Tokio read should succeed");
     assert_eq!(3, read);
     assert_eq!([1, 2, 3, 0], output);
 
     let mut output = TokioOutput::new(TokioWriter::default());
-    let written =
-        AsyncOutput::poll_write(Pin::new(&mut output), &mut cx, &[4, 5])
-            .expect_ready("Tokio writer should be ready")
-            .expect("Tokio write should succeed");
+    let written = AsyncOutput::poll_write(Pin::new(&mut output), &mut cx, &[4, 5])
+        .expect_ready("Tokio writer should be ready")
+        .expect("Tokio write should succeed");
     assert_eq!(2, written);
     assert_eq!(&[4, 5], output.get_ref().data.as_slice());
 
@@ -242,10 +216,9 @@ fn test_qubit_types_adapt_to_tokio_async_io() {
     assert_eq!(&[1, 2, 3], buffer.filled());
 
     let mut output = TokioAsyncWrite::new(QubitOutput::default());
-    let written =
-        AsyncWrite::poll_write(Pin::new(&mut output), &mut cx, &[4, 5])
-            .expect_ready("Qubit output should be ready")
-            .expect("Qubit output should write successfully");
+    let written = AsyncWrite::poll_write(Pin::new(&mut output), &mut cx, &[4, 5])
+        .expect_ready("Qubit output should be ready")
+        .expect("Qubit output should write successfully");
     assert_eq!(2, written);
     assert_eq!(&[4, 5], output.get_ref().data.as_slice());
 }
@@ -260,30 +233,18 @@ fn test_tokio_adapters_preserve_zero_pending_and_error_reads() {
     let mut bytes = [0_u8; 1];
 
     // SAFETY: The empty range at index zero is valid.
-    let read = unsafe {
-        AsyncInput::poll_read_unchecked(
-            Pin::new(&mut input),
-            &mut cx,
-            &mut bytes,
-            0,
-            0,
-        )
-    }
-    .expect_ready("zero read should complete")
-    .expect("zero read should succeed");
+    let read = unsafe { AsyncInput::poll_read_unchecked(Pin::new(&mut input), &mut cx, &mut bytes, 0, 0) }
+        .expect_ready("zero read should complete")
+        .expect("zero read should succeed");
     assert_eq!(0, read);
 
     let mut pending = TokioInput::new(PendingTokioReader);
-    assert!(
-        AsyncInput::poll_read(Pin::new(&mut pending), &mut cx, &mut bytes,)
-            .is_pending()
-    );
+    assert!(AsyncInput::poll_read(Pin::new(&mut pending), &mut cx, &mut bytes,).is_pending());
 
     let mut failed = TokioInput::new(ErrorTokioReader);
-    let error =
-        AsyncInput::poll_read(Pin::new(&mut failed), &mut cx, &mut bytes)
-            .expect_ready("error should be ready")
-            .expect_err("Tokio error should be preserved");
+    let error = AsyncInput::poll_read(Pin::new(&mut failed), &mut cx, &mut bytes)
+        .expect_ready("error should be ready")
+        .expect_err("Tokio error should be preserved");
     assert_eq!(ErrorKind::PermissionDenied, error.kind());
 
     let mut input = TokioAsyncRead::new(QubitInput {
@@ -298,17 +259,13 @@ fn test_tokio_adapters_preserve_zero_pending_and_error_reads() {
 
     let mut pending = TokioAsyncRead::new(PendingQubitInput);
     let mut buffer = ReadBuf::new(&mut bytes);
-    assert!(
-        AsyncRead::poll_read(Pin::new(&mut pending), &mut cx, &mut buffer)
-            .is_pending()
-    );
+    assert!(AsyncRead::poll_read(Pin::new(&mut pending), &mut cx, &mut buffer).is_pending());
 
     let mut failed = TokioAsyncRead::new(ErrorQubitInput);
     let mut buffer = ReadBuf::new(&mut bytes);
-    let error =
-        AsyncRead::poll_read(Pin::new(&mut failed), &mut cx, &mut buffer)
-            .expect_ready("error should be ready")
-            .expect_err("Qubit error should be preserved");
+    let error = AsyncRead::poll_read(Pin::new(&mut failed), &mut cx, &mut buffer)
+        .expect_ready("error should be ready")
+        .expect_err("Qubit error should be preserved");
     assert_eq!(ErrorKind::PermissionDenied, error.kind());
 }
 
@@ -363,17 +320,9 @@ fn test_tokio_output_adapter_accepts_empty_write() {
     let mut cx = context();
 
     // SAFETY: The empty range at index zero is valid.
-    let written = unsafe {
-        AsyncOutput::poll_write_unchecked(
-            Pin::new(&mut output),
-            &mut cx,
-            &[],
-            0,
-            0,
-        )
-    }
-    .expect_ready("empty write should complete")
-    .expect("empty write should succeed");
+    let written = unsafe { AsyncOutput::poll_write_unchecked(Pin::new(&mut output), &mut cx, &[], 0, 0) }
+        .expect_ready("empty write should complete")
+        .expect("empty write should succeed");
 
     assert_eq!(0, written);
 }

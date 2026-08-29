@@ -34,12 +34,7 @@ impl Output for CharOutput {
         self.buffered
     }
 
-    unsafe fn write_unchecked(
-        &mut self,
-        input: &[char],
-        index: usize,
-        count: usize,
-    ) -> io::Result<usize> {
+    unsafe fn write_unchecked(&mut self, input: &[char], index: usize, count: usize) -> io::Result<usize> {
         self.items.extend_from_slice(&input[index..index + count]);
         Ok(count)
     }
@@ -63,16 +58,12 @@ fn test_output_ref_forwards_writes_and_exposes_borrowed_output() {
     // SAFETY: `['a', 'b'][1..2]` is a valid source range.
     assert_eq!(
         1,
-        unsafe { output.write_unchecked(&['a', 'b'], 1, 1) }
-            .expect("unchecked write should succeed")
+        unsafe { output.write_unchecked(&['a', 'b'], 1, 1) }.expect("unchecked write should succeed")
     );
     assert_eq!(1, output.write(&['c']).expect("write should succeed"));
     // SAFETY: `['d', 'e'][0..1]` is a valid source range.
-    unsafe { output.write_fully_unchecked(&['d', 'e'], 0, 1) }
-        .expect("unchecked complete write should succeed");
-    output
-        .write_fully(&['e'])
-        .expect("complete write should succeed");
+    unsafe { output.write_fully_unchecked(&['d', 'e'], 0, 1) }.expect("unchecked complete write should succeed");
+    output.write_fully(&['e']).expect("complete write should succeed");
     output.flush().expect("flush should succeed");
 
     let inner = output.into_inner();

@@ -110,11 +110,7 @@ where
     ///
     /// Returns an I/O error reported by the wrapped output.
     #[inline(always)]
-    fn poll_write(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        input: &[u8],
-    ) -> Poll<std::io::Result<usize>> {
+    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, input: &[u8]) -> Poll<std::io::Result<usize>> {
         self.get_pin_mut().poll_write(cx, input)
     }
 
@@ -135,10 +131,7 @@ where
     /// asynchronous error kinds are normalized to
     /// [`std::io::ErrorKind::InvalidData`].
     #[inline(always)]
-    fn poll_flush(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<std::io::Result<()>> {
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         self.get_pin_mut()
             .poll_flush(cx)
             .map(|result| result.map_err(normalize_async_error))
@@ -161,10 +154,7 @@ where
     /// asynchronous error kinds are normalized to
     /// [`std::io::ErrorKind::InvalidData`].
     #[inline(always)]
-    fn poll_close(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<std::io::Result<()>> {
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         self.get_pin_mut()
             .poll_close(cx)
             .map(|result| result.map_err(normalize_async_error))

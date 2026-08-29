@@ -12,8 +12,5 @@ use qubit_io::FuturesAsyncWrite;
 
 #[test]
 fn test_futures_async_write_type_is_public() {
-    assert!(
-        std::any::type_name::<FuturesAsyncWrite<Cursor<Vec<u8>>>>()
-            .contains("FuturesAsyncWrite")
-    );
+    assert!(std::any::type_name::<FuturesAsyncWrite<Cursor<Vec<u8>>>>().contains("FuturesAsyncWrite"));
 }

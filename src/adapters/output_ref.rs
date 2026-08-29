@@ -116,12 +116,7 @@ where
     ///
     /// The range `index..index + count` must be valid for `input`.
     #[inline(always)]
-    unsafe fn write_unchecked(
-        &mut self,
-        input: &[Self::Item],
-        index: usize,
-        count: usize,
-    ) -> io::Result<usize> {
+    unsafe fn write_unchecked(&mut self, input: &[Self::Item], index: usize, count: usize) -> io::Result<usize> {
         // SAFETY: The caller's valid-range guarantee is forwarded unchanged.
         unsafe { self.inner.write_unchecked(input, index, count) }
     }
@@ -165,12 +160,7 @@ where
     ///
     /// The range `index..index + count` must be valid for `input`.
     #[inline(always)]
-    unsafe fn write_fully_unchecked(
-        &mut self,
-        input: &[Self::Item],
-        index: usize,
-        count: usize,
-    ) -> io::Result<()> {
+    unsafe fn write_fully_unchecked(&mut self, input: &[Self::Item], index: usize, count: usize) -> io::Result<()> {
         // SAFETY: The caller's valid-range guarantee is forwarded unchanged.
         unsafe { self.inner.write_fully_unchecked(input, index, count) }
     }

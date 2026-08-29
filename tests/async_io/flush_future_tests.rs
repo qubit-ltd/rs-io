@@ -20,10 +20,7 @@ use super::support_tests::TestOutput;
 
 #[test]
 fn test_flush_future_type_is_public() {
-    assert!(
-        std::any::type_name::<FlushFuture<'static, TestOutput>>()
-            .contains("FlushFuture")
-    );
+    assert!(std::any::type_name::<FlushFuture<'static, TestOutput>>().contains("FlushFuture"));
 }
 
 #[test]

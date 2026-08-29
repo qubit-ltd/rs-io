@@ -129,9 +129,7 @@ where
                 Poll::Ready(Ok(read)) => {
                     this.read += read;
                     ready_operations += 1;
-                    if this.read < this.output.len()
-                        && ready_operations >= MAX_READY_OPERATIONS_PER_POLL
-                    {
+                    if this.read < this.output.len() && ready_operations >= MAX_READY_OPERATIONS_PER_POLL {
                         cx.waker().wake_by_ref();
                         return Poll::Pending;
                     }

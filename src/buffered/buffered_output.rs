@@ -131,10 +131,7 @@ where
     /// Panics if initializing the backing buffer requires
     /// `O::Item::default()` or `O::Item::clone()` and either operation panics.
     #[inline]
-    pub fn try_with_capacity(
-        inner: O,
-        capacity: usize,
-    ) -> std::result::Result<Self, TryReserveError> {
+    pub fn try_with_capacity(inner: O, capacity: usize) -> std::result::Result<Self, TryReserveError> {
         Ok(Self {
             inner,
             buffer: Buffer::try_with_capacity(capacity)?,
@@ -425,12 +422,7 @@ where
     /// The caller must guarantee that `input_index..input_index + count` is a
     /// valid range inside `input` and that the addition does not overflow.
     #[inline]
-    pub unsafe fn write_unchecked(
-        &mut self,
-        input: &[O::Item],
-        input_index: usize,
-        count: usize,
-    ) -> Result<usize> {
+    pub unsafe fn write_unchecked(&mut self, input: &[O::Item], input_index: usize, count: usize) -> Result<usize> {
         // Keep this boundary in sync with `std::io::BufWriter`: it uses
         // `< spare_capacity()` intentionally so buffer-sized writes skip the
         // memcpy+advance hot path. That path is only for strictly smaller
@@ -504,12 +496,7 @@ where
     /// The caller must guarantee that `input_index..input_index + count` is a
     /// valid range inside `input` and that the addition does not overflow.
     #[inline]
-    pub unsafe fn write_fully_unchecked(
-        &mut self,
-        input: &[O::Item],
-        input_index: usize,
-        count: usize,
-    ) -> Result<()> {
+    pub unsafe fn write_fully_unchecked(&mut self, input: &[O::Item], input_index: usize, count: usize) -> Result<()> {
         // Keep this boundary in sync with `std::io::BufWriter`: it uses
         // `< spare_capacity()` intentionally so buffer-sized writes skip the
         // memcpy+advance hot path. That path is only for strictly smaller
@@ -562,8 +549,7 @@ where
     /// [`Output::flush`] on the wrapped output.
     #[inline]
     pub fn flush(&mut self) -> Result<()> {
-        self.flush_buffer()
-            .and_then(|()| Output::flush(&mut self.inner))
+        self.flush_buffer().and_then(|()| Output::flush(&mut self.inner))
     }
 
     /// Returns the logical output position without flushing pending items.
@@ -585,16 +571,13 @@ where
     where
         O: SeekableOutput,
     {
-        let position =
-            Seekable::seek_to(&mut self.inner, SeekFrom::Current(0))?;
-        position
-            .checked_add(self.buffer.available() as u64)
-            .ok_or_else(|| {
-                Error::new(
-                    ErrorKind::InvalidData,
-                    "buffered pending items overflow wrapped output position",
-                )
-            })
+        let position = Seekable::seek_to(&mut self.inner, SeekFrom::Current(0))?;
+        position.checked_add(self.buffer.available() as u64).ok_or_else(|| {
+            Error::new(
+                ErrorKind::InvalidData,
+                "buffered pending items overflow wrapped output position",
+            )
+        })
     }
 
     /// Seeks the wrapped output in items, flushing buffered items first.
@@ -656,25 +639,15 @@ where
             // SAFETY: `position..position + available` is the current readable
             // range maintained by `Buffer`.
             self.panicked = true;
-            let result = unsafe {
-                self.inner.write_unchecked(
-                    self.buffer.data(),
-                    position,
-                    available,
-                )
-            };
+            let result = unsafe { self.inner.write_unchecked(self.buffer.data(), position, available) };
             self.panicked = false;
             match result {
                 Ok(0) => {
                     self.buffer.compact();
-                    return Err(Error::new(
-                        ErrorKind::WriteZero,
-                        "failed to write buffered data",
-                    ));
+                    return Err(Error::new(ErrorKind::WriteZero, "failed to write buffered data"));
                 }
                 Ok(written) => {
-                    if let Err(error) = validate_write_count(written, available)
-                    {
+                    if let Err(error) = validate_write_count(written, available) {
                         self.buffer.compact();
                         return Err(error);
                     }
@@ -714,12 +687,7 @@ where
     /// source range does not overlap with the destination range in the internal
     /// buffer.
     #[inline]
-    unsafe fn write_to_buffer(
-        &mut self,
-        input: &[O::Item],
-        input_index: usize,
-        count: usize,
-    ) {
+    unsafe fn write_to_buffer(&mut self, input: &[O::Item], input_index: usize, count: usize) {
         // SAFETY: The caller guarantees valid source and spare destination
         // ranges, and the buffer advances only after cloning succeeds.
         unsafe {
@@ -749,15 +717,9 @@ where
     /// The caller must guarantee that `input_index..input_index + count` is a
     /// valid range inside `input` and that the addition does not overflow.
     #[inline]
-    unsafe fn write_inner(
-        &mut self,
-        input: &[O::Item],
-        input_index: usize,
-        count: usize,
-    ) -> Result<usize> {
+    unsafe fn write_inner(&mut self, input: &[O::Item], input_index: usize, count: usize) -> Result<usize> {
         // SAFETY: The caller guarantees the source range is valid.
-        let written =
-            unsafe { self.inner.write_unchecked(input, input_index, count) }?;
+        let written = unsafe { self.inner.write_unchecked(input, input_index, count) }?;
         validate_write_count(written, count)?;
         Ok(written)
     }
@@ -784,25 +746,15 @@ where
     ///
     /// The caller must guarantee that `input_index..input_index + count` is a
     /// valid range inside `input` and that the addition does not overflow.
-    unsafe fn write_fully_inner(
-        &mut self,
-        input: &[O::Item],
-        input_index: usize,
-        count: usize,
-    ) -> Result<()> {
+    unsafe fn write_fully_inner(&mut self, input: &[O::Item], input_index: usize, count: usize) -> Result<()> {
         let mut written = 0;
         while written < count {
             let remaining = count - written;
             // SAFETY: `written < count`, so this suffix remains inside the
             // caller-validated source range.
-            match unsafe {
-                self.write_inner(input, input_index + written, remaining)
-            } {
+            match unsafe { self.write_inner(input, input_index + written, remaining) } {
                 Ok(0) => {
-                    return Err(Error::new(
-                        ErrorKind::WriteZero,
-                        "failed to write whole buffer",
-                    ));
+                    return Err(Error::new(ErrorKind::WriteZero, "failed to write whole buffer"));
                 }
                 Ok(count) => written += count,
                 Err(error) if error.kind() == ErrorKind::Interrupted => {}
@@ -839,12 +791,7 @@ where
     /// The range `input_index..input_index + count` must be valid for `input`.
     #[cold]
     #[inline(never)]
-    unsafe fn write_fully_cold(
-        &mut self,
-        input: &[O::Item],
-        input_index: usize,
-        count: usize,
-    ) -> Result<()> {
+    unsafe fn write_fully_cold(&mut self, input: &[O::Item], input_index: usize, count: usize) -> Result<()> {
         if count > self.spare_capacity() {
             self.flush_buffer()?;
         }
@@ -892,12 +839,7 @@ where
     /// The range `input_index..input_index + count` must be valid for `input`.
     #[cold]
     #[inline(never)]
-    unsafe fn write_cold(
-        &mut self,
-        input: &[O::Item],
-        input_index: usize,
-        count: usize,
-    ) -> Result<usize> {
+    unsafe fn write_cold(&mut self, input: &[O::Item], input_index: usize, count: usize) -> Result<usize> {
         if count > self.spare_capacity() {
             self.flush_buffer()?;
         }
@@ -959,16 +901,9 @@ where
     ///
     /// The range `input_index..input_index + count` must be valid for `input`.
     #[inline(always)]
-    unsafe fn write_unchecked(
-        &mut self,
-        input: &[O::Item],
-        input_index: usize,
-        count: usize,
-    ) -> Result<usize> {
+    unsafe fn write_unchecked(&mut self, input: &[O::Item], input_index: usize, count: usize) -> Result<usize> {
         // SAFETY: Forwarded from the trait caller.
-        unsafe {
-            BufferedOutput::write_unchecked(self, input, input_index, count)
-        }
+        unsafe { BufferedOutput::write_unchecked(self, input, input_index, count) }
     }
 
     /// Writes items from the full input slice.
@@ -1017,16 +952,9 @@ where
     ///
     /// The range `index..index + count` must be valid for `input`.
     #[inline(always)]
-    unsafe fn write_fully_unchecked(
-        &mut self,
-        input: &[Self::Item],
-        index: usize,
-        count: usize,
-    ) -> Result<()> {
+    unsafe fn write_fully_unchecked(&mut self, input: &[Self::Item], index: usize, count: usize) -> Result<()> {
         // SAFETY: Forwarded from the trait caller.
-        unsafe {
-            BufferedOutput::write_fully_unchecked(self, input, index, count)
-        }
+        unsafe { BufferedOutput::write_fully_unchecked(self, input, index, count) }
     }
 
     /// Writes all items from the full input slice through the internal buffer.

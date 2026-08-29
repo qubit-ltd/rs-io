@@ -73,11 +73,7 @@ impl ProgressMode {
     }
 }
 
-const PROGRESS_MODES: [ProgressMode; 3] = [
-    ProgressMode::ReadyFull,
-    ProgressMode::Partial,
-    ProgressMode::Pending,
-];
+const PROGRESS_MODES: [ProgressMode; 3] = [ProgressMode::ReadyFull, ProgressMode::Partial, ProgressMode::Pending];
 
 /// Captures useful polling counters so benchmark work cannot be optimized away.
 struct PollStats {
@@ -146,8 +142,7 @@ impl AsyncInput for ScriptedInput {
         }
         let available = this.data.len() - this.position;
         let copied = count.min(available).min(this.progress_limit);
-        output[index..index + copied]
-            .copy_from_slice(&this.data[this.position..this.position + copied]);
+        output[index..index + copied].copy_from_slice(&this.data[this.position..this.position + copied]);
         this.position += copied;
         Poll::Ready(Ok(copied))
     }
@@ -216,10 +211,7 @@ impl AsyncOutput for ScriptedOutput {
     }
 
     /// Completes immediately unless this poll is scheduled to be pending.
-    fn poll_flush(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<io::Result<()>> {
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         if self.as_mut().get_mut().poll_is_pending() {
             cx.waker().wake_by_ref();
             Poll::Pending
@@ -231,9 +223,7 @@ impl AsyncOutput for ScriptedOutput {
 
 /// Creates deterministic byte input shared by the asynchronous benchmarks.
 fn benchmark_fixture() -> Vec<u8> {
-    (0..DATA_LEN)
-        .map(|index| (index as u8).wrapping_mul(31))
-        .collect()
+    (0..DATA_LEN).map(|index| (index as u8).wrapping_mul(31)).collect()
 }
 
 /// Polls `input` until EOF and returns the observed caller-side poll counts.
@@ -248,9 +238,7 @@ where
     loop {
         let end = (position + width).min(output.len());
         caller_polls += 1;
-        match Pin::new(&mut *input)
-            .poll_read(&mut context, &mut output[position..end])
-        {
+        match Pin::new(&mut *input).poll_read(&mut context, &mut output[position..end]) {
             Poll::Ready(Ok(0)) => break,
             Poll::Ready(Ok(count)) => position += count,
             Poll::Ready(Err(error)) => {
@@ -278,9 +266,7 @@ where
     while position < input.len() {
         let end = (position + width).min(input.len());
         caller_polls += 1;
-        match Pin::new(&mut *output)
-            .poll_write(&mut context, &input[position..end])
-        {
+        match Pin::new(&mut *output).poll_write(&mut context, &input[position..end]) {
             Poll::Ready(Ok(count)) => position += count,
             Poll::Ready(Err(error)) => {
                 panic!("async output benchmark write failed: {error}")
@@ -316,63 +302,48 @@ fn benchmark_async_input(criterion: &mut Criterion) {
     for mode in PROGRESS_MODES {
         for width in TRANSFER_WIDTHS {
             let parameter = format!("{}/{}", mode.label(), width);
-            group.bench_with_input(
-                BenchmarkId::new("buffered", &parameter),
-                &width,
-                |bencher, &width| {
-                    bencher.iter_batched(
-                        || {
-                            (
-                                AsyncBufferedInput::with_capacity(
-                                    ScriptedInput::new(fixture.clone(), mode),
-                                    BUFFER_CAPACITY,
-                                ),
-                                vec![0_u8; DATA_LEN],
-                            )
-                        },
-                        |(mut input, mut output)| {
-                            let stats =
-                                read_to_end(&mut input, &mut output, width);
-                            let (inner, pending) = input.into_parts();
-                            black_box((
-                                stats.bytes,
-                                stats.caller_polls,
-                                stats.pending_polls,
-                                inner.poll_count(),
-                                pending.available(),
-                                output,
-                            ));
-                        },
-                        BatchSize::LargeInput,
-                    );
-                },
-            );
-            group.bench_with_input(
-                BenchmarkId::new("unbuffered", &parameter),
-                &width,
-                |bencher, &width| {
-                    bencher.iter_batched(
-                        || {
-                            (
+            group.bench_with_input(BenchmarkId::new("buffered", &parameter), &width, |bencher, &width| {
+                bencher.iter_batched(
+                    || {
+                        (
+                            AsyncBufferedInput::with_capacity(
                                 ScriptedInput::new(fixture.clone(), mode),
-                                vec![0_u8; DATA_LEN],
-                            )
-                        },
-                        |(mut input, mut output)| {
-                            let stats =
-                                read_to_end(&mut input, &mut output, width);
-                            black_box((
-                                stats.bytes,
-                                stats.caller_polls,
-                                stats.pending_polls,
-                                input.poll_count(),
-                                output,
-                            ));
-                        },
-                        BatchSize::LargeInput,
-                    );
-                },
-            );
+                                BUFFER_CAPACITY,
+                            ),
+                            vec![0_u8; DATA_LEN],
+                        )
+                    },
+                    |(mut input, mut output)| {
+                        let stats = read_to_end(&mut input, &mut output, width);
+                        let (inner, pending) = input.into_parts();
+                        black_box((
+                            stats.bytes,
+                            stats.caller_polls,
+                            stats.pending_polls,
+                            inner.poll_count(),
+                            pending.available(),
+                            output,
+                        ));
+                    },
+                    BatchSize::LargeInput,
+                );
+            });
+            group.bench_with_input(BenchmarkId::new("unbuffered", &parameter), &width, |bencher, &width| {
+                bencher.iter_batched(
+                    || (ScriptedInput::new(fixture.clone(), mode), vec![0_u8; DATA_LEN]),
+                    |(mut input, mut output)| {
+                        let stats = read_to_end(&mut input, &mut output, width);
+                        black_box((
+                            stats.bytes,
+                            stats.caller_polls,
+                            stats.pending_polls,
+                            input.poll_count(),
+                            output,
+                        ));
+                    },
+                    BatchSize::LargeInput,
+                );
+            });
         }
     }
     group.finish();
@@ -389,55 +360,40 @@ fn benchmark_async_output(criterion: &mut Criterion) {
     for mode in PROGRESS_MODES {
         for width in TRANSFER_WIDTHS {
             let parameter = format!("{}/{}", mode.label(), width);
-            group.bench_with_input(
-                BenchmarkId::new("buffered", &parameter),
-                &width,
-                |bencher, &width| {
-                    bencher.iter_batched(
-                        || {
-                            AsyncBufferedOutput::with_capacity(
-                                ScriptedOutput::new(mode),
-                                BUFFER_CAPACITY,
-                            )
-                        },
-                        |mut output| {
-                            let stats =
-                                write_and_flush(&mut output, &fixture, width);
-                            let (inner, pending) = output.into_parts();
-                            black_box((
-                                stats.bytes,
-                                stats.caller_polls,
-                                stats.pending_polls,
-                                inner.poll_count(),
-                                inner.written(),
-                                pending.available(),
-                            ));
-                        },
-                        BatchSize::SmallInput,
-                    );
-                },
-            );
-            group.bench_with_input(
-                BenchmarkId::new("unbuffered", &parameter),
-                &width,
-                |bencher, &width| {
-                    bencher.iter_batched(
-                        || ScriptedOutput::new(mode),
-                        |mut output| {
-                            let stats =
-                                write_and_flush(&mut output, &fixture, width);
-                            black_box((
-                                stats.bytes,
-                                stats.caller_polls,
-                                stats.pending_polls,
-                                output.poll_count(),
-                                output.written(),
-                            ));
-                        },
-                        BatchSize::SmallInput,
-                    );
-                },
-            );
+            group.bench_with_input(BenchmarkId::new("buffered", &parameter), &width, |bencher, &width| {
+                bencher.iter_batched(
+                    || AsyncBufferedOutput::with_capacity(ScriptedOutput::new(mode), BUFFER_CAPACITY),
+                    |mut output| {
+                        let stats = write_and_flush(&mut output, &fixture, width);
+                        let (inner, pending) = output.into_parts();
+                        black_box((
+                            stats.bytes,
+                            stats.caller_polls,
+                            stats.pending_polls,
+                            inner.poll_count(),
+                            inner.written(),
+                            pending.available(),
+                        ));
+                    },
+                    BatchSize::SmallInput,
+                );
+            });
+            group.bench_with_input(BenchmarkId::new("unbuffered", &parameter), &width, |bencher, &width| {
+                bencher.iter_batched(
+                    || ScriptedOutput::new(mode),
+                    |mut output| {
+                        let stats = write_and_flush(&mut output, &fixture, width);
+                        black_box((
+                            stats.bytes,
+                            stats.caller_polls,
+                            stats.pending_polls,
+                            output.poll_count(),
+                            output.written(),
+                        ));
+                    },
+                    BatchSize::SmallInput,
+                );
+            });
         }
     }
     group.finish();
