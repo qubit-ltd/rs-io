@@ -41,10 +41,7 @@ where
 }
 
 /// Reserves vector capacity, applying local coverage failure injection first.
-pub(crate) fn try_reserve_vec<T>(
-    output: &mut Vec<T>,
-    additional: usize,
-) -> Result<(), TryReserveError> {
+pub(crate) fn try_reserve_vec<T>(output: &mut Vec<T>, additional: usize) -> Result<(), TryReserveError> {
     #[cfg(coverage)]
     if let Some(result) = coverage_maybe_fail_reserve::<()>(additional) {
         return result;
@@ -53,10 +50,7 @@ pub(crate) fn try_reserve_vec<T>(
 }
 
 /// Reserves string capacity, applying local coverage failure injection first.
-pub(crate) fn try_reserve_string(
-    output: &mut String,
-    additional: usize,
-) -> Result<(), TryReserveError> {
+pub(crate) fn try_reserve_string(output: &mut String, additional: usize) -> Result<(), TryReserveError> {
     #[cfg(coverage)]
     if COVERAGE_FAIL_NEXT_STRING_RESERVE.with(|state| {
         let fail = state.get();
@@ -119,9 +113,7 @@ fn coverage_reserve_error() -> TryReserveError {
 }
 
 #[cfg(coverage)]
-fn coverage_maybe_fail_reserve<T>(
-    additional: usize,
-) -> Option<Result<T, TryReserveError>> {
+fn coverage_maybe_fail_reserve<T>(additional: usize) -> Option<Result<T, TryReserveError>> {
     if COVERAGE_RESERVE_MAX_ADDITIONAL.with(|state| additional > state.get()) {
         return Some(Err(coverage_reserve_error()));
     }

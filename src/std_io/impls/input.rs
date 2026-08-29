@@ -48,15 +48,9 @@ where
     /// The caller must ensure that index through index plus count is a valid
     /// range inside output without overflowing.
     #[inline(always)]
-    unsafe fn read_unchecked(
-        &mut self,
-        output: &mut [u8],
-        index: usize,
-        count: usize,
-    ) -> Result<usize> {
+    unsafe fn read_unchecked(&mut self, output: &mut [u8], index: usize, count: usize) -> Result<usize> {
         // SAFETY: The caller guarantees that the range is valid inside output.
-        let target =
-            unsafe { UncheckedSlice::subslice_mut(output, index, count) };
+        let target = unsafe { UncheckedSlice::subslice_mut(output, index, count) };
         Read::read(self, target)
     }
 

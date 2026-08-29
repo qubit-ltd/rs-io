@@ -162,12 +162,7 @@ where
     ///
     /// `index..index + count` must be valid in `output`.
     #[inline]
-    unsafe fn read_unchecked(
-        &mut self,
-        output: &mut [u8],
-        index: usize,
-        count: usize,
-    ) -> io::Result<usize> {
+    unsafe fn read_unchecked(&mut self, output: &mut [u8], index: usize, count: usize) -> io::Result<usize> {
         let read = self.inner.read(&mut output[index..index + count])?;
         self.hasher.write(&output[index..index + read]);
         Ok(read)

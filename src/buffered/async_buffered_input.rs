@@ -112,10 +112,7 @@ where
     /// Panics if initializing the backing buffer requires
     /// `I::Item::default()` or `I::Item::clone()` and either operation panics.
     #[inline]
-    pub fn try_with_capacity(
-        inner: I,
-        capacity: usize,
-    ) -> Result<Self, TryReserveError> {
+    pub fn try_with_capacity(inner: I, capacity: usize) -> Result<Self, TryReserveError> {
         Ok(Self {
             inner,
             buffer: Buffer::try_with_capacity(capacity)?,
@@ -218,10 +215,7 @@ where
     /// Panics if growing the backing buffer requires `I::Item::default()` or
     /// `I::Item::clone()` and either operation panics.
     #[inline(always)]
-    pub fn try_reserve_capacity(
-        &mut self,
-        capacity: usize,
-    ) -> Result<(), TryReserveError> {
+    pub fn try_reserve_capacity(&mut self, capacity: usize) -> Result<(), TryReserveError> {
         self.buffer.try_reserve_capacity(capacity)
     }
 
@@ -261,12 +255,7 @@ where
     /// `count <= self.unread_len()`, and the destination does not overlap the
     /// unread window.
     #[inline]
-    pub unsafe fn copy_unread_to(
-        &self,
-        output: &mut [I::Item],
-        output_index: usize,
-        count: usize,
-    ) {
+    pub unsafe fn copy_unread_to(&self, output: &mut [I::Item], output_index: usize, count: usize) {
         debug_assert!(
             SliceRange::range_fits(output.len(), output_index, count),
             "unchecked unread destination range exceeds output buffer"
@@ -277,8 +266,7 @@ where
         );
         unsafe {
             let source = self.buffer.readable().get_unchecked(..count);
-            let output =
-                output.get_unchecked_mut(output_index..output_index + count);
+            let output = output.get_unchecked_mut(output_index..output_index + count);
             output.clone_from_slice(source);
         }
     }
@@ -298,10 +286,7 @@ where
     ///
     /// Returns [`ErrorKind::InvalidInput`] when the buffer is full with no
     /// consumed prefix to reclaim, or an error reported by the wrapped input.
-    pub fn poll_fill_more(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<io::Result<bool>> {
+    pub fn poll_fill_more(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<bool>> {
         // SAFETY: `inner` remains pinned for the duration of this projection.
         let this = unsafe { self.as_mut().get_unchecked_mut() };
         if this.buffer.available() == 0 {
@@ -351,11 +336,7 @@ where
     ///
     /// Returns [`ErrorKind::InvalidInput`] when `count` exceeds the buffer
     /// capacity, or an error reported by the wrapped input.
-    pub fn poll_fill_until(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        count: usize,
-    ) -> Poll<io::Result<bool>> {
+    pub fn poll_fill_until(mut self: Pin<&mut Self>, cx: &mut Context<'_>, count: usize) -> Poll<io::Result<bool>> {
         if count > self.as_ref().get_ref().buffer.capacity() {
             return Poll::Ready(Err(Error::new(
                 ErrorKind::InvalidInput,
@@ -399,11 +380,7 @@ where
     /// Returns [`ErrorKind::UnexpectedEof`] after discarding an incomplete
     /// unread window, [`ErrorKind::InvalidInput`] when `count` exceeds the
     /// buffer capacity, or an error reported by the wrapped input.
-    pub fn poll_ensure_available(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        count: usize,
-    ) -> Poll<io::Result<()>> {
+    pub fn poll_ensure_available(mut self: Pin<&mut Self>, cx: &mut Context<'_>, count: usize) -> Poll<io::Result<()>> {
         match self.as_mut().poll_fill_until(cx, count) {
             Poll::Ready(Ok(true)) => Poll::Ready(Ok(())),
             Poll::Ready(Ok(false)) => {
@@ -413,10 +390,7 @@ where
                 unsafe {
                     this.buffer.consume(available);
                 }
-                Poll::Ready(Err(Error::new(
-                    ErrorKind::UnexpectedEof,
-                    "failed to fill whole buffer",
-                )))
+                Poll::Ready(Err(Error::new(ErrorKind::UnexpectedEof, "failed to fill whole buffer")))
             }
             Poll::Ready(Err(error)) => Poll::Ready(Err(error)),
             Poll::Pending => Poll::Pending,
@@ -480,12 +454,8 @@ where
     /// Returns [`ErrorKind::UnexpectedEof`] after discarding incomplete unread
     /// data when the wrapped input ends early, [`ErrorKind::InvalidInput`] when
     /// `count` exceeds the buffer capacity, or an error from the wrapped input.
-    pub async fn ensure_available_async(
-        &mut self,
-        count: usize,
-    ) -> io::Result<()> {
-        poll_fn(|cx| Pin::new(&mut *self).poll_ensure_available(cx, count))
-            .await
+    pub async fn ensure_available_async(&mut self, count: usize) -> io::Result<()> {
+        poll_fn(|cx| Pin::new(&mut *self).poll_ensure_available(cx, count)).await
     }
 }
 
@@ -552,8 +522,7 @@ where
         let this = unsafe { self.as_mut().get_unchecked_mut() };
         if !this.buffer.is_empty() {
             let read = count.min(this.buffer.available());
-            output[index..index + read]
-                .clone_from_slice(&this.buffer.readable()[..read]);
+            output[index..index + read].clone_from_slice(&this.buffer.readable()[..read]);
             // SAFETY: `read` was bounded by the readable-window length.
             unsafe {
                 this.buffer.consume(read);
@@ -583,8 +552,7 @@ where
                     this.buffer.advance(fetched);
                 }
                 let read = count.min(fetched);
-                output[index..index + read]
-                    .clone_from_slice(&this.buffer.readable()[..read]);
+                output[index..index + read].clone_from_slice(&this.buffer.readable()[..read]);
                 // SAFETY: `read <= fetched` items are readable.
                 unsafe {
                     this.buffer.consume(read);

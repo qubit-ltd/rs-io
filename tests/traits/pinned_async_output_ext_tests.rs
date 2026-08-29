@@ -23,10 +23,7 @@ struct PinnedOutput {
 }
 
 impl AsyncClose for PinnedOutput {
-    fn poll_close(
-        self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-    ) -> Poll<std::io::Result<()>> {
+    fn poll_close(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         // SAFETY: This method does not move the pinned output.
         unsafe { self.get_unchecked_mut() }.closed = true;
         Poll::Ready(Ok(()))
@@ -46,10 +43,7 @@ impl AsyncOutput for PinnedOutput {
         Poll::Ready(Ok(count))
     }
 
-    fn poll_flush(
-        self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-    ) -> Poll<std::io::Result<()>> {
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         Poll::Ready(Ok(()))
     }
 }

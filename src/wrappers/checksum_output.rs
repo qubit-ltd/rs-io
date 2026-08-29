@@ -165,12 +165,7 @@ where
     ///
     /// `index..index + count` must be valid in `input`.
     #[inline]
-    unsafe fn write_unchecked(
-        &mut self,
-        input: &[u8],
-        index: usize,
-        count: usize,
-    ) -> io::Result<usize> {
+    unsafe fn write_unchecked(&mut self, input: &[u8], index: usize, count: usize) -> io::Result<usize> {
         let written = self.inner.write(&input[index..index + count])?;
         self.hasher.write(&input[index..index + written]);
         Ok(written)

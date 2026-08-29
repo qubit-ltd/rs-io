@@ -80,12 +80,7 @@ where
     ///
     /// The range `index..index + count` must be valid for `input`.
     #[inline]
-    unsafe fn write_unchecked(
-        &mut self,
-        input: &[Self::Item],
-        index: usize,
-        count: usize,
-    ) -> Result<usize> {
+    unsafe fn write_unchecked(&mut self, input: &[Self::Item], index: usize, count: usize) -> Result<usize> {
         match self {
             Self::AlreadyBuffered(output) => {
                 // SAFETY: Forwarded from the trait caller.
@@ -140,12 +135,7 @@ where
     ///
     /// The range `index..index + count` must be valid for `input`.
     #[inline]
-    unsafe fn write_fully_unchecked(
-        &mut self,
-        input: &[Self::Item],
-        index: usize,
-        count: usize,
-    ) -> Result<()> {
+    unsafe fn write_fully_unchecked(&mut self, input: &[Self::Item], index: usize, count: usize) -> Result<()> {
         match self {
             Self::AlreadyBuffered(output) => {
                 // SAFETY: Forwarded from the trait caller.

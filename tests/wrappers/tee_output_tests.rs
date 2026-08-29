@@ -23,10 +23,7 @@ fn test_tee_output_mirrors_primary_prefix_and_exposes_parts() {
     let mut output = TeeOutput::new(primary, branch);
 
     assert!(!output.is_buffered());
-    assert_eq!(
-        2,
-        output.write(&[7_u16, 9, 11]).expect("write should succeed")
-    );
+    assert_eq!(2, output.write(&[7_u16, 9, 11]).expect("write should succeed"));
     assert_eq!(vec![7, 9], output.inner().items);
     assert_eq!(vec![7, 9], output.branch().items);
 
@@ -37,10 +34,7 @@ fn test_tee_output_mirrors_primary_prefix_and_exposes_parts() {
 
 #[test]
 fn test_tee_output_is_buffered_only_when_both_paths_are_buffered() {
-    let mut output = TeeOutput::new(
-        ScriptedOutput::<u16>::accepting(),
-        ScriptedOutput::accepting(),
-    );
+    let mut output = TeeOutput::new(ScriptedOutput::<u16>::accepting(), ScriptedOutput::accepting());
     output.inner_mut().buffered = true;
     assert!(!output.is_buffered());
     output.branch_mut().buffered = true;
@@ -49,10 +43,7 @@ fn test_tee_output_is_buffered_only_when_both_paths_are_buffered() {
 
 #[test]
 fn test_tee_output_mutable_accessors_modify_both_paths() {
-    let mut output = TeeOutput::new(
-        ScriptedOutput::accepting(),
-        ScriptedOutput::accepting(),
-    );
+    let mut output = TeeOutput::new(ScriptedOutput::accepting(), ScriptedOutput::accepting());
     output.inner_mut().items.push(1_u16);
     output.branch_mut().items.push(2);
 
@@ -67,20 +58,13 @@ fn test_tee_output_returns_primary_errors_without_writing_branch() {
         ScriptedOutput::<u16>::failing_write("primary failed"),
         ScriptedOutput::accepting(),
     );
-    let error = output
-        .write(&[1])
-        .expect_err("primary error should be returned");
+    let error = output.write(&[1]).expect_err("primary error should be returned");
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert!(output.branch().items.is_empty());
 
-    let mut invalid = TeeOutput::new(
-        ScriptedOutput::<u16>::invalid_count(),
-        ScriptedOutput::accepting(),
-    );
-    let error = invalid
-        .write(&[1])
-        .expect_err("invalid progress should be rejected");
+    let mut invalid = TeeOutput::new(ScriptedOutput::<u16>::invalid_count(), ScriptedOutput::accepting());
+    let error = invalid.write(&[1]).expect_err("invalid progress should be rejected");
     assert_eq!(ErrorKind::InvalidData, error.kind());
     assert!(invalid.branch().items.is_empty());
 }
@@ -91,9 +75,7 @@ fn test_tee_output_returns_branch_error_after_primary_progress() {
         ScriptedOutput::accepting(),
         ScriptedOutput::<u16>::failing_write("branch failed"),
     );
-    let error = output
-        .write(&[1_u16, 2])
-        .expect_err("branch error should be returned");
+    let error = output.write(&[1_u16, 2]).expect_err("branch error should be returned");
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!(vec![1, 2], output.inner().items);
@@ -112,10 +94,7 @@ fn test_tee_output_does_not_touch_branch_after_zero_primary_progress() {
 
 #[test]
 fn test_tee_output_flushes_in_primary_then_branch_order() {
-    let mut success = TeeOutput::new(
-        ScriptedOutput::<u16>::accepting(),
-        ScriptedOutput::accepting(),
-    );
+    let mut success = TeeOutput::new(ScriptedOutput::<u16>::accepting(), ScriptedOutput::accepting());
     success.flush().expect("flush should succeed");
     assert_eq!(1, success.inner().flush_calls);
     assert_eq!(1, success.branch().flush_calls);
@@ -144,16 +123,8 @@ fn test_tee_output_flushes_in_primary_then_branch_order() {
 
 #[test]
 fn test_tee_output_seeks_primary_then_aligns_branch() {
-    let mut output = TeeOutput::new(
-        ScriptedOutput::<u16>::accepting(),
-        ScriptedOutput::accepting(),
-    );
-    assert_eq!(
-        7,
-        output
-            .seek_to(SeekFrom::Start(7))
-            .expect("seek should succeed")
-    );
+    let mut output = TeeOutput::new(ScriptedOutput::<u16>::accepting(), ScriptedOutput::accepting());
+    assert_eq!(7, output.seek_to(SeekFrom::Start(7)).expect("seek should succeed"));
     assert_eq!(7, output.inner().position);
     assert_eq!(7, output.branch().position);
 

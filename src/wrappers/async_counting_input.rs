@@ -39,10 +39,7 @@ impl<I> AsyncCountingInput<I> {
     /// Returns an input whose item count starts at zero.
     #[inline(always)]
     pub const fn new(inner: I) -> Self {
-        Self {
-            inner,
-            items_read: 0,
-        }
+        Self { inner, items_read: 0 }
     }
 
     /// Returns the successfully returned item count.

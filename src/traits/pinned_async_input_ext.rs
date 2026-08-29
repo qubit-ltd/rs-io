@@ -35,10 +35,8 @@ pub trait PinnedAsyncInputExt {
     /// # Returns
     ///
     /// A future that resolves with the number of items read.
-    fn read_async<'a>(
-        &'a mut self,
-        output: &'a mut [<Self::Input as AsyncInput>::Item],
-    ) -> ReadFuture<'a, Self::Input>;
+    fn read_async<'a>(&'a mut self, output: &'a mut [<Self::Input as AsyncInput>::Item])
+    -> ReadFuture<'a, Self::Input>;
 
     /// Creates a future that reads until the destination is full or EOF.
     ///
@@ -98,10 +96,7 @@ where
     ///
     /// A future that resolves with the number of items read.
     #[inline(always)]
-    fn read_async<'a>(
-        &'a mut self,
-        output: &'a mut [I::Item],
-    ) -> ReadFuture<'a, Self::Input> {
+    fn read_async<'a>(&'a mut self, output: &'a mut [I::Item]) -> ReadFuture<'a, Self::Input> {
         ReadFuture::new(self.as_mut(), output)
     }
 
@@ -119,10 +114,7 @@ where
     ///
     /// A future that resolves with the total number of items read.
     #[inline(always)]
-    fn read_fully_async<'a>(
-        &'a mut self,
-        output: &'a mut [I::Item],
-    ) -> ReadFullyFuture<'a, Self::Input> {
+    fn read_fully_async<'a>(&'a mut self, output: &'a mut [I::Item]) -> ReadFullyFuture<'a, Self::Input> {
         ReadFullyFuture::new(self.as_mut(), output)
     }
 
@@ -140,10 +132,7 @@ where
     ///
     /// A future that resolves after filling `output` or encountering an error.
     #[inline(always)]
-    fn read_exactly_async<'a>(
-        &'a mut self,
-        output: &'a mut [I::Item],
-    ) -> ReadExactFuture<'a, Self::Input> {
+    fn read_exactly_async<'a>(&'a mut self, output: &'a mut [I::Item]) -> ReadExactFuture<'a, Self::Input> {
         ReadExactFuture::new(self.as_mut(), output)
     }
 }

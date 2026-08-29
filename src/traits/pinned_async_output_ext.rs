@@ -37,10 +37,8 @@ pub trait PinnedAsyncOutputExt {
     /// # Returns
     ///
     /// A future that resolves with the number of accepted items.
-    fn write_async<'a>(
-        &'a mut self,
-        input: &'a [<Self::Output as AsyncOutput>::Item],
-    ) -> WriteFuture<'a, Self::Output>;
+    fn write_async<'a>(&'a mut self, input: &'a [<Self::Output as AsyncOutput>::Item])
+    -> WriteFuture<'a, Self::Output>;
 
     /// Creates a future that writes the entire source.
     ///
@@ -98,10 +96,7 @@ where
     ///
     /// A future that resolves with the number of accepted items.
     #[inline(always)]
-    fn write_async<'a>(
-        &'a mut self,
-        input: &'a [O::Item],
-    ) -> WriteFuture<'a, Self::Output> {
+    fn write_async<'a>(&'a mut self, input: &'a [O::Item]) -> WriteFuture<'a, Self::Output> {
         WriteFuture::new(self.as_mut(), input)
     }
 
@@ -119,10 +114,7 @@ where
     ///
     /// A future that resolves after every item has been accepted.
     #[inline(always)]
-    fn write_fully_async<'a>(
-        &'a mut self,
-        input: &'a [O::Item],
-    ) -> WriteFullyFuture<'a, Self::Output> {
+    fn write_fully_async<'a>(&'a mut self, input: &'a [O::Item]) -> WriteFullyFuture<'a, Self::Output> {
         WriteFullyFuture::new(self.as_mut(), input)
     }
 

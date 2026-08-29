@@ -113,12 +113,7 @@ pub trait Output {
     ///
     /// The caller must guarantee that `index..index + count` is a valid range
     /// inside `input` and that the addition does not overflow.
-    unsafe fn write_unchecked(
-        &mut self,
-        input: &[Self::Item],
-        index: usize,
-        count: usize,
-    ) -> Result<usize>;
+    unsafe fn write_unchecked(&mut self, input: &[Self::Item], index: usize, count: usize) -> Result<usize>;
 
     /// Writes items from the full input slice.
     ///
@@ -178,12 +173,7 @@ pub trait Output {
     ///
     /// The caller must guarantee that `index..index + count` is a valid range
     /// inside `input` and that the addition does not overflow.
-    unsafe fn write_fully_unchecked(
-        &mut self,
-        input: &[Self::Item],
-        index: usize,
-        count: usize,
-    ) -> Result<()> {
+    unsafe fn write_fully_unchecked(&mut self, input: &[Self::Item], index: usize, count: usize) -> Result<()> {
         debug_assert!(
             SliceRange::range_fits(input.len(), index, count),
             "unchecked write-fully range exceeds input buffer"
@@ -193,14 +183,9 @@ pub trait Output {
             let remaining = count - written;
             // SAFETY: The caller guarantees the original source range is valid;
             // `written < count`, so this suffix remains inside it.
-            match unsafe {
-                self.write_unchecked(input, index + written, remaining)
-            } {
+            match unsafe { self.write_unchecked(input, index + written, remaining) } {
                 Ok(0) => {
-                    return Err(Error::new(
-                        ErrorKind::WriteZero,
-                        "failed to write whole output range",
-                    ));
+                    return Err(Error::new(ErrorKind::WriteZero, "failed to write whole output range"));
                 }
                 Ok(progress) => {
                     validate_write_count(progress, remaining)?;

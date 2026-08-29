@@ -80,12 +80,7 @@ where
     ///
     /// The range `index..index + count` must be valid for `output`.
     #[inline]
-    unsafe fn read_unchecked(
-        &mut self,
-        output: &mut [Self::Item],
-        index: usize,
-        count: usize,
-    ) -> Result<usize> {
+    unsafe fn read_unchecked(&mut self, output: &mut [Self::Item], index: usize, count: usize) -> Result<usize> {
         match self {
             Self::AlreadyBuffered(input) => {
                 // SAFETY: Forwarded from the trait caller.
@@ -140,12 +135,7 @@ where
     ///
     /// The range `index..index + count` must be valid for `output`.
     #[inline]
-    unsafe fn read_fully_unchecked(
-        &mut self,
-        output: &mut [Self::Item],
-        index: usize,
-        count: usize,
-    ) -> Result<usize> {
+    unsafe fn read_fully_unchecked(&mut self, output: &mut [Self::Item], index: usize, count: usize) -> Result<usize> {
         match self {
             Self::AlreadyBuffered(input) => {
                 // SAFETY: Forwarded from the trait caller.

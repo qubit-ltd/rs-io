@@ -68,16 +68,13 @@ fn test_write_blanket_impl_exposes_output_methods() {
     let mut cursor = Cursor::new(Vec::new());
 
     // SAFETY: b"bc" is a valid source range inside b"abc".
-    let written = unsafe {
-        Output::write_unchecked(&mut cursor, b"abc", 1, 2)
-            .expect("write_unchecked should succeed")
-    };
+    let written =
+        unsafe { Output::write_unchecked(&mut cursor, b"abc", 1, 2).expect("write_unchecked should succeed") };
     assert_eq!(2, written);
     assert_eq!(b"bc", cursor.into_inner().as_slice());
 
     let mut cursor = Cursor::new(Vec::new());
-    let written = Output::write(&mut cursor, b"xy")
-        .expect("Output::write should delegate to write_unchecked");
+    let written = Output::write(&mut cursor, b"xy").expect("Output::write should delegate to write_unchecked");
     assert_eq!(2, written);
     assert_eq!(b"xy", cursor.into_inner().as_slice());
 
@@ -91,8 +88,7 @@ fn test_write_blanket_impl_exposes_output_methods() {
 fn test_write_blanket_impl_rejects_overreported_count() {
     let mut writer = OverreportingStdWriter;
 
-    let error = Output::write(&mut writer, b"abc")
-        .expect_err("blanket output should validate the Write count");
+    let error = Output::write(&mut writer, b"abc").expect_err("blanket output should validate the Write count");
 
     assert_eq!(ErrorKind::InvalidData, error.kind());
 }
@@ -102,8 +98,7 @@ fn test_write_blanket_impl_rejects_overreported_count() {
 fn test_write_blanket_impl_propagates_std_write_error() {
     let mut writer = FailingStdWriter;
 
-    let error = Output::write(&mut writer, b"abc")
-        .expect_err("blanket output should propagate Write errors");
+    let error = Output::write(&mut writer, b"abc").expect_err("blanket output should propagate Write errors");
 
     assert_eq!(ErrorKind::BrokenPipe, error.kind());
 }
@@ -116,29 +111,19 @@ fn test_write_blanket_impl_write_unchecked_panics_on_invalid_range() {
     let result = catch_unwind(AssertUnwindSafe(|| {
         // SAFETY: the range is intentionally invalid; this verifies
         // debug-assert behavior.
-        let _ = unsafe {
-            Output::write_unchecked(&mut writer, b"ab", 1, 2)
-                .expect("should panic")
-        };
+        let _ = unsafe { Output::write_unchecked(&mut writer, b"ab", 1, 2).expect("should panic") };
     }));
 
-    assert!(
-        result.is_err(),
-        "write_unchecked should panic on invalid range"
-    );
+    assert!(result.is_err(), "write_unchecked should panic on invalid range");
 }
 
 #[cfg(debug_assertions)]
 #[test]
-fn test_write_blanket_impl_write_unchecked_panics_on_index_plus_count_overflow()
-{
+fn test_write_blanket_impl_write_unchecked_panics_on_index_plus_count_overflow() {
     let mut writer = Cursor::new(Vec::new());
 
     let result = catch_unwind(AssertUnwindSafe(|| {
-        let _ = unsafe {
-            Output::write_unchecked(&mut writer, b"ab", usize::MAX, 2)
-                .expect("should panic")
-        };
+        let _ = unsafe { Output::write_unchecked(&mut writer, b"ab", usize::MAX, 2).expect("should panic") };
     }));
 
     assert!(
@@ -161,8 +146,7 @@ fn test_write_blanket_impl_write_unchecked_propagates_std_write_error() {
 fn test_write_blanket_impl_flush_propagates_std_flush_error() {
     let mut writer = FailingFlushStdWriter;
 
-    let error = Output::flush(&mut writer)
-        .expect_err("Output::flush should propagate std flush errors");
+    let error = Output::flush(&mut writer).expect_err("Output::flush should propagate std flush errors");
 
     assert_eq!(ErrorKind::BrokenPipe, error.kind());
 }

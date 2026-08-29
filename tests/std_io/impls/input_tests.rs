@@ -43,18 +43,14 @@ fn test_read_blanket_impl_exposes_input_read_and_read_unchecked() {
     let mut cursor = Cursor::new(b"ab".to_vec());
     let mut output = [0_u8; 4];
 
-    let read =
-        Input::read(&mut cursor, &mut output).expect("read should succeed");
+    let read = Input::read(&mut cursor, &mut output).expect("read should succeed");
     assert_eq!(2, read);
     assert_eq!(b"ab\x00\x00", &output);
 
     let mut cursor = Cursor::new(b"cd".to_vec());
     let mut output = [b'.'; 4];
     // SAFETY: output[1..3] is a valid destination range.
-    let read = unsafe {
-        Input::read_unchecked(&mut cursor, &mut output, 1, 2)
-            .expect("read_unchecked should succeed")
-    };
+    let read = unsafe { Input::read_unchecked(&mut cursor, &mut output, 1, 2).expect("read_unchecked should succeed") };
     assert_eq!(2, read);
     assert_eq!(b".cd.", &output);
 }
@@ -65,8 +61,7 @@ fn test_read_blanket_impl_rejects_overreported_count() {
     let mut reader = OverreportingStdReader;
     let mut output = [0_u8; 3];
 
-    let error = Input::read(&mut reader, &mut output)
-        .expect_err("blanket input should validate the Read count");
+    let error = Input::read(&mut reader, &mut output).expect_err("blanket input should validate the Read count");
 
     assert_eq!(ErrorKind::InvalidData, error.kind());
 }
@@ -77,8 +72,7 @@ fn test_read_blanket_impl_propagates_std_read_error() {
     let mut reader = FailingStdReader;
     let mut output = [0_u8; 3];
 
-    let error = Input::read(&mut reader, &mut output)
-        .expect_err("blanket input should propagate Read errors");
+    let error = Input::read(&mut reader, &mut output).expect_err("blanket input should propagate Read errors");
 
     assert_eq!(ErrorKind::PermissionDenied, error.kind());
 }
@@ -92,16 +86,10 @@ fn test_read_blanket_impl_read_unchecked_panics_on_invalid_range() {
     let result = catch_unwind(AssertUnwindSafe(|| {
         // SAFETY: the range is intentionally invalid; this verifies
         // debug-assert behavior.
-        let _ = unsafe {
-            Input::read_unchecked(&mut reader, &mut output, 1, 2)
-                .expect("should panic")
-        };
+        let _ = unsafe { Input::read_unchecked(&mut reader, &mut output, 1, 2).expect("should panic") };
     }));
 
-    assert!(
-        result.is_err(),
-        "read_unchecked should panic on invalid range"
-    );
+    assert!(result.is_err(), "read_unchecked should panic on invalid range");
 }
 
 #[cfg(debug_assertions)]
@@ -111,10 +99,7 @@ fn test_read_blanket_impl_read_unchecked_panics_on_index_plus_count_overflow() {
     let mut output = [0_u8; 1];
 
     let result = catch_unwind(AssertUnwindSafe(|| {
-        let _ = unsafe {
-            Input::read_unchecked(&mut reader, &mut output, usize::MAX, 2)
-                .expect("should panic")
-        };
+        let _ = unsafe { Input::read_unchecked(&mut reader, &mut output, usize::MAX, 2).expect("should panic") };
     }));
 
     assert!(
@@ -128,9 +113,8 @@ fn test_read_blanket_impl_read_unchecked_propagates_std_read_error() {
     let mut reader = FailingStdReader;
     let mut output = [0_u8; 1];
 
-    let result =
-        unsafe { Input::read_unchecked(&mut reader, &mut output, 0, 1) }
-            .expect_err("read_unchecked should propagate std read errors");
+    let result = unsafe { Input::read_unchecked(&mut reader, &mut output, 0, 1) }
+        .expect_err("read_unchecked should propagate std read errors");
 
     assert_eq!(ErrorKind::PermissionDenied, result.kind());
 }

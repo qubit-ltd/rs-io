@@ -59,10 +59,7 @@ impl<I, B> TeeInput<I, B> {
     ///
     /// Returns a synchronized-seek tee input.
     #[inline(always)]
-    pub const fn with_sync_branch_seek(
-        inner: I,
-        branch: B,
-    ) -> SyncSeekTeeInput<I, B> {
+    pub const fn with_sync_branch_seek(inner: I, branch: B) -> SyncSeekTeeInput<I, B> {
         SyncSeekTeeInput::new(inner, branch)
     }
 
@@ -166,12 +163,7 @@ where
     ///
     /// `index..index + count` must be valid in `output`.
     #[inline]
-    unsafe fn read_unchecked(
-        &mut self,
-        output: &mut [Self::Item],
-        index: usize,
-        count: usize,
-    ) -> io::Result<usize> {
+    unsafe fn read_unchecked(&mut self, output: &mut [Self::Item], index: usize, count: usize) -> io::Result<usize> {
         let read = self.inner.read(&mut output[index..index + count])?;
         self.branch.write_fully(&output[index..index + read])?;
         Ok(read)

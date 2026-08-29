@@ -149,12 +149,7 @@ where
     ///
     /// `index..index + count` must be a valid range in `input`.
     #[inline]
-    unsafe fn write_unchecked(
-        &mut self,
-        input: &[Self::Item],
-        index: usize,
-        count: usize,
-    ) -> io::Result<usize> {
+    unsafe fn write_unchecked(&mut self, input: &[Self::Item], index: usize, count: usize) -> io::Result<usize> {
         let source = &input[index..index + count];
         let written = self.inner.write(source)?;
         let written_u64 = u64::try_from(written).unwrap_or(u64::MAX);

@@ -12,8 +12,5 @@ use qubit_io::TokioAsyncWrite;
 
 #[test]
 fn test_tokio_async_write_type_is_public() {
-    assert!(
-        std::any::type_name::<TokioAsyncWrite<Cursor<Vec<u8>>>>()
-            .contains("TokioAsyncWrite")
-    );
+    assert!(std::any::type_name::<TokioAsyncWrite<Cursor<Vec<u8>>>>().contains("TokioAsyncWrite"));
 }

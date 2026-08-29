@@ -114,12 +114,7 @@ where
     ///
     /// The range `index..index + count` must be valid for `output`.
     #[inline(always)]
-    unsafe fn read_unchecked(
-        &mut self,
-        output: &mut [Self::Item],
-        index: usize,
-        count: usize,
-    ) -> io::Result<usize> {
+    unsafe fn read_unchecked(&mut self, output: &mut [Self::Item], index: usize, count: usize) -> io::Result<usize> {
         // SAFETY: The caller's valid-range guarantee is forwarded unchanged.
         unsafe { self.inner.read_unchecked(output, index, count) }
     }

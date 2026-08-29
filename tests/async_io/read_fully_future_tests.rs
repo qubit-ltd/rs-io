@@ -23,10 +23,7 @@ use super::support_tests::TestInput;
 
 #[test]
 fn test_read_fully_future_type_is_public() {
-    assert!(
-        std::any::type_name::<ReadFullyFuture<'static, TestInput>>()
-            .contains("ReadFullyFuture")
-    );
+    assert!(std::any::type_name::<ReadFullyFuture<'static, TestInput>>().contains("ReadFullyFuture"));
 }
 
 #[test]
@@ -53,19 +50,12 @@ fn test_read_fully_future_constructs_and_reports_eof_progress() {
 
 #[test]
 fn test_read_fully_future_supports_pending_reads_before_progress() {
-    let mut input = ScriptedInput::new([
-        PollResult::Pending,
-        PollResult::Read(2),
-        PollResult::Read(0),
-    ]);
+    let mut input = ScriptedInput::new([PollResult::Pending, PollResult::Read(2), PollResult::Read(0)]);
     let mut output = [0_u8; 4];
     let mut future = ReadFullyFuture::new(Pin::new(&mut input), &mut output);
     let mut cx = Context::from_waker(Waker::noop());
 
-    assert!(matches!(
-        Future::poll(Pin::new(&mut future), &mut cx),
-        Poll::Pending
-    ));
+    assert!(matches!(Future::poll(Pin::new(&mut future), &mut cx), Poll::Pending));
     match Future::poll(Pin::new(&mut future), &mut cx) {
         Poll::Ready(Ok(2)) => {}
         Poll::Ready(Ok(_)) => {
@@ -103,28 +93,19 @@ fn test_read_fully_future_constructs_and_propagates_io_error() {
 
 #[test]
 fn test_read_fully_future_pauses_when_ready_budget_is_exhausted() {
-    let mut input = ScriptedInput::new(
-        std::iter::repeat_with(|| PollResult::Read(1)).take(65),
-    );
+    let mut input = ScriptedInput::new(std::iter::repeat_with(|| PollResult::Read(1)).take(65));
     let mut output = [0_u8; 65];
     let mut future = ReadFullyFuture::new(Pin::new(&mut input), &mut output);
     let mut cx = Context::from_waker(Waker::noop());
 
-    assert!(matches!(
-        Future::poll(Pin::new(&mut future), &mut cx),
-        Poll::Pending
-    ));
+    assert!(matches!(Future::poll(Pin::new(&mut future), &mut cx), Poll::Pending));
     match Future::poll(Pin::new(&mut future), &mut cx) {
         Poll::Ready(Ok(65)) => {}
         Poll::Ready(Ok(_)) | Poll::Pending => {
-            panic!(
-                "read-fully future should complete after second poll, got not fully consumed"
-            )
+            panic!("read-fully future should complete after second poll, got not fully consumed")
         }
         Poll::Ready(Err(error)) => {
-            panic!(
-                "read-fully future should complete after second poll, got error {error}"
-            )
+            panic!("read-fully future should complete after second poll, got error {error}")
         }
     }
 }

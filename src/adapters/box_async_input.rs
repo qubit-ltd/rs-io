@@ -133,9 +133,6 @@ where
         count: usize,
     ) -> Poll<std::io::Result<usize>> {
         // SAFETY: The caller's valid-range guarantee is forwarded unchanged.
-        unsafe {
-            self.get_pin_mut()
-                .poll_read_unchecked(cx, output, index, count)
-        }
+        unsafe { self.get_pin_mut().poll_read_unchecked(cx, output, index, count) }
     }
 }

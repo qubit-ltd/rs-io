@@ -23,10 +23,7 @@ use super::support_tests::TestInput;
 
 #[test]
 fn test_read_exact_future_type_is_public() {
-    assert!(
-        std::any::type_name::<ReadExactFuture<'static, TestInput>>()
-            .contains("ReadExactFuture")
-    );
+    assert!(std::any::type_name::<ReadExactFuture<'static, TestInput>>().contains("ReadExactFuture"));
 }
 
 #[test]
@@ -72,19 +69,12 @@ fn test_read_exact_future_constructs_and_reports_eof() {
 
 #[test]
 fn test_read_exact_future_supports_pending_reads_before_progress() {
-    let mut input = ScriptedInput::new([
-        PollResult::Pending,
-        PollResult::Read(1),
-        PollResult::Read(1),
-    ]);
+    let mut input = ScriptedInput::new([PollResult::Pending, PollResult::Read(1), PollResult::Read(1)]);
     let mut output = [0_u8; 2];
     let mut future = ReadExactFuture::new(Pin::new(&mut input), &mut output);
     let mut cx = Context::from_waker(Waker::noop());
 
-    assert!(matches!(
-        Future::poll(Pin::new(&mut future), &mut cx),
-        Poll::Pending
-    ));
+    assert!(matches!(Future::poll(Pin::new(&mut future), &mut cx), Poll::Pending));
     assert!(matches!(
         Future::poll(Pin::new(&mut future), &mut cx),
         Poll::Ready(Ok(()))
@@ -93,9 +83,10 @@ fn test_read_exact_future_supports_pending_reads_before_progress() {
 
 #[test]
 fn test_read_exact_future_constructs_and_propagates_io_error() {
-    let mut input = ScriptedInput::new([PollResult::Error(
-        std::io::Error::new(ErrorKind::PermissionDenied, "denied"),
-    )]);
+    let mut input = ScriptedInput::new([PollResult::Error(std::io::Error::new(
+        ErrorKind::PermissionDenied,
+        "denied",
+    ))]);
     let mut output = [0_u8; 1];
     let mut future = ReadExactFuture::new(Pin::new(&mut input), &mut output);
     let mut cx = Context::from_waker(Waker::noop());
@@ -113,17 +104,12 @@ fn test_read_exact_future_constructs_and_propagates_io_error() {
 
 #[test]
 fn test_read_exact_future_pauses_when_ready_budget_is_exhausted() {
-    let mut input = ScriptedInput::new(
-        std::iter::repeat_with(|| PollResult::Read(1)).take(65),
-    );
+    let mut input = ScriptedInput::new(std::iter::repeat_with(|| PollResult::Read(1)).take(65));
     let mut output = [0_u8; 65];
     let mut future = ReadExactFuture::new(Pin::new(&mut input), &mut output);
     let mut cx = Context::from_waker(Waker::noop());
 
-    assert!(matches!(
-        Future::poll(Pin::new(&mut future), &mut cx),
-        Poll::Pending
-    ));
+    assert!(matches!(Future::poll(Pin::new(&mut future), &mut cx), Poll::Pending));
     assert!(matches!(
         Future::poll(Pin::new(&mut future), &mut cx),
         Poll::Ready(Ok(()))
@@ -132,8 +118,7 @@ fn test_read_exact_future_pauses_when_ready_budget_is_exhausted() {
 
 #[test]
 fn test_read_exact_future_reports_eof_after_partial_progress() {
-    let mut input =
-        ScriptedInput::new([PollResult::Read(1), PollResult::Read(0)]);
+    let mut input = ScriptedInput::new([PollResult::Read(1), PollResult::Read(0)]);
     let mut output = [0_u8; 2];
     let mut future = ReadExactFuture::new(Pin::new(&mut input), &mut output);
     let mut cx = Context::from_waker(Waker::noop());

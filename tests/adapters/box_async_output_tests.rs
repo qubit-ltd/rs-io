@@ -54,10 +54,7 @@ impl AsyncOutput for PinnedByteOutput {
         Poll::Ready(Ok(count))
     }
 
-    fn poll_flush(
-        self: Pin<&mut Self>,
-        _: &mut Context<'_>,
-    ) -> Poll<std::io::Result<()>> {
+    fn poll_flush(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         let this = unsafe { self.get_unchecked_mut() };
         this.state.borrow_mut().flushed = true;
         Poll::Ready(Ok(()))
@@ -65,10 +62,7 @@ impl AsyncOutput for PinnedByteOutput {
 }
 
 impl AsyncClose for PinnedByteOutput {
-    fn poll_close(
-        self: Pin<&mut Self>,
-        _: &mut Context<'_>,
-    ) -> Poll<std::io::Result<()>> {
+    fn poll_close(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         let this = unsafe { self.get_unchecked_mut() };
         this.state.borrow_mut().closed = true;
         Poll::Ready(Ok(()))

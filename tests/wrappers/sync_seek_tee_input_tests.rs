@@ -38,10 +38,7 @@ fn test_sync_seek_tee_input_mirrors_generic_items_and_exposes_parts() {
 
 #[test]
 fn test_sync_seek_tee_input_mutable_accessors_modify_both_paths() {
-    let mut input = SyncSeekTeeInput::new(
-        ScriptedInput::items(vec![1_u16]),
-        ScriptedOutput::accepting(),
-    );
+    let mut input = SyncSeekTeeInput::new(ScriptedInput::items(vec![1_u16]), ScriptedOutput::accepting());
     input.inner_mut().action = InputAction::Items(vec![2]);
     input.branch_mut().items.push(1);
     let mut output = [0_u16; 1];
@@ -78,16 +75,8 @@ fn test_sync_seek_tee_input_propagates_read_path_errors() {
 
 #[test]
 fn test_sync_seek_tee_input_seeks_source_then_aligns_branch() {
-    let mut input = SyncSeekTeeInput::new(
-        ScriptedInput::items(vec![1_u16]),
-        ScriptedOutput::accepting(),
-    );
-    assert_eq!(
-        5,
-        input
-            .seek_to(SeekFrom::Start(5))
-            .expect("seek should succeed")
-    );
+    let mut input = SyncSeekTeeInput::new(ScriptedInput::items(vec![1_u16]), ScriptedOutput::accepting());
+    assert_eq!(5, input.seek_to(SeekFrom::Start(5)).expect("seek should succeed"));
     assert_eq!(5, input.inner().position);
     assert_eq!(5, input.branch().position);
 

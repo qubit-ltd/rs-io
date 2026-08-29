@@ -45,12 +45,9 @@ fn test_counting_input_exposes_byte_count_and_inner_input() {
 
 #[test]
 fn test_counting_input_preserves_count_on_read_errors_and_invalid_progress() {
-    let mut failing =
-        CountingInput::new(ScriptedInput::<u16>::failing("read failed"));
+    let mut failing = CountingInput::new(ScriptedInput::<u16>::failing("read failed"));
     let mut output = [0_u16; 2];
-    let error = failing
-        .read(&mut output)
-        .expect_err("read error should be returned");
+    let error = failing.read(&mut output).expect_err("read error should be returned");
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!(0, failing.items_read());
@@ -68,12 +65,7 @@ fn test_counting_input_preserves_count_on_read_errors_and_invalid_progress() {
 fn test_counting_input_forwards_seek_without_changing_count() {
     let mut input = CountingInput::new(ScriptedInput::items(vec![1_u16]));
 
-    assert_eq!(
-        7,
-        input
-            .seek_to(SeekFrom::Start(7))
-            .expect("seek should succeed")
-    );
+    assert_eq!(7, input.seek_to(SeekFrom::Start(7)).expect("seek should succeed"));
     assert_eq!(0, input.items_read());
     assert_eq!(7, input.inner().position);
 }

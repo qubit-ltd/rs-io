@@ -37,9 +37,7 @@ impl AsyncInput for PinnedInput {
 
 #[test]
 fn test_pinned_async_input_ext_supports_non_unpin_trait_object() {
-    let mut input = Box::pin(PinnedInput {
-        _pinned: PhantomPinned,
-    });
+    let mut input = Box::pin(PinnedInput { _pinned: PhantomPinned });
     let mut input: Pin<&mut dyn AsyncInput<Item = u8>> = input.as_mut();
     let mut output = [0_u8; 2];
     let mut cx = Context::from_waker(Waker::noop());

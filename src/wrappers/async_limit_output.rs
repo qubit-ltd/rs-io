@@ -49,10 +49,7 @@ where
     /// Returns an error reported by the wrapped output. Invalid asynchronous
     /// error kinds are normalized to [`io::ErrorKind::InvalidData`].
     #[inline(always)]
-    fn poll_close(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<io::Result<()>> {
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         // SAFETY: `inner` is never moved while projecting this pinned wrapper.
         let this = unsafe { self.get_unchecked_mut() };
         // SAFETY: The pinned wrapper keeps `inner` at a stable address.
@@ -183,9 +180,7 @@ where
         if this.remaining == 0 || count == 0 {
             return Poll::Ready(Ok(0));
         }
-        let requested = usize::try_from(this.remaining)
-            .unwrap_or(usize::MAX)
-            .min(count);
+        let requested = usize::try_from(this.remaining).unwrap_or(usize::MAX).min(count);
         let source = &input[index..index + requested];
         // SAFETY: The pinned wrapper never moves `inner`.
         let inner = unsafe { Pin::new_unchecked(&mut this.inner) };
@@ -215,10 +210,7 @@ where
     /// Returns an error reported by the wrapped output. Invalid asynchronous
     /// error kinds are normalized to [`io::ErrorKind::InvalidData`].
     #[inline(always)]
-    fn poll_flush(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<io::Result<()>> {
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         // SAFETY: `inner` is never moved while projecting this pinned wrapper.
         let this = unsafe { self.get_unchecked_mut() };
         // SAFETY: The pinned wrapper keeps `inner` at a stable address.

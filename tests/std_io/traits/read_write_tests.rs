@@ -14,9 +14,7 @@ fn test_read_write_trait_object_supports_reading_and_writing() {
 
     {
         let stream: &mut dyn ReadWrite = &mut cursor;
-        stream
-            .write_all(b"ping")
-            .expect("read-write trait object should write");
+        stream.write_all(b"ping").expect("read-write trait object should write");
     }
 
     assert_eq!(b"ping", cursor.get_ref().as_slice());

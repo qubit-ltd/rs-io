@@ -39,10 +39,7 @@ pub trait AsyncClose: AsyncOutput {
     /// # Errors
     ///
     /// Returns the close error reported by the implementation.
-    fn poll_close(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<()>>;
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<()>>;
 
     /// Creates a future that closes this output.
     ///

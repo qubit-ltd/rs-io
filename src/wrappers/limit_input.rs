@@ -130,18 +130,11 @@ where
     ///
     /// `index..index + count` must be a valid range in `output`.
     #[inline]
-    unsafe fn read_unchecked(
-        &mut self,
-        output: &mut [Self::Item],
-        index: usize,
-        count: usize,
-    ) -> io::Result<usize> {
+    unsafe fn read_unchecked(&mut self, output: &mut [Self::Item], index: usize, count: usize) -> io::Result<usize> {
         if self.remaining == 0 || count == 0 {
             return Ok(0);
         }
-        let requested = usize::try_from(self.remaining)
-            .unwrap_or(usize::MAX)
-            .min(count);
+        let requested = usize::try_from(self.remaining).unwrap_or(usize::MAX).min(count);
         let read = self.inner.read(&mut output[index..index + requested])?;
         self.remaining -= u64::try_from(read).unwrap_or(u64::MAX);
         Ok(read)

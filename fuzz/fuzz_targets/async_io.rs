@@ -63,8 +63,7 @@ impl AsyncInput for ChunkedInput<'_> {
         self.pending = false;
         let available = self.bytes.len() - self.position;
         let read = available.min(count).min(self.chunk_size);
-        output[index..index + read]
-            .copy_from_slice(&self.bytes[self.position..self.position + read]);
+        output[index..index + read].copy_from_slice(&self.bytes[self.position..self.position + read]);
         self.position += read;
         Poll::Ready(Ok(read))
     }
@@ -104,10 +103,7 @@ impl AsyncOutput for ChunkedOutput {
         Poll::Ready(Ok(written))
     }
 
-    fn poll_flush(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<io::Result<()>> {
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         if self.enable_pending && !self.flush_pending {
             self.flush_pending = true;
             cx.waker().wake_by_ref();
@@ -120,10 +116,7 @@ impl AsyncOutput for ChunkedOutput {
 }
 
 impl AsyncClose for ChunkedOutput {
-    fn poll_close(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<io::Result<()>> {
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         if self.enable_pending && !self.close_pending {
             self.close_pending = true;
             cx.waker().wake_by_ref();
@@ -152,19 +145,13 @@ impl AsyncOutput for ForbiddenOutput {
         Poll::Ready(Ok(count))
     }
 
-    fn poll_flush(
-        self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-    ) -> Poll<io::Result<()>> {
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         Poll::Ready(Err(Error::new(self.kind, "forbidden flush error")))
     }
 }
 
 impl AsyncClose for ForbiddenOutput {
-    fn poll_close(
-        self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-    ) -> Poll<io::Result<()>> {
+    fn poll_close(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         Poll::Ready(Err(Error::new(self.kind, "forbidden close error")))
     }
 }

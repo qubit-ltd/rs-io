@@ -134,10 +134,7 @@ where
         count: usize,
     ) -> Poll<std::io::Result<usize>> {
         // SAFETY: The caller's valid-range guarantee is forwarded unchanged.
-        unsafe {
-            self.get_pin_mut()
-                .poll_write_unchecked(cx, input, index, count)
-        }
+        unsafe { self.get_pin_mut().poll_write_unchecked(cx, input, index, count) }
     }
 
     /// Forwards an asynchronous flush to the pinned boxed output.
@@ -154,10 +151,7 @@ where
     ///
     /// Returns an error reported while flushing the wrapped output.
     #[inline(always)]
-    fn poll_flush(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<std::io::Result<()>> {
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         self.get_pin_mut().poll_flush(cx)
     }
 }
@@ -180,10 +174,7 @@ where
     ///
     /// Returns an error reported while closing the wrapped output.
     #[inline(always)]
-    fn poll_close(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<std::io::Result<()>> {
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         self.get_pin_mut().poll_close(cx)
     }
 }

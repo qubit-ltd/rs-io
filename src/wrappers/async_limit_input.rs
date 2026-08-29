@@ -148,9 +148,7 @@ where
         if this.remaining == 0 || count == 0 {
             return Poll::Ready(Ok(0));
         }
-        let requested = usize::try_from(this.remaining)
-            .unwrap_or(usize::MAX)
-            .min(count);
+        let requested = usize::try_from(this.remaining).unwrap_or(usize::MAX).min(count);
         let destination = &mut output[index..index + requested];
         // SAFETY: The pinned wrapper never moves `inner`.
         let inner = unsafe { Pin::new_unchecked(&mut this.inner) };

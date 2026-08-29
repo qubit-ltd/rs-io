@@ -41,10 +41,7 @@ impl<I> CountingInput<I> {
     /// Returns a wrapper with its item count initialized to zero.
     #[inline(always)]
     pub const fn new(inner: I) -> Self {
-        Self {
-            inner,
-            items_read: 0,
-        }
+        Self { inner, items_read: 0 }
     }
 
     /// Returns the saturating number of items successfully returned through
@@ -150,12 +147,7 @@ where
     ///
     /// `index..index + count` must be a valid range in `output`.
     #[inline]
-    unsafe fn read_unchecked(
-        &mut self,
-        output: &mut [Self::Item],
-        index: usize,
-        count: usize,
-    ) -> io::Result<usize> {
+    unsafe fn read_unchecked(&mut self, output: &mut [Self::Item], index: usize, count: usize) -> io::Result<usize> {
         let destination = &mut output[index..index + count];
         let read = self.inner.read(destination)?;
         let read_u64 = u64::try_from(read).unwrap_or(u64::MAX);

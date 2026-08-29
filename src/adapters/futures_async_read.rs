@@ -111,11 +111,7 @@ where
     ///
     /// Returns an I/O error reported by the wrapped input.
     #[inline]
-    fn poll_read(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        output: &mut [u8],
-    ) -> Poll<std::io::Result<usize>> {
+    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, output: &mut [u8]) -> Poll<std::io::Result<usize>> {
         if output.is_empty() {
             return Poll::Ready(Ok(0));
         }

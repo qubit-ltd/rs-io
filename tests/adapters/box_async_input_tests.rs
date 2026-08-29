@@ -39,8 +39,7 @@ impl AsyncInput for PinnedByteInput {
         let this = unsafe { self.as_mut().get_unchecked_mut() };
         let remaining = this.items.len() - this.position;
         let read = remaining.min(count);
-        output[index..index + read]
-            .copy_from_slice(&this.items[this.position..this.position + read]);
+        output[index..index + read].copy_from_slice(&this.items[this.position..this.position + read]);
         this.position += read;
         Poll::Ready(Ok(read))
     }

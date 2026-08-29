@@ -16,8 +16,7 @@ const MAX_FUZZ_INPUT_LEN: usize = 4096;
 
 fuzz_target!(|data: &[u8]| {
     let data = &data[..data.len().min(MAX_FUZZ_INPUT_LEN)];
-    let capacity =
-        usize::from(data.first().copied().unwrap_or_default() % 32) + 1;
+    let capacity = usize::from(data.first().copied().unwrap_or_default() % 32) + 1;
     let mut buffer = Buffer::<u8>::with_capacity(capacity);
     let mut model = Vec::new();
 
@@ -70,11 +69,7 @@ fn append_with_copy(buffer: &mut Buffer<u8>, model: &mut Vec<u8>, value: u8) {
 }
 
 /// Appends one modeled value through spare storage plus `advance`.
-fn append_through_spare(
-    buffer: &mut Buffer<u8>,
-    model: &mut Vec<u8>,
-    value: u8,
-) {
+fn append_through_spare(buffer: &mut Buffer<u8>, model: &mut Vec<u8>, value: u8) {
     ensure_spare(buffer);
     buffer.spare_mut()[0] = value;
     // SAFETY: `ensure_spare` guarantees one initialized spare element.

@@ -69,9 +69,7 @@ impl AsyncInput for ScriptedAsyncInput {
                 output[index..index + read].copy_from_slice(&data[..read]);
                 Poll::Ready(Ok(read))
             }
-            ReadStep::Error(kind) => {
-                Poll::Ready(Err(Error::new(kind, "read failed")))
-            }
+            ReadStep::Error(kind) => Poll::Ready(Err(Error::new(kind, "read failed"))),
             ReadStep::Pending => {
                 this.registered_waker = Some(cx.waker().clone());
                 Poll::Pending
@@ -138,8 +136,7 @@ fn test_async_input_poll_read_rejects_overreported_count() {
     let mut output = [0_u8; 3];
     let mut cx = context();
 
-    let result =
-        AsyncInput::poll_read(Pin::new(&mut input), &mut cx, &mut output);
+    let result = AsyncInput::poll_read(Pin::new(&mut input), &mut cx, &mut output);
 
     let error = result
         .expect_ready("overreported read should be ready")
@@ -162,8 +159,7 @@ fn test_async_input_zero_length_read_does_not_poll_inner() {
 #[test]
 fn test_async_input_poll_read_rejects_forbidden_error_kinds() {
     for kind in [ErrorKind::WouldBlock, ErrorKind::Interrupted] {
-        let mut input =
-            Box::pin(ScriptedAsyncInput::new(vec![ReadStep::Error(kind)]));
+        let mut input = Box::pin(ScriptedAsyncInput::new(vec![ReadStep::Error(kind)]));
         let mut output = [0_u8; 1];
         let mut cx = context();
 
@@ -247,10 +243,7 @@ fn test_read_fully_async_handles_pending_partial_and_eof() {
 
 #[test]
 fn test_read_exact_async_reports_unexpected_eof_with_progress() {
-    let mut input = Box::pin(ScriptedAsyncInput::new(vec![
-        ReadStep::Data(vec![1, 2]),
-        ReadStep::Eof,
-    ]));
+    let mut input = Box::pin(ScriptedAsyncInput::new(vec![ReadStep::Data(vec![1, 2]), ReadStep::Eof]));
     let mut output = [0_u8; 3];
     let mut future = ReadExactFuture::new(input.as_mut(), &mut output);
     let mut cx = context();
@@ -411,8 +404,7 @@ fn test_read_fully_async_returns_non_interrupted_error() {
 
 #[test]
 fn test_read_fully_async_completes_when_destination_is_full() {
-    let mut input =
-        Box::pin(ScriptedAsyncInput::new(vec![ReadStep::Data(vec![1, 2])]));
+    let mut input = Box::pin(ScriptedAsyncInput::new(vec![ReadStep::Data(vec![1, 2])]));
     let mut output = [0_u8; 2];
     let mut future = ReadFullyFuture::new(input.as_mut(), &mut output);
     let mut cx = context();
@@ -436,9 +428,7 @@ fn test_read_fully_async_yields_after_ready_progress_budget() {
         }
     }
 
-    let mut input = OneItemAsyncInput {
-        remaining: ITEM_COUNT,
-    };
+    let mut input = OneItemAsyncInput { remaining: ITEM_COUNT };
     let mut output = [0_u8; ITEM_COUNT];
     let wake_state = Arc::new(TestWake(AtomicBool::new(false)));
     let waker = Waker::from(Arc::clone(&wake_state));
@@ -452,9 +442,7 @@ fn test_read_fully_async_yields_after_ready_progress_budget() {
 
     let mut completed = None;
     for _ in 0..8 {
-        if let Poll::Ready(result) =
-            Future::poll(Pin::new(&mut future), &mut cx)
-        {
+        if let Poll::Ready(result) = Future::poll(Pin::new(&mut future), &mut cx) {
             completed = Some(result.expect("cooperative read should succeed"));
             break;
         }
@@ -476,9 +464,7 @@ fn test_read_exactly_async_yields_after_ready_progress_budget() {
         }
     }
 
-    let mut input = OneItemAsyncInput {
-        remaining: ITEM_COUNT,
-    };
+    let mut input = OneItemAsyncInput { remaining: ITEM_COUNT };
     let mut output = [0_u8; ITEM_COUNT];
     let wake_state = Arc::new(TestWake(AtomicBool::new(false)));
     let waker = Waker::from(Arc::clone(&wake_state));
@@ -492,9 +478,7 @@ fn test_read_exactly_async_yields_after_ready_progress_budget() {
 
     let mut completed = false;
     for _ in 0..8 {
-        if let Poll::Ready(result) =
-            Future::poll(Pin::new(&mut future), &mut cx)
-        {
+        if let Poll::Ready(result) = Future::poll(Pin::new(&mut future), &mut cx) {
             result.expect("cooperative exact read should succeed");
             completed = true;
             break;

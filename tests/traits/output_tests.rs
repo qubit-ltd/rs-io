@@ -36,22 +36,14 @@ impl ScriptedOutput {
 impl Output for ScriptedOutput {
     type Item = u16;
 
-    unsafe fn write_unchecked(
-        &mut self,
-        input: &[u16],
-        index: usize,
-        count: usize,
-    ) -> std::io::Result<usize> {
+    unsafe fn write_unchecked(&mut self, input: &[u16], index: usize, count: usize) -> std::io::Result<usize> {
         match self.steps.pop_front().unwrap_or(WriteStep::Accept(count)) {
             WriteStep::Accept(max_count) => {
                 let written = count.min(max_count);
-                self.values
-                    .extend_from_slice(&input[index..index + written]);
+                self.values.extend_from_slice(&input[index..index + written]);
                 Ok(written)
             }
-            WriteStep::Interrupted => {
-                Err(Error::new(ErrorKind::Interrupted, "interrupted"))
-            }
+            WriteStep::Interrupted => Err(Error::new(ErrorKind::Interrupted, "interrupted")),
             WriteStep::Error(kind, message) => Err(Error::new(kind, message)),
             WriteStep::Zero => Ok(0),
         }
@@ -67,12 +59,7 @@ struct OverreportingOutput;
 impl Output for OverreportingOutput {
     type Item = u16;
 
-    unsafe fn write_unchecked(
-        &mut self,
-        _input: &[u16],
-        _index: usize,
-        count: usize,
-    ) -> std::io::Result<usize> {
+    unsafe fn write_unchecked(&mut self, _input: &[u16], _index: usize, count: usize) -> std::io::Result<usize> {
         Ok(count + 1)
     }
 
@@ -102,10 +89,7 @@ fn test_output_write_returns_successful_count() {
 
 #[test]
 fn test_output_write_propagates_implementation_error() {
-    let mut output = ScriptedOutput::new(vec![WriteStep::Error(
-        ErrorKind::BrokenPipe,
-        "write failed",
-    )]);
+    let mut output = ScriptedOutput::new(vec![WriteStep::Error(ErrorKind::BrokenPipe, "write failed")]);
 
     let error = output
         .write(&[10, 20, 30])
@@ -116,8 +100,7 @@ fn test_output_write_propagates_implementation_error() {
 
 #[test]
 fn test_output_write_fully_writes_until_range_is_complete() {
-    let mut output =
-        ScriptedOutput::new(vec![WriteStep::Accept(2), WriteStep::Accept(2)]);
+    let mut output = ScriptedOutput::new(vec![WriteStep::Accept(2), WriteStep::Accept(2)]);
     let input = [10, 20, 30, 40, 50];
 
     // SAFETY: `input[1..5]` is a valid source range.
@@ -132,8 +115,7 @@ fn test_output_write_fully_writes_until_range_is_complete() {
 
 #[test]
 fn test_output_write_fully_writes_full_slice() {
-    let mut output =
-        ScriptedOutput::new(vec![WriteStep::Accept(1), WriteStep::Accept(2)]);
+    let mut output = ScriptedOutput::new(vec![WriteStep::Accept(1), WriteStep::Accept(2)]);
 
     output
         .write_fully(&[1, 2, 3])
@@ -144,8 +126,7 @@ fn test_output_write_fully_writes_full_slice() {
 
 #[test]
 fn test_output_write_fully_retries_interrupted_writes() {
-    let mut output =
-        ScriptedOutput::new(vec![WriteStep::Interrupted, WriteStep::Accept(3)]);
+    let mut output = ScriptedOutput::new(vec![WriteStep::Interrupted, WriteStep::Accept(3)]);
 
     // SAFETY: The full input range is valid.
     unsafe {
@@ -173,10 +154,7 @@ fn test_output_write_fully_returns_write_zero() {
 
 #[test]
 fn test_output_write_fully_returns_non_interrupted_error() {
-    let mut output = ScriptedOutput::new(vec![WriteStep::Error(
-        ErrorKind::BrokenPipe,
-        "write failed",
-    )]);
+    let mut output = ScriptedOutput::new(vec![WriteStep::Error(ErrorKind::BrokenPipe, "write failed")]);
 
     // SAFETY: The full input range is valid.
     let error = unsafe {
