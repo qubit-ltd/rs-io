@@ -29,14 +29,14 @@ The default feature set contains the runtime-neutral core:
 
 ```toml
 [dependencies]
-qubit-io = "0.15"
+qubit-io = "0.16"
 ```
 
 Enable an adapter only in an application that uses that ecosystem:
 
 ```toml
 [dependencies]
-qubit-io = { version = "0.15", features = ["tokio"] }
+qubit-io = { version = "0.16", features = ["tokio"] }
 ```
 
 `tokio` enables `TokioInput`, `TokioOutput`, `TokioAsyncRead`, and `TokioAsyncWrite`. `futures-io` enables the matching `Futures*` types. The core traits neither select an executor nor require either feature.
