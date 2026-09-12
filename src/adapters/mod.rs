@@ -24,6 +24,7 @@ mod futures_output;
 mod input_ref;
 mod output_ref;
 mod std_read;
+mod std_write;
 #[cfg(all(feature = "tokio", not(miri)))]
 mod tokio_async_read;
 #[cfg(all(feature = "tokio", not(miri)))]
@@ -48,6 +49,7 @@ pub use futures_output::FuturesOutput;
 pub use input_ref::InputRef;
 pub use output_ref::OutputRef;
 pub use std_read::StdRead;
+pub use std_write::StdWrite;
 #[cfg(all(feature = "tokio", not(miri)))]
 pub use tokio_async_read::TokioAsyncRead;
 #[cfg(all(feature = "tokio", not(miri)))]
