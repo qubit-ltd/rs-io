@@ -23,6 +23,7 @@ mod futures_output_tests;
 mod input_ref_tests;
 mod output_ref_tests;
 mod std_read_tests;
+mod std_write_tests;
 #[cfg(all(feature = "tokio", not(miri)))]
 mod tokio_async_read_tests;
 #[cfg(all(feature = "tokio", not(miri)))]
