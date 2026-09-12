@@ -54,6 +54,7 @@ pub use adapters::FuturesInput;
 pub use adapters::FuturesOutput;
 pub use adapters::InputRef;
 pub use adapters::OutputRef;
+pub use adapters::StdRead;
 #[cfg(all(feature = "tokio", not(miri)))]
 pub use adapters::TokioAsyncRead;
 #[cfg(all(feature = "tokio", not(miri)))]
