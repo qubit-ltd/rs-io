@@ -8,7 +8,6 @@
 
 //! Copy and comparison operations for byte and item streams.
 
-// qubit-style: allow coverage-cfg
 #[cfg(coverage)]
 use std::cell::Cell;
 use std::cmp::Ordering;

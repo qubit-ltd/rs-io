@@ -31,7 +31,7 @@ doctest = true
 [package.metadata.docs.rs]
 all-features = true
 
-[package.metadata.rs-ci]
+[package.metadata.rs-infra]
 miri = true
 sanitizers = ["address"]
 
