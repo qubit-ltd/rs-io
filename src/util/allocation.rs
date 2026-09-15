@@ -8,7 +8,6 @@
 
 //! Allocation helpers owned by `qubit-io`.
 
-// qubit-style: allow coverage-cfg
 #[cfg(coverage)]
 use std::cell::Cell;
 use std::collections::TryReserveError;

@@ -8,7 +8,6 @@
 
 //! Shared allocation, stream, and unchecked-slice utilities.
 
-// qubit-style: allow coverage-cfg
 mod allocation;
 mod streams;
 
