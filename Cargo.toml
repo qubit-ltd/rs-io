@@ -45,11 +45,11 @@ tokio = ["dep:tokio"]
 
 [dependencies]
 qubit-utils = "0.3"
-futures-io = { version = "0.3", optional = true }
-tokio = { version = "1.53", features = ["io-util"], optional = true }
+futures-io = { version = "^0.3", optional = true }
+tokio = { version = "^1.53", features = ["io-util"], optional = true }
 
 [dev-dependencies]
-criterion = { version = "0.8", default-features = false }
+criterion = { version = "^0.8", default-features = false }
 
 [[bench]]
 name = "buffered"
