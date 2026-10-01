@@ -11,6 +11,7 @@
 mod allocation;
 mod streams;
 
+// qubit-style: allow coverage-cfg
 pub(crate) use allocation::allocation_error;
 #[cfg(coverage)]
 pub use allocation::coverage_fail_next_reserve;

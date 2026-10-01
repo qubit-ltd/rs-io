@@ -9,9 +9,9 @@
 #![no_main]
 
 use std::future::Future;
+use std::io;
 use std::io::Error;
 use std::io::ErrorKind;
-use std::io::{self};
 use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;

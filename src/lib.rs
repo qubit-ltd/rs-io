@@ -30,6 +30,7 @@
 //! The concrete trait definitions and wrapper types live in dedicated modules
 //! and are re-exported from the crate root for ergonomic use.
 
+// qubit-style: allow coverage-cfg
 mod adapters;
 mod async_io;
 pub mod buffered;
