@@ -22,6 +22,48 @@ use crate::traits::validate_write_count;
 /// `AsyncOutput` expresses readiness through [`Poll`] and does not depend on a
 /// particular executor. File publication operations such as commit and abort
 /// intentionally do not belong to this byte-transfer abstraction.
+///
+/// # Examples
+///
+/// Implement the trait for an in-memory output and inspect its buffering
+/// behavior through the public API:
+///
+/// ```
+/// use std::io::Result;
+/// use std::pin::Pin;
+/// use std::task::Context;
+/// use std::task::Poll;
+///
+/// use qubit_io::AsyncOutput;
+///
+/// #[derive(Default)]
+/// struct VecOutput {
+///     items: Vec<u8>,
+/// }
+///
+/// impl AsyncOutput for VecOutput {
+///     type Item = u8;
+///
+///     unsafe fn poll_write_unchecked(
+///         self: Pin<&mut Self>,
+///         _cx: &mut Context<'_>,
+///         input: &[Self::Item],
+///         index: usize,
+///         count: usize,
+///     ) -> Poll<Result<usize>> {
+///         let this = self.get_mut();
+///         this.items.extend_from_slice(&input[index..index + count]);
+///         Poll::Ready(Ok(count))
+///     }
+///
+///     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<()>> {
+///         Poll::Ready(Ok(()))
+///     }
+/// }
+///
+/// let output = VecOutput::default();
+/// assert!(!output.is_buffered());
+/// ```
 pub trait AsyncOutput {
     /// The item type written to this output.
     type Item;

@@ -15,5 +15,8 @@ use qubit_io::EnsuredBufferedOutput;
 fn test_ensured_buffered_output_reports_buffered_variant() {
     let output = BufferedOutput::new(Cursor::new(Vec::<u8>::new()));
     let ensured = BufferedOutput::ensure(output);
-    assert!(matches!(ensured, EnsuredBufferedOutput::AlreadyBuffered(_)));
+    assert!(
+        matches!(ensured, EnsuredBufferedOutput::AlreadyBuffered(_)),
+        "an ensured buffered output should retain the already-buffered variant"
+    );
 }

@@ -6,6 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
+use std::any::type_name;
 use std::future::Future;
 use std::io::ErrorKind;
 use std::panic::AssertUnwindSafe;
@@ -23,7 +24,7 @@ use super::support_tests::TestOutput;
 
 #[test]
 fn test_write_fully_future_type_is_public() {
-    assert!(std::any::type_name::<WriteFullyFuture<'static, TestOutput>>().contains("WriteFullyFuture"));
+    assert!(type_name::<WriteFullyFuture<'static, TestOutput>>().contains("WriteFullyFuture"));
 }
 
 #[test]

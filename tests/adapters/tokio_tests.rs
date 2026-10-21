@@ -8,6 +8,7 @@
 
 use std::io::Error;
 use std::io::ErrorKind;
+use std::io::Result;
 use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
@@ -32,7 +33,7 @@ struct TokioReader {
 struct PendingTokioReader;
 
 impl AsyncRead for PendingTokioReader {
-    fn poll_read(self: Pin<&mut Self>, _cx: &mut Context<'_>, _output: &mut ReadBuf<'_>) -> Poll<std::io::Result<()>> {
+    fn poll_read(self: Pin<&mut Self>, _cx: &mut Context<'_>, _output: &mut ReadBuf<'_>) -> Poll<Result<()>> {
         Poll::Pending
     }
 }
@@ -40,17 +41,13 @@ impl AsyncRead for PendingTokioReader {
 struct ErrorTokioReader;
 
 impl AsyncRead for ErrorTokioReader {
-    fn poll_read(self: Pin<&mut Self>, _cx: &mut Context<'_>, _output: &mut ReadBuf<'_>) -> Poll<std::io::Result<()>> {
+    fn poll_read(self: Pin<&mut Self>, _cx: &mut Context<'_>, _output: &mut ReadBuf<'_>) -> Poll<Result<()>> {
         Poll::Ready(Err(Error::new(ErrorKind::PermissionDenied, "read failed")))
     }
 }
 
 impl AsyncRead for TokioReader {
-    fn poll_read(
-        mut self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-        output: &mut ReadBuf<'_>,
-    ) -> Poll<std::io::Result<()>> {
+    fn poll_read(mut self: Pin<&mut Self>, _cx: &mut Context<'_>, output: &mut ReadBuf<'_>) -> Poll<Result<()>> {
         let remaining = &self.data[self.position..];
         let read = remaining.len().min(output.remaining());
         output.put_slice(&remaining[..read]);
@@ -66,16 +63,16 @@ struct TokioWriter {
 }
 
 impl AsyncWrite for TokioWriter {
-    fn poll_write(mut self: Pin<&mut Self>, _cx: &mut Context<'_>, input: &[u8]) -> Poll<std::io::Result<usize>> {
+    fn poll_write(mut self: Pin<&mut Self>, _cx: &mut Context<'_>, input: &[u8]) -> Poll<Result<usize>> {
         self.data.extend_from_slice(input);
         Poll::Ready(Ok(input.len()))
     }
 
-    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<()>> {
         Poll::Ready(Ok(()))
     }
 
-    fn poll_shutdown(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+    fn poll_shutdown(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<()>> {
         self.closed = true;
         Poll::Ready(Ok(()))
     }
@@ -95,7 +92,7 @@ impl AsyncInput for QubitInput {
         output: &mut [u8],
         index: usize,
         count: usize,
-    ) -> Poll<std::io::Result<usize>> {
+    ) -> Poll<Result<usize>> {
         let remaining = &self.data[self.position..];
         let read = remaining.len().min(count);
         output[index..index + read].copy_from_slice(&remaining[..read]);
@@ -115,7 +112,7 @@ impl AsyncInput for PendingQubitInput {
         _output: &mut [u8],
         _index: usize,
         _count: usize,
-    ) -> Poll<std::io::Result<usize>> {
+    ) -> Poll<Result<usize>> {
         Poll::Pending
     }
 }
@@ -131,7 +128,7 @@ impl AsyncInput for ErrorQubitInput {
         _output: &mut [u8],
         _index: usize,
         _count: usize,
-    ) -> Poll<std::io::Result<usize>> {
+    ) -> Poll<Result<usize>> {
         Poll::Ready(Err(Error::new(ErrorKind::PermissionDenied, "read failed")))
     }
 }
@@ -143,7 +140,7 @@ struct QubitOutput {
 }
 
 impl AsyncClose for QubitOutput {
-    fn poll_close(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+    fn poll_close(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<()>> {
         self.closed = true;
         Poll::Ready(Ok(()))
     }
@@ -158,12 +155,12 @@ impl AsyncOutput for QubitOutput {
         input: &[u8],
         index: usize,
         count: usize,
-    ) -> Poll<std::io::Result<usize>> {
+    ) -> Poll<Result<usize>> {
         self.data.extend_from_slice(&input[index..index + count]);
         Poll::Ready(Ok(count))
     }
 
-    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<()>> {
         Poll::Ready(Ok(()))
     }
 }

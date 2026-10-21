@@ -20,6 +20,21 @@ use crate::Seekable;
 /// # Type Parameters
 ///
 /// * `I` - Wrapped input type.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_io::CountingInput;
+/// use qubit_io::Input;
+///
+/// let input = std::io::Cursor::new(&b"abc"[..]);
+/// let mut counting_input = CountingInput::new(input);
+/// let mut buffer = [0; 3];
+///
+/// assert_eq!(counting_input.read(&mut buffer).unwrap(), 3);
+/// assert_eq!(buffer, *b"abc");
+/// assert_eq!(counting_input.bytes_read(), 3);
+/// ```
 #[must_use]
 #[derive(Debug)]
 pub struct CountingInput<I> {

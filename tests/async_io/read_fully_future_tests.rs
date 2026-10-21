@@ -7,6 +7,7 @@
 // =============================================================================
 
 use std::future::Future;
+use std::io::Error;
 use std::io::ErrorKind;
 use std::panic::AssertUnwindSafe;
 use std::panic::catch_unwind;
@@ -74,7 +75,7 @@ fn test_read_fully_future_supports_pending_reads_before_progress() {
 fn test_read_fully_future_constructs_and_propagates_io_error() {
     let mut input = ScriptedInput::new([
         PollResult::Read(1),
-        PollResult::Error(std::io::Error::new(ErrorKind::TimedOut, "timeout")),
+        PollResult::Error(Error::new(ErrorKind::TimedOut, "timeout")),
     ]);
     let mut output = [0_u8; 2];
     let mut future = ReadFullyFuture::new(Pin::new(&mut input), &mut output);

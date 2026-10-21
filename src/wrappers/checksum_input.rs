@@ -18,6 +18,21 @@ use crate::Seekable;
 /// Seeking changes only the source position; it does not reset or otherwise
 /// modify the accumulated checksum.
 ///
+/// # Examples
+///
+/// ```
+/// use std::collections::hash_map::DefaultHasher;
+///
+/// use qubit_io::ChecksumInput;
+/// use qubit_io::Input;
+///
+/// let mut input = ChecksumInput::new(std::io::Cursor::new(b"abc"), DefaultHasher::new());
+/// let mut bytes = [0; 3];
+/// assert_eq!(input.read(&mut bytes).expect("read input"), 3);
+/// assert_eq!(&bytes, b"abc");
+/// assert_ne!(input.checksum(), 0);
+/// ```
+///
 /// # Type Parameters
 ///
 /// * `I` - Wrapped byte input type.

@@ -25,6 +25,57 @@ use crate::AsyncOutput;
 ///
 /// - `'a`: Shared lifetime of the output borrow and source slice.
 /// - `O`: Asynchronous output type.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_io::AsyncOutput;
+/// use qubit_io::WriteFuture;
+/// use std::future::Future;
+/// use std::io::Result;
+/// use std::pin::Pin;
+/// use std::sync::Arc;
+/// use std::task::Context;
+/// use std::task::Poll;
+/// use std::task::Wake;
+/// use std::task::Waker;
+///
+/// struct Output;
+///
+/// impl AsyncOutput for Output {
+///     type Item = u8;
+///
+///     unsafe fn poll_write_unchecked(
+///         self: Pin<&mut Self>,
+///         _cx: &mut Context<'_>,
+///         input: &[u8],
+///         _index: usize,
+///         count: usize,
+///     ) -> Poll<Result<usize>> {
+///         Poll::Ready(Ok(input.len().min(count)))
+///     }
+///
+///     fn poll_flush(
+///         self: Pin<&mut Self>,
+///         _cx: &mut Context<'_>,
+///     ) -> Poll<Result<()>> {
+///         Poll::Ready(Ok(()))
+///     }
+/// }
+///
+/// struct NoopWake;
+///
+/// impl Wake for NoopWake {
+///     fn wake(self: Arc<Self>) {}
+/// }
+///
+/// let input = [1, 2, 3];
+/// let mut output = Output;
+/// let mut write = Box::pin(WriteFuture::new(Pin::new(&mut output), &input));
+/// let waker = Waker::from(Arc::new(NoopWake));
+/// let mut context = Context::from_waker(&waker);
+/// assert!(matches!(write.as_mut().poll(&mut context), Poll::Ready(Ok(3))));
+/// ```
 #[must_use = "futures do nothing unless polled"]
 pub struct WriteFuture<'a, O>
 where

@@ -26,6 +26,46 @@ use crate::AsyncOutput;
 /// successful inner writes. The future self-wakes and returns [`Poll::Pending`]
 /// when that budget is exhausted before completion.
 ///
+/// # Examples
+///
+/// ```
+/// use qubit_io::AsyncOutput;
+/// use qubit_io::WriteFullyFuture;
+/// use std::future::Future;
+/// use std::io::Result;
+/// use std::pin::Pin;
+/// use std::task::Context;
+/// use std::task::Poll;
+/// use std::task::Waker;
+///
+/// struct Output;
+///
+/// impl AsyncOutput for Output {
+///     type Item = u8;
+///
+///     unsafe fn poll_write_unchecked(
+///         self: Pin<&mut Self>,
+///         _cx: &mut Context<'_>,
+///         _input: &[u8],
+///         _index: usize,
+///         count: usize,
+///     ) -> Poll<Result<usize>> {
+///         Poll::Ready(Ok(count))
+///     }
+///
+///     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<()>> {
+///         Poll::Ready(Ok(()))
+///     }
+/// }
+///
+/// let mut output = Output;
+/// let input = [1, 2, 3];
+/// let mut future = Box::pin(WriteFullyFuture::new(Pin::new(&mut output), &input));
+/// let mut context = Context::from_waker(Waker::noop());
+/// assert!(matches!(future.as_mut().poll(&mut context), Poll::Ready(Ok(()))));
+/// assert_eq!(future.items_written(), input.len());
+/// ```
+///
 /// # Panics
 ///
 /// [`Future::poll`] panics when called again after this future has returned

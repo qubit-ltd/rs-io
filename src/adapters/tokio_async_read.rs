@@ -20,6 +20,55 @@ use crate::AsyncInput;
 /// # Type Parameters
 ///
 /// - `I`: Qubit byte input type.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_io::AsyncInput;
+/// use qubit_io::TokioAsyncRead;
+/// use std::io::Result;
+/// use std::pin::Pin;
+/// use std::task::Context;
+/// use std::task::Poll;
+/// use std::task::Wake;
+/// use std::task::Waker;
+/// use std::sync::Arc;
+/// use tokio::io::AsyncRead;
+/// use tokio::io::ReadBuf;
+///
+/// struct EmptyInput;
+///
+/// impl AsyncInput for EmptyInput {
+///     type Item = u8;
+///
+///     unsafe fn poll_read_unchecked(
+///         self: Pin<&mut Self>,
+///         _cx: &mut Context<'_>,
+///         _output: &mut [u8],
+///         _index: usize,
+///         _count: usize,
+///     ) -> Poll<Result<usize>> {
+///         Poll::Ready(Ok(0))
+///     }
+/// }
+///
+/// struct NoopWake;
+///
+/// impl Wake for NoopWake {
+///     fn wake(self: Arc<Self>) {}
+/// }
+///
+/// let mut reader = TokioAsyncRead::new(EmptyInput);
+/// let waker = Waker::from(Arc::new(NoopWake));
+/// let mut context = Context::from_waker(&waker);
+/// let mut bytes = [0; 1];
+/// let mut output = ReadBuf::new(&mut bytes);
+/// assert!(matches!(
+///     AsyncRead::poll_read(Pin::new(&mut reader), &mut context, &mut output),
+///     Poll::Ready(Ok(())),
+/// ));
+/// assert_eq!(output.filled(), &[]);
+/// ```
 #[must_use]
 #[repr(transparent)]
 pub struct TokioAsyncRead<I> {

@@ -17,6 +17,41 @@ use crate::traits::normalize_async_error;
 
 /// Asynchronous output that counts successfully accepted items.
 ///
+/// # Examples
+///
+/// ```
+/// use std::io;
+/// use std::pin::Pin;
+/// use std::task::Context;
+/// use std::task::Poll;
+///
+/// use qubit_io::AsyncCountingOutput;
+/// use qubit_io::AsyncOutput;
+///
+/// struct EmptyOutput;
+///
+/// impl AsyncOutput for EmptyOutput {
+///     type Item = u8;
+///
+///     unsafe fn poll_write_unchecked(
+///         self: Pin<&mut Self>,
+///         _cx: &mut Context<'_>,
+///         _input: &[u8],
+///         _index: usize,
+///         _count: usize,
+///     ) -> Poll<io::Result<usize>> {
+///         Poll::Ready(Ok(0))
+///     }
+///
+///     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+///         Poll::Ready(Ok(()))
+///     }
+/// }
+///
+/// let output = AsyncCountingOutput::new(EmptyOutput);
+/// assert_eq!(output.bytes_written(), 0);
+/// ```
+///
 /// # Type Parameters
 ///
 /// - `O`: Wrapped asynchronous output type.

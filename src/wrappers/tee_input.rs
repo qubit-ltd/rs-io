@@ -23,6 +23,22 @@ use crate::SyncSeekTeeInput;
 ///
 /// * `I` - Source input type.
 /// * `B` - Branch output type receiving mirrored items.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_io::Input;
+/// use qubit_io::TeeInput;
+///
+/// let source = std::io::Cursor::new(&b"abc"[..]);
+/// let branch = std::io::Cursor::new(Vec::new());
+/// let mut input = TeeInput::new(source, branch);
+/// let mut buffer = [0; 3];
+///
+/// assert_eq!(input.read(&mut buffer).unwrap(), 3);
+/// assert_eq!(buffer, *b"abc");
+/// assert_eq!(input.branch().get_ref(), b"abc");
+/// ```
 #[must_use]
 #[derive(Debug)]
 pub struct TeeInput<I, B> {

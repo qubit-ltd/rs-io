@@ -19,6 +19,17 @@ use crate::Seekable;
 /// # Type Parameters
 ///
 /// * `O` - Wrapped output type.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_io::CountingOutput;
+/// use qubit_io::Output;
+///
+/// let mut output = CountingOutput::new(Vec::new());
+/// assert_eq!(output.write(b"abc").unwrap(), 3);
+/// assert_eq!(output.bytes_written(), 3);
+/// ```
 #[must_use]
 #[derive(Debug)]
 pub struct CountingOutput<O> {

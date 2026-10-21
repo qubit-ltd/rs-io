@@ -19,6 +19,39 @@ use crate::AsyncInput;
 /// Pending and failed reads do not change the hasher. The checksum algorithm
 /// and stability guarantees are those of the supplied [`Hasher`].
 ///
+/// # Examples
+///
+/// ```
+/// use std::collections::hash_map::DefaultHasher;
+/// use std::hash::Hasher;
+/// use std::io;
+/// use std::pin::Pin;
+/// use std::task::Context;
+/// use std::task::Poll;
+///
+/// use qubit_io::AsyncChecksumInput;
+/// use qubit_io::AsyncInput;
+///
+/// struct EmptyInput;
+///
+/// impl AsyncInput for EmptyInput {
+///     type Item = u8;
+///
+///     unsafe fn poll_read_unchecked(
+///         self: Pin<&mut Self>,
+///         _cx: &mut Context<'_>,
+///         _output: &mut [u8],
+///         _index: usize,
+///         _count: usize,
+///     ) -> Poll<io::Result<usize>> {
+///         Poll::Ready(Ok(0))
+///     }
+/// }
+///
+/// let input = AsyncChecksumInput::new(EmptyInput, DefaultHasher::new());
+/// assert_eq!(input.checksum(), input.hasher().finish());
+/// ```
+///
 /// # Type Parameters
 ///
 /// - `I`: Wrapped asynchronous byte input type.

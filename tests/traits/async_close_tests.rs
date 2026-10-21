@@ -65,11 +65,14 @@ fn test_async_close_is_object_safe_and_default_future_closes_output() {
             Poll::Pending => panic!("close should complete"),
         }
     }
-    assert!(output.closed);
+    assert!(output.closed, "close_async should close the output");
 
     let mut output = std::pin::pin!(output);
     let mut output: Pin<&mut dyn AsyncClose<Item = u8>> = output.as_mut();
-    assert!(AsyncClose::poll_close(output.as_mut(), &mut cx).is_ready());
+    assert!(
+        AsyncClose::poll_close(output.as_mut(), &mut cx).is_ready(),
+        "poll_close should complete for the closed output"
+    );
 }
 
 #[test]
@@ -81,6 +84,12 @@ fn test_close_future_preserves_pending_before_completion() {
     let mut future = output.close_async();
     let mut cx = Context::from_waker(Waker::noop());
 
-    assert!(Future::poll(Pin::new(&mut future), &mut cx).is_pending());
-    assert!(Future::poll(Pin::new(&mut future), &mut cx).is_ready());
+    assert!(
+        Future::poll(Pin::new(&mut future), &mut cx).is_pending(),
+        "close future should preserve the pending state"
+    );
+    assert!(
+        Future::poll(Pin::new(&mut future), &mut cx).is_ready(),
+        "close future should complete after pending"
+    );
 }

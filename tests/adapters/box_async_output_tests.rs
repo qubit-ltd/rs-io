@@ -46,6 +46,7 @@ impl AsyncOutput for PinnedByteOutput {
         index: usize,
         count: usize,
     ) -> Poll<std::io::Result<usize>> {
+        // SAFETY: The pinned field is not moved while accessing the shared state.
         let this = unsafe { self.get_unchecked_mut() };
         this.state
             .borrow_mut()
@@ -55,6 +56,7 @@ impl AsyncOutput for PinnedByteOutput {
     }
 
     fn poll_flush(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        // SAFETY: The pinned field is not moved while accessing the shared state.
         let this = unsafe { self.get_unchecked_mut() };
         this.state.borrow_mut().flushed = true;
         Poll::Ready(Ok(()))
@@ -63,6 +65,7 @@ impl AsyncOutput for PinnedByteOutput {
 
 impl AsyncClose for PinnedByteOutput {
     fn poll_close(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        // SAFETY: The pinned field is not moved while accessing the shared state.
         let this = unsafe { self.get_unchecked_mut() };
         this.state.borrow_mut().closed = true;
         Poll::Ready(Ok(()))

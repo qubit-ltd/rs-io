@@ -22,6 +22,18 @@ use crate::Seekable;
 ///
 /// * `O` - Wrapped byte output type.
 /// * `H` - Hasher updated with successfully accepted bytes.
+///
+/// # Examples
+///
+/// ```
+/// use std::collections::hash_map::DefaultHasher;
+/// use std::hash::Hasher;
+///
+/// use qubit_io::ChecksumOutput;
+///
+/// let output = ChecksumOutput::new(Vec::<u8>::new(), DefaultHasher::new());
+/// assert_eq!(output.checksum(), DefaultHasher::new().finish());
+/// ```
 #[must_use]
 #[derive(Debug)]
 pub struct ChecksumOutput<O, H> {

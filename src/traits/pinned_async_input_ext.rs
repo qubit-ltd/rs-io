@@ -35,6 +35,11 @@ pub trait PinnedAsyncInputExt {
     /// # Returns
     ///
     /// A future that resolves with the number of items read.
+    ///
+    /// # Errors
+    ///
+    /// Resolves with the input error if a read fails, or `InvalidData` if the
+    /// input reports more items than requested.
     fn read_async<'a>(&'a mut self, output: &'a mut [<Self::Input as AsyncInput>::Item])
     -> ReadFuture<'a, Self::Input>;
 
@@ -51,6 +56,11 @@ pub trait PinnedAsyncInputExt {
     /// # Returns
     ///
     /// A future that resolves with the total number of items read.
+    ///
+    /// # Errors
+    ///
+    /// Resolves with the input error if a read fails, or `InvalidData` if the
+    /// input reports more items than requested.
     fn read_fully_async<'a>(
         &'a mut self,
         output: &'a mut [<Self::Input as AsyncInput>::Item],
@@ -69,6 +79,12 @@ pub trait PinnedAsyncInputExt {
     /// # Returns
     ///
     /// A future that resolves after filling `output` or encountering an error.
+    ///
+    /// # Errors
+    ///
+    /// Resolves with `UnexpectedEof` if EOF occurs before `output` is full,
+    /// with the input error if a read fails, or with `InvalidData` if the
+    /// input reports more items than requested.
     fn read_exactly_async<'a>(
         &'a mut self,
         output: &'a mut [<Self::Input as AsyncInput>::Item],
@@ -95,6 +111,11 @@ where
     /// # Returns
     ///
     /// A future that resolves with the number of items read.
+    ///
+    /// # Errors
+    ///
+    /// Resolves with the input error if a read fails, or `InvalidData` if the
+    /// input reports more items than requested.
     #[inline(always)]
     fn read_async<'a>(&'a mut self, output: &'a mut [I::Item]) -> ReadFuture<'a, Self::Input> {
         ReadFuture::new(self.as_mut(), output)
@@ -113,6 +134,11 @@ where
     /// # Returns
     ///
     /// A future that resolves with the total number of items read.
+    ///
+    /// # Errors
+    ///
+    /// Resolves with the input error if a read fails, or `InvalidData` if the
+    /// input reports more items than requested.
     #[inline(always)]
     fn read_fully_async<'a>(&'a mut self, output: &'a mut [I::Item]) -> ReadFullyFuture<'a, Self::Input> {
         ReadFullyFuture::new(self.as_mut(), output)
@@ -131,6 +157,12 @@ where
     /// # Returns
     ///
     /// A future that resolves after filling `output` or encountering an error.
+    ///
+    /// # Errors
+    ///
+    /// Resolves with `UnexpectedEof` if EOF occurs before `output` is full,
+    /// with the input error if a read fails, or with `InvalidData` if the
+    /// input reports more items than requested.
     #[inline(always)]
     fn read_exactly_async<'a>(&'a mut self, output: &'a mut [I::Item]) -> ReadExactFuture<'a, Self::Input> {
         ReadExactFuture::new(self.as_mut(), output)

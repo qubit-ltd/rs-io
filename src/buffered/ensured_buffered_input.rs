@@ -20,6 +20,19 @@ use crate::SeekableInput;
 /// already buffers items as-is, and wraps an unbuffered input in
 /// [`BufferedInput`]. Operations delegate to the selected branch.
 ///
+/// # Examples
+///
+/// ```
+/// use qubit_io::BufferedInput;
+/// use qubit_io::Input;
+/// use std::io::Cursor;
+///
+/// let mut input = BufferedInput::ensure(Cursor::new(b"abc"));
+/// let mut output = [0; 2];
+/// assert_eq!(Input::read(&mut input, &mut output).unwrap(), 2);
+/// assert_eq!(&output, b"ab");
+/// ```
+///
 /// # Type Parameters
 ///
 /// - `I`: Input type that may require buffering.

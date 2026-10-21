@@ -19,6 +19,52 @@ use crate::AsyncInput;
 /// # Type Parameters
 ///
 /// - `I`: Qubit byte input type.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_io::AsyncInput;
+/// use qubit_io::FuturesAsyncRead;
+/// use futures_io::AsyncRead;
+/// use std::io::Result;
+/// use std::pin::Pin;
+/// use std::sync::Arc;
+/// use std::task::Context;
+/// use std::task::Poll;
+/// use std::task::Wake;
+/// use std::task::Waker;
+///
+/// struct EmptyInput;
+///
+/// impl AsyncInput for EmptyInput {
+///     type Item = u8;
+///
+///     unsafe fn poll_read_unchecked(
+///         self: Pin<&mut Self>,
+///         _cx: &mut Context<'_>,
+///         _output: &mut [u8],
+///         _index: usize,
+///         _count: usize,
+///     ) -> Poll<Result<usize>> {
+///         Poll::Ready(Ok(0))
+///     }
+/// }
+///
+/// struct NoopWake;
+///
+/// impl Wake for NoopWake {
+///     fn wake(self: Arc<Self>) {}
+/// }
+///
+/// let mut reader = FuturesAsyncRead::new(EmptyInput);
+/// let waker = Waker::from(Arc::new(NoopWake));
+/// let mut context = Context::from_waker(&waker);
+/// let mut output = [0; 1];
+/// assert!(matches!(
+///     AsyncRead::poll_read(Pin::new(&mut reader), &mut context, &mut output),
+///     Poll::Ready(Ok(0)),
+/// ));
+/// ```
 #[must_use]
 #[repr(transparent)]
 pub struct FuturesAsyncRead<I> {

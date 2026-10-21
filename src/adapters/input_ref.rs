@@ -16,6 +16,20 @@ use crate::Input;
 ///
 /// - `'a`: Lifetime of the mutable input borrow.
 /// - `I`: The borrowed input type, which may be unsized.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_io::InputRef;
+/// use qubit_io::Input;
+/// use std::io::Cursor;
+///
+/// let mut source = Cursor::new(b"hello");
+/// let mut input = InputRef::new(&mut source);
+/// let mut output = [0; 5];
+/// assert_eq!(input.read(&mut output).unwrap(), 5);
+/// assert_eq!(&output, b"hello");
+/// ```
 #[must_use]
 #[repr(transparent)]
 pub struct InputRef<'a, I>

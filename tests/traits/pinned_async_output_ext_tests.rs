@@ -60,20 +60,32 @@ fn test_pinned_async_output_ext_supports_non_unpin_trait_object() {
         let input = [1, 2];
         {
             let mut future = output.write_async(&input);
-            assert!(Future::poll(Pin::new(&mut future), &mut cx).is_ready());
+            assert!(
+                Future::poll(Pin::new(&mut future), &mut cx).is_ready(),
+                "write_async should complete for a ready output"
+            );
         }
         {
             let mut future = output.write_fully_async(&input);
-            assert!(Future::poll(Pin::new(&mut future), &mut cx).is_ready());
+            assert!(
+                Future::poll(Pin::new(&mut future), &mut cx).is_ready(),
+                "write_fully_async should complete for a ready output"
+            );
         }
         {
             let mut future = output.flush_async();
-            assert!(Future::poll(Pin::new(&mut future), &mut cx).is_ready());
+            assert!(
+                Future::poll(Pin::new(&mut future), &mut cx).is_ready(),
+                "flush_async should complete for a ready output"
+            );
         }
         {
             let mut future = output.close_async();
-            assert!(Future::poll(Pin::new(&mut future), &mut cx).is_ready());
+            assert!(
+                Future::poll(Pin::new(&mut future), &mut cx).is_ready(),
+                "close_async should complete for a ready output"
+            );
         }
     }
-    assert!(output.closed);
+    assert!(output.closed, "close_async should close the output");
 }

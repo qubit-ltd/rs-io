@@ -12,6 +12,18 @@ use crate::Output;
 
 /// Output wrapper that accepts at most a fixed number of items.
 ///
+/// # Examples
+///
+/// ```
+/// use qubit_io::LimitOutput;
+/// use qubit_io::Output;
+///
+/// let mut output = LimitOutput::new(Vec::new(), 2);
+/// assert_eq!(Output::write(&mut output, b"abc").unwrap(), 2);
+/// assert_eq!(output.remaining(), 0);
+/// assert_eq!(output.into_inner(), b"ab");
+/// ```
+///
 /// # Type Parameters
 ///
 /// * `O` - Wrapped output type.

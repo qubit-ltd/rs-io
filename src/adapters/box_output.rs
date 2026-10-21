@@ -15,6 +15,17 @@ use crate::Output;
 /// # Type Parameters
 ///
 /// - `O`: The boxed output type, which may be unsized.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_io::BoxOutput;
+/// use qubit_io::Output;
+///
+/// let mut output = BoxOutput::new(Box::new(Vec::new()));
+/// output.write_fully(b"hello").unwrap();
+/// assert_eq!(output.into_inner().as_slice(), b"hello");
+/// ```
 #[must_use]
 #[repr(transparent)]
 pub struct BoxOutput<O>

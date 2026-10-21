@@ -17,16 +17,12 @@ use qubit_io::std_io::ext::WriteExt;
 /// dedicated public module.
 #[test]
 fn test_std_io_exposes_standard_traits_and_extensions() {
-    /// Requires the standard read-and-seek composite trait.
     fn require_read_seek<T: ReadSeek>(_: &mut T) {}
 
-    /// Requires the standard read-and-write composite trait.
     fn require_read_write<T: ReadWrite>(_: &mut T) {}
 
-    /// Requires the standard reader extension trait.
     fn require_read_ext<T: ReadExt>(_: &mut T) {}
 
-    /// Requires the standard writer extension trait.
     fn require_write_ext<T: WriteExt>(_: &mut T) {}
 
     let mut cursor = Cursor::new(vec![1_u8, 2, 3]);

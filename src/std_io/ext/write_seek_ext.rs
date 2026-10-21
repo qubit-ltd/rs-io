@@ -20,6 +20,21 @@ use crate::std_io::WriteSeek;
 /// `WriteSeekExt` provides position-preserving write helpers for random-access
 /// output use cases such as patching headers, offsets, and indexes after a
 /// stream has already been written.
+///
+/// # Examples
+/// ```
+/// use qubit_io::std_io::ext::WriteSeekExt;
+/// use std::io::Cursor;
+///
+/// let mut output = Cursor::new(b"abcdef".to_vec());
+/// output.set_position(2);
+///
+/// output.write_all_at_preserving_position(1, b"XY")?;
+///
+/// assert_eq!(output.get_ref(), b"aXYdef");
+/// assert_eq!(output.position(), 2);
+/// # Ok::<(), std::io::Error>(())
+/// ```
 pub trait WriteSeekExt: Write + Seek {
     /// Writes all bytes at `offset` and restores the original position.
     ///

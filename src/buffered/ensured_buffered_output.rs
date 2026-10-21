@@ -23,6 +23,17 @@ use crate::SeekableOutput;
 /// # Type Parameters
 ///
 /// - `O`: Output type that may require buffering.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_io::BufferedOutput;
+/// use qubit_io::Output;
+///
+/// let mut output = BufferedOutput::ensure(std::io::sink());
+/// assert!(output.is_buffered());
+/// Output::write_fully(&mut output, b"items").unwrap();
+/// ```
 #[must_use]
 pub enum EnsuredBufferedOutput<O>
 where

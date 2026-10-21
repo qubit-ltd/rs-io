@@ -23,6 +23,19 @@ use crate::util::try_reserve_vec;
 /// `BufReadExt` provides bounded delimiter-oriented reads. These helpers are
 /// useful for line-based and delimiter-based formats where accepting unbounded
 /// input would make parsers vulnerable to excessive memory use.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_io::std_io::ext::BufReadExt;
+/// use std::io::Cursor;
+///
+/// let mut input = Cursor::new(b"header\nbody".to_vec());
+/// let header = input.read_line_limited(16)?;
+///
+/// assert_eq!("header\n", header);
+/// # Ok::<(), std::io::Error>(())
+/// ```
 pub trait BufReadExt: BufRead {
     /// Reads bytes through `delimiter` while enforcing `max_len`.
     ///

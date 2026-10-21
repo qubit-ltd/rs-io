@@ -21,6 +21,43 @@ use crate::traits::normalize_async_error;
 /// Pending and failed writes do not change the hasher. The checksum algorithm
 /// and stability guarantees are those of the supplied [`Hasher`].
 ///
+/// # Examples
+///
+/// ```
+/// use std::collections::hash_map::DefaultHasher;
+/// use std::hash::Hasher;
+/// use std::io;
+/// use std::pin::Pin;
+/// use std::task::Context;
+/// use std::task::Poll;
+///
+/// use qubit_io::AsyncChecksumOutput;
+/// use qubit_io::AsyncOutput;
+///
+/// struct EmptyOutput;
+///
+/// impl AsyncOutput for EmptyOutput {
+///     type Item = u8;
+///
+///     unsafe fn poll_write_unchecked(
+///         self: Pin<&mut Self>,
+///         _cx: &mut Context<'_>,
+///         _input: &[u8],
+///         _index: usize,
+///         _count: usize,
+///     ) -> Poll<io::Result<usize>> {
+///         Poll::Ready(Ok(0))
+///     }
+///
+///     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+///         Poll::Ready(Ok(()))
+///     }
+/// }
+///
+/// let output = AsyncChecksumOutput::new(EmptyOutput, DefaultHasher::new());
+/// assert_eq!(output.checksum(), output.hasher().finish());
+/// ```
+///
 /// # Type Parameters
 ///
 /// - `O`: Wrapped asynchronous byte output type.

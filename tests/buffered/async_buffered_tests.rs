@@ -16,6 +16,12 @@ use std::task::Context;
 use std::task::Poll;
 use std::task::Waker;
 
+use qubit_io::AsyncBufferedInput;
+use qubit_io::AsyncBufferedOutput;
+use qubit_io::AsyncClose;
+use qubit_io::AsyncInput;
+use qubit_io::AsyncOutput;
+
 enum ReadStep {
     Data(Vec<u16>),
     Error(ErrorKind),
@@ -197,12 +203,6 @@ impl AsyncOutput for ScriptedOutput {
         }
     }
 }
-
-use qubit_io::AsyncBufferedInput;
-use qubit_io::AsyncBufferedOutput;
-use qubit_io::AsyncClose;
-use qubit_io::AsyncInput;
-use qubit_io::AsyncOutput;
 
 fn complete<F>(future: F) -> F::Output
 where

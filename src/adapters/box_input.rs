@@ -15,6 +15,19 @@ use crate::Input;
 /// # Type Parameters
 ///
 /// - `I`: The boxed input type, which may be unsized.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_io::BoxInput;
+/// use qubit_io::Input;
+/// use std::io::Cursor;
+///
+/// let mut input = BoxInput::new(Box::new(Cursor::new(b"hello")));
+/// let mut output = [0; 5];
+/// assert_eq!(input.read(&mut output).unwrap(), 5);
+/// assert_eq!(&output, b"hello");
+/// ```
 #[must_use]
 #[repr(transparent)]
 pub struct BoxInput<I>

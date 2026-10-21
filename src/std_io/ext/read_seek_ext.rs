@@ -21,6 +21,21 @@ use crate::std_io::ext::internal::read_ext_impl;
 /// `ReadSeekExt` provides position-preserving read helpers for common
 /// inspection use cases such as file signature checks, MIME detection, and
 /// random-offset probing.
+///
+/// # Examples
+/// ```
+/// use qubit_io::std_io::ext::ReadSeekExt;
+/// use std::io::Cursor;
+///
+/// let mut input = Cursor::new(b"abcdef".to_vec());
+/// input.set_position(2);
+/// let mut header = [0; 2];
+///
+/// assert_eq!(input.peek_exact_or_eof(&mut header)?, 2);
+/// assert_eq!(&header, b"cd");
+/// assert_eq!(input.position(), 2);
+/// # Ok::<(), std::io::Error>(())
+/// ```
 pub trait ReadSeekExt: Read + Seek {
     /// Reads from the current position and restores the original position.
     ///

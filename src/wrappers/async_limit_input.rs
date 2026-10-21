@@ -15,6 +15,37 @@ use crate::AsyncInput;
 
 /// Asynchronous input that exposes at most a fixed number of items.
 ///
+/// # Examples
+///
+/// ```
+/// use std::io;
+/// use std::pin::Pin;
+/// use std::task::Context;
+/// use std::task::Poll;
+///
+/// use qubit_io::AsyncInput;
+/// use qubit_io::AsyncLimitInput;
+///
+/// struct EmptyInput;
+///
+/// impl AsyncInput for EmptyInput {
+///     type Item = u8;
+///
+///     unsafe fn poll_read_unchecked(
+///         self: Pin<&mut Self>,
+///         _cx: &mut Context<'_>,
+///         _output: &mut [u8],
+///         _index: usize,
+///         _count: usize,
+///     ) -> Poll<io::Result<usize>> {
+///         Poll::Ready(Ok(0))
+///     }
+/// }
+///
+/// let mut input = AsyncLimitInput::new(EmptyInput, 3);
+/// assert_eq!(input.remaining(), 3);
+/// ```
+///
 /// # Type Parameters
 ///
 /// - `I`: Wrapped asynchronous input type.

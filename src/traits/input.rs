@@ -30,6 +30,22 @@ use crate::util::SliceRange;
 ///
 /// Use a wrapper/newtype when a type needs item-oriented input semantics that
 /// differ from its byte-oriented [`std::io::Read`] implementation.
+///
+/// # Examples
+///
+/// Standard readers implement `Input<Item = u8>` automatically, so callers
+/// can use the trait methods directly on them:
+///
+/// ```
+/// use std::io::Cursor;
+///
+/// use qubit_io::Input;
+///
+/// let mut input = Cursor::new(b"data");
+/// let mut output = [0; 4];
+/// assert_eq!(Input::read(&mut input, &mut output).unwrap(), 4);
+/// assert_eq!(&output, b"data");
+/// ```
 pub trait Input {
     /// The item type read from this input.
     type Item;

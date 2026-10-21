@@ -14,6 +14,23 @@ use std::io::Result;
 use crate::Input;
 
 /// Adapts an [`Input`] of bytes to [`std::io::Read`].
+///
+/// # Type Parameters
+///
+/// - `I`: Input that supplies bytes to the standard reader.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_io::StdRead;
+/// use std::io::Read;
+///
+/// let input = std::io::Cursor::new(b"hello".to_vec());
+/// let mut reader = StdRead::new(input);
+/// let mut bytes = Vec::new();
+/// reader.read_to_end(&mut bytes).expect("reading should succeed");
+/// assert_eq!(bytes, b"hello");
+/// ```
 #[must_use]
 #[repr(transparent)]
 pub struct StdRead<I> {

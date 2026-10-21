@@ -17,6 +17,19 @@ use crate::Output;
 ///
 /// - `'a`: Lifetime of the mutable output borrow.
 /// - `O`: The borrowed output type, which may be unsized.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_io::OutputRef;
+/// use qubit_io::Output;
+/// use std::io::Cursor;
+///
+/// let mut destination = Cursor::new(Vec::new());
+/// let mut output = OutputRef::new(&mut destination);
+/// assert_eq!(output.write(b"hello").unwrap(), 5);
+/// assert_eq!(output.into_inner().get_ref(), b"hello");
+/// ```
 #[must_use]
 #[repr(transparent)]
 pub struct OutputRef<'a, O>

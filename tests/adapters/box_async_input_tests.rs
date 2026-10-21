@@ -36,9 +36,12 @@ impl AsyncInput for PinnedByteInput {
         index: usize,
         count: usize,
     ) -> Poll<std::io::Result<usize>> {
+        // SAFETY: The pinned field is not moved while accessing the other fields.
         let this = unsafe { self.as_mut().get_unchecked_mut() };
         let remaining = this.items.len() - this.position;
         let read = remaining.min(count);
+        // SAFETY: The caller guarantees `index..index + count` is in bounds,
+        // and `read` does not exceed `count`.
         output[index..index + read].copy_from_slice(&this.items[this.position..this.position + read]);
         this.position += read;
         Poll::Ready(Ok(read))

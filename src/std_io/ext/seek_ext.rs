@@ -17,6 +17,21 @@ use std::io::SeekFrom;
 /// `SeekExt` provides stable, position-preserving helpers for seekable streams.
 /// The methods are implemented for every type that implements [`Seek`],
 /// including `dyn Seek` trait objects.
+///
+/// # Examples
+///
+/// ```
+/// use std::io::Cursor;
+/// use std::io::Seek;
+///
+/// use qubit_io::std_io::ext::SeekExt;
+///
+/// let mut stream = Cursor::new(b"hello".to_vec());
+/// stream.set_position(2);
+/// assert_eq!(stream.stream_size()?, 5);
+/// assert_eq!(stream.stream_position()?, 2);
+/// # Ok::<(), std::io::Error>(())
+/// ```
 pub trait SeekExt: Seek {
     /// Gets the stream size without changing the final stream position.
     ///

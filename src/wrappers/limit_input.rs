@@ -12,6 +12,17 @@ use crate::Input;
 
 /// Input wrapper that exposes at most a fixed number of items.
 ///
+/// # Examples
+///
+/// ```
+/// use qubit_io::LimitInput;
+/// use qubit_io::Input;
+///
+/// let mut input = LimitInput::new(std::io::empty(), 3);
+/// assert_eq!(input.remaining(), 3);
+/// assert_eq!(input.read(&mut [0_u8; 1]).unwrap(), 0);
+/// ```
+///
 /// # Type Parameters
 ///
 /// * `I` - Wrapped input type.

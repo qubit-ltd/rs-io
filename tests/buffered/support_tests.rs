@@ -48,8 +48,3 @@ impl AsyncOutput for TestOutput {
         Poll::Ready(Ok(()))
     }
 }
-
-#[test]
-fn test_async_buffer_support_types_are_constructible() {
-    let _ = (TestInput, TestOutput);
-}

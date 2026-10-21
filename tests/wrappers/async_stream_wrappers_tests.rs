@@ -20,6 +20,16 @@ use std::task::Context;
 use std::task::Poll;
 use std::task::Waker;
 
+use qubit_io::AsyncChecksumInput;
+use qubit_io::AsyncChecksumOutput;
+use qubit_io::AsyncClose;
+use qubit_io::AsyncCountingInput;
+use qubit_io::AsyncCountingOutput;
+use qubit_io::AsyncInput;
+use qubit_io::AsyncLimitInput;
+use qubit_io::AsyncLimitOutput;
+use qubit_io::AsyncOutput;
+
 enum ReadStep {
     Data(Vec<u8>),
     Error(ErrorKind),
@@ -158,16 +168,6 @@ impl AsyncOutput for ScriptedOutput {
         }
     }
 }
-
-use qubit_io::AsyncChecksumInput;
-use qubit_io::AsyncChecksumOutput;
-use qubit_io::AsyncClose;
-use qubit_io::AsyncCountingInput;
-use qubit_io::AsyncCountingOutput;
-use qubit_io::AsyncInput;
-use qubit_io::AsyncLimitInput;
-use qubit_io::AsyncLimitOutput;
-use qubit_io::AsyncOutput;
 
 #[test]
 fn test_async_output_wrappers_propagate_close() {

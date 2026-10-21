@@ -22,6 +22,51 @@ use crate::traits::validate_read_count;
 /// `AsyncInput` expresses readiness through [`Poll`] and does not depend on a
 /// particular executor. Implementations may be pinned and therefore are never
 /// moved by the polling methods.
+///
+/// # Examples
+///
+/// Implement the trait for a small in-memory input and inspect its buffering
+/// behavior through the public API:
+///
+/// ```
+/// use std::io::Result;
+/// use std::pin::Pin;
+/// use std::task::Context;
+/// use std::task::Poll;
+///
+/// use qubit_io::AsyncInput;
+///
+/// struct SliceInput<'a> {
+///     items: &'a [u8],
+///     position: usize,
+/// }
+///
+/// impl AsyncInput for SliceInput<'_> {
+///     type Item = u8;
+///
+///     unsafe fn poll_read_unchecked(
+///         self: Pin<&mut Self>,
+///         _cx: &mut Context<'_>,
+///         output: &mut [Self::Item],
+///         index: usize,
+///         count: usize,
+///     ) -> Poll<Result<usize>> {
+///         let this = self.get_mut();
+///         let available = this.items.len() - this.position;
+///         let read = available.min(count);
+///         output[index..index + read]
+///             .copy_from_slice(&this.items[this.position..this.position + read]);
+///         this.position += read;
+///         Poll::Ready(Ok(read))
+///     }
+/// }
+///
+/// let input = SliceInput {
+///     items: b"data",
+///     position: 0,
+/// };
+/// assert!(!input.is_buffered());
+/// ```
 pub trait AsyncInput {
     /// The item type read from this input.
     type Item;

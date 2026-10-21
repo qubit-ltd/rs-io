@@ -26,6 +26,53 @@ use crate::AsyncInput;
 /// successful inner reads. The future self-wakes and returns [`Poll::Pending`]
 /// when that budget is exhausted before completion.
 ///
+/// # Examples
+///
+/// ```
+/// use qubit_io::AsyncInput;
+/// use qubit_io::ReadExactFuture;
+/// use std::future::Future;
+/// use std::io::Result;
+/// use std::pin::Pin;
+/// use std::task::Context;
+/// use std::task::Poll;
+/// use std::task::Waker;
+///
+/// struct OneByteInput(bool);
+///
+/// impl AsyncInput for OneByteInput {
+///     type Item = u8;
+///
+///     unsafe fn poll_read_unchecked(
+///         mut self: Pin<&mut Self>,
+///         _cx: &mut Context<'_>,
+///         output: &mut [u8],
+///         index: usize,
+///         count: usize,
+///     ) -> Poll<Result<usize>> {
+///         if count == 0 || self.0 {
+///             return Poll::Ready(Ok(0));
+///         }
+///         output[index] = b'x';
+///         self.0 = true;
+///         Poll::Ready(Ok(1))
+///     }
+/// }
+///
+/// let mut input = OneByteInput(false);
+/// let mut output = [0_u8; 1];
+/// let mut future = ReadExactFuture::new(Pin::new(&mut input), &mut output);
+/// let mut context = Context::from_waker(Waker::noop());
+/// assert_eq!(future.items_read(), 0);
+/// assert!(matches!(
+///     Future::poll(Pin::new(&mut future), &mut context),
+///     Poll::Ready(Ok(())),
+/// ));
+/// assert_eq!(future.items_read(), 1);
+/// drop(future);
+/// assert_eq!(output, [b'x']);
+/// ```
+///
 /// # Panics
 ///
 /// [`Future::poll`] panics when called again after this future has returned

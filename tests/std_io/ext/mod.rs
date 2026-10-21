@@ -8,6 +8,7 @@
 
 mod buf_read_ext_tests;
 mod coverage_tests;
+mod read_ext_impl_tests;
 mod read_ext_tests;
 mod read_seek_ext_tests;
 mod seek_ext_tests;

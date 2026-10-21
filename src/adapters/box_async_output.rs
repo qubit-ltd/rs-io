@@ -19,6 +19,40 @@ use crate::AsyncOutput;
 ///
 /// - `O`: The boxed asynchronous output type, which may be unsized and
 ///   non-`Unpin`.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_io::AsyncOutput;
+/// use qubit_io::BoxAsyncOutput;
+/// use std::io::Result;
+/// use std::pin::Pin;
+/// use std::task::Context;
+/// use std::task::Poll;
+///
+/// struct DiscardOutput;
+///
+/// impl AsyncOutput for DiscardOutput {
+///     type Item = u8;
+///
+///     unsafe fn poll_write_unchecked(
+///         self: Pin<&mut Self>,
+///         _cx: &mut Context<'_>,
+///         _input: &[u8],
+///         _index: usize,
+///         count: usize,
+///     ) -> Poll<Result<usize>> {
+///         Poll::Ready(Ok(count))
+///     }
+///
+///     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<()>> {
+///         Poll::Ready(Ok(()))
+///     }
+/// }
+///
+/// let output = BoxAsyncOutput::new(Box::new(DiscardOutput));
+/// assert!(!output.is_buffered());
+/// ```
 #[must_use]
 #[repr(transparent)]
 pub struct BoxAsyncOutput<O>

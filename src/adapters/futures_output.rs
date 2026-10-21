@@ -22,6 +22,71 @@ use crate::util::UncheckedSlice;
 /// # Type Parameters
 ///
 /// - `T`: Futures-io writer type.
+///
+/// # Examples
+///
+/// ```
+/// use futures_io::AsyncWrite;
+/// use qubit_io::AsyncOutput;
+/// use qubit_io::FuturesOutput;
+/// use std::io::Result;
+/// use std::pin::Pin;
+/// use std::sync::Arc;
+/// use std::task::Context;
+/// use std::task::Poll;
+/// use std::task::Wake;
+/// use std::task::Waker;
+///
+/// struct VecWriter(Vec<u8>);
+///
+/// impl AsyncWrite for VecWriter {
+///     fn poll_write(
+///         mut self: Pin<&mut Self>,
+///         _cx: &mut Context<'_>,
+///         input: &[u8],
+///     ) -> Poll<Result<usize>> {
+///         self.0.extend_from_slice(input);
+///         Poll::Ready(Ok(input.len()))
+///     }
+///
+///     fn poll_flush(
+///         self: Pin<&mut Self>,
+///         _cx: &mut Context<'_>,
+///     ) -> Poll<Result<()>> {
+///         Poll::Ready(Ok(()))
+///     }
+///
+///     fn poll_close(
+///         self: Pin<&mut Self>,
+///         _cx: &mut Context<'_>,
+///     ) -> Poll<Result<()>> {
+///         Poll::Ready(Ok(()))
+///     }
+/// }
+///
+/// struct NoopWake;
+///
+/// impl Wake for NoopWake {
+///     fn wake(self: Arc<Self>) {}
+/// }
+///
+/// let mut output = FuturesOutput::new(VecWriter(Vec::new()));
+/// let waker = Waker::from(Arc::new(NoopWake));
+/// let mut context = Context::from_waker(&waker);
+/// assert!(matches!(
+///     unsafe {
+///         AsyncOutput::poll_write_unchecked(
+///             Pin::new(&mut output),
+///             &mut context,
+///             b"hello",
+///             0,
+///             5,
+///         )
+///     },
+///     Poll::Ready(Ok(5)),
+/// ));
+/// assert_eq!(output.get_ref().0, b"hello");
+/// ```
 #[must_use]
 #[repr(transparent)]
 pub struct FuturesOutput<T> {

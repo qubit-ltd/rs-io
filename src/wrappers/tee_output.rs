@@ -21,6 +21,20 @@ use crate::Seekable;
 ///
 /// * `P` - Primary output type.
 /// * `B` - Branch output type receiving mirrored items.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_io::Output;
+/// use qubit_io::TeeOutput;
+///
+/// let primary = std::io::Cursor::new(Vec::new());
+/// let branch = std::io::Cursor::new(Vec::new());
+/// let mut output = TeeOutput::new(primary, branch);
+///
+/// assert_eq!(output.write(b"abc").unwrap(), 3);
+/// assert_eq!(output.branch().get_ref(), b"abc");
+/// ```
 #[must_use]
 #[derive(Debug)]
 pub struct TeeOutput<P, B> {

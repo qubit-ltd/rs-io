@@ -18,6 +18,7 @@ use std::io::BufWriter;
 use std::io::Cursor;
 use std::io::Read;
 use std::io::Write;
+use std::time::Duration;
 
 use criterion::BatchSize;
 use criterion::BenchmarkId;
@@ -50,7 +51,7 @@ fn benchmark_fixture() -> Vec<u8> {
 fn benchmark_buffered_input(criterion: &mut Criterion) {
     let fixture = benchmark_fixture();
     let mut group = criterion.benchmark_group("buffered_input");
-    group.measurement_time(std::time::Duration::from_secs(2));
+    group.measurement_time(Duration::from_secs(2));
     group.sample_size(10);
     group.throughput(Throughput::Bytes(DATA_LEN as u64));
 
@@ -148,7 +149,7 @@ fn benchmark_buffered_input(criterion: &mut Criterion) {
 fn benchmark_buffered_output(criterion: &mut Criterion) {
     let fixture = benchmark_fixture();
     let mut group = criterion.benchmark_group("buffered_output");
-    group.measurement_time(std::time::Duration::from_secs(2));
+    group.measurement_time(Duration::from_secs(2));
     group.sample_size(10);
     group.throughput(Throughput::Bytes(DATA_LEN as u64));
 

@@ -26,6 +26,65 @@ use crate::traits::normalize_async_error;
 ///
 /// - `'a`: Lifetime of the borrowed output.
 /// - `O`: Asynchronous output type.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_io::AsyncClose;
+/// use qubit_io::AsyncOutput;
+/// use std::future::Future;
+/// use std::io::Result;
+/// use std::pin::Pin;
+/// use std::sync::Arc;
+/// use std::task::Context;
+/// use std::task::Poll;
+/// use std::task::Wake;
+/// use std::task::Waker;
+///
+/// struct Output;
+///
+/// impl AsyncOutput for Output {
+///     type Item = u8;
+///
+///     unsafe fn poll_write_unchecked(
+///         self: Pin<&mut Self>,
+///         _cx: &mut Context<'_>,
+///         _input: &[u8],
+///         _index: usize,
+///         _count: usize,
+///     ) -> Poll<Result<usize>> {
+///         unreachable!("the example only closes the output")
+///     }
+///
+///     fn poll_flush(
+///         self: Pin<&mut Self>,
+///         _cx: &mut Context<'_>,
+///     ) -> Poll<Result<()>> {
+///         Poll::Ready(Ok(()))
+///     }
+/// }
+///
+/// impl AsyncClose for Output {
+///     fn poll_close(
+///         self: Pin<&mut Self>,
+///         _cx: &mut Context<'_>,
+///     ) -> Poll<Result<()>> {
+///         Poll::Ready(Ok(()))
+///     }
+/// }
+///
+/// struct NoopWake;
+///
+/// impl Wake for NoopWake {
+///     fn wake(self: Arc<Self>) {}
+/// }
+///
+/// let mut output = Output;
+/// let waker = Waker::from(Arc::new(NoopWake));
+/// let mut context = Context::from_waker(&waker);
+/// let mut close = Box::pin(output.close_async());
+/// assert!(matches!(close.as_mut().poll(&mut context), Poll::Ready(Ok(()))));
+/// ```
 #[must_use = "futures do nothing unless polled"]
 pub struct CloseFuture<'a, O>
 where

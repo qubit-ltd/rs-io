@@ -30,6 +30,41 @@ use crate::traits::normalize_async_error;
 /// I/O; callers that need delivery guarantees must poll `flush` to completion
 /// or recover the pending buffer through [`Self::into_parts`].
 ///
+/// # Examples
+///
+/// ```
+/// use qubit_io::AsyncBufferedOutput;
+/// use qubit_io::AsyncOutput;
+/// use std::io;
+/// use std::pin::Pin;
+/// use std::task::Context;
+/// use std::task::Poll;
+///
+/// struct DiscardOutput;
+///
+/// impl AsyncOutput for DiscardOutput {
+///     type Item = u8;
+///
+///     unsafe fn poll_write_unchecked(
+///         self: Pin<&mut Self>,
+///         _cx: &mut Context<'_>,
+///         _input: &[u8],
+///         _index: usize,
+///         count: usize,
+///     ) -> Poll<io::Result<usize>> {
+///         Poll::Ready(Ok(count))
+///     }
+///
+///     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+///         Poll::Ready(Ok(()))
+///     }
+/// }
+///
+/// let mut output = AsyncBufferedOutput::with_capacity(DiscardOutput, 4);
+/// assert_eq!(output.capacity(), 4);
+/// assert!(output.pending().is_empty());
+/// ```
+///
 /// # Type Parameters
 ///
 /// - `O`: Asynchronous item output type.

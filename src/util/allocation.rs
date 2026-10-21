@@ -106,6 +106,7 @@ pub fn coverage_reset_reserve_hooks() {
 }
 
 #[cfg(coverage)]
+/// Creates a reserve error by requesting more capacity than a vector can hold.
 fn coverage_reserve_error() -> TryReserveError {
     Vec::<u8>::new()
         .try_reserve(usize::MAX)
@@ -113,6 +114,8 @@ fn coverage_reserve_error() -> TryReserveError {
 }
 
 #[cfg(coverage)]
+/// Fails requests above the configured limit or when the successful-attempt
+/// counter reaches zero; the latter failure resets that counter.
 fn coverage_maybe_fail_reserve<T>(additional: usize) -> Option<Result<T, TryReserveError>> {
     if COVERAGE_RESERVE_MAX_ADDITIONAL.with(|state| additional > state.get()) {
         return Some(Err(coverage_reserve_error()));

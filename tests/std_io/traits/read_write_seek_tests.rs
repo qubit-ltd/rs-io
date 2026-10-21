@@ -6,13 +6,14 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
+use std::io::Cursor;
 use std::io::SeekFrom;
 
 use qubit_io::std_io::ReadWriteSeek;
 
 #[test]
 fn test_read_write_seek_trait_object_supports_all_io_operations() {
-    let mut cursor = std::io::Cursor::new(Vec::new());
+    let mut cursor = Cursor::new(Vec::new());
     let stream: &mut dyn ReadWriteSeek = &mut cursor;
 
     stream

@@ -20,6 +20,61 @@ use crate::traits::normalize_async_error;
 /// # Type Parameters
 ///
 /// - `O`: Qubit byte output type.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_io::AsyncClose;
+/// use qubit_io::AsyncOutput;
+/// use qubit_io::FuturesAsyncWrite;
+/// use futures_io::AsyncWrite;
+/// use std::io::Result;
+/// use std::pin::Pin;
+/// use std::task::Context;
+/// use std::task::Poll;
+/// use std::task::Wake;
+/// use std::sync::Arc;
+///
+/// struct Sink;
+///
+/// impl AsyncOutput for Sink {
+///     type Item = u8;
+///
+///     unsafe fn poll_write_unchecked(
+///         self: Pin<&mut Self>,
+///         _cx: &mut Context<'_>,
+///         input: &[u8],
+///         _index: usize,
+///         count: usize,
+///     ) -> Poll<Result<usize>> {
+///         Poll::Ready(Ok(count.min(input.len())))
+///     }
+///
+///     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<()>> {
+///         Poll::Ready(Ok(()))
+///     }
+/// }
+///
+/// impl AsyncClose for Sink {
+///     fn poll_close(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<()>> {
+///         Poll::Ready(Ok(()))
+///     }
+/// }
+///
+/// struct NoopWake;
+///
+/// impl Wake for NoopWake {
+///     fn wake(self: Arc<Self>) {}
+/// }
+///
+/// let mut writer = FuturesAsyncWrite::new(Sink);
+/// let waker = std::task::Waker::from(Arc::new(NoopWake));
+/// let mut context = Context::from_waker(&waker);
+/// assert!(matches!(
+///     AsyncWrite::poll_write(Pin::new(&mut writer), &mut context, b"data"),
+///     Poll::Ready(Ok(4)),
+/// ));
+/// ```
 #[must_use]
 #[repr(transparent)]
 pub struct FuturesAsyncWrite<O> {

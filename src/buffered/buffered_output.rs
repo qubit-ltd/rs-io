@@ -43,6 +43,21 @@ use crate::traits::validate_write_count;
 /// # Type Parameters
 ///
 /// - `O`: Wrapped item output type.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_io::BufferedOutput;
+/// use std::io::Cursor;
+///
+/// let mut output = BufferedOutput::with_capacity(Cursor::new(Vec::new()), 4);
+/// output.write(&[1, 2, 3])?;
+/// output.flush()?;
+/// let (inner, pending) = output.into_parts();
+/// assert!(pending.is_empty());
+/// assert_eq!(inner.into_inner(), vec![1, 2, 3]);
+/// # Ok::<(), std::io::Error>(())
+/// ```
 #[must_use]
 #[derive(Debug)]
 pub struct BufferedOutput<O>

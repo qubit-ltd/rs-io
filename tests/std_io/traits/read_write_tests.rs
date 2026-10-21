@@ -10,12 +10,20 @@ use qubit_io::std_io::ReadWrite;
 
 #[test]
 fn test_read_write_trait_object_supports_reading_and_writing() {
-    let mut cursor = std::io::Cursor::new(Vec::new());
+    let mut cursor = std::io::Cursor::new(b"ping".to_vec());
 
     {
         let stream: &mut dyn ReadWrite = &mut cursor;
-        stream.write_all(b"ping").expect("read-write trait object should write");
+        let mut content = [0_u8; 4];
+        stream
+            .read_exact(&mut content)
+            .expect("read-write trait object should read");
+        assert_eq!(*b"ping", content);
+
+        stream
+            .write_all(b" pong")
+            .expect("read-write trait object should write");
     }
 
-    assert_eq!(b"ping", cursor.get_ref().as_slice());
+    assert_eq!(b"ping pong", cursor.get_ref().as_slice());
 }

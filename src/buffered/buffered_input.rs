@@ -34,6 +34,19 @@ use crate::util::SliceRange;
 /// implements [`Input`] and [`Seekable`] directly, so it can be passed to
 /// item-oriented APIs without converting through standard byte traits.
 ///
+/// # Examples
+///
+/// ```
+/// use qubit_io::BufferedInput;
+/// use qubit_io::Input;
+/// use std::io::Cursor;
+///
+/// let mut input = BufferedInput::new(Cursor::new(b"abc"));
+/// let mut output = [0; 2];
+/// assert_eq!(Input::read(&mut input, &mut output).unwrap(), 2);
+/// assert_eq!(&output, b"ab");
+/// ```
+///
 /// # Type Parameters
 ///
 /// - `I`: Wrapped item input type.

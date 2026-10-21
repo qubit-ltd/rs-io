@@ -28,6 +28,36 @@ use crate::buffered::DEFAULT_BUFFER_CAPACITY;
 /// no runtime-specific work. The wrapped input can be `!Unpin`; pin projection
 /// is kept internal and the input is never moved while this wrapper is pinned.
 ///
+/// # Examples
+///
+/// ```
+/// use qubit_io::AsyncBufferedInput;
+/// use qubit_io::AsyncInput;
+/// use std::io;
+/// use std::pin::Pin;
+/// use std::task::Context;
+/// use std::task::Poll;
+///
+/// struct EmptyInput;
+///
+/// impl AsyncInput for EmptyInput {
+///     type Item = u8;
+///
+///     unsafe fn poll_read_unchecked(
+///         self: Pin<&mut Self>,
+///         _cx: &mut Context<'_>,
+///         _output: &mut [Self::Item],
+///         _index: usize,
+///         _count: usize,
+///     ) -> Poll<io::Result<usize>> {
+///         Poll::Ready(Ok(0))
+///     }
+/// }
+///
+/// let input = AsyncBufferedInput::new(EmptyInput);
+/// assert_eq!(input.unread_len(), 0);
+/// ```
+///
 /// # Type Parameters
 ///
 /// - `I`: Asynchronous item input type.

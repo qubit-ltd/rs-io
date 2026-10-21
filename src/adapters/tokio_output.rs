@@ -22,6 +22,16 @@ use crate::util::UncheckedSlice;
 /// # Type Parameters
 ///
 /// - `T`: Tokio writer type.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_io::TokioOutput;
+/// use std::io::Cursor;
+///
+/// let output = TokioOutput::new(Cursor::new(Vec::<u8>::new()));
+/// assert!(output.get_ref().get_ref().is_empty());
+/// ```
 #[must_use]
 #[repr(transparent)]
 pub struct TokioOutput<T> {
