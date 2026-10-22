@@ -8,6 +8,12 @@
       "features": []
     },
     {
+      "name": "digest-wrappers",
+      "commands": ["check", "test", "doc"],
+      "defaultFeatures": false,
+      "features": ["digest"]
+    },
+    {
       "name": "futures-io-adapters",
       "commands": ["check", "test", "doc"],
       "defaultFeatures": false,
