@@ -9,18 +9,27 @@
 //!
 //! These adapters add counting, checksumming, transfer limits, tee behavior,
 //! and position restoration while preserving the item-oriented traits of the
-//! wrapped streams.
+//! wrapped streams. The optional `digest` feature adds content digest wrappers
+//! for byte streams.
 
 mod async_checksum_input;
 mod async_checksum_output;
 mod async_counting_input;
 mod async_counting_output;
+#[cfg(feature = "digest")]
+mod async_digest_input;
+#[cfg(feature = "digest")]
+mod async_digest_output;
 mod async_limit_input;
 mod async_limit_output;
 mod checksum_input;
 mod checksum_output;
 mod counting_input;
 mod counting_output;
+#[cfg(feature = "digest")]
+mod digest_input;
+#[cfg(feature = "digest")]
+mod digest_output;
 mod limit_input;
 mod limit_output;
 mod position_guard;
@@ -32,12 +41,20 @@ pub use async_checksum_input::AsyncChecksumInput;
 pub use async_checksum_output::AsyncChecksumOutput;
 pub use async_counting_input::AsyncCountingInput;
 pub use async_counting_output::AsyncCountingOutput;
+#[cfg(feature = "digest")]
+pub use async_digest_input::AsyncDigestInput;
+#[cfg(feature = "digest")]
+pub use async_digest_output::AsyncDigestOutput;
 pub use async_limit_input::AsyncLimitInput;
 pub use async_limit_output::AsyncLimitOutput;
 pub use checksum_input::ChecksumInput;
 pub use checksum_output::ChecksumOutput;
 pub use counting_input::CountingInput;
 pub use counting_output::CountingOutput;
+#[cfg(feature = "digest")]
+pub use digest_input::DigestInput;
+#[cfg(feature = "digest")]
+pub use digest_output::DigestOutput;
 pub use limit_input::LimitInput;
 pub use limit_output::LimitOutput;
 pub use position_guard::PositionGuard;

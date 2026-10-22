@@ -24,8 +24,9 @@
 //!
 //! Item-oriented buffering includes [`BufferedInput`], [`BufferedOutput`],
 //! [`AsyncBufferedInput`], and [`AsyncBufferedOutput`]. Limit, counting, and
-//! checksum wrappers are available for both operation modes. Binary and text
-//! codecs remain in sibling crates.
+//! checksum wrappers are available for both operation modes. The optional
+//! `digest` feature adds fixed-output content digests and helpers that read
+//! byte inputs to EOF. Binary and text codecs remain in sibling crates.
 //!
 //! The concrete trait definitions and wrapper types live in dedicated modules
 //! and are re-exported from the crate root for ergonomic use.
@@ -65,6 +66,8 @@ pub use adapters::TokioInput;
 #[cfg(all(feature = "tokio", not(miri)))]
 pub use adapters::TokioOutput;
 pub use async_io::CloseFuture;
+#[cfg(feature = "digest")]
+pub use async_io::DigestAllFuture;
 pub use async_io::FlushFuture;
 pub use async_io::ReadExactFuture;
 pub use async_io::ReadFullyFuture;
@@ -120,12 +123,20 @@ pub use wrappers::AsyncChecksumInput;
 pub use wrappers::AsyncChecksumOutput;
 pub use wrappers::AsyncCountingInput;
 pub use wrappers::AsyncCountingOutput;
+#[cfg(feature = "digest")]
+pub use wrappers::AsyncDigestInput;
+#[cfg(feature = "digest")]
+pub use wrappers::AsyncDigestOutput;
 pub use wrappers::AsyncLimitInput;
 pub use wrappers::AsyncLimitOutput;
 pub use wrappers::ChecksumInput;
 pub use wrappers::ChecksumOutput;
 pub use wrappers::CountingInput;
 pub use wrappers::CountingOutput;
+#[cfg(feature = "digest")]
+pub use wrappers::DigestInput;
+#[cfg(feature = "digest")]
+pub use wrappers::DigestOutput;
 pub use wrappers::LimitInput;
 pub use wrappers::LimitOutput;
 pub use wrappers::PositionGuard;

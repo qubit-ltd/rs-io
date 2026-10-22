@@ -9,6 +9,10 @@ mod async_checksum_input_tests;
 mod async_checksum_output_tests;
 mod async_counting_input_tests;
 mod async_counting_output_tests;
+#[cfg(feature = "digest")]
+mod async_digest_input_tests;
+#[cfg(feature = "digest")]
+mod async_digest_output_tests;
 mod async_limit_input_tests;
 mod async_limit_output_tests;
 mod async_stream_wrappers_tests;
@@ -16,6 +20,12 @@ mod checksum_input_tests;
 mod checksum_output_tests;
 mod counting_input_tests;
 mod counting_output_tests;
+#[cfg(feature = "digest")]
+mod digest_input_tests;
+#[cfg(feature = "digest")]
+mod digest_output_tests;
+#[cfg(feature = "digest")]
+mod digest_support_tests;
 mod limit_input_tests;
 mod limit_output_tests;
 mod position_guard_tests;

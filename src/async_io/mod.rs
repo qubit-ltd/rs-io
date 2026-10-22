@@ -9,6 +9,8 @@
 //! Future implementations backing the asynchronous I/O convenience methods.
 
 mod close_future;
+#[cfg(feature = "digest")]
+mod digest_all_future;
 mod flush_future;
 mod read_exact_future;
 mod read_fully_future;
@@ -17,6 +19,8 @@ mod write_fully_future;
 mod write_future;
 
 pub use close_future::CloseFuture;
+#[cfg(feature = "digest")]
+pub use digest_all_future::DigestAllFuture;
 pub use flush_future::FlushFuture;
 pub use read_exact_future::ReadExactFuture;
 pub(crate) use read_fully_future::MAX_READY_OPERATIONS_PER_POLL;
