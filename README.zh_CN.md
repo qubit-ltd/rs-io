@@ -196,6 +196,21 @@ fn main() -> io::Result<()> {
 可通过引用或 box 使用 `dyn ByteInput`／`dyn ByteOutput`。
 借用输出和标准库转换的完整用法见[用户手册](doc/user_guide.zh_CN.md#4-连接标准库字节流)。
 
+异步字节流和字符流也提供了同样的短约束：
+
+| 操作方式与元素类型 | 输入约束 | 输出约束 |
+| --- | --- | --- |
+| 同步 `u8` | `ByteInput` | `ByteOutput` |
+| 异步 `u8` | `AsyncByteInput` | `AsyncByteOutput` |
+| 同步 `char` | `CharInput` | `CharOutput` |
+| 异步 `char` | `AsyncCharInput` | `AsyncCharOutput` |
+
+只要基础 trait 的 `Item` 符合要求，流就会自动满足对应约束。例如，可以用
+`I: CharInput` 代替 `I: Input<Item = char>`，用 `O: AsyncByteOutput`
+代替 `O: AsyncOutput<Item = u8>`。返回值同样可以写成 `impl CharInput`、
+`impl AsyncByteOutput`。字符流传输的是 Rust `char`（Unicode 标量值），不会自动
+执行文本编码或解码。异步读写仍使用 `Pin` 和 `Poll`，不要求流满足 `Unpin`。
+
 ## 兼容标准库 Read 和 Write
 
 所有实现 `std::io::Read` 的类型都已自动实现 `Input<Item = u8>`；所有实现

@@ -282,8 +282,66 @@ fn main() -> io::Result<()> {
 这样的指针类型。将具体返回类型改成 `impl ByteInput` 后，调用方就不能直接调用原类型的
 专有方法。参数上的 `?Sized` 允许传入借用的 trait 对象；若 API 需要拥有一个实现
 `Input`／`Output` 的值，可用 `BoxInput`／`BoxOutput` 包装拥有的 trait 对象。
-这两个字节 trait 用于同步 I/O；异步接口仍使用 `AsyncInput<Item = u8>`、
-`AsyncOutput<Item = u8>`。
+异步字节流则可以使用 `AsyncByteInput`、`AsyncByteOutput`。
+
+### 为字符流和异步流使用短约束
+
+四种基础接口都有固定元素类型的子 trait：
+
+| 基础接口 | `Item = u8` | `Item = char` |
+| --- | --- | --- |
+| `Input` | `ByteInput` | `CharInput` |
+| `Output` | `ByteOutput` | `CharOutput` |
+| `AsyncInput` | `AsyncByteInput` | `AsyncCharInput` |
+| `AsyncOutput` | `AsyncByteOutput` | `AsyncCharOutput` |
+
+这些 trait 继承基础接口的操作，并自动覆盖元素类型匹配的流，包括 unsized trait 对象。
+自定义实现仍放在基础 trait 上，不要再显式实现对应的短约束 trait。
+参数和返回值的用法与前面的字节示例相同，例如 `I: CharInput`、
+`-> impl AsyncCharOutput`。它们不会额外要求 `Send`、`Sync` 或 `Unpin`。
+
+下面是供调用方接入的 API 定义片段，分别展示同步字符操作、异步字符读取和异步字节写入。
+具体流由调用方提供；异步调用还需要已固定的借用和任务上下文：
+
+```rust
+use std::io;
+use std::pin::Pin;
+use std::task::{Context, Poll};
+use qubit_io::{AsyncByteOutput, AsyncCharInput, CharInput, CharOutput};
+
+fn read_char<I: CharInput + ?Sized>(input: &mut I) -> io::Result<char> {
+    let mut chars = ['\0'];
+    input.read_exactly(&mut chars)?;
+    Ok(chars[0])
+}
+
+fn write_chars<O: CharOutput + ?Sized>(output: &mut O, chars: &[char]) -> io::Result<()> {
+    output.write_fully(chars)
+}
+
+fn poll_chars<I: AsyncCharInput + ?Sized>(
+    input: Pin<&mut I>, cx: &mut Context<'_>, chars: &mut [char],
+) -> Poll<io::Result<usize>> {
+    input.poll_read(cx, chars)
+}
+
+fn poll_bytes<O: AsyncByteOutput + ?Sized>(
+    output: Pin<&mut O>, cx: &mut Context<'_>, bytes: &[u8],
+) -> Poll<io::Result<usize>> {
+    output.poll_write(cx, bytes)
+}
+```
+
+如果流包含 `['你', '🦀']`，一次完整读取返回两个元素；同样的文本编码为 UTF-8 后需要
+七个字节。一个 `char` 表示一个 Unicode 标量值，不一定是用户看到的一个完整字符；
+组合序列可能包含多个元素。上述 trait 不执行文本编解码、规范化或字素簇分割，
+字符流也不能直接调用 `into_std_read()`、`into_std_write()`。跨越字节边界时需要编码层。
+
+异步短约束保留基础接口的就绪规则：返回 `Pending` 时不能传输元素，实现还必须安排唤醒。
+`!Unpin` 流须先固定再轮询；需要返回 Future 的辅助方法时，可使用
+`PinnedAsyncInputExt`、`PinnedAsyncOutputExt`。Tokio、`futures-io` 类型仍需通过
+现有适配器接入；仅实现运行时自己的异步接口，不会自动实现 `AsyncByteInput`、
+`AsyncByteOutput`。
 
 ### 转换为标准库接口
 

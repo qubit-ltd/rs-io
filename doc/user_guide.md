@@ -287,8 +287,73 @@ or a pointer such as `Box<dyn ByteInput>`. Replacing a concrete return type
 with `impl ByteInput` hides its type-specific methods. `?Sized` on the
 parameters permits borrowed trait objects. For owned trait objects, use
 `BoxInput` / `BoxOutput` when an API requires an owned `Input` / `Output`
-implementor. These byte traits apply to synchronous I/O; asynchronous APIs
-continue to use `AsyncInput<Item = u8>` / `AsyncOutput<Item = u8>`.
+implementor. For asynchronous bytes, use `AsyncByteInput` / `AsyncByteOutput`.
+
+### Name character and asynchronous stream bounds
+
+All four base interfaces have item-specific subtraits:
+
+| Base interface | `Item = u8` | `Item = char` |
+| --- | --- | --- |
+| `Input` | `ByteInput` | `CharInput` |
+| `Output` | `ByteOutput` | `CharOutput` |
+| `AsyncInput` | `AsyncByteInput` | `AsyncCharInput` |
+| `AsyncOutput` | `AsyncByteOutput` | `AsyncCharOutput` |
+
+They inherit the base operations and automatically apply to matching streams,
+including unsized trait objects. Implement the base trait rather than adding
+an explicit implementation of a specialized trait. Generic parameters and
+opaque return types follow the byte example above, such as `I: CharInput` or
+`-> impl AsyncCharOutput`. These names do not add `Send`, `Sync`, or `Unpin`
+requirements.
+
+The following API-definition fragments illustrate synchronous character
+operations and asynchronous character/byte polling. The caller supplies the
+concrete stream; asynchronous callers also supply its pinned borrow and task
+context:
+
+```rust
+use std::io;
+use std::pin::Pin;
+use std::task::{Context, Poll};
+use qubit_io::{AsyncByteOutput, AsyncCharInput, CharInput, CharOutput};
+
+fn read_char<I: CharInput + ?Sized>(input: &mut I) -> io::Result<char> {
+    let mut chars = ['\0'];
+    input.read_exactly(&mut chars)?;
+    Ok(chars[0])
+}
+
+fn write_chars<O: CharOutput + ?Sized>(output: &mut O, chars: &[char]) -> io::Result<()> {
+    output.write_fully(chars)
+}
+
+fn poll_chars<I: AsyncCharInput + ?Sized>(
+    input: Pin<&mut I>, cx: &mut Context<'_>, chars: &mut [char],
+) -> Poll<io::Result<usize>> {
+    input.poll_read(cx, chars)
+}
+
+fn poll_bytes<O: AsyncByteOutput + ?Sized>(
+    output: Pin<&mut O>, cx: &mut Context<'_>, bytes: &[u8],
+) -> Poll<io::Result<usize>> {
+    output.poll_write(cx, bytes)
+}
+```
+
+For a stream containing `['你', '🦀']`, a successful full read returns two
+items, even though its UTF-8 encoding occupies seven bytes. A `char` is one
+Unicode scalar value, not a grapheme cluster; combining sequences can contain
+multiple items. These traits perform no text encoding, decoding, normalization,
+or segmentation, and character streams cannot directly use `into_std_read()`
+or `into_std_write()`. Use an encoding layer when crossing a byte boundary.
+
+Async bounds preserve the base readiness rules: `Pending` transfers no items
+and the implementation arranges a wakeup. Pin a `!Unpin` stream before polling;
+for future-returning helpers on pinned streams, use `PinnedAsyncInputExt` /
+`PinnedAsyncOutputExt`. Tokio and `futures-io` values still require their
+existing adapters; implementing a runtime's async interface alone does not
+implement `AsyncByteInput` or `AsyncByteOutput`.
 
 ### Convert to standard-library interfaces
 

@@ -207,6 +207,24 @@ Return `impl ByteInput` / `impl ByteOutput` to hide a concrete type, or use
 See the [byte-stream guide](doc/user_guide.md#4-connect-standard-library-byte-streams)
 for borrowed outputs and standard-library conversion.
 
+The same short-bound pattern covers asynchronous bytes and Unicode scalar
+values:
+
+| Mode and item type | Input bound | Output bound |
+| --- | --- | --- |
+| Synchronous `u8` | `ByteInput` | `ByteOutput` |
+| Asynchronous `u8` | `AsyncByteInput` | `AsyncByteOutput` |
+| Synchronous `char` | `CharInput` | `CharOutput` |
+| Asynchronous `char` | `AsyncCharInput` | `AsyncCharOutput` |
+
+Each trait automatically applies to implementations of its corresponding base
+trait with the matching `Item`. For example, use `I: CharInput` instead of
+`I: Input<Item = char>`, or `O: AsyncByteOutput` instead of
+`O: AsyncOutput<Item = u8>`. Opaque return types use `impl CharInput` or
+`impl AsyncByteOutput` in the same way. Character streams transfer Rust `char`
+values (Unicode scalar values), without encoding or decoding text. Async
+polling still uses `Pin` and `Poll`, and does not require `Unpin`.
+
 ## Compatible with standard Read and Write
 
 Every `std::io::Read` value already implements `Input<Item = u8>`, and every
