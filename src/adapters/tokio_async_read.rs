@@ -13,9 +13,9 @@ use std::task::Poll;
 use tokio::io::AsyncRead;
 use tokio::io::ReadBuf;
 
-use crate::AsyncInput;
+use crate::AsyncByteInput;
 
-/// Exposes a Qubit byte [`AsyncInput`] as a Tokio [`AsyncRead`].
+/// Exposes a Qubit [`AsyncByteInput`] as a Tokio [`AsyncRead`].
 ///
 /// # Type Parameters
 ///
@@ -141,7 +141,7 @@ impl<I> TokioAsyncRead<I> {
 
 impl<I> AsyncRead for TokioAsyncRead<I>
 where
-    I: AsyncInput<Item = u8>,
+    I: AsyncByteInput,
 {
     /// Polls one Tokio read through the wrapped Qubit input.
     ///

@@ -11,6 +11,7 @@ use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
 
+use crate::AsyncByteInput;
 use crate::AsyncInput;
 
 /// Asynchronous input that counts successfully returned items.
@@ -123,7 +124,7 @@ impl<I> AsyncCountingInput<I> {
 
 impl<I> AsyncCountingInput<I>
 where
-    I: AsyncInput<Item = u8>,
+    I: AsyncByteInput,
 {
     /// Returns the successfully returned byte count.
     ///

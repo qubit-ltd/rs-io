@@ -13,6 +13,7 @@ use std::task::Poll;
 
 use digest::Digest;
 
+use crate::AsyncByteInput;
 use crate::AsyncInput;
 use crate::DigestAllFuture;
 
@@ -113,7 +114,7 @@ where
     #[inline]
     pub fn digest_all(input: Pin<&mut I>) -> DigestAllFuture<'_, I, D>
     where
-        I: AsyncInput<Item = u8>,
+        I: AsyncByteInput,
     {
         DigestAllFuture::new(input)
     }
@@ -213,7 +214,7 @@ where
 
 impl<I, D> AsyncInput for AsyncDigestInput<I, D>
 where
-    I: AsyncInput<Item = u8>,
+    I: AsyncByteInput,
     D: Digest,
 {
     /// Byte item hashed after successful reads.

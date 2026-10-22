@@ -14,7 +14,7 @@ use std::task::Poll;
 
 use digest::Digest;
 
-use crate::AsyncInput;
+use crate::AsyncByteInput;
 use crate::DEFAULT_COPY_BUFFER_SIZE;
 use crate::async_io::MAX_READY_OPERATIONS_PER_POLL;
 
@@ -39,7 +39,7 @@ use crate::async_io::MAX_READY_OPERATIONS_PER_POLL;
 #[must_use = "futures do nothing unless polled"]
 pub struct DigestAllFuture<'a, I, D>
 where
-    I: AsyncInput<Item = u8> + ?Sized,
+    I: AsyncByteInput + ?Sized,
     D: Digest,
 {
     /// Input kept pinned for the entire borrow.
@@ -54,14 +54,14 @@ where
 // and the algorithm is never exposed through a pinned reference.
 impl<I, D> Unpin for DigestAllFuture<'_, I, D>
 where
-    I: AsyncInput<Item = u8> + ?Sized,
+    I: AsyncByteInput + ?Sized,
     D: Digest,
 {
 }
 
 impl<'a, I, D> DigestAllFuture<'a, I, D>
 where
-    I: AsyncInput<Item = u8> + ?Sized,
+    I: AsyncByteInput + ?Sized,
     D: Digest,
 {
     /// Creates a future with a fresh digest state at the current input
@@ -86,7 +86,7 @@ where
 
 impl<I, D> Future for DigestAllFuture<'_, I, D>
 where
-    I: AsyncInput<Item = u8> + ?Sized,
+    I: AsyncByteInput + ?Sized,
     D: Digest,
 {
     /// Full digest of bytes read from the initial position to EOF.

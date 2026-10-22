@@ -11,6 +11,7 @@ use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
 
+use crate::AsyncByteOutput;
 use crate::AsyncClose;
 use crate::AsyncOutput;
 use crate::traits::normalize_async_error;
@@ -162,7 +163,7 @@ impl<O> AsyncCountingOutput<O> {
 
 impl<O> AsyncCountingOutput<O>
 where
-    O: AsyncOutput<Item = u8>,
+    O: AsyncByteOutput,
 {
     /// Returns the successfully accepted byte count.
     ///

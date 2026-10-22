@@ -12,6 +12,7 @@ use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
 
+use crate::AsyncByteInput;
 use crate::AsyncInput;
 
 /// Asynchronous byte input that hashes successfully returned bytes.
@@ -159,7 +160,7 @@ where
 
 impl<I, H> AsyncInput for AsyncChecksumInput<I, H>
 where
-    I: AsyncInput<Item = u8>,
+    I: AsyncByteInput,
     H: Hasher,
 {
     /// Byte item hashed after successful reads.

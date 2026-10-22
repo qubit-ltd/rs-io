@@ -13,6 +13,7 @@ use std::task::Poll;
 
 use digest::Digest;
 
+use crate::AsyncByteOutput;
 use crate::AsyncClose;
 use crate::AsyncOutput;
 use crate::traits::normalize_async_error;
@@ -229,7 +230,7 @@ where
 
 impl<O, D> AsyncOutput for AsyncDigestOutput<O, D>
 where
-    O: AsyncOutput<Item = u8>,
+    O: AsyncByteOutput,
     D: Digest,
 {
     /// Byte item hashed after successful writes.

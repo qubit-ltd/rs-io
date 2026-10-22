@@ -12,9 +12,9 @@ use std::task::Poll;
 
 use futures_io::AsyncRead;
 
-use crate::AsyncInput;
+use crate::AsyncByteInput;
 
-/// Exposes a Qubit byte [`AsyncInput`] as a futures-io [`AsyncRead`].
+/// Exposes a Qubit [`AsyncByteInput`] as a futures-io [`AsyncRead`].
 ///
 /// # Type Parameters
 ///
@@ -137,7 +137,7 @@ impl<I> FuturesAsyncRead<I> {
 
 impl<I> AsyncRead for FuturesAsyncRead<I>
 where
-    I: AsyncInput<Item = u8>,
+    I: AsyncByteInput,
 {
     /// Polls one futures-io read through the wrapped Qubit input.
     ///

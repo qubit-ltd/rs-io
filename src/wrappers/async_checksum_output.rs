@@ -12,6 +12,7 @@ use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
 
+use crate::AsyncByteOutput;
 use crate::AsyncClose;
 use crate::AsyncOutput;
 use crate::traits::normalize_async_error;
@@ -200,7 +201,7 @@ where
 
 impl<O, H> AsyncOutput for AsyncChecksumOutput<O, H>
 where
-    O: AsyncOutput<Item = u8>,
+    O: AsyncByteOutput,
     H: Hasher,
 {
     /// Byte item hashed after successful writes.

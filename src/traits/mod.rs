@@ -8,11 +8,17 @@
 
 //! Core synchronous, asynchronous, pinned, and seekable I/O traits.
 
+mod async_byte_input;
+mod async_byte_output;
+mod async_char_input;
+mod async_char_output;
 mod async_close;
 mod async_input;
 mod async_output;
 mod byte_input;
 mod byte_output;
+mod char_input;
+mod char_output;
 mod input;
 mod internal;
 mod output;
@@ -22,11 +28,17 @@ mod seekable;
 mod seekable_input;
 mod seekable_output;
 
+pub use async_byte_input::AsyncByteInput;
+pub use async_byte_output::AsyncByteOutput;
+pub use async_char_input::AsyncCharInput;
+pub use async_char_output::AsyncCharOutput;
 pub use async_close::AsyncClose;
 pub use async_input::AsyncInput;
 pub use async_output::AsyncOutput;
 pub use byte_input::ByteInput;
 pub use byte_output::ByteOutput;
+pub use char_input::CharInput;
+pub use char_output::CharOutput;
 pub use input::Input;
 pub(crate) use internal::normalize_async_error;
 pub(crate) use internal::validate_read_count;
