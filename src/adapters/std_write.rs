@@ -9,6 +9,8 @@
 //! Adapter from a Qubit synchronous output to the standard library writer.
 
 use std::io::Result;
+use std::io::Seek;
+use std::io::SeekFrom;
 use std::io::Write;
 
 use crate::Output;
@@ -74,5 +76,15 @@ where
     #[inline]
     fn flush(&mut self) -> Result<()> {
         Output::flush(&mut self.inner)
+    }
+}
+
+impl<O> Seek for StdWrite<O>
+where
+    O: Output<Item = u8> + crate::Seekable<Unit = u8>,
+{
+    #[inline]
+    fn seek(&mut self, position: SeekFrom) -> Result<u64> {
+        crate::Seekable::seek_to(&mut self.inner, position)
     }
 }

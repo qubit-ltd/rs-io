@@ -29,14 +29,14 @@
 
 ```toml
 [dependencies]
-qubit-io = "0.17"
+qubit-io = "0.18"
 ```
 
 只有应用实际使用某个生态时才启用对应 adapter：
 
 ```toml
 [dependencies]
-qubit-io = { version = "0.17", features = ["tokio"] }
+qubit-io = { version = "0.18", features = ["tokio"] }
 ```
 
 `tokio` 启用 `TokioInput`、`TokioOutput`、`TokioAsyncRead` 和 `TokioAsyncWrite`；`futures-io` 启用对应的 `Futures*` 类型。核心 trait 不选择 executor，也不要求这两个 feature。
@@ -314,6 +314,14 @@ fn run_mapper() -> io::Result<()> {
 ### 标准 I/O 扩展
 
 标准库集成位于 `qubit_io::std_io`，扩展 trait 位于 `qubit_io::std_io::ext`。它们为字节流提供 bounded read、bounded string 与 delimiter read、copy、discard 和保持位置的操作。处理由其他方控制大小的数据时，优先使用 `*_limited`，不要使用无上限的 `read_to_end`、`read_to_string` 或 delimiter read；上限是资源策略。
+
+字节型 `Input` 与 `Output` 可分别通过 `into_std_read` 和 `into_std_write`
+消费并转换为标准 reader 或 writer。`InputRef` 与 `OutputRef` 可借用已有对象后
+进行相同转换；trait object 也先通过这两个 adapter 包装再转换。生成的
+`StdRead` 或 `StdWrite` 提供 `get_ref`、`get_mut` 和 `into_inner`，并在内部流实现
+字节单位的 `Seekable` 时转发 `Seek`。转换只构造 wrapper，不执行 I/O、flush、close
+或分配。标准向量读写使用标准 trait 的默认回退，不承诺保留内部流原生的
+scatter/gather 优化。
 
 ### seek 与传输工具
 

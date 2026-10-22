@@ -11,6 +11,7 @@ use std::io::ErrorKind;
 use std::io::Result;
 
 use super::validate_read_count;
+use crate::StdRead;
 use crate::util::SliceRange;
 
 /// Minimal indexed input interface over items.
@@ -49,6 +50,45 @@ use crate::util::SliceRange;
 pub trait Input {
     /// The item type read from this input.
     type Item;
+
+    /// Converts this byte input into a standard library reader.
+    ///
+    /// The conversion only wraps `self`; it performs no I/O and does not
+    /// allocate. The wrapped input can be recovered with
+    /// [`StdRead::into_inner`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use qubit_io::Input;
+    /// use std::io::Read;
+    ///
+    /// let input = std::io::Cursor::new(b"hello");
+    /// let mut reader = input.into_std_read();
+    /// let mut bytes = Vec::new();
+    /// reader.read_to_end(&mut bytes).unwrap();
+    /// assert_eq!(bytes, b"hello");
+    /// let input = reader.into_inner();
+    /// assert_eq!(input.position(), 5);
+    /// ```
+    ///
+    /// Non-byte inputs cannot be converted:
+    ///
+    /// ```compile_fail
+    /// use qubit_io::Input;
+    ///
+    /// fn convert<I: Input<Item = char>>(input: I) {
+    ///     let _reader = input.into_std_read();
+    /// }
+    /// ```
+    #[must_use = "the returned reader is the converted input"]
+    #[inline]
+    fn into_std_read(self) -> StdRead<Self>
+    where
+        Self: Sized + Input<Item = u8>,
+    {
+        StdRead::new(self)
+    }
 
     /// Returns whether this input already buffers items internally.
     ///

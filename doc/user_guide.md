@@ -29,14 +29,14 @@ The default feature set contains the runtime-neutral core:
 
 ```toml
 [dependencies]
-qubit-io = "0.17"
+qubit-io = "0.18"
 ```
 
 Enable an adapter only in an application that uses that ecosystem:
 
 ```toml
 [dependencies]
-qubit-io = { version = "0.17", features = ["tokio"] }
+qubit-io = { version = "0.18", features = ["tokio"] }
 ```
 
 `tokio` enables `TokioInput`, `TokioOutput`, `TokioAsyncRead`, and `TokioAsyncWrite`. `futures-io` enables the matching `Futures*` types. The core traits neither select an executor nor require either feature.
@@ -314,6 +314,17 @@ The boundary is intentional:
 ### Standard I/O extensions
 
 Standard-library integrations live under `qubit_io::std_io` and extension traits under `qubit_io::std_io::ext`. They add bounded reads, bounded strings and delimiter reads, copy helpers, discard helpers, and position-preserving operations for byte streams. For data controlled by another party, prefer a `*_limited` method over unbounded `read_to_end`, `read_to_string`, or delimiter reads; the limit is resource policy.
+
+Byte-oriented `Input` and `Output` values can be consumed into a standard
+reader or writer with `into_std_read` and `into_std_write`. `InputRef` and
+`OutputRef` provide the same bridge while borrowing an existing value; wrap a
+trait object in one of these adapters before conversion. The resulting
+`StdRead` or `StdWrite` exposes `get_ref`, `get_mut`, and `into_inner`, and
+forwards `Seek` when its inner stream implements byte-oriented `Seekable`.
+These conversions only construct wrappers. They do not perform I/O, flush,
+close, or allocate. Standard vector reads and writes use the standard traits'
+default fallback; they do not promise to preserve an inner stream's native
+scatter/gather optimization.
 
 ### Seek and transfer utilities
 

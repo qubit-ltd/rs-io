@@ -202,3 +202,15 @@ where
         self.inner.read_fully(output)
     }
 }
+
+impl<I> crate::Seekable for InputRef<'_, I>
+where
+    I: Input + crate::Seekable + ?Sized,
+{
+    type Unit = I::Unit;
+
+    #[inline(always)]
+    fn seek_to(&mut self, position: std::io::SeekFrom) -> io::Result<u64> {
+        crate::Seekable::seek_to(self.inner, position)
+    }
+}

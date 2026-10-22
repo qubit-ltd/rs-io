@@ -10,6 +10,8 @@
 
 use std::io::Read;
 use std::io::Result;
+use std::io::Seek;
+use std::io::SeekFrom;
 
 use crate::Input;
 
@@ -71,5 +73,15 @@ where
     #[inline]
     fn read(&mut self, output: &mut [u8]) -> Result<usize> {
         Input::read(&mut self.inner, output)
+    }
+}
+
+impl<I> Seek for StdRead<I>
+where
+    I: Input<Item = u8> + crate::Seekable<Unit = u8>,
+{
+    #[inline]
+    fn seek(&mut self, position: SeekFrom) -> Result<u64> {
+        crate::Seekable::seek_to(&mut self.inner, position)
     }
 }

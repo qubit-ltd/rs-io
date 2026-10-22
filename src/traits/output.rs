@@ -11,6 +11,7 @@ use std::io::ErrorKind;
 use std::io::Result;
 
 use super::validate_write_count;
+use crate::StdWrite;
 use crate::util::SliceRange;
 
 /// Minimal indexed output interface over items.
@@ -79,6 +80,44 @@ use crate::util::SliceRange;
 pub trait Output {
     /// The item type written to this output.
     type Item;
+
+    /// Converts this byte output into a standard library writer.
+    ///
+    /// The conversion only wraps `self`; it performs no I/O, flush, or
+    /// allocation. The wrapped output can be recovered with
+    /// [`StdWrite::into_inner`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use qubit_io::Output;
+    /// use std::io::Write;
+    ///
+    /// let output = std::io::Cursor::new(Vec::new());
+    /// let mut writer = output.into_std_write();
+    /// writer.write_all(b"hello").unwrap();
+    /// std::io::Write::flush(&mut writer).unwrap();
+    /// let output = writer.into_inner();
+    /// assert_eq!(output.into_inner(), b"hello");
+    /// ```
+    ///
+    /// Non-byte outputs cannot be converted:
+    ///
+    /// ```compile_fail
+    /// use qubit_io::Output;
+    ///
+    /// fn convert<O: Output<Item = char>>(output: O) {
+    ///     let _writer = output.into_std_write();
+    /// }
+    /// ```
+    #[must_use = "the returned writer is the converted output"]
+    #[inline]
+    fn into_std_write(self) -> StdWrite<Self>
+    where
+        Self: Sized + Output<Item = u8>,
+    {
+        StdWrite::new(self)
+    }
 
     /// Returns whether this output already buffers items internally.
     ///
