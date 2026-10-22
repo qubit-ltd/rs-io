@@ -1,0 +1,4 @@
+# Keep SHA hardware features out of compile-time cfg so Miri's cpufeatures
+# detection selects the software fallback instead of unsupported intrinsics.
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "target-feature=-sha2,-sha3"]
