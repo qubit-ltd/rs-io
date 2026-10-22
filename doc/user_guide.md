@@ -304,7 +304,7 @@ Here the limit, buffer, and counters operate in records, not bytes. `TeeOutput` 
 The boundary is intentional:
 
 - `Input`/`Output`, limit, counting, and tee can move non-`u8` items.
-- Checksum wrappers are byte-only because `std::hash::Hasher` consumes bytes.
+- Checksum and digest wrappers are byte-only because their algorithm interfaces consume bytes.
 - Qubit `Buffer<T>` and buffered wrappers require `Copy + Default`. The records above meet that condition.
 - Records containing `String` or another non-`Copy` field can still use core streams and the wrappers that do not require copying, but not the current generic buffer.
 - Network and disk boundaries still need encoding. The gain is avoiding repeated encode/decode work in every business operator.
@@ -325,6 +325,52 @@ These conversions only construct wrappers. They do not perform I/O, flush,
 close, or allocate. Standard vector reads and writes use the standard traits'
 default fallback; they do not promise to preserve an inner stream's native
 scatter/gather optimization.
+
+### Content digests
+
+When an upload or download needs a SHA-256 fingerprint, enable `digest` and select a compatible concrete algorithm:
+
+```toml
+[dependencies]
+qubit-io = { version = "0.18", features = ["digest"] }
+sha2 = "0.11"
+```
+
+The four `DigestInput`, `DigestOutput`, `AsyncDigestInput`, and `AsyncDigestOutput` wrappers accept a caller-supplied `digest::Digest`. `rs-io` depends on `digest` 0.11; algorithms using `digest` 0.10 require a compatible version before they can be passed to these wrappers. The library does not select SHA-256 as a production dependency.
+
+The following complete program fingerprints an input, then checks that output bytes produce the same digest:
+
+```rust
+use std::io::{self, Cursor};
+use qubit_io::{DigestInput, DigestOutput, Output};
+use sha2::{Digest, Sha256};
+
+fn main() -> io::Result<()> {
+    let mut input = Cursor::new(b"hello world");
+    let fingerprint = DigestInput::<_, Sha256>::digest_all(&mut input)?;
+    assert_eq!(fingerprint, Sha256::digest(b"hello world"));
+
+    let mut output = DigestOutput::new(Vec::<u8>::new(), Sha256::new());
+    output.write_fully(b"hello ")?;
+    assert_eq!(output.digest(), Sha256::digest(b"hello "));
+    output.write_fully(b"world")?;
+    output.flush()?;
+    let (bytes, written_digest) = output.finalize();
+    assert_eq!(bytes, b"hello world");
+    assert_eq!(written_digest, fingerprint);
+    Ok(())
+}
+```
+
+`DigestInput::<_, D>::digest_all(&mut input)` creates a fresh algorithm state, reads from the current position to EOF, and leaves ownership of the input with the caller. It uses a fixed 16 KiB read buffer regardless of `is_buffered()`, so it neither allocates storage for the whole stream nor adds another buffering wrapper. To fingerprint the entire original input, call it at the beginning of that input. An error returns no partial digest and does not rewind consumed bytes.
+
+For normal incremental transfer, construct a wrapper with `new(inner, hasher)`. The supplied initial algorithm state is preserved. Each wrapper updates only the successfully transferred prefix; zero-length progress, errors, and asynchronous `Pending` results do not update it. `digest()` clones and finalizes a state snapshot, allowing transfer to continue; only this method requires `D: Clone`. `finalize()` consumes the wrapper and returns `(inner, digest::Output<D>)`. `into_parts()` returns `(inner, hasher)` so computation can continue elsewhere.
+
+Neither `finalize()` nor `into_parts()` performs I/O, reads to EOF, flushes, or closes the stream. Output digests include bytes already accepted by an inner buffer; check an explicit flush or close result before treating delivery as successful. A failed flush does not roll back the digest. Direct transfers through `inner_mut()` bypass tracking, while changes through `hasher_mut()` affect the state directly.
+
+Synchronous seek is forwarded without resetting the digest. Repeated reads and overwriting writes are included in transfer order, so the digest is not automatically the final file's content fingerprint. Wrapper order also matters: `DigestInput<BufferedInput<_>, _>` tracks bytes consumed by the caller, while a buffer around `DigestInput` may prefetch bytes into the digest before the caller consumes them.
+
+The asynchronous wrappers preserve the same rules, support `!Unpin` underlying streams, and forward flush and close as appropriate. `AsyncDigestInput::<_, D>::digest_all(input.as_mut())` accepts a `Pin<&mut I>` and returns `DigestAllFuture`, which can be awaited. It preserves digest progress across `Pending` and yields after at most 64 successful reads per poll. Cancellation retains the consumed input position but discards the partial digest. Polling the completed future again panics. A pinned wrapper can expose a snapshot through a shared reference; consuming `finalize()` requires ownership of the wrapper.
 
 ### Seek and transfer utilities
 

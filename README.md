@@ -100,6 +100,7 @@ pipeline and the `Clone + Default` requirement of generic buffering.
 | Transfer | `Input<Item = T>`, `Output<Item = T>` | `AsyncInput<Item = T>`, `AsyncOutput<Item = T>` |
 | Buffering | `BufferedInput`, `BufferedOutput` | `AsyncBufferedInput`, `AsyncBufferedOutput` |
 | Observability and limits | limit, counting, checksum, tee | async limit, counting, checksum |
+| Content digests (`digest`) | `DigestInput`, `DigestOutput` | `AsyncDigestInput`, `AsyncDigestOutput` |
 | Ecosystem bridges | `qubit_io::std_io` | optional Tokio and `futures-io` adapters |
 
 `AsyncClose` represents a real transport shutdown. It is deliberately separate from flushing buffered output.
@@ -107,6 +108,7 @@ pipeline and the `Clone + Default` requirement of generic buffering.
 ## Features
 
 - Default features: runtime-neutral core only.
+- `digest`: compute fixed-size content digests while transferring bytes with caller-supplied RustCrypto algorithms. Input wrappers also offer `digest_all` to read the remaining input to EOF. See the [digest guide](doc/user_guide.md#content-digests).
 - `tokio`: adapters in both directions for Tokio I/O traits.
 - `futures-io`: adapters in both directions for `futures-io` traits.
 

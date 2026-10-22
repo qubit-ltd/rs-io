@@ -304,7 +304,7 @@ fn run_mapper() -> io::Result<()> {
 边界也必须明确：
 
 - `Input`/`Output`、limit、counting 与 tee 可以传输非 `u8` item。
-- checksum wrapper 仅支持字节，因为 `std::hash::Hasher` 消费字节。
+- checksum 与 digest wrapper 仅支持字节，因为它们的算法接口都消费字节。
 - Qubit `Buffer<T>` 与 buffered wrapper 要求 `Copy + Default`；本例记录满足该条件。
 - 含 `String` 等非 `Copy` 字段的记录仍可使用核心 stream 与不要求复制的 wrapper，但不能直接使用当前泛型 buffer。
 - 网络和磁盘边界仍需要编码。本例的价值是避免每个业务 operator 重复编解码。
@@ -322,6 +322,52 @@ fn run_mapper() -> io::Result<()> {
 字节单位的 `Seekable` 时转发 `Seek`。转换只构造 wrapper，不执行 I/O、flush、close
 或分配。标准向量读写使用标准 trait 的默认回退，不承诺保留内部流原生的
 scatter/gather 优化。
+
+### 内容摘要
+
+上传或下载需要 SHA-256 指纹时，启用 `digest` feature，并选择兼容的具体算法：
+
+```toml
+[dependencies]
+qubit-io = { version = "0.18", features = ["digest"] }
+sha2 = "0.11"
+```
+
+`DigestInput`、`DigestOutput`、`AsyncDigestInput`、`AsyncDigestOutput` 都接受调用方提供的 `digest::Digest` 实现。`rs-io` 使用 `digest` 0.11；基于 `digest` 0.10 的算法需要先切换到接口兼容的版本。库本身不依赖具体的 SHA-256 算法实现。
+
+下面的完整程序先计算输入指纹，再确认输出字节的摘要与它相同：
+
+```rust
+use std::io::{self, Cursor};
+use qubit_io::{DigestInput, DigestOutput, Output};
+use sha2::{Digest, Sha256};
+
+fn main() -> io::Result<()> {
+    let mut input = Cursor::new(b"hello world");
+    let fingerprint = DigestInput::<_, Sha256>::digest_all(&mut input)?;
+    assert_eq!(fingerprint, Sha256::digest(b"hello world"));
+
+    let mut output = DigestOutput::new(Vec::<u8>::new(), Sha256::new());
+    output.write_fully(b"hello ")?;
+    assert_eq!(output.digest(), Sha256::digest(b"hello "));
+    output.write_fully(b"world")?;
+    output.flush()?;
+    let (bytes, written_digest) = output.finalize();
+    assert_eq!(bytes, b"hello world");
+    assert_eq!(written_digest, fingerprint);
+    Ok(())
+}
+```
+
+`DigestInput::<_, D>::digest_all(&mut input)` 创建新的算法状态，从输入当前位置一直读到 EOF，调用后输入仍由调用方持有。它使用固定的 16 KiB 缓冲区批量读取，无须根据 `is_buffered()` 再包装缓冲流，也不会把整个输入载入内存。计算整个原始输入的指纹时，应在输入起点调用。读取失败会返回错误，不返回部分摘要，已消费的输入也不会回退。
+
+需要在正常读写过程中累计摘要时，用 `new(inner, hasher)` 构造 wrapper，传入的算法初始状态会被保留。每次只累计成功传输的那部分字节；零字节传输、错误和异步 `Pending` 均不更新状态。`digest()` 克隆并终结状态副本，返回快照后仍可继续传输，只有此方法要求 `D: Clone`。`finalize()` 消费 wrapper，返回 `(inner, digest::Output<D>)`；`into_parts()` 返回 `(inner, hasher)`，便于调用方继续计算。
+
+`finalize()` 和 `into_parts()` 不执行 I/O，不会自动读到 EOF、flush 或 close。输出摘要包括内部缓冲区已经接受的字节；需要确认交付成功时，先显式 flush 或 close 并检查结果。flush 失败不会回滚已累计的摘要。通过 `inner_mut()` 直接读写会绕过统计，通过 `hasher_mut()` 修改算法状态则会直接影响摘要。
+
+同步版本转发 seek，但不重置摘要。重复读取、覆盖写入都会按传输顺序累计，因此结果不自动代表文件的最终内容。wrapper 顺序也会影响统计边界：`DigestInput<BufferedInput<_>, _>` 记录调用方已消费的字节；将缓冲层放到 `DigestInput` 外面时，预读字节也可能提前计入摘要。
+
+异步 wrapper 遵循相同语义，支持底层流为 `!Unpin`，并按底层能力转发 flush 和 close。`AsyncDigestInput::<_, D>::digest_all(input.as_mut())` 接受 `Pin<&mut I>`，返回可 await 的 `DigestAllFuture`。它在 `Pending` 之间保留摘要进度，每次 poll 最多完成 64 次成功读取后主动让出执行机会。取消 future 会保留已消费的输入位置并丢弃部分摘要；完成后再次 poll 会 panic。已经固定的 wrapper 可通过共享引用取得摘要快照，而消费型的 `finalize()` 需要取得 wrapper 所有权。
 
 ### seek 与传输工具
 

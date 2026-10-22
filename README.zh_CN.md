@@ -95,6 +95,7 @@ operator 边界重复序列化。此时 limit 与 counting 的单位是“记录
 | 传输 | `Input<Item = T>`、`Output<Item = T>` | `AsyncInput<Item = T>`、`AsyncOutput<Item = T>` |
 | 缓冲 | `BufferedInput`、`BufferedOutput` | `AsyncBufferedInput`、`AsyncBufferedOutput` |
 | 观测与限量 | limit、counting、checksum、tee | 异步 limit、counting、checksum |
+| 内容摘要（`digest`） | `DigestInput`、`DigestOutput` | `AsyncDigestInput`、`AsyncDigestOutput` |
 | 生态桥接 | `qubit_io::std_io` | 可选 Tokio 与 `futures-io` adapter |
 
 `AsyncClose` 表示真实的 transport shutdown，并且有意与刷新缓冲输出的 flush 分离。
@@ -102,6 +103,7 @@ operator 边界重复序列化。此时 limit 与 counting 的单位是“记录
 ## Feature
 
 - 默认 feature：仅运行时中立的核心层。
+- `digest`：在字节传输过程中计算固定长度的内容摘要，具体算法由调用方提供。输入 wrapper 还提供 `digest_all`，可直接读到 EOF 并返回摘要。用法见[内容摘要](doc/user_guide.zh_CN.md#内容摘要)。
 - `tokio`：Qubit 与 Tokio I/O trait 的双向适配。
 - `futures-io`：Qubit 与 `futures-io` trait 的双向适配。
 
