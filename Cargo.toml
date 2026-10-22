@@ -48,7 +48,7 @@ tokio = ["dep:tokio"]
 digest = { version = "^0.11", optional = true, default-features = false }
 qubit-utils = "^0.3"
 futures-io = { version = "^0.3", optional = true }
-tokio = { version = "^1.53", features = ["io-util"], optional = true }
+tokio = { version = "^1.54", features = ["io-util"], optional = true }
 
 [dev-dependencies]
 sha2 = "^0.11"
