@@ -11,6 +11,7 @@ use std::io::ErrorKind;
 use std::io::Result;
 
 use super::validate_read_count;
+use crate::ByteInput;
 use crate::StdRead;
 use crate::util::SliceRange;
 
@@ -85,7 +86,7 @@ pub trait Input {
     #[inline]
     fn into_std_read(self) -> StdRead<Self>
     where
-        Self: Sized + Input<Item = u8>,
+        Self: Sized + ByteInput,
     {
         StdRead::new(self)
     }

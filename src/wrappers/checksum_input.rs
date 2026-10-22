@@ -10,6 +10,7 @@ use std::hash::Hasher;
 use std::io;
 use std::io::SeekFrom;
 
+use crate::ByteInput;
 use crate::Input;
 use crate::Seekable;
 
@@ -139,7 +140,7 @@ where
 
 impl<I, H> Input for ChecksumInput<I, H>
 where
-    I: Input<Item = u8>,
+    I: ByteInput,
     H: Hasher,
 {
     /// Byte item returned by this input.

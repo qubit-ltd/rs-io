@@ -15,6 +15,7 @@
 //! selecting an executor. Standard-library byte streams implement the
 //! synchronous traits automatically; optional newtypes bridge Tokio and
 //! `futures-io` asynchronous streams without overlapping blanket impls.
+//! [`ByteInput`] and [`ByteOutput`] name the synchronous byte-stream bounds.
 //! [`AsyncClose`] represents a real close operation rather than a flush.
 //! Named futures preserve multi-poll progress, while [`PinnedAsyncInputExt`]
 //! and [`PinnedAsyncOutputExt`] support pinned `!Unpin` values and trait
@@ -87,6 +88,8 @@ pub use capacity_const::DEFAULT_COPY_BUFFER_SIZE;
 pub use traits::AsyncClose;
 pub use traits::AsyncInput;
 pub use traits::AsyncOutput;
+pub use traits::ByteInput;
+pub use traits::ByteOutput;
 pub use traits::Input;
 pub use traits::Output;
 pub use traits::PinnedAsyncInputExt;

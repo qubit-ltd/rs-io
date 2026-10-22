@@ -13,6 +13,7 @@ use std::io::Seek;
 use std::io::SeekFrom;
 use std::io::Write;
 
+use crate::ByteOutput;
 use crate::Output;
 
 /// Adapts an [`Output`] of bytes to [`std::io::Write`].
@@ -66,7 +67,7 @@ impl<O> StdWrite<O> {
 
 impl<O> Write for StdWrite<O>
 where
-    O: Output<Item = u8>,
+    O: ByteOutput,
 {
     #[inline]
     fn write(&mut self, input: &[u8]) -> Result<usize> {
@@ -81,7 +82,7 @@ where
 
 impl<O> Seek for StdWrite<O>
 where
-    O: Output<Item = u8> + crate::Seekable<Unit = u8>,
+    O: ByteOutput + crate::Seekable<Unit = u8>,
 {
     #[inline]
     fn seek(&mut self, position: SeekFrom) -> Result<u64> {

@@ -11,6 +11,7 @@ use std::io::ErrorKind;
 use std::io::Result;
 
 use super::validate_write_count;
+use crate::ByteOutput;
 use crate::StdWrite;
 use crate::util::SliceRange;
 
@@ -114,7 +115,7 @@ pub trait Output {
     #[inline]
     fn into_std_write(self) -> StdWrite<Self>
     where
-        Self: Sized + Output<Item = u8>,
+        Self: Sized + ByteOutput,
     {
         StdWrite::new(self)
     }

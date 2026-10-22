@@ -9,6 +9,7 @@
 use std::io;
 use std::io::SeekFrom;
 
+use crate::ByteInput;
 use crate::Input;
 use crate::Seekable;
 
@@ -110,7 +111,7 @@ impl<I> CountingInput<I> {
 
 impl<I> CountingInput<I>
 where
-    I: Input<Item = u8>,
+    I: ByteInput,
 {
     /// Returns the successfully returned byte count.
     ///

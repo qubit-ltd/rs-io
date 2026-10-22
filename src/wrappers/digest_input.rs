@@ -11,6 +11,7 @@ use std::io::SeekFrom;
 
 use digest::Digest;
 
+use crate::ByteInput;
 use crate::DEFAULT_COPY_BUFFER_SIZE;
 use crate::Input;
 use crate::Seekable;
@@ -105,7 +106,7 @@ where
     /// ```
     pub fn digest_all(input: &mut I) -> io::Result<digest::Output<D>>
     where
-        I: Input<Item = u8>,
+        I: ByteInput,
     {
         let mut hasher = D::new();
         let mut buffer = [0; DEFAULT_COPY_BUFFER_SIZE];
@@ -212,7 +213,7 @@ where
 
 impl<I, D> Input for DigestInput<I, D>
 where
-    I: Input<Item = u8>,
+    I: ByteInput,
     D: Digest,
 {
     /// Byte item returned by this input.

@@ -9,6 +9,8 @@ mod async_close_tests;
 mod async_contract_error_tests;
 mod async_input_tests;
 mod async_output_tests;
+mod byte_input_tests;
+mod byte_output_tests;
 mod input_tests;
 mod io_contract_tests;
 mod output_tests;

@@ -9,6 +9,7 @@
 use std::io;
 use std::io::SeekFrom;
 
+use crate::ByteOutput;
 use crate::Output;
 use crate::Seekable;
 
@@ -108,7 +109,7 @@ impl<O> CountingOutput<O> {
 
 impl<O> CountingOutput<O>
 where
-    O: Output<Item = u8>,
+    O: ByteOutput,
 {
     /// Returns the successfully accepted byte count.
     ///

@@ -11,6 +11,7 @@ use std::io::SeekFrom;
 
 use digest::Digest;
 
+use crate::ByteOutput;
 use crate::Output;
 use crate::Seekable;
 
@@ -165,7 +166,7 @@ where
 
 impl<O, D> Output for DigestOutput<O, D>
 where
-    O: Output<Item = u8>,
+    O: ByteOutput,
     D: Digest,
 {
     /// Byte item accepted by this output.

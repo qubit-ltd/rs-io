@@ -11,6 +11,8 @@
 mod async_close;
 mod async_input;
 mod async_output;
+mod byte_input;
+mod byte_output;
 mod input;
 mod internal;
 mod output;
@@ -23,6 +25,8 @@ mod seekable_output;
 pub use async_close::AsyncClose;
 pub use async_input::AsyncInput;
 pub use async_output::AsyncOutput;
+pub use byte_input::ByteInput;
+pub use byte_output::ByteOutput;
 pub use input::Input;
 pub(crate) use internal::normalize_async_error;
 pub(crate) use internal::validate_read_count;

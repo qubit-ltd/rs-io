@@ -13,6 +13,7 @@ use std::io::Result;
 use std::io::Seek;
 use std::io::SeekFrom;
 
+use crate::ByteInput;
 use crate::Input;
 
 /// Adapts an [`Input`] of bytes to [`std::io::Read`].
@@ -68,7 +69,7 @@ impl<I> StdRead<I> {
 
 impl<I> Read for StdRead<I>
 where
-    I: Input<Item = u8>,
+    I: ByteInput,
 {
     #[inline]
     fn read(&mut self, output: &mut [u8]) -> Result<usize> {
@@ -78,7 +79,7 @@ where
 
 impl<I> Seek for StdRead<I>
 where
-    I: Input<Item = u8> + crate::Seekable<Unit = u8>,
+    I: ByteInput + crate::Seekable<Unit = u8>,
 {
     #[inline]
     fn seek(&mut self, position: SeekFrom) -> Result<u64> {
