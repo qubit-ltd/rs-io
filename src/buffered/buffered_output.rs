@@ -18,6 +18,7 @@ use crate::Buffer;
 use crate::Output;
 use crate::Seekable;
 use crate::SeekableOutput;
+use crate::buffered::BufferedOutputRecovery;
 use crate::buffered::DEFAULT_BUFFER_CAPACITY;
 use crate::buffered::EnsuredBufferedOutput;
 use crate::traits::validate_write_count;
@@ -35,10 +36,13 @@ use crate::traits::validate_write_count;
 /// [`Self::spare_raw_parts_mut`] and then call [`Self::advance`] after
 /// validating the range they initialized.
 /// Call [`Self::flush`] before [`Self::into_parts`] when pending items must be
-/// written before recovering the wrapped writer.
-/// Dropping a `BufferedOutput` makes a best-effort attempt to write pending
-/// buffered items, but drop-time errors are ignored. For arbitrary item types,
-/// `BufferedOutput` also supports [`Seekable`]-based seeking in item offsets.
+/// written before recovering the wrapped writer. Recovery reports whether
+/// pending items are safe to retry or may overlap with effects of a panicking
+/// inner I/O operation.
+/// Dropping a non-poisoned `BufferedOutput` makes a best-effort attempt to
+/// write pending buffered items, but drop-time errors are ignored. A poisoned
+/// value skips this attempt. For arbitrary item types, `BufferedOutput` also
+/// supports [`Seekable`]-based seeking in item offsets.
 ///
 /// # Type Parameters
 ///
@@ -53,8 +57,8 @@ use crate::traits::validate_write_count;
 /// let mut output = BufferedOutput::with_capacity(Cursor::new(Vec::new()), 4);
 /// output.write(&[1, 2, 3])?;
 /// output.flush()?;
-/// let (inner, pending) = output.into_parts();
-/// assert!(pending.is_empty());
+/// let (inner, recovery) = output.into_parts();
+/// assert!(matches!(recovery, qubit_io::BufferedOutputRecovery::Pending(buffer) if buffer.is_empty()));
 /// assert_eq!(inner.into_inner(), vec![1, 2, 3]);
 /// # Ok::<(), std::io::Error>(())
 /// ```
@@ -69,7 +73,7 @@ where
     inner: O,
     /// Storage retaining accepted but unwritten items.
     buffer: Buffer<O::Item>,
-    /// Whether a wrapped write is currently unwinding.
+    /// Whether an inner I/O call is active or previously unwound.
     panicked: bool,
 }
 
@@ -262,19 +266,33 @@ where
     ///
     /// # Returns
     ///
-    /// Returns the wrapped output and the buffer holding pending items in
-    /// logical write order.
+    /// Returns the wrapped output and the recovery state holding items in
+    /// logical write order. A previously panicking inner I/O call yields
+    /// [`BufferedOutputRecovery::Indeterminate`].
     #[inline]
     #[must_use = "the returned inner output and pending buffer must be handled"]
-    pub fn into_parts(self) -> (O, Buffer<O::Item>) {
+    pub fn into_parts(self) -> (O, BufferedOutputRecovery<O::Item>) {
         let this = ManuallyDrop::new(self);
         // SAFETY: `this` will not be dropped, so reading both fields moves them
-        // out exactly once. The `panicked` flag is intentionally discarded.
+        // out exactly once. Read the Copy flag before moving either field.
         unsafe {
+            let panicked = this.panicked;
             let inner = ptr::read(&this.inner);
             let buffer = ptr::read(&this.buffer);
-            (inner, buffer)
+            let recovery = if panicked {
+                BufferedOutputRecovery::Indeterminate(buffer)
+            } else {
+                BufferedOutputRecovery::Pending(buffer)
+            };
+            (inner, recovery)
         }
+    }
+
+    fn ensure_not_panicked(&self) -> Result<()> {
+        if self.panicked {
+            return Err(Error::other("buffered output is poisoned after an inner I/O panic"));
+        }
+        Ok(())
     }
 
     /// Returns the internal buffer capacity.
@@ -343,9 +361,14 @@ where
     ///
     /// Returns the backing storage, the spare start index, and the spare item
     /// count.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an inner I/O operation previously panicked.
     #[inline(always)]
     #[must_use]
     pub fn spare_raw_parts_mut(&mut self) -> (&mut [O::Item], usize, usize) {
+        assert!(!self.panicked, "buffered output is poisoned after an inner I/O panic");
         self.buffer.spare_raw_parts_mut()
     }
 
@@ -358,6 +381,7 @@ where
     /// # Panics
     ///
     /// Panics in debug builds if `count > self.spare_capacity()`.
+    /// Panics if an inner I/O operation previously panicked.
     ///
     /// # Safety
     ///
@@ -366,6 +390,7 @@ where
     /// [`Self::spare_raw_parts_mut`] have been initialized.
     #[inline(always)]
     pub unsafe fn advance(&mut self, count: usize) {
+        assert!(!self.panicked, "buffered output is poisoned after an inner I/O panic");
         // SAFETY: The caller guarantees that `count` is within spare capacity.
         unsafe {
             self.buffer.advance(count);
@@ -387,9 +412,11 @@ where
     /// Returns any non-interrupted I/O error produced while flushing buffered
     /// items. Returns [`ErrorKind::InvalidInput`] if `count` exceeds the buffer
     /// capacity. Returns [`ErrorKind::InvalidData`] if the wrapped writer
-    /// reports more items than the pending buffer range contained.
+    /// reports more items than the pending buffer range contained. Returns
+    /// [`ErrorKind::Other`] if an inner I/O operation previously panicked.
     #[inline]
     pub fn ensure_spare_capacity(&mut self, count: usize) -> Result<()> {
+        self.ensure_not_panicked()?;
         if count > self.buffer.capacity() {
             return Err(Error::new(
                 ErrorKind::InvalidInput,
@@ -426,7 +453,8 @@ where
     /// large input directly to the wrapped writer. Flush failures include
     /// [`ErrorKind::WriteZero`] if the writer reports that zero items were
     /// written before the buffer is drained, and [`ErrorKind::InvalidData`] if
-    /// it reports more items than the requested range contained.
+    /// it reports more items than the requested range contained. Returns
+    /// [`ErrorKind::Other`] if an inner I/O operation previously panicked.
     ///
     /// # Panics
     ///
@@ -438,6 +466,7 @@ where
     /// valid range inside `input` and that the addition does not overflow.
     #[inline]
     pub unsafe fn write_unchecked(&mut self, input: &[O::Item], input_index: usize, count: usize) -> Result<usize> {
+        self.ensure_not_panicked()?;
         // Keep this boundary in sync with `std::io::BufWriter`: it uses
         // `< spare_capacity()` intentionally so buffer-sized writes skip the
         // memcpy+advance hot path. That path is only for strictly smaller
@@ -469,7 +498,8 @@ where
     /// Returns any I/O error produced while flushing pending items or writing a
     /// large input directly to the wrapped writer. Returns
     /// [`ErrorKind::InvalidData`] if the wrapped writer reports accepting more
-    /// items than requested.
+    /// items than requested, or [`ErrorKind::Other`] if an inner I/O operation
+    /// previously panicked.
     #[inline]
     pub fn write(&mut self, input: &[O::Item]) -> Result<usize> {
         // SAFETY: The full input slice is a valid source range.
@@ -500,7 +530,8 @@ where
     /// large input directly to the wrapped writer. Flush failures include
     /// [`ErrorKind::WriteZero`] if the writer reports that zero items were
     /// written before the buffer is drained, and [`ErrorKind::InvalidData`] if
-    /// it reports more items than the requested range contained.
+    /// it reports more items than the requested range contained. Returns
+    /// [`ErrorKind::Other`] if an inner I/O operation previously panicked.
     ///
     /// # Panics
     ///
@@ -512,6 +543,7 @@ where
     /// valid range inside `input` and that the addition does not overflow.
     #[inline]
     pub unsafe fn write_fully_unchecked(&mut self, input: &[O::Item], input_index: usize, count: usize) -> Result<()> {
+        self.ensure_not_panicked()?;
         // Keep this boundary in sync with `std::io::BufWriter`: it uses
         // `< spare_capacity()` intentionally so buffer-sized writes skip the
         // memcpy+advance hot path. That path is only for strictly smaller
@@ -541,7 +573,8 @@ where
     /// # Errors
     ///
     /// Returns any I/O error produced while flushing pending items or writing a
-    /// large input directly to the wrapped writer.
+    /// large input directly to the wrapped writer, or [`ErrorKind::Other`] if
+    /// an inner I/O operation previously panicked.
     #[inline(always)]
     pub fn write_fully(&mut self, input: &[O::Item]) -> Result<()> {
         // SAFETY: The full input slice is a valid source range.
@@ -562,9 +595,16 @@ where
     /// progress while draining the buffer, [`ErrorKind::InvalidData`] if the
     /// writer reports an impossible item count, or any error returned by
     /// [`Output::flush`] on the wrapped output.
+    /// Returns [`ErrorKind::Other`] if an inner I/O operation previously
+    /// panicked.
     #[inline]
     pub fn flush(&mut self) -> Result<()> {
-        self.flush_buffer().and_then(|()| Output::flush(&mut self.inner))
+        self.ensure_not_panicked()?;
+        self.flush_buffer()?;
+        self.panicked = true;
+        let result = Output::flush(&mut self.inner);
+        self.panicked = false;
+        result
     }
 
     /// Returns the logical output position without flushing pending items.
@@ -580,13 +620,18 @@ where
     ///
     /// Returns any error produced while querying the wrapped output position.
     /// Returns [`ErrorKind::InvalidData`] if adding the pending item count
-    /// overflows `u64`.
+    /// overflows `u64`, or [`ErrorKind::Other`] if an inner I/O operation
+    /// previously panicked.
     #[inline]
     pub fn stream_position(&mut self) -> Result<u64>
     where
         O: SeekableOutput,
     {
-        let position = Seekable::seek_to(&mut self.inner, SeekFrom::Current(0))?;
+        self.ensure_not_panicked()?;
+        self.panicked = true;
+        let result = Seekable::seek_to(&mut self.inner, SeekFrom::Current(0));
+        self.panicked = false;
+        let position = result?;
         position.checked_add(self.buffer.available() as u64).ok_or_else(|| {
             Error::new(
                 ErrorKind::InvalidData,
@@ -615,17 +660,23 @@ where
     /// items, [`ErrorKind::WriteZero`] if the wrapped output cannot make
     /// progress while draining the buffer, [`ErrorKind::InvalidData`] if the
     /// writer reports an impossible item count, or any error returned by
-    /// [`Seekable::seek_to`] on the wrapped output.
+    /// [`Seekable::seek_to`] on the wrapped output. Returns
+    /// [`ErrorKind::Other`] if an inner I/O operation previously panicked.
     #[inline]
     pub fn seek_to(&mut self, position: SeekFrom) -> Result<u64>
     where
         O: SeekableOutput,
     {
+        self.ensure_not_panicked()?;
         match position {
             SeekFrom::Current(0) => self.stream_position(),
-            other => self
-                .flush_buffer()
-                .and_then(|()| Seekable::seek_to(&mut self.inner, other)),
+            other => {
+                self.flush_buffer()?;
+                self.panicked = true;
+                let result = Seekable::seek_to(&mut self.inner, other);
+                self.panicked = false;
+                result
+            }
         }
     }
 
@@ -734,7 +785,10 @@ where
     #[inline]
     unsafe fn write_inner(&mut self, input: &[O::Item], input_index: usize, count: usize) -> Result<usize> {
         // SAFETY: The caller guarantees the source range is valid.
-        let written = unsafe { self.inner.write_unchecked(input, input_index, count) }?;
+        self.panicked = true;
+        let result = unsafe { self.inner.write_unchecked(input, input_index, count) };
+        self.panicked = false;
+        let written = result?;
         validate_write_count(written, count)?;
         Ok(written)
     }
@@ -1030,7 +1084,8 @@ where
     /// # Errors
     ///
     /// Returns an error reported while draining pending items or seeking the
-    /// wrapped output.
+    /// wrapped output, or [`ErrorKind::Other`] if an inner I/O operation
+    /// previously panicked.
     #[inline(always)]
     fn seek_to(&mut self, position: SeekFrom) -> Result<u64> {
         BufferedOutput::seek_to(self, position)
@@ -1042,7 +1097,8 @@ where
     O: Output,
     O::Item: Clone + Default,
 {
-    /// Attempts a best-effort drain unless another wrapped write is unwinding.
+    /// Attempts a best-effort drain unless an inner I/O call previously
+    /// panicked.
     ///
     /// Any drain error is ignored because destructors cannot report it.
     fn drop(&mut self) {

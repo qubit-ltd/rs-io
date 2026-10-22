@@ -268,15 +268,18 @@ where
         self.buffer.spare_capacity()
     }
 
-    /// Returns the full backing storage and its spare-tail range.
+    /// Returns the full backing storage and the start and length of its spare
+    /// tail.
     ///
     /// Call [`Self::advance`] after writing initialized items into the returned
     /// spare range.
     ///
     /// # Returns
     ///
-    /// Returns the backing storage together with the first and past-the-end
-    /// indexes of its spare range.
+    /// Returns `(storage, index, count)`, where `storage` is the full backing
+    /// storage, `index` is the start of the spare range, and `count` is the
+    /// number of spare items. The spare range is
+    /// `storage[index..index + count]`.
     #[inline(always)]
     #[must_use]
     pub fn spare_raw_parts_mut(&mut self) -> (&mut [O::Item], usize, usize) {

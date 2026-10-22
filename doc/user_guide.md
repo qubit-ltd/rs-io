@@ -56,7 +56,7 @@ This job exposes only two of the three source records. Records contain `String` 
 
 `Records` and `Collected` are application-owned in-memory adapters, not library types. You can read `map_sales` and `main` first; chapter 11 explains the implementation contracts.
 
-<!-- example: objects -->
+<!-- example: objects profile=core mode=run -->
 ```rust
 use std::io;
 use qubit_io::{BufferedInput, BufferedOutput, CountingInput, CountingOutput,
@@ -147,8 +147,8 @@ fn main() -> io::Result<()> {
     output.flush()?;
     assert_eq!(input.items_read(), 2);
     assert_eq!(output.items_written(), 2);
-    let (sink, pending) = output.into_inner().into_parts();
-    assert!(pending.is_empty());
+    let (sink, recovery) = output.into_inner().into_parts();
+    assert!(matches!(recovery, qubit_io::BufferedOutputRecovery::Pending(buffer) if buffer.is_empty()));
     assert_eq!(sink.0, vec![
         CategoryRevenue { category: "books".into(), amount_cents: 300 },
         CategoryRevenue { category: "books".into(), amount_cents: 500 },
@@ -192,7 +192,7 @@ Zero progress for an empty slice does not establish EOF. Process only `buffer[..
 
 This independent `src/main.rs` accepts a short input, then checks the position after an exact read fails:
 
-<!-- example: basic -->
+<!-- example: basic profile=core mode=run -->
 ```rust
 use std::io::{self, Cursor, ErrorKind};
 use qubit_io::{Input, Output};
@@ -237,7 +237,7 @@ return types. The output borrows the destination vector. Its trait objects
 pass through the same generic function, then an `OutputRef` exposes the
 output to a standard-library writer:
 
-<!-- example: byte-traits -->
+<!-- example: byte-traits profile=core mode=run -->
 ```rust
 use std::io::{self, Cursor, Write};
 use qubit_io::{ByteInput, ByteOutput, CountingOutput, Output, OutputRef};
@@ -312,6 +312,7 @@ operations and asynchronous character/byte polling. The caller supplies the
 concrete stream; asynchronous callers also supply its pinned borrow and task
 context:
 
+<!-- example: character-poll profile=core mode=skip reason="API contract fragment requires caller supplied stream state" -->
 ```rust
 use std::io;
 use std::pin::Pin;
@@ -359,7 +360,7 @@ implement `AsyncByteInput` or `AsyncByteOutput`.
 
 In the other direction, `input.into_std_read()` and `output.into_std_write()` produce `StdRead` and `StdWrite`. They consume the original value. Wrap a borrow in `InputRef` or `OutputRef` first to retain ownership. This independent program demonstrates both directions, using qualified calls where method names overlap:
 
-<!-- example: std -->
+<!-- example: std profile=core mode=run -->
 ```rust
 use std::io::{self, Cursor, Read, Write};
 use qubit_io::{Input, InputRef, Output};
@@ -404,9 +405,9 @@ Object buffering is not a zero-cost move: initialization and transfer may call `
 
 Inputs can prefetch. Inspect `unread()` and `unread_len()` for items not yet delivered. `fill_more` and `fill_until` replenish the window; `ensure_available` reports an error if the requested count cannot be obtained. `into_parts()` performs no I/O and returns the inner input plus its `Buffer`. Process that buffer's `readable()` window before continuing with the inner source.
 
-A successful output `write_fully` can mean acceptance into a buffer. On normal completion, explicitly `flush` and check the result. `into_parts()` does not flush: it returns the inner output and pending window. This independent program deliberately splits an unflushed output to show how the caller takes responsibility for those items:
+A successful output `write_fully` can mean acceptance into a buffer. On normal completion, explicitly `flush` and check the result. `into_parts()` does not flush: it returns the inner output and a `BufferedOutputRecovery` state. `Pending` contains items not reported as written by a normally returning inner call; `Indeterminate` means an inner I/O call panicked and some buffered items may already have taken effect, so blind replay is unsafe. This program splits an unflushed output to show how the caller handles the normal `Pending` case:
 
-<!-- example: buffer -->
+<!-- example: buffer profile=core mode=run -->
 ```rust
 use std::io::{self, Cursor};
 use qubit_io::{BufferedInput, BufferedOutput, Input, Output};
@@ -426,8 +427,12 @@ fn main() -> io::Result<()> {
 
     let mut output = BufferedOutput::with_capacity(Vec::<u8>::new(), 8);
     output.write_fully(b"abc")?;
-    let (mut sink, pending) = output.into_parts();
+    let (mut sink, recovery) = output.into_parts();
     assert!(sink.is_empty());
+    let pending = match recovery {
+        qubit_io::BufferedOutputRecovery::Pending(buffer) => buffer,
+        qubit_io::BufferedOutputRecovery::Indeterminate(_) => unreachable!("no inner I/O panic occurred"),
+    };
     sink.write_fully(pending.readable())?;
     Output::flush(&mut sink)?;
     assert_eq!(sink, b"abc");
@@ -435,11 +440,13 @@ fn main() -> io::Result<()> {
 }
 ```
 
-Retain the wrapper after flush failure. If draining fails, successfully written prefixes are removed from the pending window; do not resend the entire batch. The pending window may also be empty while the inner `flush` failed. Retry flushing only when the underlying failure and its side effects permit retry, or take responsibility for the remaining items with `into_parts()`.
+Retain the wrapper after flush failure. If draining fails normally, successfully written prefixes are removed from the pending window; do not resend the entire batch. If an inner I/O call panics, the wrapper becomes poisoned and future I/O through it is rejected. `into_parts()` then returns `Indeterminate`, including when the buffer is empty, because completed side effects cannot be inferred. Do not replay that payload without application-level reconciliation. Without a panic, `into_parts()` returns `Pending`; its window may be empty while the inner `flush` failed. Retry flushing only when the underlying failure and its side effects permit retry.
 
 Synchronous `BufferedOutput` drop only attempts to drain its own buffer and ignores errors; it does not replace explicit `flush`. Async buffering performs no I/O on drop. Direct reads through `inner_mut()` may skip unread prefetched items; direct writes may overtake pending output. Transfer normally through the wrapper.
 
 `Buffer<T>` is the backing storage used by these wrappers, exposing consumed, readable, and spare windows. Prefer buffered streams for ordinary use. Specialized drivers and encoders can manage the windows directly, but must satisfy the range contracts of its `unsafe` state-changing methods.
+
+`AsyncBufferedOutput::spare_raw_parts_mut()` returns `(storage, index, count)`, where the writable range is `storage[index..index + count]`. `count` is the number of spare items, not the end index. Initialize exactly that range before calling `advance(count)`.
 
 ## 6. Limit and count transferred items
 
@@ -449,7 +456,7 @@ Synchronous `BufferedOutput` drop only attempts to drain its own buffer and igno
 
 This independent program compares observation points and checks exhausted quotas:
 
-<!-- example: order -->
+<!-- example: order profile=core mode=run -->
 ```rust
 use std::io::{self, Cursor, ErrorKind};
 use qubit_io::{BufferedInput, CountingInput, Input, LimitInput,
@@ -497,7 +504,7 @@ Chapter 2 puts the input limit inside the buffer, preventing prefetch beyond two
 
 `ChecksumInput` and `ChecksumOutput` accept a caller-supplied `std::hash::Hasher` and operate only on `u8`. They feed successfully transferred prefixes to the hasher; `checksum()` returns the current `u64`. This example uses `DefaultHasher` to demonstrate the interface, not as a stable cross-version file format or cryptographic digest:
 
-<!-- example: checksum -->
+<!-- example: checksum profile=core mode=run -->
 ```rust
 use std::collections::hash_map::DefaultHasher;
 use std::hash::Hasher;
@@ -527,7 +534,7 @@ sha2 = "0.11"
 
 `DigestInput` and `DigestOutput` accept a `digest::Digest` implementation. The current interface uses `digest 0.11`; algorithms built against 0.10 cannot be mixed in directly. This independent program fingerprints the entire remaining input and checks the output digest:
 
-<!-- example: digest -->
+<!-- example: digest profile=digest mode=run -->
 ```rust
 use std::io::{self, Cursor};
 use qubit_io::{DigestInput, DigestOutput, Output};
@@ -560,7 +567,7 @@ Choose a method according to the data you want to cover:
 | `finalize()` | Consumes the wrapper and returns `(inner, digest)` |
 | `into_parts()` | Returns `(inner, hasher)` for continued computation |
 
-`digest_all` uses a fixed 16 KiB read buffer rather than retaining the entire input, and does not require another wrapper based on `is_buffered()`. Start at the beginning to fingerprint the full original input. A read failure returns no partial digest and does not rewind consumed input.
+`digest_all` uses a fixed 16 KiB read buffer rather than retaining the entire input, and does not require another wrapper based on `is_buffered()`. Start at the beginning to fingerprint the full original input. It retries `Interrupted` in place, preserving the hasher state and any successfully read prefix. Other read errors return no partial digest and do not rewind consumed input; a fresh call starts a new digest from the input's current position.
 
 Checksum and digest wrappers track successfully reported byte prefixes. Errors, zero progress, and async `Pending` add nothing for that operation. `inner_mut()` bypasses tracking; `hasher_mut()` directly changes algorithm state.
 
@@ -576,7 +583,7 @@ To give chapter 2 two revenue sinks, replace `Collected(Vec::new())` with `TeeOu
 
 This independent byte example demonstrates success and a branch with an insufficient quota:
 
-<!-- example: tee -->
+<!-- example: tee profile=core mode=run -->
 ```rust
 use std::io::{self, ErrorKind};
 use qubit_io::{LimitOutput, Output, TeeOutput};
@@ -616,7 +623,7 @@ Choose seek semantics explicitly: ordinary `TeeInput` seeks only its source. `Te
 
 This independent program reads the beginning temporarily and restores the position, then checks an oversized generic copy:
 
-<!-- example: seek -->
+<!-- example: seek profile=core mode=run -->
 ```rust
 use std::io::{self, Cursor, ErrorKind, SeekFrom};
 use qubit_io::{Input, PositionGuard, Seekable, Streams};
@@ -674,7 +681,7 @@ Import the required extension traits from `qubit_io::std_io::ext` when working d
 
 This independent program checks source position and output after quota failure instead of assuming rollback:
 
-<!-- example: limited -->
+<!-- example: limited profile=core mode=run -->
 ```rust
 use std::io::{self, Cursor, ErrorKind};
 use qubit_io::std_io::ext::ReadExt;
@@ -717,7 +724,7 @@ tokio = { version = "1", features = ["rt", "macros", "io-util"] }
 
 Save this complete program as `src/main.rs` and run `cargo run`. It transfers three bytes to buffered output, explicitly flushes and closes, checks the result, and then demonstrates reverse adaptation:
 
-<!-- example: async -->
+<!-- example: async profile=tokio mode=run -->
 ```rust
 use std::io;
 use qubit_io::{AsyncBufferedOutput, AsyncClose, AsyncCountingInput,
@@ -773,7 +780,7 @@ futures = "0.3"
 
 This complete program demonstrates both directions using `futures` memory streams and its executor. Run `cargo run`; assertions pass without terminal output. Executor selection belongs to the application; the library does not require `futures::executor`.
 
-<!-- example: futures -->
+<!-- example: futures profile=futures mode=run -->
 ```rust
 use std::io;
 use qubit_io::{AsyncInput, AsyncOutput, FuturesAsyncRead,
@@ -813,7 +820,7 @@ Reverse writer adapters additionally require inner `AsyncClose` to satisfy the e
 
 Convenience methods such as `read_async` and `write_fully_async` require `Unpin`. Use `PinnedAsyncInputExt` and `PinnedAsyncOutputExt` for pinned `!Unpin` streams or trait objects. This independent program uses the Tokio dependencies above and reads through a pinned trait object without requiring the trait object to implement `Unpin`:
 
-<!-- example: pinned -->
+<!-- example: pinned profile=tokio mode=run -->
 ```rust
 use std::io;
 use std::pin::Pin;

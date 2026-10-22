@@ -41,6 +41,10 @@ Rust 类型。库和应用开发者可以直接围绕这些元素编写处理算
 qubit-io = "0.19"
 ```
 
+开发尚未发布的版本时，可将 `path` 指向本地仓库，并保留匹配的 `version`
+要求。例如，在同级仓库中可写成 `qubit-io = { path = "../rs-io", version = "0.19" }`。
+路径依赖用于工作区开发；发布后的使用者应采用上面的 Crates.io 依赖。
+
 ## 快速开始：处理业务记录流
 
 假设一条销售数据流水线需要输出各分类的收入记录。如果每经过一个处理环节都将记录
@@ -54,6 +58,7 @@ qubit-io = "0.19"
 下面是完整的可运行程序。内存中的记录源和接收端由示例自行实现；流接口、缓冲、限量、
 计数以及检查边界的读写方法由 Qubit IO 提供：
 
+<!-- example: sales-pipeline profile=core mode=run -->
 ```rust
 use std::io;
 use qubit_io::{
@@ -166,6 +171,7 @@ fn main() -> io::Result<()> {
 API 只处理字节时，可以用 `ByteInput`、`ByteOutput` 分别简写
 `Input<Item = u8>`、`Output<Item = u8>` 约束，读写方法仍由原来的接口提供：
 
+<!-- example: byte-bounds profile=core mode=run -->
 ```rust
 use std::io::{self, Cursor};
 use qubit_io::{ByteInput, ByteOutput};
@@ -218,6 +224,7 @@ fn main() -> io::Result<()> {
 `Cursor`、`Vec<u8>` 等类型可以直接接入，无需再套一层输入输出适配器。
 反过来，`StdRead` 和 `StdWrite` 可以将 Qubit 字节流交给使用标准库接口的代码：
 
+<!-- example: standard-bridge profile=core mode=run -->
 ```rust
 use std::io::{self, Cursor, Read};
 use qubit_io::{CountingInput, Input, Output, StdRead};
@@ -271,6 +278,8 @@ fn main() -> io::Result<()> {
 使用输出缓冲时，应显式刷新并检查结果。同步缓冲在析构时只会尽力写出待发送数据；
 异步缓冲在析构时无法执行异步 I/O。[用户指南](doc/user_guide.zh_CN.md)
 进一步说明包装顺序、部分读写以及未读数据和待发送数据的恢复方式。
+同步缓冲输出的恢复结果分为 `Pending` 和 `Indeterminate`。后者表示底层 I/O
+调用 panic 后无法确认副作用；决定是否重放前，应由应用核对外部状态。
 
 ### 内容摘要
 
@@ -282,6 +291,7 @@ qubit-io = { version = "0.19", features = ["digest"] }
 sha2 = "0.11"
 ```
 
+<!-- example: digest-fingerprint profile=digest mode=run -->
 ```rust
 use std::io::{self, Cursor};
 use qubit_io::DigestInput;
@@ -298,6 +308,8 @@ fn main() -> io::Result<()> {
 `digest_all` 使用固定大小的缓冲，从当前位置读到 EOF。只有从输入起点开始读取，
 得到的才是完整原始输入的指纹。需要边传输边计算时，可使用 `DigestInput::new`
 或 `DigestOutput::new` 包装字节流。算法需要兼容 `digest` 0.11 接口，具体选择由应用决定。
+读取遇到 `Interrupted` 时会重试，并保留此前已累计的摘要；其他读取错误会直接返回，
+不提供部分摘要，输入位置也不会回退。
 
 摘要包装器按成功传输的顺序更新摘要，定位后重复读取或覆盖写入的字节也会计入，
 因此结果不自动等于最终文件内容的指纹。`finalize()` 不会继续读取、刷新或关闭流。
@@ -315,9 +327,10 @@ fn main() -> io::Result<()> {
 ```toml
 [dependencies]
 qubit-io = { version = "0.19", features = ["tokio"] }
-tokio = { version = "1.54", features = ["macros", "rt"] }
+tokio = { version = "1.54", features = ["macros", "rt", "io-util"] }
 ```
 
+<!-- example: tokio-reader profile=tokio mode=run -->
 ```rust
 use std::io;
 use qubit_io::{AsyncCountingInput, AsyncInput, TokioInput};

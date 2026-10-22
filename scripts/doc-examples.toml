@@ -1,0 +1,18 @@
+version = 1
+documents = ["README.md", "README.zh_CN.md", "doc/user_guide.md", "doc/user_guide.zh_CN.md"]
+pairs = [["README.md", "README.zh_CN.md"], ["doc/user_guide.md", "doc/user_guide.zh_CN.md"]]
+
+[profiles.core]
+features = []
+
+[profiles.digest]
+features = ["digest"]
+dependencies = { sha2 = "\"0.11\"" }
+
+[profiles.tokio]
+features = ["tokio"]
+dependencies = { tokio = "{ version = \"1\", features = [\"rt\", \"macros\", \"io-util\"] }" }
+
+[profiles.futures]
+features = ["futures-io"]
+dependencies = { futures = "\"0.3\"" }

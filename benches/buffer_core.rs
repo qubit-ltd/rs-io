@@ -5,12 +5,14 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Microbenchmarks for buffered-copy primitives.
+//! Microbenchmarks for buffered-copy primitives with consumption barriers.
 //!
 //! Run with `cargo bench --bench buffer_core`. The benchmark separates loops
 //! whose bounds are visible to the optimizer from loops whose indices are only
-//! known at runtime, so unchecked copies can be compared with safe slices under
-//! the same valid-range invariants.
+//! known at runtime. Append measurements include per-window consumption
+//! barriers, so they measure buffering/copy and observation overhead together;
+//! results do not support carrying forward claims that unchecked copies are
+//! faster than safe slices.
 
 use std::hint::black_box;
 
@@ -79,9 +81,11 @@ fn copy_safe_with_runtime_indexes(input: &[u8], output: &mut [u8], offsets: &[us
 
 /// Appends the fixture through `Buffer::copy_from` using valid window
 /// invariants.
-fn append_with_buffer(input: &[u8], buffer: &mut Buffer<u8>, width: usize) {
+fn append_with_buffer(input: &[u8], buffer: &mut Buffer<u8>, width: usize) -> usize {
+    let mut total = 0;
     for input_index in (0..input.len()).step_by(width) {
         if buffer.spare_capacity() < width {
+            black_box(buffer.readable());
             buffer.clear();
         }
         // SAFETY: `COPY_WIDTHS` divides both `DATA_LEN` and `BUFFER_CAPACITY`.
@@ -89,20 +93,67 @@ fn append_with_buffer(input: &[u8], buffer: &mut Buffer<u8>, width: usize) {
         unsafe {
             buffer.copy_from(input, input_index, width);
         }
+        total += width;
     }
+    black_box(buffer.readable());
+    total
 }
 
 /// Appends the fixture with the corresponding safe-slice window implementation.
 fn append_with_safe_slices(input: &[u8], output: &mut [u8], width: usize) -> usize {
     let mut limit = 0_usize;
+    let mut total = 0_usize;
     for input_index in (0..input.len()).step_by(width) {
         if output.len() - limit < width {
+            black_box(&output[..limit]);
             limit = 0;
         }
         output[limit..limit + width].copy_from_slice(&input[input_index..input_index + width]);
         limit += width;
+        total += width;
     }
-    limit
+    black_box(&output[..limit]);
+    total
+}
+
+/// Validates every append window before timed benchmark iterations begin.
+fn validate_append_windows(input: &[u8], width: usize) {
+    let mut buffer = Buffer::with_capacity(BUFFER_CAPACITY);
+    let mut buffer_windows = Vec::new();
+    for input_index in (0..input.len()).step_by(width) {
+        if buffer.spare_capacity() < width {
+            buffer_windows.push(buffer.readable().to_vec());
+            buffer.clear();
+        }
+        // SAFETY: the fixture length and buffer capacity are multiples of width.
+        unsafe {
+            buffer.copy_from(input, input_index, width);
+        }
+    }
+    buffer_windows.push(buffer.readable().to_vec());
+
+    let mut safe_output = vec![0_u8; BUFFER_CAPACITY];
+    let mut safe_limit = 0_usize;
+    let mut safe_windows = Vec::new();
+    for input_index in (0..input.len()).step_by(width) {
+        if safe_output.len() - safe_limit < width {
+            safe_windows.push(safe_output[..safe_limit].to_vec());
+            safe_limit = 0;
+        }
+        safe_output[safe_limit..safe_limit + width].copy_from_slice(&input[input_index..input_index + width]);
+        safe_limit += width;
+    }
+    safe_windows.push(safe_output[..safe_limit].to_vec());
+
+    assert_eq!(
+        buffer_windows, safe_windows,
+        "append window contents differ at width {width}"
+    );
+    let buffer_total: usize = buffer_windows.iter().map(Vec::len).sum();
+    let safe_total: usize = safe_windows.iter().map(Vec::len).sum();
+    assert_eq!(buffer_total, input.len(), "Buffer append byte count differs");
+    assert_eq!(safe_total, input.len(), "safe append byte count differs");
+    assert_eq!(buffer_total, safe_total, "append byte counts differ");
 }
 
 /// Copies one readable buffer window through `Buffer::copy_to`.
@@ -199,6 +250,7 @@ fn benchmark_buffer_append(criterion: &mut Criterion) {
     group.throughput(Throughput::Bytes(DATA_LEN as u64));
 
     for width in COPY_WIDTHS {
+        validate_append_windows(&input, width);
         group.bench_with_input(
             BenchmarkId::new("buffer_unchecked", width),
             &width,
@@ -206,8 +258,8 @@ fn benchmark_buffer_append(criterion: &mut Criterion) {
                 bencher.iter_batched(
                     || Buffer::with_capacity(BUFFER_CAPACITY),
                     |mut buffer| {
-                        append_with_buffer(&input, &mut buffer, width);
-                        black_box(buffer.available());
+                        let total = append_with_buffer(&input, &mut buffer, width);
+                        black_box((total, buffer.available()));
                     },
                     BatchSize::SmallInput,
                 );
@@ -217,8 +269,8 @@ fn benchmark_buffer_append(criterion: &mut Criterion) {
             bencher.iter_batched(
                 || vec![0_u8; BUFFER_CAPACITY],
                 |mut output| {
-                    let limit = append_with_safe_slices(&input, &mut output, width);
-                    black_box((output, limit));
+                    let total = append_with_safe_slices(&input, &mut output, width);
+                    black_box((output, total));
                 },
                 BatchSize::SmallInput,
             );

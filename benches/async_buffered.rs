@@ -5,11 +5,14 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
-//! Runtime-neutral benchmarks for asynchronous buffered item I/O.
+//! Runtime-neutral benchmarks for asynchronous buffered item I/O with
+//! consumption barriers.
 //!
 //! Run with `cargo bench --bench async_buffered`. The scripted inner streams
 //! model full progress, partial progress, and periodic `Pending` without using
-//! an executor, so the results isolate buffering and polling overhead.
+//! an executor. Successful sink writes consume the accepted input range through
+//! `black_box`, so results include buffering, polling, and consumption
+//! overhead.
 
 use std::hint::black_box;
 use std::io;
@@ -196,8 +199,8 @@ impl AsyncOutput for ScriptedOutput {
     unsafe fn poll_write_unchecked(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        _input: &[u8],
-        _index: usize,
+        input: &[u8],
+        index: usize,
         count: usize,
     ) -> Poll<io::Result<usize>> {
         let this = self.as_mut().get_mut();
@@ -206,6 +209,7 @@ impl AsyncOutput for ScriptedOutput {
             return Poll::Pending;
         }
         let accepted = count.min(this.progress_limit);
+        black_box(&input[index..index + accepted]);
         this.written += accepted;
         Poll::Ready(Ok(accepted))
     }

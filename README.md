@@ -45,6 +45,12 @@ adapter or digest dependency.
 qubit-io = "0.19"
 ```
 
+For development against an unpublished checkout, use a local `path` dependency
+pointing to this repository and keep the matching `version` requirement, for
+example `qubit-io = { path = "../rs-io", version = "0.19" }` from a sibling
+checkout. The path form is for workspace development; published consumers
+should use the Crates.io dependency above.
+
 ## Quick start: process business records
 
 Consider a sales pipeline that emits category revenue records. Encoding every
@@ -60,6 +66,7 @@ This complete program uses application-defined in-memory record adapters.
 Qubit IO supplies the traits, buffer, limit, counters, and checked read/write
 helpers:
 
+<!-- example: sales-pipeline profile=core mode=run -->
 ```rust
 use std::io;
 use qubit_io::{
@@ -175,6 +182,7 @@ Use `ByteInput` and `ByteOutput` when an API transfers bytes. They provide
 shorter bounds for `Input<Item = u8>` and `Output<Item = u8>`, respectively,
 with the same inherited operations:
 
+<!-- example: byte-bounds profile=core mode=run -->
 ```rust
 use std::io::{self, Cursor};
 use qubit_io::{ByteInput, ByteOutput};
@@ -233,6 +241,7 @@ and `Vec<u8>` can therefore participate without an extra input/output adapter.
 In the reverse direction, `StdRead` and `StdWrite` expose Qubit byte streams
 through the standard traits:
 
+<!-- example: standard-bridge profile=core mode=run -->
 ```rust
 use std::io::{self, Cursor, Read};
 use qubit_io::{CountingInput, Input, Output, StdRead};
@@ -292,6 +301,11 @@ buffered output cannot perform asynchronous I/O. The
 [user guide](doc/user_guide.md) explains wrapper order, partial progress, and
 recovery of unread or pending items.
 
+Synchronous buffered output exposes recovery as `Pending` or `Indeterminate`.
+The latter follows a panic during inner I/O; check external side effects before
+deciding whether any retained items can be replayed. See the user guide for the
+recovery path and its limits.
+
 ### Content digests
 
 For a SHA-256 fingerprint, enable `digest` and add a compatible algorithm:
@@ -302,6 +316,7 @@ qubit-io = { version = "0.19", features = ["digest"] }
 sha2 = "0.11"
 ```
 
+<!-- example: digest-fingerprint profile=digest mode=run -->
 ```rust
 use std::io::{self, Cursor};
 use qubit_io::DigestInput;
@@ -317,6 +332,9 @@ fn main() -> io::Result<()> {
 
 `digest_all` reads from the current position to EOF using a fixed-size buffer;
 it fingerprints the entire original input only when started at its beginning.
+An `Interrupted` read is retried without losing the digest accumulated from
+earlier reads. Other read errors are returned without a partial digest, and the
+input remains at the position already reached.
 For incremental tracking, wrap a byte stream with `DigestInput::new` or
 `DigestOutput::new`. Algorithms must use the compatible `digest` 0.11 interface;
 Qubit IO does not choose the algorithm for the application.
@@ -340,9 +358,10 @@ Tokio:
 ```toml
 [dependencies]
 qubit-io = { version = "0.19", features = ["tokio"] }
-tokio = { version = "1.54", features = ["macros", "rt"] }
+tokio = { version = "1.54", features = ["macros", "rt", "io-util"] }
 ```
 
+<!-- example: tokio-reader profile=tokio mode=run -->
 ```rust
 use std::io;
 use qubit_io::{AsyncCountingInput, AsyncInput, TokioInput};

@@ -10,6 +10,7 @@ mod async_buffered_output_tests;
 mod async_buffered_tests;
 mod buffer_tests;
 mod buffered_input_tests;
+mod buffered_output_recovery_tests;
 mod buffered_output_tests;
 mod ensured_buffered_input_tests;
 mod ensured_buffered_output_tests;

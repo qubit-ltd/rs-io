@@ -17,6 +17,7 @@ use std::io::Write;
 use std::rc::Rc;
 
 use qubit_io::BufferedOutput;
+use qubit_io::BufferedOutputRecovery;
 use qubit_io::EnsuredBufferedOutput;
 use qubit_io::Output;
 use qubit_io::Seekable;
@@ -174,8 +175,8 @@ fn test_buffered_output_writes_clone_only_items() {
         .expect("buffered string write should succeed");
     output.flush().expect("buffered string flush should succeed");
 
-    let (inner, pending) = output.into_parts();
-    assert!(pending.is_empty());
+    let (inner, recovery) = output.into_parts();
+    assert!(matches!(recovery, BufferedOutputRecovery::Pending(buffer) if buffer.is_empty()));
     assert_eq!(inner.values, ["alpha", "beta"]);
     assert!(inner.flushed);
 }
@@ -570,7 +571,12 @@ where
 {
     output.flush().expect("flush should succeed");
     let (inner, pending) = output.into_parts();
-    assert!(pending.is_empty(), "successful flush should leave no pending bytes");
+    match pending {
+        BufferedOutputRecovery::Pending(buffer) => {
+            assert!(buffer.is_empty(), "successful flush should drain pending bytes")
+        }
+        BufferedOutputRecovery::Indeterminate(_) => panic!("successful I/O must recover as pending"),
+    }
     inner
 }
 
@@ -920,10 +926,10 @@ fn test_flush_then_into_parts_returns_inner_after_pending_write() {
     output.write_fully(b"abc").expect("buffered write should succeed");
 
     output.flush().expect("flush should write pending bytes");
-    let (cursor, pending) = output.into_parts();
+    let (cursor, recovery) = output.into_parts();
 
     assert_eq!(b"abc", cursor.into_inner().as_slice());
-    assert!(pending.is_empty());
+    assert!(matches!(recovery, BufferedOutputRecovery::Pending(buffer) if buffer.is_empty()));
 }
 
 #[test]
@@ -934,10 +940,13 @@ fn test_flush_error_leaves_output_available_for_parts_recovery() {
 
     let error = output.flush().expect_err("flush should preserve pending bytes");
 
-    let (writer, pending) = output.into_parts();
+    let (writer, recovery) = output.into_parts();
     assert_eq!(ErrorKind::WriteZero, error.kind());
     assert_eq!(b"", writer.output.as_slice());
-    assert_eq!(b"abc", pending.readable());
+    match recovery {
+        BufferedOutputRecovery::Pending(buffer) => assert_eq!(b"abc", buffer.readable()),
+        BufferedOutputRecovery::Indeterminate(_) => panic!("ordinary write errors remain retryable"),
+    }
 }
 
 #[test]
@@ -1061,12 +1070,15 @@ fn test_seekable_items_flushes_pending_items_before_seeking() {
     let position = output
         .seek_to(SeekFrom::Start(3))
         .expect("item seek should flush pending items before seeking");
-    let (inner, pending) = output.into_parts();
+    let (inner, recovery) = output.into_parts();
 
     assert_eq!(3, position);
     assert_eq!(vec![10, 20, 30], inner.values);
     assert_eq!(3, inner.position);
-    assert!(pending.is_empty(), "seek should flush all pending items");
+    assert!(
+        matches!(recovery, BufferedOutputRecovery::Pending(buffer) if buffer.is_empty()),
+        "seek should flush all pending items"
+    );
 }
 
 #[test]
@@ -1083,12 +1095,15 @@ fn test_seekable_items_supports_current_offset() {
     let position = output
         .seek_to(SeekFrom::Current(1))
         .expect("current seek should be interpreted in u16 items");
-    let (inner, pending) = output.into_parts();
+    let (inner, recovery) = output.into_parts();
 
     assert_eq!(3, position);
     assert_eq!(3, inner.position);
     assert_eq!(vec![11, 12, 0], inner.values);
-    assert!(pending.is_empty(), "seek should flush all pending items");
+    assert!(
+        matches!(recovery, BufferedOutputRecovery::Pending(buffer) if buffer.is_empty()),
+        "seek should flush all pending items"
+    );
 }
 
 #[test]
@@ -1109,10 +1124,13 @@ fn test_into_parts_returns_inner_and_pending_bytes_without_flushing() {
     let mut output = BufferedOutput::with_capacity(cursor, 4);
     output.write_fully(b"ab").expect("buffered write should succeed");
 
-    let (cursor, pending) = output.into_parts();
+    let (cursor, recovery) = output.into_parts();
 
     assert!(cursor.into_inner().is_empty());
-    assert_eq!(b"ab", pending.readable());
+    match recovery {
+        BufferedOutputRecovery::Pending(buffer) => assert_eq!(b"ab", buffer.readable()),
+        BufferedOutputRecovery::Indeterminate(_) => panic!("no I/O occurred"),
+    }
 }
 
 #[test]
@@ -1126,9 +1144,12 @@ fn test_try_reserve_capacity_preserves_pending_bytes() {
         .expect("output buffer growth should succeed");
 
     assert_eq!(8, output.capacity());
-    let (cursor, pending) = output.into_parts();
+    let (cursor, recovery) = output.into_parts();
     assert!(cursor.into_inner().is_empty());
-    assert_eq!(b"ab", pending.readable());
+    match recovery {
+        BufferedOutputRecovery::Pending(buffer) => assert_eq!(b"ab", buffer.readable()),
+        BufferedOutputRecovery::Indeterminate(_) => panic!("capacity reservation is not I/O"),
+    }
 }
 
 #[test]
@@ -1171,7 +1192,7 @@ fn test_flush_error_keeps_output_owned_by_caller() {
     output.flush().expect("retrying flush should write preserved bytes");
     let (writer, pending) = output.into_parts();
 
-    assert!(pending.is_empty());
+    assert!(matches!(pending, BufferedOutputRecovery::Pending(buffer) if buffer.is_empty()));
     assert_eq!(b"abc", writer.output.as_slice());
 }
 
@@ -1189,7 +1210,7 @@ fn test_inner_flush_error_keeps_output_owned_by_caller() {
     assert_eq!("flush failed", error.to_string());
     let (writer, pending) = output.into_parts();
 
-    assert!(pending.is_empty());
+    assert!(matches!(pending, BufferedOutputRecovery::Pending(buffer) if buffer.is_empty()));
     assert_eq!(b"abc", writer.output.as_slice());
 }
 

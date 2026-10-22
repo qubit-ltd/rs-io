@@ -82,6 +82,7 @@ pub use buffered::AsyncBufferedOutput;
 pub use buffered::Buffer;
 pub use buffered::BufferedInput;
 pub use buffered::BufferedOutput;
+pub use buffered::BufferedOutputRecovery;
 pub use buffered::EnsuredBufferedInput;
 pub use buffered::EnsuredBufferedOutput;
 pub use capacity_const::DEFAULT_BUFFER_CAPACITY;

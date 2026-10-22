@@ -7,6 +7,7 @@
 // =============================================================================
 
 use std::io;
+use std::io::ErrorKind;
 use std::io::SeekFrom;
 
 use digest::Digest;
@@ -15,6 +16,7 @@ use crate::ByteInput;
 use crate::DEFAULT_COPY_BUFFER_SIZE;
 use crate::Input;
 use crate::Seekable;
+use crate::traits::validate_read_count;
 
 /// Byte input wrapper that computes a digest of successfully returned bytes.
 ///
@@ -90,8 +92,10 @@ where
     ///
     /// # Errors
     ///
-    /// Returns the input's read error, including invalid byte counts. Bytes
-    /// already consumed are not rewound; no partial digest is returned.
+    /// Retries [`ErrorKind::Interrupted`]. Returns any other input error, or
+    /// [`ErrorKind::InvalidData`] if the input reports more bytes than the
+    /// buffer can hold. Bytes already consumed are not rewound; no partial
+    /// digest is returned.
     ///
     /// # Examples
     ///
@@ -111,7 +115,12 @@ where
         let mut hasher = D::new();
         let mut buffer = [0; DEFAULT_COPY_BUFFER_SIZE];
         loop {
-            let read = input.read(&mut buffer)?;
+            let read = match input.read(&mut buffer) {
+                Ok(read) => read,
+                Err(error) if error.kind() == ErrorKind::Interrupted => continue,
+                Err(error) => return Err(error),
+            };
+            validate_read_count(read, buffer.len())?;
             if read == 0 {
                 return Ok(hasher.finalize());
             }

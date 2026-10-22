@@ -708,6 +708,39 @@ fn test_async_buffered_output_exposes_spare_window_and_async_capacity_check() ->
 }
 
 #[test]
+fn test_async_buffered_output_spare_raw_parts_nonzero_start() -> io::Result<()> {
+    let mut output = AsyncBufferedOutput::with_capacity(ScriptedOutput::new([], []), 8);
+    let (storage, index, count) = output.spare_raw_parts_mut();
+    assert_eq!((0, 8), (index, count));
+    storage[..2].copy_from_slice(&[7, 8]);
+    // SAFETY: Two initialized elements fit in the reported spare range.
+    unsafe {
+        output.advance(2);
+    }
+
+    let (storage, index, count) = output.spare_raw_parts_mut();
+    assert_eq!((2, 6), (index, count));
+    assert_eq!(6, storage[index..index + count].len());
+    storage[index..index + count].copy_from_slice(&[9, 10, 11, 12, 13, 14]);
+    // SAFETY: All six initialized elements fit in the reported spare range.
+    unsafe {
+        output.advance(count);
+    }
+
+    assert_eq!(&[7, 8, 9, 10, 11, 12, 13, 14], output.pending());
+    let (storage, index, count) = output.spare_raw_parts_mut();
+    assert_eq!(0, storage[index..].len());
+    assert_eq!(0, count);
+
+    let mut cx = Context::from_waker(Waker::noop());
+    Pin::new(&mut output)
+        .poll_ensure_spare_capacity(&mut cx, 1)
+        .expect_ready("draining should make spare capacity available")?;
+    assert_eq!(&[7, 8, 9, 10, 11, 12, 13, 14], output.inner().values.as_slice());
+    Ok(())
+}
+
+#[test]
 fn test_async_buffered_output_yields_after_bounded_ready_drains() -> io::Result<()> {
     let inner = ScriptedOutput::new(std::iter::repeat_with(|| WriteStep::Accept(1)).take(65), []);
     let mut output = AsyncBufferedOutput::with_capacity(inner, 65);

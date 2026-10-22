@@ -1,0 +1,88 @@
+[project]
+repository_root = ".."
+io_manifest = "rs-io/Cargo.toml"
+budget_manifest = "rs-budget/Cargo.toml"
+
+[[manifest]]
+path = "rs-codec/Cargo.toml"
+required_all_features = ["qubit-io"]
+
+[[manifest]]
+path = "rs-io-binary/Cargo.toml"
+required_default = ["qubit-io"]
+required_all_features = ["qubit-io"]
+
+[[manifest]]
+path = "rs-io-binary/fuzz/Cargo.toml"
+required_default = ["qubit-io"]
+required_all_features = ["qubit-io"]
+
+[[manifest]]
+path = "rs-io-text/Cargo.toml"
+required_default = ["qubit-io"]
+required_all_features = ["qubit-io"]
+
+[[manifest]]
+path = "rs-fs/Cargo.toml"
+required_default = ["qubit-io", "qubit-budget"]
+required_all_features = ["qubit-io", "qubit-budget"]
+
+[[manifest]]
+path = "rs-fs/tests/fixtures/documentation_examples/Cargo.toml"
+required_default = ["qubit-io", "qubit-budget"]
+required_all_features = ["qubit-io", "qubit-budget"]
+
+[[manifest]]
+path = "rs-fs-local/Cargo.toml"
+required_default = ["qubit-io", "qubit-budget"]
+required_all_features = ["qubit-io", "qubit-budget"]
+
+[[manifest]]
+path = "rs-fs-testkit/Cargo.toml"
+required_default = ["qubit-io", "qubit-budget"]
+required_all_features = ["qubit-io", "qubit-budget"]
+
+[[manifest]]
+path = "rs-fs-testkit/fixtures/s3-contract/Cargo.toml"
+required_default = ["qubit-io", "qubit-budget"]
+required_all_features = ["qubit-io", "qubit-budget"]
+
+[[manifest]]
+path = "rs-local-files/Cargo.toml"
+required_default = ["qubit-io", "qubit-budget"]
+required_all_features = ["qubit-io", "qubit-budget"]
+
+[[manifest]]
+path = "rs-local-files/fuzz/Cargo.toml"
+required_default = ["qubit-io", "qubit-budget"]
+required_all_features = ["qubit-io", "qubit-budget"]
+
+[[manifest]]
+path = "rs-mime/Cargo.toml"
+required_default = ["qubit-io", "qubit-budget"]
+required_all_features = ["qubit-io", "qubit-budget"]
+
+[[manifest]]
+path = "rs-magika/Cargo.toml"
+required_default = ["qubit-io", "qubit-budget"]
+required_all_features = ["qubit-io", "qubit-budget"]
+
+[[manifest]]
+path = "rs-json/Cargo.toml"
+required_default = ["qubit-io", "qubit-budget"]
+required_all_features = ["qubit-io", "qubit-budget"]
+
+[[manifest]]
+path = "rs-json/tests/fixtures/documentation_examples/Cargo.toml"
+required_default = ["qubit-budget"]
+required_all_features = ["qubit-budget"]
+
+[[manifest]]
+path = "rs-json/tests/fixtures/jcs_feature_unification/Cargo.toml"
+required_default = ["qubit-budget"]
+required_all_features = ["qubit-budget"]
+
+[[manifest]]
+path = "rs-json/fuzz/Cargo.toml"
+required_default = ["qubit-budget"]
+required_all_features = ["qubit-budget"]

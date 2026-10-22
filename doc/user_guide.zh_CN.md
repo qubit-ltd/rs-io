@@ -56,7 +56,7 @@ qubit-io = "0.19.0"
 
 `Records` 和 `Collected` 是本例自行实现的内存适配器，不是库内置类型。阅读时可以先看 `map_sales` 与 `main`；第 11 章解释底层实现契约。
 
-<!-- example: objects -->
+<!-- example: objects profile=core mode=run -->
 ```rust
 use std::io;
 use qubit_io::{BufferedInput, BufferedOutput, CountingInput, CountingOutput,
@@ -147,8 +147,8 @@ fn main() -> io::Result<()> {
     output.flush()?;
     assert_eq!(input.items_read(), 2);
     assert_eq!(output.items_written(), 2);
-    let (sink, pending) = output.into_inner().into_parts();
-    assert!(pending.is_empty());
+    let (sink, recovery) = output.into_inner().into_parts();
+    assert!(matches!(recovery, qubit_io::BufferedOutputRecovery::Pending(buffer) if buffer.is_empty()));
     assert_eq!(sink.0, vec![
         CategoryRevenue { category: "books".into(), amount_cents: 300 },
         CategoryRevenue { category: "books".into(), amount_cents: 500 },
@@ -192,7 +192,7 @@ fn main() -> io::Result<()> {
 
 下例是独立的 `src/main.rs`：先接受短输入，再演示精确读取失败后的输入位置。
 
-<!-- example: basic -->
+<!-- example: basic profile=core mode=run -->
 ```rust
 use std::io::{self, Cursor, ErrorKind};
 use qubit_io::{Input, Output};
@@ -233,7 +233,7 @@ fn main() -> io::Result<()> {
 下面的独立程序同时展示参数约束和返回值写法。输出借用目标向量，通过 trait 对象传入
 泛型函数，最后借助 `OutputRef` 转成标准库写接口，追加一个字节：
 
-<!-- example: byte-traits -->
+<!-- example: byte-traits profile=core mode=run -->
 ```rust
 use std::io::{self, Cursor, Write};
 use qubit_io::{ByteInput, ByteOutput, CountingOutput, Output, OutputRef};
@@ -303,6 +303,7 @@ fn main() -> io::Result<()> {
 下面是供调用方接入的 API 定义片段，分别展示同步字符操作、异步字符读取和异步字节写入。
 具体流由调用方提供；异步调用还需要已固定的借用和任务上下文：
 
+<!-- example: character-poll profile=core mode=skip reason="API contract fragment requires caller supplied stream state" -->
 ```rust
 use std::io;
 use std::pin::Pin;
@@ -347,7 +348,7 @@ fn poll_bytes<O: AsyncByteOutput + ?Sized>(
 
 反方向使用 `input.into_std_read()`、`output.into_std_write()`，得到 `StdRead`、`StdWrite`。转换消费原值；通过 `InputRef`、`OutputRef` 包装借用后再转换，可以保留原对象的所有权。下面的独立程序演示双向接入，并使用限定调用解决方法同名问题：
 
-<!-- example: std -->
+<!-- example: std profile=core mode=run -->
 ```rust
 use std::io::{self, Cursor, Read, Write};
 use qubit_io::{Input, InputRef, Output};
@@ -392,9 +393,9 @@ fn main() -> io::Result<()> {
 
 输入可能预读。`unread()`、`unread_len()` 查看尚未交给调用方的元素；`fill_more`、`fill_until` 可以补充缓冲，`ensure_available` 在无法取得所需数量时返回错误。`into_parts()` 不执行 I/O，返回底层输入和 `Buffer`，后者的 `readable()` 是必须先处理的未读窗口。
 
-输出的 `write_fully` 成功可能仅表示进入缓冲。正常结束时先 `flush` 并检查结果；`into_parts()` 不刷新，返回底层输出与仍待写的窗口。以下独立程序故意在刷新前拆开输出，展示由调用方接管数据的过程：
+输出的 `write_fully` 成功可能仅表示进入缓冲。正常结束时先 `flush` 并检查结果；`into_parts()` 不刷新，而是返回底层输出和 `BufferedOutputRecovery` 状态。`Pending` 表示依据正常返回的写入结果尚未报告写出的窗口；`Indeterminate` 表示底层 I/O 调用曾 panic，缓冲中的元素可能已经产生副作用，不能盲目重放。以下程序在未刷新时拆开输出，展示正常 `Pending` 情况下如何接管数据：
 
-<!-- example: buffer -->
+<!-- example: buffer profile=core mode=run -->
 ```rust
 use std::io::{self, Cursor};
 use qubit_io::{BufferedInput, BufferedOutput, Input, Output};
@@ -414,8 +415,12 @@ fn main() -> io::Result<()> {
 
     let mut output = BufferedOutput::with_capacity(Vec::<u8>::new(), 8);
     output.write_fully(b"abc")?;
-    let (mut sink, pending) = output.into_parts();
+    let (mut sink, recovery) = output.into_parts();
     assert!(sink.is_empty());
+    let pending = match recovery {
+        qubit_io::BufferedOutputRecovery::Pending(buffer) => buffer,
+        qubit_io::BufferedOutputRecovery::Indeterminate(_) => unreachable!("底层 I/O 未发生 panic"),
+    };
     sink.write_fully(pending.readable())?;
     Output::flush(&mut sink)?;
     assert_eq!(sink, b"abc");
@@ -423,11 +428,13 @@ fn main() -> io::Result<()> {
 }
 ```
 
-flush 失败后应保留包装器。若在排空过程中失败，已成功写出的前缀会从待写窗口移除；不要重发整批数据。也可能待写数据已排空，而底层 `flush` 失败，此时仍需处理刷新失败。只有底层错误允许重试、且已知其副作用时，才重试刷新；也可用 `into_parts()` 接管剩余元素。
+flush 失败后应保留包装器。若排空时正常返回错误，已成功写出的前缀会从待写窗口移除；不要重发整批数据。若底层 I/O 调用 panic，包装器会进入中毒状态，后续经包装器发起的 I/O 会被拒绝。此时 `into_parts()` 返回 `Indeterminate`，即使缓冲为空也不能据此判断底层没有副作用；应先由应用核对外部状态，不要直接重放。没有发生 panic 时，`into_parts()` 返回 `Pending`。底层 `flush` 失败时待写窗口也可能已经为空；只有错误语义及其副作用允许时才重试刷新。
 
 同步 `BufferedOutput` 析构只尽力排空自身缓冲，忽略错误，不能代替显式 `flush`。异步缓冲析构不执行 I/O。通过 `inner_mut()` 直接读取可能越过预读数据，直接写入可能排在待写数据之前；正常传输应经过包装器。
 
 `Buffer<T>` 是这些包装器使用的底层存储，提供已消费、可读、空闲窗口。普通调用者优先使用缓冲流；只有专用驱动或编码器需要直接管理窗口时，才使用其 `unsafe` 状态修改方法，并遵守范围契约。
+
+`AsyncBufferedOutput::spare_raw_parts_mut()` 返回 `(storage, index, count)`，可写范围是 `storage[index..index + count]`。其中 `count` 是剩余元素数量，不是结束索引；只初始化这段范围，再调用 `advance(count)`。
 
 ## 6. 限制与统计传输量
 
@@ -437,7 +444,7 @@ flush 失败后应保留包装器。若在排空过程中失败，已成功写�
 
 下面的独立程序比较两个观测位置，并检查额度耗尽后的结果：
 
-<!-- example: order -->
+<!-- example: order profile=core mode=run -->
 ```rust
 use std::io::{self, Cursor, ErrorKind};
 use qubit_io::{BufferedInput, CountingInput, Input, LimitInput,
@@ -485,7 +492,7 @@ fn main() -> io::Result<()> {
 
 `ChecksumInput`、`ChecksumOutput` 接受调用方提供的 `std::hash::Hasher`，只处理 `u8`。它们将成功传输的字节前缀传给 hasher，`checksum()` 返回当前 `u64` 值。下面用 `DefaultHasher` 演示接口，不将其数值作为稳定的跨版本文件格式或密码学摘要：
 
-<!-- example: checksum -->
+<!-- example: checksum profile=core mode=run -->
 ```rust
 use std::collections::hash_map::DefaultHasher;
 use std::hash::Hasher;
@@ -515,7 +522,7 @@ sha2 = "0.11"
 
 `DigestInput`、`DigestOutput` 接受 `digest::Digest` 实现；当前接口版本为 `digest 0.11`，基于 0.10 的算法不能直接混用。以下独立程序计算整个剩余输入的指纹，再验证输出摘要：
 
-<!-- example: digest -->
+<!-- example: digest profile=digest mode=run -->
 ```rust
 use std::io::{self, Cursor};
 use qubit_io::{DigestInput, DigestOutput, Output};
@@ -548,7 +555,7 @@ fn main() -> io::Result<()> {
 | `finalize()` | 消费包装器，返回 `(inner, digest)` |
 | `into_parts()` | 返回 `(inner, hasher)`，供调用方继续计算 |
 
-`digest_all` 使用固定 16 KiB 读缓冲，不将整个输入载入内存，也无须先根据 `is_buffered()` 再包一层。要计算完整原始输入的指纹，应从输入起点调用；读取失败不返回部分摘要，也不回退已消费的位置。
+`digest_all` 使用固定 16 KiB 读缓冲，不将整个输入载入内存，也无须先根据 `is_buffered()` 再包一层。要计算完整原始输入的指纹，应从输入起点调用。遇到 `Interrupted` 会在原位置重试，保留此前成功读取的前缀和摘要状态。其他读取错误不返回部分摘要，也不回退已消费的位置；再次调用会从当前输入位置开始创建新的摘要状态。
 
 校验和与摘要包装器只累计成功返回的字节前缀；错误、零传输和异步 `Pending` 不增加当前操作的统计。`inner_mut()` 绕过跟踪，`hasher_mut()` 直接改变算法状态。
 
@@ -564,7 +571,7 @@ fn main() -> io::Result<()> {
 
 下面的独立字节示例同时展示正常镜像与分支额度不足：
 
-<!-- example: tee -->
+<!-- example: tee profile=core mode=run -->
 ```rust
 use std::io::{self, ErrorKind};
 use qubit_io::{LimitOutput, Output, TeeOutput};
@@ -604,7 +611,7 @@ seek 也要选对语义：普通 `TeeInput` 仅定位来源；`TeeInput::with_sy
 
 下面的独立程序先临时读取开头并恢复位置，再验证泛型有界复制的超限行为：
 
-<!-- example: seek -->
+<!-- example: seek profile=core mode=run -->
 ```rust
 use std::io::{self, Cursor, ErrorKind, SeekFrom};
 use qubit_io::{Input, PositionGuard, Seekable, Streams};
@@ -662,7 +669,7 @@ fn main() -> io::Result<()> {
 
 下面的独立程序观察超限后的位置和输出，不假设错误意味着回滚：
 
-<!-- example: limited -->
+<!-- example: limited profile=core mode=run -->
 ```rust
 use std::io::{self, Cursor, ErrorKind};
 use qubit_io::std_io::ext::ReadExt;
@@ -705,7 +712,7 @@ tokio = { version = "1", features = ["rt", "macros", "io-util"] }
 
 将下列完整程序保存为 `src/main.rs`，执行 `cargo run`。它把三个字节传入缓冲输出，显式刷新、关闭并检查结果；最后演示反向适配：
 
-<!-- example: async -->
+<!-- example: async profile=tokio mode=run -->
 ```rust
 use std::io;
 use qubit_io::{AsyncBufferedOutput, AsyncClose, AsyncCountingInput,
@@ -761,7 +768,7 @@ futures = "0.3"
 
 以下完整程序用 `futures` 的内存流和执行器演示双向接入；执行 `cargo run` 后断言通过，无终端输出。执行器由应用选择，库本身不要求 `futures::executor`。
 
-<!-- example: futures -->
+<!-- example: futures profile=futures mode=run -->
 ```rust
 use std::io;
 use qubit_io::{AsyncInput, AsyncOutput, FuturesAsyncRead,
@@ -801,7 +808,7 @@ fn main() -> io::Result<()> {
 
 普通 `read_async`、`write_fully_async` 等便利方法要求 `Unpin`。已固定的 `!Unpin` 流或 trait object 使用 `PinnedAsyncInputExt`、`PinnedAsyncOutputExt`。下面的独立程序沿用 Tokio 依赖，通过 pinned trait object 完成读取；不要求 trait object 为 `Unpin`：
 
-<!-- example: pinned -->
+<!-- example: pinned profile=tokio mode=run -->
 ```rust
 use std::io;
 use std::pin::Pin;

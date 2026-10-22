@@ -28,6 +28,7 @@ use criterion::criterion_group;
 use criterion::criterion_main;
 use qubit_io::BufferedInput;
 use qubit_io::BufferedOutput;
+use qubit_io::BufferedOutputRecovery;
 use qubit_io::Input;
 
 const BUFFER_CAPACITY: usize = 8 * 1024;
@@ -162,7 +163,13 @@ fn benchmark_buffered_output(criterion: &mut Criterion) {
                         output.write_fully(chunk).expect("buffered output benchmark write");
                     }
                     output.flush().expect("buffered output benchmark flush");
-                    let (writer, pending) = output.into_parts();
+                    let (writer, recovery) = output.into_parts();
+                    let pending = match recovery {
+                        BufferedOutputRecovery::Pending(buffer) => buffer,
+                        BufferedOutputRecovery::Indeterminate(_) => {
+                            panic!("successful flush must not produce indeterminate recovery")
+                        }
+                    };
                     let bytes = writer.into_inner();
                     black_box((bytes, pending.available()));
                 },
