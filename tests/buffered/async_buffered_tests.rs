@@ -12,8 +12,12 @@ use std::io;
 use std::io::Error;
 use std::io::ErrorKind;
 use std::pin::Pin;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use std::task::Context;
 use std::task::Poll;
+use std::task::Wake;
 use std::task::Waker;
 
 use qubit_io::AsyncBufferedInput;
@@ -216,6 +220,14 @@ where
         }
     }
     panic!("test future did not complete");
+}
+
+struct WakeFlag(AtomicBool);
+
+impl Wake for WakeFlag {
+    fn wake(self: Arc<Self>) {
+        self.0.store(true, Ordering::SeqCst);
+    }
 }
 
 #[test]
@@ -576,10 +588,17 @@ fn test_async_buffered_input_exposes_window_refill_and_consume_operations() -> i
 fn test_async_buffered_input_yields_after_bounded_ready_refills() -> io::Result<()> {
     let inner = ScriptedInput::new((0_u16..65).map(|item| ReadStep::Data(vec![item])));
     let mut input = AsyncBufferedInput::with_capacity(inner, 65);
-    let mut cx = Context::from_waker(Waker::noop());
+    let flag = Arc::new(WakeFlag(AtomicBool::new(false)));
+    let waker = Waker::from(Arc::clone(&flag));
+    let mut cx = Context::from_waker(&waker);
 
+    assert!(!flag.0.load(Ordering::SeqCst));
     assert!(Pin::new(&mut input).poll_fill_until(&mut cx, 65).is_pending());
     assert_eq!(64, input.unread_len());
+    assert!(
+        flag.0.swap(false, Ordering::SeqCst),
+        "budget exhaustion should schedule a wake"
+    );
 
     assert!(
         Pin::new(&mut input)
@@ -744,16 +763,23 @@ fn test_async_buffered_output_spare_raw_parts_nonzero_start() -> io::Result<()> 
 fn test_async_buffered_output_yields_after_bounded_ready_drains() -> io::Result<()> {
     let inner = ScriptedOutput::new(std::iter::repeat_with(|| WriteStep::Accept(1)).take(65), []);
     let mut output = AsyncBufferedOutput::with_capacity(inner, 65);
-    let mut cx = Context::from_waker(Waker::noop());
+    let flag = Arc::new(WakeFlag(AtomicBool::new(false)));
+    let waker = Waker::from(Arc::clone(&flag));
+    let mut cx = Context::from_waker(&waker);
     let first: Vec<_> = (0_u16..64).collect();
 
     assert_eq!(64, complete(output.write_async(&first))?);
     assert_eq!(1, complete(output.write_async(&[64]))?);
     assert_eq!(65, output.pending_len());
 
+    assert!(!flag.0.load(Ordering::SeqCst));
     assert!(Pin::new(&mut output).poll_flush(&mut cx).is_pending());
     assert_eq!(1, output.pending_len());
     assert_eq!(64, output.inner().values.len());
+    assert!(
+        flag.0.swap(false, Ordering::SeqCst),
+        "budget exhaustion should schedule a wake"
+    );
 
     Pin::new(&mut output)
         .poll_flush(&mut cx)
