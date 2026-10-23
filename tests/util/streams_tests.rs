@@ -5,6 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
+use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::io::Cursor;
@@ -12,6 +13,7 @@ use std::io::Error;
 use std::io::ErrorKind;
 use std::io::Read;
 use std::io::Write;
+use std::rc::Rc;
 
 use qubit_io::DEFAULT_BUFFER_CAPACITY;
 use qubit_io::Input;
@@ -177,6 +179,65 @@ impl Input for ChunkInput {
 struct InterruptedItemInput {
     interrupted: bool,
     inner: ChunkInput,
+}
+
+struct EventInput {
+    step: usize,
+    fail_tail: bool,
+    events: Rc<RefCell<Vec<&'static str>>>,
+}
+
+impl Input for EventInput {
+    type Item = u16;
+
+    unsafe fn read_unchecked(&mut self, output: &mut [u16], index: usize, count: usize) -> std::io::Result<usize> {
+        if count == 0 {
+            return Ok(0);
+        }
+        self.events.borrow_mut().push("read");
+        if self.step < 2 {
+            output[index] = self.step as u16 + 1;
+            self.step += 1;
+            Ok(1)
+        } else if self.fail_tail {
+            Err(Error::other("tail read failed"))
+        } else {
+            Ok(0)
+        }
+    }
+}
+
+struct EventOutput {
+    values: Vec<u16>,
+    events: Rc<RefCell<Vec<&'static str>>>,
+}
+
+impl Output for EventOutput {
+    type Item = u16;
+
+    unsafe fn write_unchecked(&mut self, input: &[u16], index: usize, count: usize) -> std::io::Result<usize> {
+        self.events.borrow_mut().push("write");
+        self.values.extend_from_slice(&input[index..index + count]);
+        Ok(count)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+struct OverreportingSafeReadItemInput;
+
+impl Input for OverreportingSafeReadItemInput {
+    type Item = u16;
+
+    unsafe fn read_unchecked(&mut self, _output: &mut [u16], _index: usize, _count: usize) -> std::io::Result<usize> {
+        panic!("the safe read override must be used")
+    }
+
+    fn read(&mut self, output: &mut [u16]) -> std::io::Result<usize> {
+        Ok(output.len() + 1)
+    }
 }
 
 impl InterruptedItemInput {
@@ -702,6 +763,93 @@ fn test_copy_input_to_output_retries_interrupted_reads() {
 }
 
 #[test]
+fn test_copy_input_to_output_forwards_each_read_before_next_read() {
+    let events = Rc::new(RefCell::new(Vec::new()));
+    let mut input = EventInput {
+        step: 0,
+        fail_tail: false,
+        events: Rc::clone(&events),
+    };
+    let mut output = EventOutput {
+        values: Vec::new(),
+        events: Rc::clone(&events),
+    };
+    assert_eq!(Streams::copy_input_to_output(&mut input, &mut output).unwrap(), 2);
+    assert_eq!(output.values, [1, 2]);
+    assert_eq!(*events.borrow(), ["read", "write", "read", "write", "read"]);
+}
+
+#[test]
+fn test_copy_input_to_output_at_most_forwards_each_read_before_next_read() {
+    let events = Rc::new(RefCell::new(Vec::new()));
+    let mut input = EventInput {
+        step: 0,
+        fail_tail: true,
+        events: Rc::clone(&events),
+    };
+    let mut output = EventOutput {
+        values: Vec::new(),
+        events: Rc::clone(&events),
+    };
+    assert_eq!(
+        Streams::copy_input_to_output_at_most(&mut input, &mut output, 2).unwrap(),
+        2
+    );
+    assert_eq!(output.values, [1, 2]);
+    assert_eq!(*events.borrow(), ["read", "write", "read", "write"]);
+}
+
+#[test]
+fn test_copy_input_to_output_keeps_forwarded_prefix_on_later_read_error() {
+    let events = Rc::new(RefCell::new(Vec::new()));
+    let mut input = EventInput {
+        step: 0,
+        fail_tail: true,
+        events: Rc::clone(&events),
+    };
+    let mut output = EventOutput {
+        values: Vec::new(),
+        events: Rc::clone(&events),
+    };
+    let error = Streams::copy_input_to_output(&mut input, &mut output).unwrap_err();
+    assert_eq!(error.kind(), ErrorKind::Other);
+    assert_eq!(error.to_string(), "tail read failed");
+    assert_eq!(output.values, [1, 2]);
+}
+
+#[test]
+fn test_copy_input_to_output_at_most_keeps_forwarded_prefix_on_later_read_error() {
+    let events = Rc::new(RefCell::new(Vec::new()));
+    let mut input = EventInput {
+        step: 0,
+        fail_tail: true,
+        events: Rc::clone(&events),
+    };
+    let mut output = EventOutput {
+        values: Vec::new(),
+        events: Rc::clone(&events),
+    };
+    let error = Streams::copy_input_to_output_at_most(&mut input, &mut output, 3).unwrap_err();
+    assert_eq!(error.kind(), ErrorKind::Other);
+    assert_eq!(error.to_string(), "tail read failed");
+    assert_eq!(output.values, [1, 2]);
+}
+
+#[test]
+fn test_copy_input_to_output_at_most_retries_interrupted_reads() {
+    let mut input = InterruptedItemInput::new(vec![vec![1, 2, 3]]);
+    let mut output = CollectOutput::default();
+    assert_eq!(
+        Streams::copy_input_to_output_at_most(&mut input, &mut output, 2).unwrap(),
+        2
+    );
+    assert_eq!(output.values, [1, 2]);
+    let mut remaining = [0; 1];
+    assert_eq!(input.read(&mut remaining).unwrap(), 1);
+    assert_eq!(remaining, [3]);
+}
+
+#[test]
 fn test_copy_input_to_output_returns_read_error() {
     let mut input = FailingItemInput;
     let mut output = CollectOutput::default();
@@ -743,8 +891,8 @@ fn test_copy_input_to_output_rejects_overreported_read_count() {
 }
 
 #[test]
-fn test_copy_input_to_output_rejects_overridden_read_fully_count() {
-    let mut input = OverreportingFullyItemInput;
+fn test_copy_input_to_output_rejects_overridden_safe_read_count() {
+    let mut input = OverreportingSafeReadItemInput;
     let mut output = CollectOutput::default();
 
     let error = Streams::copy_input_to_output(&mut input, &mut output)
@@ -819,8 +967,8 @@ fn test_copy_input_to_output_at_most_returns_write_error() {
 }
 
 #[test]
-fn test_copy_input_to_output_at_most_rejects_overridden_read_fully_count() {
-    let mut input = OverreportingFullyItemInput;
+fn test_copy_input_to_output_at_most_rejects_overridden_safe_read_count() {
+    let mut input = OverreportingSafeReadItemInput;
     let mut output = CollectOutput::default();
 
     let error = Streams::copy_input_to_output_at_most(&mut input, &mut output, 3)

@@ -225,6 +225,12 @@ impl Streams {
     /// if an input or output reports an impossible item count or the
     /// accumulated copied item count overflows `u64`.
     ///
+    /// Each successful read prefix is written before the next read is
+    /// attempted. A later read error does not roll back prefixes already
+    /// forwarded to output. A write error may leave partial output and
+    /// consumed input; this method does not return a recovery buffer or
+    /// flush the output.
+    ///
     /// # Panics
     /// Panics if `T::default()` or `T::clone()` panics.
     pub fn copy_input_to_output<T>(input: &mut dyn Input<Item = T>, output: &mut dyn Output<Item = T>) -> Result<u64>
@@ -234,7 +240,11 @@ impl Streams {
         let mut buffer = create_vec(DEFAULT_BUFFER_CAPACITY, T::default())?;
         let mut copied = 0_u64;
         loop {
-            let read = input.read_fully(&mut buffer)?;
+            let read = match input.read(&mut buffer) {
+                Ok(read) => read,
+                Err(error) if error.kind() == ErrorKind::Interrupted => continue,
+                Err(error) => return Err(error),
+            };
             validate_read_count(read, buffer.len())?;
             if read == 0 {
                 return Ok(copied);
@@ -269,6 +279,13 @@ impl Streams {
     /// reported by the underlying streams. Returns [`ErrorKind::InvalidData`]
     /// if an input or output reports an impossible item count.
     ///
+    /// Each successful read prefix is written before the next read is
+    /// attempted. A later read error does not roll back prefixes already
+    /// forwarded to output. A write error may leave partial output and
+    /// consumed input; this method does not return a recovery buffer or
+    /// flush the output. When the item limit is exhausted, this method does
+    /// not probe the input for EOF.
+    ///
     /// # Panics
     /// Panics if `max_items > 0` and `T::default()` or `T::clone()` panics.
     pub fn copy_input_to_output_at_most<T>(
@@ -290,8 +307,11 @@ impl Streams {
         let mut copied = 0_u64;
         while remaining > 0 {
             let requested = remaining.min(buffer.len() as u64) as usize;
-            // SAFETY: `requested` is a valid prefix length inside `buffer`.
-            let read = unsafe { input.read_fully_unchecked(&mut buffer, 0, requested)? };
+            let read = match input.read(&mut buffer[..requested]) {
+                Ok(read) => read,
+                Err(error) if error.kind() == ErrorKind::Interrupted => continue,
+                Err(error) => return Err(error),
+            };
             validate_read_count(read, requested)?;
             if read == 0 {
                 break;
