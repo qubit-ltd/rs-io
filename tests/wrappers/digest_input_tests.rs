@@ -314,3 +314,15 @@ fn test_digest_all_does_not_rewind_after_non_interrupted_error() {
     );
     assert_eq!(2, input.position);
 }
+
+#[test]
+fn test_digest_input_rejects_safe_overreported_count() {
+    let mut input = DigestInput::new(super::support_tests::SafeOverreportInput, Sha256::new());
+    let before = input.digest();
+    let mut output = [0_u8; 4];
+    let error =
+        unsafe { qubit_io::Input::read_unchecked(&mut input, &mut output, 1, 2) }.expect_err("overreport should fail");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!(before, input.digest());
+}

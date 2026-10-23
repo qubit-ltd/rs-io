@@ -17,6 +17,7 @@ use crate::AsyncByteOutput;
 use crate::AsyncClose;
 use crate::AsyncOutput;
 use crate::traits::normalize_async_error;
+use crate::traits::validate_write_count;
 
 /// Asynchronous byte output that computes a digest of successfully accepted
 /// bytes.
@@ -296,6 +297,9 @@ where
     /// Returns an I/O error reported by the wrapped output without changing the
     /// hasher.
     ///
+    /// An invalid count returns [`io::ErrorKind::InvalidData`] without updating
+    /// the hasher.
+    ///
     /// # Safety
     ///
     /// The range `index..index + count` must be valid for `input`.
@@ -310,10 +314,14 @@ where
         // `hasher` is not structurally pinned and is accessed without Pin.
         let this = unsafe { self.as_mut().get_unchecked_mut() };
         let source = &input[index..index + count];
+        let requested = source.len();
         // SAFETY: The pinned wrapper keeps `inner` at a stable address.
         let inner = unsafe { Pin::new_unchecked(&mut this.inner) };
         match inner.poll_write(cx, source) {
             Poll::Ready(Ok(written)) => {
+                if let Err(error) = validate_write_count(written, requested) {
+                    return Poll::Ready(Err(error));
+                }
                 if written != 0 {
                     this.hasher.update(&input[index..index + written]);
                 }

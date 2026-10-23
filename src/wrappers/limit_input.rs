@@ -9,6 +9,7 @@
 use std::io;
 
 use crate::Input;
+use crate::traits::validate_read_count;
 
 /// Input wrapper that exposes at most a fixed number of items.
 ///
@@ -137,6 +138,9 @@ where
     /// [`io::ErrorKind::InvalidData`] when it reports an impossible count. The
     /// remaining limit is unchanged when an error is returned.
     ///
+    /// An invalid count returns [`io::ErrorKind::InvalidData`] without reducing
+    /// the remaining limit.
+    ///
     /// # Safety
     ///
     /// `index..index + count` must be a valid range in `output`.
@@ -147,6 +151,7 @@ where
         }
         let requested = usize::try_from(self.remaining).unwrap_or(usize::MAX).min(count);
         let read = self.inner.read(&mut output[index..index + requested])?;
+        validate_read_count(read, requested)?;
         self.remaining -= u64::try_from(read).unwrap_or(u64::MAX);
         Ok(read)
     }

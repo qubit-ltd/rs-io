@@ -11,6 +11,7 @@ use std::io::SeekFrom;
 
 use crate::Output;
 use crate::Seekable;
+use crate::traits::validate_write_count;
 
 /// Output wrapper that mirrors successfully accepted items to a branch output.
 ///
@@ -159,12 +160,16 @@ where
     /// returns the branch error after the primary has accepted the reported
     /// prefix.
     ///
+    /// An invalid count returns [`io::ErrorKind::InvalidData`] before the
+    /// branch is written.
+    ///
     /// # Safety
     ///
     /// `index..index + count` must be valid in `input`.
     #[inline]
     unsafe fn write_unchecked(&mut self, input: &[Self::Item], index: usize, count: usize) -> io::Result<usize> {
         let written = self.inner.write(&input[index..index + count])?;
+        validate_write_count(written, count)?;
         self.branch.write_fully(&input[index..index + written])?;
         Ok(written)
     }

@@ -67,3 +67,16 @@ fn test_checksum_input_forwards_seek_without_hashing() {
     assert_eq!(6, input.seek_to(SeekFrom::Start(6)).expect("seek should succeed"));
     assert_eq!(expected_checksum(b""), input.checksum());
 }
+
+#[test]
+fn test_checksum_input_rejects_safe_overreported_count() {
+    let mut wrapper = qubit_io::ChecksumInput::new(
+        super::support_tests::SafeOverreportInput,
+        std::collections::hash_map::DefaultHasher::new(),
+    );
+    let before = std::hash::Hasher::finish(wrapper.hasher());
+    let mut bytes = [0_u8; 4];
+    let error = unsafe { qubit_io::Input::read_unchecked(&mut wrapper, &mut bytes, 1, 2) }.unwrap_err();
+    assert_eq!(std::io::ErrorKind::InvalidData, error.kind());
+    assert_eq!(before, std::hash::Hasher::finish(wrapper.hasher()));
+}

@@ -13,6 +13,7 @@ use std::task::Poll;
 
 use crate::AsyncByteInput;
 use crate::AsyncInput;
+use crate::traits::validate_read_count;
 
 /// Asynchronous input that counts successfully returned items.
 ///
@@ -174,6 +175,9 @@ where
     /// Returns an I/O error reported by the wrapped input without changing the
     /// count.
     ///
+    /// An invalid count returns [`io::ErrorKind::InvalidData`] without changing
+    /// the counter.
+    ///
     /// # Safety
     ///
     /// The range `index..index + count` must be valid for `output`.
@@ -187,10 +191,14 @@ where
         // SAFETY: `inner` is never moved while projecting this pinned wrapper.
         let this = unsafe { self.as_mut().get_unchecked_mut() };
         let destination = &mut output[index..index + count];
+        let requested = destination.len();
         // SAFETY: The pinned wrapper keeps `inner` at a stable address.
         let inner = unsafe { Pin::new_unchecked(&mut this.inner) };
         match inner.poll_read(cx, destination) {
             Poll::Ready(Ok(read)) => {
+                if let Err(error) = validate_read_count(read, requested) {
+                    return Poll::Ready(Err(error));
+                }
                 let read_u64 = u64::try_from(read).unwrap_or(u64::MAX);
                 this.items_read = this.items_read.saturating_add(read_u64);
                 Poll::Ready(Ok(read))

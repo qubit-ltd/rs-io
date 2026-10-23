@@ -12,6 +12,7 @@ use std::io::SeekFrom;
 use crate::ByteInput;
 use crate::Input;
 use crate::Seekable;
+use crate::traits::validate_read_count;
 
 /// Input wrapper that counts successfully returned items.
 ///
@@ -159,6 +160,9 @@ where
     /// Returns an error from the wrapped input, including
     /// [`io::ErrorKind::InvalidData`] when it reports an impossible count.
     ///
+    /// An invalid count returns [`io::ErrorKind::InvalidData`] without changing
+    /// the counter.
+    ///
     /// # Safety
     ///
     /// `index..index + count` must be a valid range in `output`.
@@ -166,6 +170,7 @@ where
     unsafe fn read_unchecked(&mut self, output: &mut [Self::Item], index: usize, count: usize) -> io::Result<usize> {
         let destination = &mut output[index..index + count];
         let read = self.inner.read(destination)?;
+        validate_read_count(read, destination.len())?;
         let read_u64 = u64::try_from(read).unwrap_or(u64::MAX);
         self.items_read = self.items_read.saturating_add(read_u64);
         Ok(read)

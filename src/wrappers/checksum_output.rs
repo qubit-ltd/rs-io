@@ -13,6 +13,7 @@ use std::io::SeekFrom;
 use crate::ByteOutput;
 use crate::Output;
 use crate::Seekable;
+use crate::traits::validate_write_count;
 
 /// Byte output wrapper that hashes successfully accepted bytes.
 ///
@@ -174,12 +175,16 @@ where
     /// [`io::ErrorKind::InvalidData`] when it reports an impossible count. No
     /// bytes are added to the hasher when an error is returned.
     ///
+    /// An invalid count returns [`io::ErrorKind::InvalidData`] without updating
+    /// the hasher.
+    ///
     /// # Safety
     ///
     /// `index..index + count` must be valid in `input`.
     #[inline]
     unsafe fn write_unchecked(&mut self, input: &[u8], index: usize, count: usize) -> io::Result<usize> {
         let written = self.inner.write(&input[index..index + count])?;
+        validate_write_count(written, count)?;
         self.hasher.write(&input[index..index + written]);
         Ok(written)
     }

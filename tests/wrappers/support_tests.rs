@@ -246,3 +246,189 @@ fn seek_position(current: u64, position: SeekFrom) -> io::Result<u64> {
 fn test_wrapper_support_stream_is_constructible() {
     let _ = TestStream;
 }
+
+/// Input whose safe methods overreport while unchecked methods panic.
+pub(crate) struct SafeOverreportInput;
+
+impl Input for SafeOverreportInput {
+    type Item = u8;
+
+    fn read(&mut self, output: &mut [u8]) -> io::Result<usize> {
+        Ok(output.len() + 1)
+    }
+
+    unsafe fn read_unchecked(&mut self, _: &mut [u8], _: usize, _: usize) -> io::Result<usize> {
+        panic!("safe override must be called")
+    }
+}
+
+impl qubit_io::AsyncInput for SafeOverreportInput {
+    type Item = u8;
+
+    fn poll_read(
+        self: std::pin::Pin<&mut Self>,
+        _: &mut std::task::Context<'_>,
+        output: &mut [u8],
+    ) -> std::task::Poll<io::Result<usize>> {
+        std::task::Poll::Ready(Ok(output.len() + 1))
+    }
+
+    unsafe fn poll_read_unchecked(
+        self: std::pin::Pin<&mut Self>,
+        _: &mut std::task::Context<'_>,
+        _: &mut [u8],
+        _: usize,
+        _: usize,
+    ) -> std::task::Poll<io::Result<usize>> {
+        panic!("safe override must be called")
+    }
+}
+
+/// Output whose safe methods overreport while unchecked methods panic.
+pub(crate) struct SafeOverreportOutput;
+
+impl Output for SafeOverreportOutput {
+    type Item = u8;
+
+    fn write(&mut self, input: &[u8]) -> io::Result<usize> {
+        Ok(input.len() + 1)
+    }
+
+    unsafe fn write_unchecked(&mut self, _: &[u8], _: usize, _: usize) -> io::Result<usize> {
+        panic!("safe override must be called")
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+impl qubit_io::AsyncOutput for SafeOverreportOutput {
+    type Item = u8;
+
+    fn poll_write(
+        self: std::pin::Pin<&mut Self>,
+        _: &mut std::task::Context<'_>,
+        input: &[u8],
+    ) -> std::task::Poll<io::Result<usize>> {
+        std::task::Poll::Ready(Ok(input.len() + 1))
+    }
+
+    unsafe fn poll_write_unchecked(
+        self: std::pin::Pin<&mut Self>,
+        _: &mut std::task::Context<'_>,
+        _: &[u8],
+        _: usize,
+        _: usize,
+    ) -> std::task::Poll<io::Result<usize>> {
+        panic!("safe override must be called")
+    }
+
+    fn poll_flush(self: std::pin::Pin<&mut Self>, _: &mut std::task::Context<'_>) -> std::task::Poll<io::Result<()>> {
+        std::task::Poll::Ready(Ok(()))
+    }
+}
+
+/// Safe input that makes one valid short transfer before overreporting.
+#[derive(Default)]
+pub(crate) struct SafeProgressThenOverreportInput(std::cell::Cell<bool>);
+
+impl Input for SafeProgressThenOverreportInput {
+    type Item = u8;
+
+    fn read(&mut self, output: &mut [u8]) -> io::Result<usize> {
+        if self.0.replace(true) {
+            Ok(output.len() + 1)
+        } else {
+            Ok(output.len().min(1))
+        }
+    }
+
+    unsafe fn read_unchecked(&mut self, _: &mut [u8], _: usize, _: usize) -> io::Result<usize> {
+        panic!("safe override must be called")
+    }
+}
+
+impl qubit_io::AsyncInput for SafeProgressThenOverreportInput {
+    type Item = u8;
+
+    fn poll_read(
+        self: std::pin::Pin<&mut Self>,
+        _: &mut std::task::Context<'_>,
+        output: &mut [u8],
+    ) -> std::task::Poll<io::Result<usize>> {
+        let this = self.get_mut();
+        let read = if this.0.replace(true) {
+            output.len() + 1
+        } else {
+            output.len().min(1)
+        };
+        std::task::Poll::Ready(Ok(read))
+    }
+
+    unsafe fn poll_read_unchecked(
+        self: std::pin::Pin<&mut Self>,
+        _: &mut std::task::Context<'_>,
+        _: &mut [u8],
+        _: usize,
+        _: usize,
+    ) -> std::task::Poll<io::Result<usize>> {
+        panic!("safe override must be called")
+    }
+}
+
+/// Safe output that makes one valid short transfer before overreporting.
+#[derive(Default)]
+pub(crate) struct SafeProgressThenOverreportOutput(std::cell::Cell<bool>);
+
+impl Output for SafeProgressThenOverreportOutput {
+    type Item = u8;
+
+    fn write(&mut self, input: &[u8]) -> io::Result<usize> {
+        if self.0.replace(true) {
+            Ok(input.len() + 1)
+        } else {
+            Ok(input.len().min(1))
+        }
+    }
+
+    unsafe fn write_unchecked(&mut self, _: &[u8], _: usize, _: usize) -> io::Result<usize> {
+        panic!("safe override must be called")
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+impl qubit_io::AsyncOutput for SafeProgressThenOverreportOutput {
+    type Item = u8;
+
+    fn poll_write(
+        self: std::pin::Pin<&mut Self>,
+        _: &mut std::task::Context<'_>,
+        input: &[u8],
+    ) -> std::task::Poll<io::Result<usize>> {
+        let this = self.get_mut();
+        let written = if this.0.replace(true) {
+            input.len() + 1
+        } else {
+            input.len().min(1)
+        };
+        std::task::Poll::Ready(Ok(written))
+    }
+
+    unsafe fn poll_write_unchecked(
+        self: std::pin::Pin<&mut Self>,
+        _: &mut std::task::Context<'_>,
+        _: &[u8],
+        _: usize,
+        _: usize,
+    ) -> std::task::Poll<io::Result<usize>> {
+        panic!("safe override must be called")
+    }
+
+    fn poll_flush(self: std::pin::Pin<&mut Self>, _: &mut std::task::Context<'_>) -> std::task::Poll<io::Result<()>> {
+        std::task::Poll::Ready(Ok(()))
+    }
+}

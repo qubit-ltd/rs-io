@@ -9,6 +9,7 @@
 use std::io;
 
 use crate::Output;
+use crate::traits::validate_write_count;
 
 /// Output wrapper that accepts at most a fixed number of items.
 ///
@@ -138,6 +139,9 @@ where
     /// [`io::ErrorKind::InvalidData`] when it reports an impossible count. The
     /// remaining limit is unchanged when an error is returned.
     ///
+    /// An invalid count returns [`io::ErrorKind::InvalidData`] without reducing
+    /// the remaining limit.
+    ///
     /// # Safety
     ///
     /// `index..index + count` must be a valid range in `input`.
@@ -148,6 +152,7 @@ where
         }
         let requested = usize::try_from(self.remaining).unwrap_or(usize::MAX).min(count);
         let written = self.inner.write(&input[index..index + requested])?;
+        validate_write_count(written, requested)?;
         self.remaining -= u64::try_from(written).unwrap_or(u64::MAX);
         Ok(written)
     }

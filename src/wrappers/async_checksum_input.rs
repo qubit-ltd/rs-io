@@ -14,6 +14,7 @@ use std::task::Poll;
 
 use crate::AsyncByteInput;
 use crate::AsyncInput;
+use crate::traits::validate_read_count;
 
 /// Asynchronous byte input that hashes successfully returned bytes.
 ///
@@ -195,6 +196,9 @@ where
     /// Returns an I/O error reported by the wrapped input without changing the
     /// hasher.
     ///
+    /// An invalid count returns [`io::ErrorKind::InvalidData`] without updating
+    /// the hasher.
+    ///
     /// # Safety
     ///
     /// The range `index..index + count` must be valid for `output`.
@@ -208,10 +212,14 @@ where
         // SAFETY: `inner` is never moved while projecting this pinned wrapper.
         let this = unsafe { self.as_mut().get_unchecked_mut() };
         let destination = &mut output[index..index + count];
+        let requested = destination.len();
         // SAFETY: The pinned wrapper keeps `inner` at a stable address.
         let inner = unsafe { Pin::new_unchecked(&mut this.inner) };
         match inner.poll_read(cx, destination) {
             Poll::Ready(Ok(read)) => {
+                if let Err(error) = validate_read_count(read, requested) {
+                    return Poll::Ready(Err(error));
+                }
                 this.hasher.write(&output[index..index + read]);
                 Poll::Ready(Ok(read))
             }

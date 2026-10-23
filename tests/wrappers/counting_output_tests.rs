@@ -63,3 +63,24 @@ fn test_counting_output_forwards_flush_and_seek_without_counting() {
     assert_eq!(0, output.items_written());
     assert_eq!(4, output.inner().position);
 }
+
+#[test]
+fn test_counting_output_rejects_safe_overreported_count() {
+    let mut wrapper = qubit_io::CountingOutput::new(super::support_tests::SafeOverreportOutput);
+    let error = qubit_io::Output::write(&mut wrapper, b"ab").unwrap_err();
+    assert_eq!(std::io::ErrorKind::InvalidData, error.kind());
+    assert_eq!(0, wrapper.items_written());
+}
+
+#[test]
+fn test_counting_output_preserves_short_progress_before_overreport() {
+    let mut output = qubit_io::CountingOutput::new(super::support_tests::SafeProgressThenOverreportOutput::default());
+
+    assert_eq!(
+        1,
+        qubit_io::Output::write(&mut output, b"ab").expect("short write should succeed")
+    );
+    let error = qubit_io::Output::write(&mut output, b"ab").expect_err("overreport should fail");
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!(1, output.items_written());
+}

@@ -12,6 +12,7 @@ use std::io::SeekFrom;
 use crate::Input;
 use crate::Output;
 use crate::Seekable;
+use crate::traits::validate_read_count;
 
 /// Tee input whose branch position follows every source seek.
 ///
@@ -143,12 +144,16 @@ where
     /// returns the branch error after the source has advanced and the
     /// destination has been modified.
     ///
+    /// An invalid count returns [`io::ErrorKind::InvalidData`] before the
+    /// branch is written.
+    ///
     /// # Safety
     ///
     /// `index..index + count` must be valid in `output`.
     #[inline]
     unsafe fn read_unchecked(&mut self, output: &mut [Self::Item], index: usize, count: usize) -> io::Result<usize> {
         let read = self.inner.read(&mut output[index..index + count])?;
+        validate_read_count(read, count)?;
         self.branch.write_fully(&output[index..index + read])?;
         Ok(read)
     }

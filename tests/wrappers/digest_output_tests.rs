@@ -72,6 +72,17 @@ fn test_digest_output_prefix_accessors_and_parts_do_not_flush() {
 }
 
 #[test]
+fn test_digest_output_rejects_safe_overreported_count() {
+    let mut output = DigestOutput::new(super::support_tests::SafeOverreportOutput, Sha256::new());
+    let before = output.digest();
+    let error =
+        unsafe { qubit_io::Output::write_unchecked(&mut output, b"abcd", 1, 2) }.expect_err("overreport should fail");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!(before, output.digest());
+}
+
+#[test]
 fn test_digest_output_errors_invalid_counts_and_zero_progress() {
     let mut output = DigestOutput::new(ScriptedOutput::<u8>::failing_write("write failure"), Sha256::new());
     assert_eq!(ErrorKind::Other, output.write(b"abc").expect_err("write error").kind());

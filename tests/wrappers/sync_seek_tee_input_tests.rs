@@ -96,3 +96,15 @@ fn test_sync_seek_tee_input_seeks_source_then_aligns_branch() {
     assert_eq!(9, input.inner().position);
     assert_eq!(5, input.branch().position);
 }
+
+#[test]
+fn test_sync_seek_tee_input_rejects_safe_overreported_count() {
+    let mut wrapper = qubit_io::SyncSeekTeeInput::new(
+        super::support_tests::SafeOverreportInput,
+        super::support_tests::ScriptedOutput::<u8>::accepting(),
+    );
+    let mut bytes = [0_u8; 2];
+    let error = qubit_io::Input::read(&mut wrapper, &mut bytes).unwrap_err();
+    assert_eq!(std::io::ErrorKind::InvalidData, error.kind());
+    assert!(wrapper.branch().items.is_empty());
+}

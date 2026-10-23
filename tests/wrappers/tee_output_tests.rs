@@ -144,3 +144,14 @@ fn test_tee_output_seeks_primary_then_aligns_branch() {
     assert_eq!(11, output.inner().position);
     assert_eq!(7, output.branch().position);
 }
+
+#[test]
+fn test_tee_output_rejects_safe_overreported_count() {
+    let mut wrapper = qubit_io::TeeOutput::new(
+        super::support_tests::SafeOverreportOutput,
+        super::support_tests::ScriptedOutput::<u8>::accepting(),
+    );
+    let error = unsafe { qubit_io::Output::write_unchecked(&mut wrapper, b"abcd", 1, 2) }.unwrap_err();
+    assert_eq!(std::io::ErrorKind::InvalidData, error.kind());
+    assert!(wrapper.branch().items.is_empty());
+}

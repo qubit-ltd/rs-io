@@ -12,6 +12,7 @@ use std::task::Context;
 use std::task::Poll;
 
 use crate::AsyncInput;
+use crate::traits::validate_read_count;
 
 /// Asynchronous input that exposes at most a fixed number of items.
 ///
@@ -164,6 +165,9 @@ where
     /// Returns an I/O error reported by the wrapped input without consuming the
     /// remaining limit.
     ///
+    /// An invalid count returns [`io::ErrorKind::InvalidData`] without reducing
+    /// the remaining limit.
+    ///
     /// # Safety
     ///
     /// The range `index..index + count` must be valid for `output`.
@@ -185,6 +189,9 @@ where
         let inner = unsafe { Pin::new_unchecked(&mut this.inner) };
         match inner.poll_read(cx, destination) {
             Poll::Ready(Ok(read)) => {
+                if let Err(error) = validate_read_count(read, requested) {
+                    return Poll::Ready(Err(error));
+                }
                 this.remaining -= read as u64;
                 Poll::Ready(Ok(read))
             }

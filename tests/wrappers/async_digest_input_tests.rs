@@ -219,3 +219,20 @@ fn test_async_digest_input_digest_all_rejects_poll_after_completion() {
     let _ = ready(Pin::new(&mut future).poll(&mut cx));
     let _ = Pin::new(&mut future).poll(&mut cx);
 }
+
+#[test]
+fn test_async_digest_input_rejects_safe_overreported_count() {
+    let mut wrapper = qubit_io::AsyncDigestInput::new(
+        super::support_tests::SafeOverreportInput,
+        <sha2::Sha256 as digest::Digest>::new(),
+    );
+    let waker = std::task::Waker::noop();
+    let mut cx = std::task::Context::from_waker(waker);
+    let before = wrapper.digest();
+    let mut bytes = [0_u8; 2];
+    let result = qubit_io::AsyncInput::poll_read(std::pin::Pin::new(&mut wrapper), &mut cx, &mut bytes);
+    assert!(
+        matches!(result, std::task::Poll::Ready(Err(ref error)) if error.kind() == std::io::ErrorKind::InvalidData)
+    );
+    assert_eq!(before, wrapper.digest());
+}

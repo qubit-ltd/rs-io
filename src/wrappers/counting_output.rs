@@ -12,6 +12,7 @@ use std::io::SeekFrom;
 use crate::ByteOutput;
 use crate::Output;
 use crate::Seekable;
+use crate::traits::validate_write_count;
 
 /// Output wrapper that counts successfully accepted items.
 ///
@@ -157,6 +158,9 @@ where
     /// Returns an error from the wrapped output, including
     /// [`io::ErrorKind::InvalidData`] when it reports an impossible count.
     ///
+    /// An invalid count returns [`io::ErrorKind::InvalidData`] without changing
+    /// the counter.
+    ///
     /// # Safety
     ///
     /// `index..index + count` must be a valid range in `input`.
@@ -164,6 +168,7 @@ where
     unsafe fn write_unchecked(&mut self, input: &[Self::Item], index: usize, count: usize) -> io::Result<usize> {
         let source = &input[index..index + count];
         let written = self.inner.write(source)?;
+        validate_write_count(written, source.len())?;
         let written_u64 = u64::try_from(written).unwrap_or(u64::MAX);
         self.items_written = self.items_written.saturating_add(written_u64);
         Ok(written)

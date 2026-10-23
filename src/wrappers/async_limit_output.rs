@@ -14,6 +14,7 @@ use std::task::Poll;
 use crate::AsyncClose;
 use crate::AsyncOutput;
 use crate::traits::normalize_async_error;
+use crate::traits::validate_write_count;
 
 /// Asynchronous output that accepts at most a fixed number of items.
 ///
@@ -200,6 +201,9 @@ where
     /// Returns an I/O error reported by the wrapped output without consuming
     /// the remaining limit.
     ///
+    /// An invalid count returns [`io::ErrorKind::InvalidData`] without reducing
+    /// the remaining limit.
+    ///
     /// # Safety
     ///
     /// The range `index..index + count` must be valid for `input`.
@@ -221,6 +225,9 @@ where
         let inner = unsafe { Pin::new_unchecked(&mut this.inner) };
         match inner.poll_write(cx, source) {
             Poll::Ready(Ok(written)) => {
+                if let Err(error) = validate_write_count(written, requested) {
+                    return Poll::Ready(Err(error));
+                }
                 this.remaining -= written as u64;
                 Poll::Ready(Ok(written))
             }

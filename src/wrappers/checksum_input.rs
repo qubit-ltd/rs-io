@@ -13,6 +13,7 @@ use std::io::SeekFrom;
 use crate::ByteInput;
 use crate::Input;
 use crate::Seekable;
+use crate::traits::validate_read_count;
 
 /// Byte input wrapper that hashes successfully returned bytes.
 ///
@@ -174,12 +175,16 @@ where
     /// [`io::ErrorKind::InvalidData`] when it reports an impossible count. No
     /// bytes are added to the hasher when an error is returned.
     ///
+    /// An invalid count returns [`io::ErrorKind::InvalidData`] without updating
+    /// the hasher.
+    ///
     /// # Safety
     ///
     /// `index..index + count` must be valid in `output`.
     #[inline]
     unsafe fn read_unchecked(&mut self, output: &mut [u8], index: usize, count: usize) -> io::Result<usize> {
         let read = self.inner.read(&mut output[index..index + count])?;
+        validate_read_count(read, count)?;
         self.hasher.write(&output[index..index + read]);
         Ok(read)
     }

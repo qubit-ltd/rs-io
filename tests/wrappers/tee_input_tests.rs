@@ -109,3 +109,15 @@ fn test_tee_input_can_create_synchronized_seek_variant() {
     assert_eq!(3, input.inner().position);
     assert_eq!(3, input.branch().position);
 }
+
+#[test]
+fn test_tee_input_rejects_safe_overreported_count() {
+    let mut wrapper = qubit_io::TeeInput::new(
+        super::support_tests::SafeOverreportInput,
+        super::support_tests::ScriptedOutput::<u8>::accepting(),
+    );
+    let mut bytes = [0_u8; 4];
+    let error = unsafe { qubit_io::Input::read_unchecked(&mut wrapper, &mut bytes, 1, 2) }.unwrap_err();
+    assert_eq!(std::io::ErrorKind::InvalidData, error.kind());
+    assert!(wrapper.branch().items.is_empty());
+}

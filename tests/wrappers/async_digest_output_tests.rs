@@ -135,3 +135,19 @@ fn test_async_digest_output_non_clone_algorithm_can_write_and_finalize() {
     let (_, fingerprint) = output.finalize();
     assert_eq!(Sha256::digest(b"abc"), fingerprint);
 }
+
+#[test]
+fn test_async_digest_output_rejects_safe_overreported_count() {
+    let mut wrapper = qubit_io::AsyncDigestOutput::new(
+        super::support_tests::SafeOverreportOutput,
+        <sha2::Sha256 as digest::Digest>::new(),
+    );
+    let waker = std::task::Waker::noop();
+    let mut cx = std::task::Context::from_waker(waker);
+    let before = wrapper.digest();
+    let result = qubit_io::AsyncOutput::poll_write(std::pin::Pin::new(&mut wrapper), &mut cx, b"ab");
+    assert!(
+        matches!(result, std::task::Poll::Ready(Err(ref error)) if error.kind() == std::io::ErrorKind::InvalidData)
+    );
+    assert_eq!(before, wrapper.digest());
+}

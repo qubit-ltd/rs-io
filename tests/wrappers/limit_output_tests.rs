@@ -58,3 +58,11 @@ fn test_limit_output_forwards_flush() {
     output.flush().expect("flush should succeed");
     assert_eq!(1, output.inner().flush_calls);
 }
+
+#[test]
+fn test_limit_output_rejects_safe_overreported_count() {
+    let mut wrapper = qubit_io::LimitOutput::new(super::support_tests::SafeOverreportOutput, 1);
+    let error = unsafe { qubit_io::Output::write_unchecked(&mut wrapper, b"abcd", 0, 4) }.unwrap_err();
+    assert_eq!(std::io::ErrorKind::InvalidData, error.kind());
+    assert_eq!(1, wrapper.remaining());
+}

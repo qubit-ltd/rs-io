@@ -69,3 +69,23 @@ fn test_counting_input_forwards_seek_without_changing_count() {
     assert_eq!(0, input.items_read());
     assert_eq!(7, input.inner().position);
 }
+
+#[test]
+fn test_counting_input_rejects_safe_overreported_count() {
+    let mut wrapper = qubit_io::CountingInput::new(super::support_tests::SafeOverreportInput);
+    let mut bytes = [0_u8; 2];
+    let error = qubit_io::Input::read(&mut wrapper, &mut bytes).unwrap_err();
+    assert_eq!(std::io::ErrorKind::InvalidData, error.kind());
+    assert_eq!(0, wrapper.items_read());
+}
+
+#[test]
+fn test_counting_input_preserves_short_progress_before_overreport() {
+    let mut input = CountingInput::new(super::support_tests::SafeProgressThenOverreportInput::default());
+    let mut output = [0_u8; 2];
+
+    assert_eq!(1, input.read(&mut output).expect("short read should succeed"));
+    let error = input.read(&mut output).expect_err("overreport should fail");
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!(1, input.items_read());
+}
