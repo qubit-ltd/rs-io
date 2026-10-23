@@ -45,4 +45,9 @@ use super::Seekable;
 /// ```
 pub trait SeekableInput: Input + Seekable<Unit = <Self as Input>::Item> {}
 
-impl<T> SeekableInput for T where T: Input + Seekable<Unit = <T as Input>::Item> {}
+impl<T> SeekableInput for T
+where
+    T: Input + Seekable<Unit = <T as Input>::Item> + ?Sized,
+{
+    // empty
+}
