@@ -11,8 +11,12 @@ use std::future::Future;
 use std::io::ErrorKind;
 use std::io::Result;
 use std::pin::Pin;
+use std::sync::Arc;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
 use std::task::Context;
 use std::task::Poll;
+use std::task::Wake;
 use std::task::Waker;
 
 use qubit_io::AsyncDigestInput;
@@ -27,6 +31,19 @@ use super::digest_support_tests::PinnedStream;
 use super::digest_support_tests::Step;
 use super::digest_support_tests::error_kind;
 use super::digest_support_tests::ready;
+
+#[derive(Default)]
+struct BudgetWakeCounter(AtomicUsize);
+
+impl Wake for BudgetWakeCounter {
+    fn wake(self: Arc<Self>) {
+        self.0.fetch_add(1, Ordering::SeqCst);
+    }
+
+    fn wake_by_ref(self: &Arc<Self>) {
+        self.0.fetch_add(1, Ordering::SeqCst);
+    }
+}
 
 struct OverreportedSafeInput {
     transferred: bool,
@@ -178,7 +195,9 @@ fn test_async_digest_input_digest_all_rejects_overreport_after_progress() {
 
 #[test]
 fn test_async_digest_input_digest_all_budget_cancellation_and_errors() {
-    let mut cx = Context::from_waker(Waker::noop());
+    let counter = Arc::new(BudgetWakeCounter::default());
+    let waker = Waker::from(Arc::clone(&counter));
+    let mut cx = Context::from_waker(&waker);
     let mut stream = Box::pin(PinnedStream::default());
     stream.state.borrow_mut().bytes = vec![b'x'; 65];
     stream
@@ -187,7 +206,12 @@ fn test_async_digest_input_digest_all_budget_cancellation_and_errors() {
         .steps
         .extend((0..65).map(|_| Step::Transfer(1)));
     let mut future = AsyncDigestInput::<_, Sha256>::digest_all(stream.as_mut());
+    assert_eq!(0, counter.0.load(Ordering::SeqCst));
     assert!(Pin::new(&mut future).poll(&mut cx).is_pending());
+    assert!(
+        counter.0.load(Ordering::SeqCst) > 0,
+        "budget Pending must schedule a wake"
+    );
     assert_eq!(Sha256::digest([b'x'; 65]), ready(Pin::new(&mut future).poll(&mut cx)));
     drop(future);
     for (step, expected) in [

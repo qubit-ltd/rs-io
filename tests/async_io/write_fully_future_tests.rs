@@ -18,6 +18,7 @@ use std::task::Waker;
 
 use qubit_io::WriteFullyFuture;
 
+use super::support_tests::CancellationOutput;
 use super::support_tests::PollResult;
 use super::support_tests::SafeOverreportedOutput;
 use super::support_tests::ScriptedOutput;
@@ -165,4 +166,30 @@ fn test_write_fully_future_reports_write_zero_after_progress() {
         Poll::Pending => panic!("expected WriteZero to return ready"),
     };
     assert_eq!(ErrorKind::WriteZero, error.kind());
+}
+
+#[test]
+fn test_write_fully_cancellation_resume() {
+    for pending_after in [Some(2), None] {
+        let expected: Vec<u8> = (0_u8..65).collect();
+        let mut output = CancellationOutput {
+            bytes: Vec::new(),
+            pending_after,
+        };
+        let mut cx = Context::from_waker(Waker::noop());
+        let mut future = WriteFullyFuture::new(Pin::new(&mut output), &expected);
+        assert!(matches!(Future::poll(Pin::new(&mut future), &mut cx), Poll::Pending));
+        let done = future.items_written();
+        assert_eq!(pending_after.unwrap_or(64), done);
+        drop(future);
+        assert_eq!(&expected[..done], output.bytes.as_slice());
+        let mut resumed = WriteFullyFuture::new(Pin::new(&mut output), &expected[done..]);
+        assert!(matches!(
+            Future::poll(Pin::new(&mut resumed), &mut cx),
+            Poll::Ready(Ok(()))
+        ));
+        assert_eq!(65, done + resumed.items_written());
+        drop(resumed);
+        assert_eq!(expected, output.bytes);
+    }
 }

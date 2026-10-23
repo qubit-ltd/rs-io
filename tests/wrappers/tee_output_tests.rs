@@ -7,6 +7,7 @@
 // =============================================================================
 //! Tests for [`qubit_io::TeeOutput`].
 
+use std::io::Cursor;
 use std::io::ErrorKind;
 use std::io::SeekFrom;
 
@@ -18,6 +19,7 @@ use qubit_io::Seekable;
 use qubit_io::TeeOutput;
 
 use super::support_tests::ScriptedOutput;
+use super::support_tests::SeekFailOnceOutput;
 
 #[test]
 fn test_tee_output_mirrors_primary_prefix_and_exposes_parts() {
@@ -243,6 +245,35 @@ fn test_tee_output_seeks_primary_then_aligns_branch() {
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!(11, output.inner().position);
     assert_eq!(7, output.branch().position);
+}
+
+#[test]
+fn test_tee_output_seek_failure_recovery_contract() {
+    let branch = SeekFailOnceOutput {
+        inner: Cursor::new(vec![b'.'; 6]),
+        fail_next_seek: true,
+    };
+    let mut output = TeeOutput::new(Cursor::new(vec![b'.'; 6]), branch);
+    assert_eq!(ErrorKind::Other, output.seek_to(SeekFrom::Start(2)).unwrap_err().kind());
+    assert!(output.branch_error().is_none());
+    assert_eq!(2, output.inner().position());
+    assert_eq!(0, output.branch().inner.position());
+    output
+        .write_fully(b"x")
+        .expect("existing behavior allows continued writes");
+    assert_eq!(b"..x...", output.inner().get_ref().as_slice());
+    assert_eq!(b"x.....", output.branch().inner.get_ref().as_slice());
+    assert!(output.branch_error().is_none());
+    assert_eq!(
+        4,
+        output.seek_to(SeekFrom::Start(4)).expect("resynchronization succeeds")
+    );
+    assert_eq!(4, output.inner().position());
+    assert_eq!(4, output.branch().inner.position());
+    output.write_fully(b"y").expect("aligned write succeeds");
+    assert_eq!(b"..x.y.", output.inner().get_ref().as_slice());
+    assert_eq!(b"x...y.", output.branch().inner.get_ref().as_slice());
+    assert!(output.branch_error().is_none());
 }
 
 #[test]

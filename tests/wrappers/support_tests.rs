@@ -7,13 +7,45 @@
 // =============================================================================
 
 use std::io;
+use std::io::Cursor;
 use std::io::Error;
 use std::io::ErrorKind;
 use std::io::SeekFrom;
+use std::io::Write;
 
 use qubit_io::Input;
 use qubit_io::Output;
 use qubit_io::Seekable;
+
+/// Stores bytes at real cursor offsets and can reject the next seek.
+pub(super) struct SeekFailOnceOutput {
+    pub(super) inner: Cursor<Vec<u8>>,
+    pub(super) fail_next_seek: bool,
+}
+
+impl Output for SeekFailOnceOutput {
+    type Item = u8;
+
+    unsafe fn write_unchecked(&mut self, input: &[u8], index: usize, count: usize) -> io::Result<usize> {
+        Write::write(&mut self.inner, &input[index..index + count])
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Write::flush(&mut self.inner)
+    }
+}
+
+impl Seekable for SeekFailOnceOutput {
+    type Unit = u8;
+
+    fn seek_to(&mut self, position: SeekFrom) -> io::Result<u64> {
+        if self.fail_next_seek {
+            self.fail_next_seek = false;
+            return Err(Error::other("scripted branch seek failure"));
+        }
+        self.inner.seek_to(position)
+    }
+}
 
 /// Marker used by compile-time async wrapper surface tests.
 pub(crate) struct TestStream;

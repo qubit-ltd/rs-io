@@ -18,6 +18,7 @@ use std::task::Waker;
 
 use qubit_io::ReadFullyFuture;
 
+use super::support_tests::CancellationInput;
 use super::support_tests::PollResult;
 use super::support_tests::SafeOverreportedInput;
 use super::support_tests::ScriptedInput;
@@ -143,5 +144,33 @@ fn test_read_fully_future_pauses_when_ready_budget_is_exhausted() {
         Poll::Ready(Err(error)) => {
             panic!("read-fully future should complete after second poll, got error {error}")
         }
+    }
+}
+
+#[test]
+fn test_read_fully_cancellation_resume() {
+    for pending_after in [Some(2), None] {
+        let expected: Vec<u8> = (0_u8..65).collect();
+        let mut input = CancellationInput {
+            bytes: expected.clone(),
+            position: 0,
+            pending_after,
+        };
+        let mut output = [255; 65];
+        let mut cx = Context::from_waker(Waker::noop());
+        let mut future = ReadFullyFuture::new(Pin::new(&mut input), &mut output);
+        assert!(matches!(Future::poll(Pin::new(&mut future), &mut cx), Poll::Pending));
+        let done = future.items_read();
+        assert_eq!(pending_after.unwrap_or(64), done);
+        drop(future);
+        assert_eq!(done, input.position);
+        assert_eq!(&expected[..done], &output[..done]);
+        assert!(output[done..].iter().all(|byte| *byte == 255));
+        let mut resumed = ReadFullyFuture::new(Pin::new(&mut input), &mut output[done..]);
+        assert!(matches!(Future::poll(Pin::new(&mut resumed), &mut cx), Poll::Ready(Ok(n)) if n == 65 - done));
+        assert_eq!(65, done + resumed.items_read());
+        drop(resumed);
+        assert_eq!(65, input.position);
+        assert_eq!(expected.as_slice(), &output);
     }
 }

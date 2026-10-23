@@ -17,6 +17,7 @@ use std::task::Waker;
 
 use qubit_io::ReadExactFuture;
 
+use super::support_tests::CancellationInput;
 use super::support_tests::PollResult;
 use super::support_tests::SafeOverreportedInput;
 use super::support_tests::ScriptedInput;
@@ -168,5 +169,36 @@ fn test_read_exact_future_reports_eof_after_partial_progress() {
         Poll::Ready(Ok(_)) => {
             panic!("partial read should fail with UnexpectedEof")
         }
+    }
+}
+
+#[test]
+fn test_read_exact_cancellation_resume() {
+    for pending_after in [Some(2), None] {
+        let expected: Vec<u8> = (0_u8..65).collect();
+        let mut input = CancellationInput {
+            bytes: expected.clone(),
+            position: 0,
+            pending_after,
+        };
+        let mut output = [255; 65];
+        let mut cx = Context::from_waker(Waker::noop());
+        let mut future = ReadExactFuture::new(Pin::new(&mut input), &mut output);
+        assert!(matches!(Future::poll(Pin::new(&mut future), &mut cx), Poll::Pending));
+        let done = future.items_read();
+        assert_eq!(pending_after.unwrap_or(64), done);
+        drop(future);
+        assert_eq!(done, input.position);
+        assert_eq!(&expected[..done], &output[..done]);
+        assert!(output[done..].iter().all(|byte| *byte == 255));
+        let mut resumed = ReadExactFuture::new(Pin::new(&mut input), &mut output[done..]);
+        assert!(matches!(
+            Future::poll(Pin::new(&mut resumed), &mut cx),
+            Poll::Ready(Ok(()))
+        ));
+        assert_eq!(65, done + resumed.items_read());
+        drop(resumed);
+        assert_eq!(65, input.position);
+        assert_eq!(expected.as_slice(), &output);
     }
 }

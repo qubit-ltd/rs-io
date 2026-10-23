@@ -640,19 +640,40 @@ fn test_tokio_write_bridges_support_pinned_inner_values() {
 #[test]
 fn test_tokio_duplex_round_trip_under_backpressure() {
     let counter = Arc::new(WakeCounter::default());
-    let waker = Waker::from(counter.clone());
+    let waker = Waker::from(Arc::clone(&counter));
     let mut cx = Context::from_waker(&waker);
-    let (mut sender, mut receiver) = tokio::io::duplex(1);
+    let (sender, receiver) = tokio::io::duplex(1);
+    let mut sender = TokioAsyncWrite::new(TokioOutput::new(sender));
+    let mut receiver = TokioAsyncRead::new(TokioInput::new(receiver));
     let payload = b"duplex";
-    let mut sent = 0;
-    let mut received = Vec::new();
+    assert_eq!(
+        1,
+        AsyncWrite::poll_write(Pin::new(&mut sender), &mut cx, &payload[..1])
+            .expect_ready("first byte ready")
+            .expect("first write succeeds")
+    );
+    assert!(AsyncWrite::poll_write(Pin::new(&mut sender), &mut cx, &payload[1..]).is_pending());
+    let before = counter.0.load(Ordering::SeqCst);
+    let mut first = [0; 1];
+    let mut buffer = ReadBuf::new(&mut first);
+    AsyncRead::poll_read(Pin::new(&mut receiver), &mut cx, &mut buffer)
+        .expect_ready("buffered byte ready")
+        .expect("first read succeeds");
+    assert_eq!(&payload[..1], buffer.filled());
+    assert!(
+        counter.0.load(Ordering::SeqCst) > before,
+        "freeing duplex capacity must wake the writer through both bridges"
+    );
+    let mut sent = 1;
+    let mut received = first.to_vec();
     for _ in 0..32 {
-        let mut write_pending = false;
-        let wake_count = counter.0.load(Ordering::SeqCst);
         if sent < payload.len() {
             match AsyncWrite::poll_write(Pin::new(&mut sender), &mut cx, &payload[sent..]) {
-                Poll::Ready(Ok(n)) => sent += n,
-                Poll::Pending => write_pending = true,
+                Poll::Ready(Ok(n)) => {
+                    assert!(n > 0);
+                    sent += n;
+                }
+                Poll::Pending => {}
                 Poll::Ready(Err(error)) => panic!("duplex write failed: {error}"),
             }
         }
@@ -663,23 +684,23 @@ fn test_tokio_duplex_round_trip_under_backpressure() {
             Poll::Pending => {}
             Poll::Ready(Err(error)) => panic!("duplex read failed: {error}"),
         }
-        if write_pending && !received.is_empty() {
-            assert!(
-                counter.0.load(Ordering::SeqCst) > wake_count,
-                "reading from duplex must wake a blocked writer"
-            );
+        if received.len() == payload.len() {
+            break;
         }
     }
     assert_eq!(payload.len(), sent);
     assert_eq!(payload, received.as_slice());
+    AsyncWrite::poll_flush(Pin::new(&mut sender), &mut cx)
+        .expect_ready("flush ready")
+        .expect("flush succeeds");
     AsyncWrite::poll_shutdown(Pin::new(&mut sender), &mut cx)
-        .expect_ready("duplex shutdown should complete")
-        .expect("duplex shutdown should succeed");
+        .expect_ready("shutdown ready")
+        .expect("shutdown succeeds");
     let mut eof = [0; 1];
     let mut buffer = ReadBuf::new(&mut eof);
     AsyncRead::poll_read(Pin::new(&mut receiver), &mut cx, &mut buffer)
-        .expect_ready("duplex EOF should be ready")
-        .expect("duplex EOF read should succeed");
+        .expect_ready("EOF ready")
+        .expect("EOF read succeeds");
     assert!(buffer.filled().is_empty());
 }
 

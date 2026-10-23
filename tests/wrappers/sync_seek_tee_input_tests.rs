@@ -18,6 +18,7 @@ use qubit_io::SyncSeekTeeInput;
 use super::support_tests::InputAction;
 use super::support_tests::ScriptedInput;
 use super::support_tests::ScriptedOutput;
+use super::support_tests::SeekFailOnceOutput;
 
 #[test]
 fn test_sync_seek_tee_input_mirrors_generic_items_and_exposes_parts() {
@@ -174,6 +175,40 @@ fn test_sync_seek_tee_input_seeks_source_then_aligns_branch() {
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!(9, input.inner().position);
     assert_eq!(5, input.branch().position);
+}
+
+#[test]
+fn test_sync_seek_tee_input_seek_failure_recovery_contract() {
+    let branch = SeekFailOnceOutput {
+        inner: Cursor::new(vec![b'.'; 6]),
+        fail_next_seek: true,
+    };
+    let mut input = SyncSeekTeeInput::new(Cursor::new(b"abcdef".to_vec()), branch);
+    assert_eq!(ErrorKind::Other, input.seek_to(SeekFrom::Start(2)).unwrap_err().kind());
+    assert!(input.branch_error().is_none());
+    assert_eq!(2, input.inner().position());
+    assert_eq!(0, input.branch().inner.position());
+    let mut byte = [0];
+    input
+        .read_exactly(&mut byte)
+        .expect("existing behavior allows continued reads");
+    assert_eq!(b"c", &byte);
+    assert_eq!(3, input.inner().position());
+    assert_eq!(1, input.branch().inner.position());
+    assert_eq!(b"c.....", input.branch().inner.get_ref().as_slice());
+    assert!(input.branch_error().is_none());
+    assert_eq!(
+        4,
+        input.seek_to(SeekFrom::Start(4)).expect("resynchronization succeeds")
+    );
+    assert_eq!(4, input.inner().position());
+    assert_eq!(4, input.branch().inner.position());
+    input.read_exactly(&mut byte).expect("aligned read succeeds");
+    assert_eq!(b"e", &byte);
+    assert_eq!(5, input.inner().position());
+    assert_eq!(5, input.branch().inner.position());
+    assert_eq!(b"c...e.", input.branch().inner.get_ref().as_slice());
+    assert!(input.branch_error().is_none());
 }
 
 #[test]

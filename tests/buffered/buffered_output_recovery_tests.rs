@@ -9,6 +9,8 @@
 use std::cell::RefCell;
 use std::io::Error;
 use std::io::ErrorKind;
+use std::panic::AssertUnwindSafe;
+use std::panic::catch_unwind;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::AtomicBool;
@@ -215,7 +217,7 @@ fn test_direct_write_and_inner_flush_panics_poison_all_write_paths() {
 }
 
 #[test]
-fn test_inner_flush_panic_is_indeterminate_and_drop_does_not_retry() {
+fn test_inner_flush_panic_is_indeterminate_and_into_parts_does_not_retry() {
     let sink = PanicOnceSink::default();
     let state = Arc::clone(&sink.0);
     let mut output = BufferedOutput::with_capacity(sink, 4);
@@ -232,6 +234,27 @@ fn test_inner_flush_panic_is_indeterminate_and_drop_does_not_retry() {
         calls_after_panic,
         state.lock().expect("state mutex should be available").calls
     );
+}
+
+#[test]
+fn test_poisoned_buffered_output_drop_does_not_retry_pending_write() {
+    let sink = PanicOnceSink::default();
+    let state = Arc::clone(&sink.0);
+    let mut output = BufferedOutput::with_capacity(sink, 8);
+    output.write_fully(b"abc").expect("buffer accepts input");
+    state.lock().expect("state lock").panic_next_write = true;
+    assert!(catch_unwind(AssertUnwindSafe(|| output.flush())).is_err());
+    assert_eq!(3, output.capacity() - output.spare_capacity());
+    let before = {
+        let state = state.lock().expect("state lock");
+        (state.calls, state.bytes.clone())
+    };
+    assert_eq!(1, before.0);
+    assert_eq!(b"a", before.1.as_slice());
+    drop(output);
+    let after = state.lock().expect("state lock");
+    assert_eq!(before.0, after.calls, "drop must not retry inner I/O");
+    assert_eq!(before.1, after.bytes, "drop must not replay uncertain bytes");
 }
 
 #[derive(Default)]

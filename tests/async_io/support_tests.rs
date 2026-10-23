@@ -279,3 +279,73 @@ impl AsyncClose for ForbiddenErrorOutput {
         Poll::Ready(Err(Error::new(self.kind, "forbidden close error")))
     }
 }
+
+/// Emits distinct bytes one at a time and optionally yields once after a
+/// prefix.
+pub(super) struct CancellationInput {
+    pub(super) bytes: Vec<u8>,
+    pub(super) position: usize,
+    pub(super) pending_after: Option<usize>,
+}
+
+impl AsyncInput for CancellationInput {
+    type Item = u8;
+
+    unsafe fn poll_read_unchecked(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        output: &mut [u8],
+        index: usize,
+        count: usize,
+    ) -> Poll<Result<usize>> {
+        let this = self.get_mut();
+        if count == 0 {
+            return Poll::Ready(Ok(0));
+        }
+        if this.pending_after == Some(this.position) {
+            this.pending_after = None;
+            cx.waker().wake_by_ref();
+            return Poll::Pending;
+        }
+        if this.position == this.bytes.len() {
+            return Poll::Ready(Ok(0));
+        }
+        output[index] = this.bytes[this.position];
+        this.position += 1;
+        Poll::Ready(Ok(1))
+    }
+}
+
+/// Records actual accepted bytes, optionally yielding once after a prefix.
+pub(super) struct CancellationOutput {
+    pub(super) bytes: Vec<u8>,
+    pub(super) pending_after: Option<usize>,
+}
+
+impl AsyncOutput for CancellationOutput {
+    type Item = u8;
+
+    unsafe fn poll_write_unchecked(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        input: &[u8],
+        index: usize,
+        count: usize,
+    ) -> Poll<Result<usize>> {
+        let this = self.get_mut();
+        if count == 0 {
+            return Poll::Ready(Ok(0));
+        }
+        if this.pending_after == Some(this.bytes.len()) {
+            this.pending_after = None;
+            cx.waker().wake_by_ref();
+            return Poll::Pending;
+        }
+        this.bytes.push(input[index]);
+        Poll::Ready(Ok(1))
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<()>> {
+        Poll::Ready(Ok(()))
+    }
+}
