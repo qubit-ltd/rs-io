@@ -194,22 +194,17 @@ where
     ///
     /// `index..index + count` must be valid in `output`.
     #[inline]
-    unsafe fn read_unchecked(
-        &mut self,
-        output: &mut [Self::Item],
-        index: usize,
-        count: usize,
-    ) -> io::Result<usize> {
+    unsafe fn read_unchecked(&mut self, output: &mut [Self::Item], index: usize, count: usize) -> io::Result<usize> {
         if count == 0 {
             return Ok(0);
         }
         self.failure.check()?;
         let read = self.inner.read(&mut output[index..index + count])?;
         validate_read_count(read, count)?;
-        if read != 0 {
-            if let Err(error) = self.branch.write_fully(&output[index..index + read]) {
-                self.failure.record(error);
-            }
+        if read != 0
+            && let Err(error) = self.branch.write_fully(&output[index..index + read])
+        {
+            self.failure.record(error);
         }
         Ok(read)
     }

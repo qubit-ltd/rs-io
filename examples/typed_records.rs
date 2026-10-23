@@ -75,15 +75,9 @@ where
     /// # Safety
     ///
     /// `index..index + count` must be valid for `output`.
-    unsafe fn read_unchecked(
-        &mut self,
-        output: &mut [T],
-        index: usize,
-        count: usize,
-    ) -> io::Result<usize> {
+    unsafe fn read_unchecked(&mut self, output: &mut [T], index: usize, count: usize) -> io::Result<usize> {
         let read = count.min(self.items.len() - self.position);
-        output[index..index + read]
-            .copy_from_slice(&self.items[self.position..self.position + read]);
+        output[index..index + read].copy_from_slice(&self.items[self.position..self.position + read]);
         self.position += read;
         Ok(read)
     }
@@ -122,12 +116,7 @@ where
     /// # Safety
     ///
     /// `index..index + count` must be valid for `input`.
-    unsafe fn write_unchecked(
-        &mut self,
-        input: &[T],
-        index: usize,
-        count: usize,
-    ) -> io::Result<usize> {
+    unsafe fn write_unchecked(&mut self, input: &[T], index: usize, count: usize) -> io::Result<usize> {
         self.items.extend_from_slice(&input[index..index + count]);
         Ok(count)
     }
@@ -210,7 +199,7 @@ fn main() -> io::Result<()> {
     assert_eq!(2, output.items_written());
     let (shuffle, audit, error) = output.into_inner().into_parts();
     if let Some(error) = error {
-        return Err(error.into());
+        return Err(error);
     }
     assert_eq!(shuffle.items, audit.items);
     assert_eq!(

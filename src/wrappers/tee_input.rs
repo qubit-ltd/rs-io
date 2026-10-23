@@ -20,8 +20,9 @@ use crate::wrappers::internal::tee_failure::TeeFailure;
 ///
 /// A branch failure is latched after the source and destination have advanced.
 /// The read still reports primary progress; later non-empty reads fail before
-/// touching either stream. Callers must inspect [`branch_error`](Self::branch_error)
-/// after finite reads or the error returned by [`into_parts`](Self::into_parts).
+/// touching either stream. Callers must inspect
+/// [`branch_error`](Self::branch_error) after finite reads or the error
+/// returned by [`into_parts`](Self::into_parts).
 ///
 /// # Type Parameters
 ///
@@ -144,7 +145,8 @@ impl<I, B> TeeInput<I, B> {
         self.failure.error()
     }
 
-    /// Consumes this wrapper and returns both streams and any latched branch error.
+    /// Consumes this wrapper and returns both streams and any latched branch
+    /// error.
     ///
     /// # Returns
     ///
@@ -199,22 +201,17 @@ where
     ///
     /// `index..index + count` must be valid in `output`.
     #[inline]
-    unsafe fn read_unchecked(
-        &mut self,
-        output: &mut [Self::Item],
-        index: usize,
-        count: usize,
-    ) -> io::Result<usize> {
+    unsafe fn read_unchecked(&mut self, output: &mut [Self::Item], index: usize, count: usize) -> io::Result<usize> {
         if count == 0 {
             return Ok(0);
         }
         self.failure.check()?;
         let read = self.inner.read(&mut output[index..index + count])?;
         validate_read_count(read, count)?;
-        if read != 0 {
-            if let Err(error) = self.branch.write_fully(&output[index..index + read]) {
-                self.failure.record(error);
-            }
+        if read != 0
+            && let Err(error) = self.branch.write_fully(&output[index..index + read])
+        {
+            self.failure.record(error);
         }
         Ok(read)
     }

@@ -19,8 +19,9 @@ use crate::wrappers::internal::tee_failure::TeeFailure;
 /// Operations are ordered and not transactional. A branch write failure is
 /// latched after primary progress; the write reports that progress, and later
 /// non-empty writes, flushes, and seeks return the stored error. Check `flush`
-/// after finite writes or inspect the error from [`into_parts`](Self::into_parts).
-/// A returned `Ok(n)` describes primary progress, not successful mirroring.
+/// after finite writes or inspect the error from
+/// [`into_parts`](Self::into_parts). A returned `Ok(n)` describes primary
+/// progress, not successful mirroring.
 ///
 /// # Type Parameters
 ///
@@ -184,22 +185,17 @@ where
     ///
     /// `index..index + count` must be valid in `input`.
     #[inline]
-    unsafe fn write_unchecked(
-        &mut self,
-        input: &[Self::Item],
-        index: usize,
-        count: usize,
-    ) -> io::Result<usize> {
+    unsafe fn write_unchecked(&mut self, input: &[Self::Item], index: usize, count: usize) -> io::Result<usize> {
         if count == 0 {
             return Ok(0);
         }
         self.failure.check()?;
         let written = self.inner.write(&input[index..index + count])?;
         validate_write_count(written, count)?;
-        if written != 0 {
-            if let Err(error) = self.branch.write_fully(&input[index..index + written]) {
-                self.failure.record(error);
-            }
+        if written != 0
+            && let Err(error) = self.branch.write_fully(&input[index..index + written])
+        {
+            self.failure.record(error);
         }
         Ok(written)
     }

@@ -60,9 +60,7 @@ fn test_tee_input_returns_source_errors_without_writing_branch() {
         ScriptedOutput::accepting(),
     );
     let mut output = [0_u16; 2];
-    let error = input
-        .read(&mut output)
-        .expect_err("source error should be returned");
+    let error = input.read(&mut output).expect_err("source error should be returned");
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert!(input.branch().items.is_empty());
@@ -86,24 +84,14 @@ fn test_tee_input_reports_branch_error_after_source_progress() {
         ScriptedOutput::failing_write("branch failed"),
     );
     let mut output = [0_u16; 2];
-    assert_eq!(
-        2,
-        input
-            .read(&mut output)
-            .expect("primary progress should be returned")
-    );
+    assert_eq!(2, input.read(&mut output).expect("primary progress should be returned"));
 
     assert_eq!(ErrorKind::Other, input.branch_error().unwrap().kind());
     assert_eq!([1, 2], output);
     assert_eq!(0, input.inner().remaining_len());
     let source_position = input.inner().position;
     input.inner_mut().action = InputAction::Error("empty read touched source");
-    assert_eq!(
-        0,
-        input
-            .read(&mut [])
-            .expect("empty read should succeed after failure")
-    );
+    assert_eq!(0, input.read(&mut []).expect("empty read should succeed after failure"));
     assert_eq!(source_position, input.inner().position);
     assert_eq!(
         ErrorKind::Other,
@@ -113,10 +101,7 @@ fn test_tee_input_reports_branch_error_after_source_progress() {
             .kind()
     );
     assert_eq!(source_position, input.inner().position);
-    assert_eq!(
-        ErrorKind::Other,
-        input.read(&mut output).unwrap_err().kind()
-    );
+    assert_eq!(ErrorKind::Other, input.read(&mut output).unwrap_err().kind());
     assert_eq!(0, input.inner().remaining_len());
     let (_, _, error) = input.into_parts();
     assert!(error.is_some());
@@ -143,10 +128,7 @@ fn test_tee_input_read_exactly_keeps_primary_success_and_error_cause() {
         .read_exactly(&mut bytes)
         .expect("exact primary read should succeed");
     assert_eq!(&bytes, b"abc");
-    assert_eq!(
-        Some(ErrorKind::Other),
-        input.branch_error().map(|error| error.kind())
-    );
+    assert_eq!(Some(ErrorKind::Other), input.branch_error().map(|error| error.kind()));
     assert_eq!(3, input.inner().position());
     let (_, _, error) = input.into_parts();
     let error = error.expect("latched branch error should be returned");
@@ -159,12 +141,7 @@ struct FailingCauseOutput;
 impl qubit_io::Output for FailingCauseOutput {
     type Item = u8;
 
-    unsafe fn write_unchecked(
-        &mut self,
-        _input: &[u8],
-        _index: usize,
-        count: usize,
-    ) -> std::io::Result<usize> {
+    unsafe fn write_unchecked(&mut self, _input: &[u8], _index: usize, count: usize) -> std::io::Result<usize> {
         Ok(count)
     }
 
@@ -190,10 +167,7 @@ impl std::error::Error for UnderlyingCause {}
 
 #[test]
 fn test_tee_input_rejects_invalid_source_progress() {
-    let mut input = TeeInput::new(
-        ScriptedInput::<u16>::invalid_count(),
-        ScriptedOutput::accepting(),
-    );
+    let mut input = TeeInput::new(ScriptedInput::<u16>::invalid_count(), ScriptedOutput::accepting());
     let mut output = [0_u16; 2];
     let error = input
         .read(&mut output)
@@ -205,34 +179,19 @@ fn test_tee_input_rejects_invalid_source_progress() {
 
 #[test]
 fn test_tee_input_forwards_seek_only_to_source() {
-    let mut input = TeeInput::new(
-        ScriptedInput::items(vec![1_u16]),
-        ScriptedOutput::<u16>::accepting(),
-    );
+    let mut input = TeeInput::new(ScriptedInput::items(vec![1_u16]), ScriptedOutput::<u16>::accepting());
 
-    assert_eq!(
-        9,
-        input
-            .seek_to(SeekFrom::Start(9))
-            .expect("seek should succeed")
-    );
+    assert_eq!(9, input.seek_to(SeekFrom::Start(9)).expect("seek should succeed"));
     assert_eq!(9, input.inner().position);
     assert_eq!(0, input.branch().position);
 }
 
 #[test]
 fn test_tee_input_can_create_synchronized_seek_variant() {
-    let mut input = TeeInput::with_sync_branch_seek(
-        ScriptedInput::items(vec![1_u16]),
-        ScriptedOutput::<u16>::accepting(),
-    );
+    let mut input =
+        TeeInput::with_sync_branch_seek(ScriptedInput::items(vec![1_u16]), ScriptedOutput::<u16>::accepting());
 
-    assert_eq!(
-        3,
-        input
-            .seek_to(SeekFrom::Start(3))
-            .expect("seek should succeed")
-    );
+    assert_eq!(3, input.seek_to(SeekFrom::Start(3)).expect("seek should succeed"));
     assert_eq!(3, input.inner().position);
     assert_eq!(3, input.branch().position);
 }
@@ -244,8 +203,7 @@ fn test_tee_input_rejects_safe_overreported_count() {
         super::support_tests::ScriptedOutput::<u8>::accepting(),
     );
     let mut bytes = [0_u8; 4];
-    let error =
-        unsafe { qubit_io::Input::read_unchecked(&mut wrapper, &mut bytes, 1, 2) }.unwrap_err();
+    let error = unsafe { qubit_io::Input::read_unchecked(&mut wrapper, &mut bytes, 1, 2) }.unwrap_err();
     assert_eq!(std::io::ErrorKind::InvalidData, error.kind());
     assert!(wrapper.branch().items.is_empty());
 }

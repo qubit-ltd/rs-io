@@ -26,10 +26,7 @@ fn test_tee_output_mirrors_primary_prefix_and_exposes_parts() {
     let mut output = TeeOutput::new(primary, branch);
 
     assert!(!output.is_buffered());
-    assert_eq!(
-        2,
-        output.write(&[7_u16, 9, 11]).expect("write should succeed")
-    );
+    assert_eq!(2, output.write(&[7_u16, 9, 11]).expect("write should succeed"));
     assert_eq!(vec![7, 9], output.inner().items);
     assert_eq!(vec![7, 9], output.branch().items);
 
@@ -41,10 +38,7 @@ fn test_tee_output_mirrors_primary_prefix_and_exposes_parts() {
 
 #[test]
 fn test_tee_output_is_buffered_only_when_both_paths_are_buffered() {
-    let mut output = TeeOutput::new(
-        ScriptedOutput::<u16>::accepting(),
-        ScriptedOutput::accepting(),
-    );
+    let mut output = TeeOutput::new(ScriptedOutput::<u16>::accepting(), ScriptedOutput::accepting());
     output.inner_mut().buffered = true;
     assert!(!output.is_buffered());
     output.branch_mut().buffered = true;
@@ -68,20 +62,13 @@ fn test_tee_output_returns_primary_errors_without_writing_branch() {
         ScriptedOutput::<u16>::failing_write("primary failed"),
         ScriptedOutput::accepting(),
     );
-    let error = output
-        .write(&[1])
-        .expect_err("primary error should be returned");
+    let error = output.write(&[1]).expect_err("primary error should be returned");
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert!(output.branch().items.is_empty());
 
-    let mut invalid = TeeOutput::new(
-        ScriptedOutput::<u16>::invalid_count(),
-        ScriptedOutput::accepting(),
-    );
-    let error = invalid
-        .write(&[1])
-        .expect_err("invalid progress should be rejected");
+    let mut invalid = TeeOutput::new(ScriptedOutput::<u16>::invalid_count(), ScriptedOutput::accepting());
+    let error = invalid.write(&[1]).expect_err("invalid progress should be rejected");
     assert_eq!(ErrorKind::InvalidData, error.kind());
     assert!(invalid.branch().items.is_empty());
 }
@@ -105,9 +92,7 @@ fn test_tee_output_reports_branch_error_after_primary_progress() {
     );
     assert_eq!(
         2,
-        output
-            .write(&[1_u16, 2])
-            .expect("primary progress should be returned")
+        output.write(&[1_u16, 2]).expect("primary progress should be returned")
     );
 
     assert_eq!(ErrorKind::Other, output.branch_error().unwrap().kind());
@@ -139,10 +124,7 @@ fn test_tee_output_reports_branch_error_after_primary_progress() {
 fn test_tee_output_composes_with_counting_and_buffering() {
     let tee = TeeOutput::new(Vec::<u8>::new(), LimitOutput::new(Vec::<u8>::new(), 2));
     let mut counted = CountingOutput::new(tee);
-    assert_eq!(
-        3,
-        counted.write(b"abc").expect("primary write should succeed")
-    );
+    assert_eq!(3, counted.write(b"abc").expect("primary write should succeed"));
     assert_eq!(3, counted.items_written());
     assert_eq!(
         Some(ErrorKind::WriteZero),
@@ -151,9 +133,7 @@ fn test_tee_output_composes_with_counting_and_buffering() {
 
     let tee = TeeOutput::new(Vec::<u8>::new(), LimitOutput::new(Vec::<u8>::new(), 2));
     let mut buffered = BufferedOutput::with_capacity(tee, 3);
-    buffered
-        .write_fully(b"abc")
-        .expect("buffer should accept input");
+    buffered.write_fully(b"abc").expect("buffer should accept input");
     assert_eq!(ErrorKind::WriteZero, buffered.flush().unwrap_err().kind());
     assert_eq!(b"abc", buffered.inner_mut().inner().as_slice());
     assert_eq!(ErrorKind::WriteZero, buffered.flush().unwrap_err().kind());
@@ -163,12 +143,7 @@ fn test_tee_output_composes_with_counting_and_buffering() {
 #[test]
 fn test_tee_output_write_fully_latches_interrupted_without_retrying() {
     let mut output = TeeOutput::new(Vec::<u8>::new(), InterruptedFullyOutput);
-    assert_eq!(
-        3,
-        output
-            .write(b"abc")
-            .expect("primary progress should be returned")
-    );
+    assert_eq!(3, output.write(b"abc").expect("primary progress should be returned"));
     assert_eq!(
         Some(ErrorKind::Interrupted),
         output.branch_error().map(|error| error.kind())
@@ -180,9 +155,7 @@ fn test_tee_output_write_fully_latches_interrupted_without_retrying() {
 #[test]
 fn test_tee_output_write_fully_success_still_exposes_branch_failure() {
     let mut output = TeeOutput::new(Vec::<u8>::new(), LimitOutput::new(Vec::<u8>::new(), 2));
-    output
-        .write_fully(b"abc")
-        .expect("primary full write should succeed");
+    output.write_fully(b"abc").expect("primary full write should succeed");
     assert_eq!(b"abc", output.inner().as_slice());
     assert_eq!(
         Some(ErrorKind::WriteZero),
@@ -195,12 +168,7 @@ struct InterruptedFullyOutput;
 impl Output for InterruptedFullyOutput {
     type Item = u8;
 
-    unsafe fn write_unchecked(
-        &mut self,
-        _input: &[u8],
-        _index: usize,
-        count: usize,
-    ) -> std::io::Result<usize> {
+    unsafe fn write_unchecked(&mut self, _input: &[u8], _index: usize, count: usize) -> std::io::Result<usize> {
         Ok(count)
     }
 
@@ -226,10 +194,7 @@ fn test_tee_output_does_not_touch_branch_after_zero_primary_progress() {
 
 #[test]
 fn test_tee_output_flushes_in_primary_then_branch_order() {
-    let mut success = TeeOutput::new(
-        ScriptedOutput::<u16>::accepting(),
-        ScriptedOutput::accepting(),
-    );
+    let mut success = TeeOutput::new(ScriptedOutput::<u16>::accepting(), ScriptedOutput::accepting());
     success.flush().expect("flush should succeed");
     assert_eq!(1, success.inner().flush_calls);
     assert_eq!(1, success.branch().flush_calls);
@@ -258,16 +223,8 @@ fn test_tee_output_flushes_in_primary_then_branch_order() {
 
 #[test]
 fn test_tee_output_seeks_primary_then_aligns_branch() {
-    let mut output = TeeOutput::new(
-        ScriptedOutput::<u16>::accepting(),
-        ScriptedOutput::accepting(),
-    );
-    assert_eq!(
-        7,
-        output
-            .seek_to(SeekFrom::Start(7))
-            .expect("seek should succeed")
-    );
+    let mut output = TeeOutput::new(ScriptedOutput::<u16>::accepting(), ScriptedOutput::accepting());
+    assert_eq!(7, output.seek_to(SeekFrom::Start(7)).expect("seek should succeed"));
     assert_eq!(7, output.inner().position);
     assert_eq!(7, output.branch().position);
 
@@ -294,8 +251,7 @@ fn test_tee_output_rejects_safe_overreported_count() {
         super::support_tests::SafeOverreportOutput,
         super::support_tests::ScriptedOutput::<u8>::accepting(),
     );
-    let error =
-        unsafe { qubit_io::Output::write_unchecked(&mut wrapper, b"abcd", 1, 2) }.unwrap_err();
+    let error = unsafe { qubit_io::Output::write_unchecked(&mut wrapper, b"abcd", 1, 2) }.unwrap_err();
     assert_eq!(std::io::ErrorKind::InvalidData, error.kind());
     assert!(wrapper.branch().items.is_empty());
 }
