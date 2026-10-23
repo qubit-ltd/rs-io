@@ -13,6 +13,9 @@ from pathlib import Path
 from typing import Any
 
 
+CRATES_IO_SOURCE = "registry+https://github.com/rust-lang/crates.io-index"
+
+
 def canonical(path: str | Path) -> Path:
     return Path(path).expanduser().resolve(strict=True)
 
@@ -40,7 +43,12 @@ def inspect_graph(
     root_manifest: Path,
     expected: dict[str, Path],
     required: set[str],
+    *,
+    expected_versions: dict[str, str] | None = None,
+    registry_packages: set[str] | None = None,
 ) -> list[str]:
+    expected_versions = expected_versions or {}
+    registry_packages = registry_packages or set()
     packages = {package["id"]: package for package in metadata["packages"]}
     roots = [
         package_id
@@ -53,36 +61,55 @@ def inspect_graph(
         )
     reachable = reachable_ids(metadata, roots[0])
     errors: list[str] = []
-    for name, expected_manifest in expected.items():
-        found = [packages[package_id] for package_id in reachable if packages[package_id]["name"] == name]
-        if name in required and not found:
+    for name in required:
+        if not any(packages[package_id]["name"] == name for package_id in reachable):
             errors.append(f"{name}: required package is not reachable")
-        if len(found) > 1:
+    for name in set(expected) | registry_packages:
+        expected_manifest = expected.get(name)
+        found = [packages[package_id] for package_id in reachable if packages[package_id]["name"] == name]
+        if len(found) > 1 and name not in registry_packages:
             ids = ", ".join(package["id"] for package in found)
             errors.append(f"{name}: expected one reachable package ID, found {len(found)} ({ids})")
         for package in found:
             manifest_path = Path(package["manifest_path"]).resolve()
-            if package.get("source") is not None:
-                errors.append(f"{name}: registry/other source {package['source']} at {manifest_path}")
-            if manifest_path != expected_manifest:
-                errors.append(f"{name}: canonical manifest is {manifest_path}, expected {expected_manifest}")
+            if name in registry_packages:
+                source = package.get("source") or "path"
+                if source != CRATES_IO_SOURCE:
+                    errors.append(f"{name}: expected crates.io registry source, found {source}")
+            else:
+                if package.get("source") is not None:
+                    errors.append(f"{name}: registry/other source {package['source']} at {manifest_path}")
+                if expected_manifest is not None and manifest_path != expected_manifest:
+                    errors.append(f"{name}: canonical manifest is {manifest_path}, expected {expected_manifest}")
+            expected_version = expected_versions.get(name)
+            if expected_version and name not in registry_packages:
+                actual_version = package.get("version", "")
+                matches = actual_version == expected_version or (
+                    expected_version.count(".") == 1
+                    and actual_version.startswith(expected_version + ".")
+                )
+                if not matches:
+                    errors.append(f"{name}: expected version {expected_version}, found {actual_version}")
+        if name in registry_packages and found and expected_versions.get(name):
+            wanted = expected_versions[name]
+            if not any(package.get("version") == wanted for package in found):
+                versions = ", ".join(sorted({package.get("version", "") for package in found}))
+                errors.append(f"{name}: expected crates.io version {wanted}, found {versions}")
     return errors
 
 
-def load_local_patches(
-    repository_root: Path, config: dict[str, Any], candidate_manifest: Path
-) -> dict[str, Path]:
+def load_local_patches(repository_root: Path, config: dict[str, Any]) -> dict[str, Path]:
     configured = config["local_patches"]
     if not isinstance(configured, dict) or not configured:
         raise ValueError("project.local_patches must be a non-empty table")
-    required_names = {"qubit-io", "qubit-budget", "qubit-fs", "qubit-fs-testkit"}
+    required_names = {"qubit-fs", "qubit-fs-testkit"}
     if set(configured) != required_names:
         missing = sorted(required_names - set(configured))
         unexpected = sorted(set(configured) - required_names)
         raise ValueError(f"project.local_patches keys mismatch: missing={missing}, unexpected={unexpected}")
     patches: dict[str, Path] = {}
     for name, relative_manifest in configured.items():
-        manifest = candidate_manifest if name == "qubit-io" else repository_root / relative_manifest
+        manifest = repository_root / relative_manifest
         manifest = canonical(manifest)
         try:
             package = tomllib.loads(manifest.read_text(encoding="utf-8"))["package"]
@@ -115,40 +142,20 @@ def load_config(config_path: Path) -> tuple[Path, dict[str, Path], list[tuple[Pa
         canonical_project_root = script_root
     project = data["project"]
     repository_root = canonical(canonical_project_root / project["repository_root"])
-    candidate_manifest = canonical(script_root / "Cargo.toml")
-    expected = load_local_patches(repository_root, project, candidate_manifest)
+    expected = load_local_patches(repository_root, project)
     # Keep the configured sibling manifest as an independent repository identity check.
-    if canonical(repository_root / project["io_manifest"]) != canonical(repository_root / project["local_patches"]["qubit-io"]):
-        raise ValueError("qubit-io local_patches entry must match io_manifest")
-    if expected.get("qubit-io") != candidate_manifest:
-        raise ValueError("qubit-io local patch must use the candidate checkout Cargo.toml")
-    if "qubit-budget" in expected and expected["qubit-budget"] != canonical(repository_root / project["budget_manifest"]):
-        raise ValueError("qubit-budget local patch must match budget_manifest")
+    io_manifest = canonical(repository_root / project["io_manifest"])
+    try:
+        io_package = tomllib.loads(io_manifest.read_text(encoding="utf-8"))["package"]["name"]
+    except (OSError, tomllib.TOMLDecodeError, KeyError, TypeError) as error:
+        raise ValueError(f"invalid io_manifest {io_manifest}: {error}") from error
+    if io_package != "qubit-io":
+        raise ValueError(f"io_manifest must identify qubit-io, found {io_package}")
     manifests = []
     for item in data["manifest"]:
         path = (repository_root / item["path"]).resolve()
         settings = dict(item)
-        overrides = settings.get("patch_overrides", {})
-        if not isinstance(overrides, dict):
-            raise ValueError(f"patch_overrides must be a table for {path}")
-        resolved_overrides: dict[str, Path] = {}
-        for name, relative_manifest in overrides.items():
-            if name not in expected:
-                raise ValueError(f"unknown patch override {name} for {path}")
-            if not isinstance(relative_manifest, str) or Path(relative_manifest).is_absolute():
-                raise ValueError(f"patch override path for {name} must be relative to repository_root")
-            override_manifest = canonical(repository_root / relative_manifest)
-            try:
-                package = tomllib.loads(override_manifest.read_text(encoding="utf-8"))["package"]
-                package_name = package["name"]
-            except (OSError, tomllib.TOMLDecodeError, KeyError, TypeError) as error:
-                raise ValueError(f"invalid patch override for {name}: {override_manifest}: {error}") from error
-            if package_name != name:
-                raise ValueError(
-                    f"patch override {name} points to package {package_name} at {override_manifest}"
-                )
-            resolved_overrides[name] = override_manifest
-        settings["patch_overrides"] = resolved_overrides
+        settings["io_manifest"] = io_manifest
         manifests.append((path, settings))
     return repository_root, expected, manifests
 
@@ -239,7 +246,7 @@ def check_config(
         if not manifest.is_file():
             errors.append(f"missing configured manifest: {manifest}")
             continue
-        manifest_patches = {**expected, **settings.get("patch_overrides", {})}
+        manifest_patches = expected
         try:
             conflicts = check_patch_conflicts(manifest, manifest_patches, workspace_locator)
         except RuntimeError as error:
@@ -251,8 +258,16 @@ def check_config(
         for all_features, mode in ((False, "default"), (True, "all-features")):
             required = set(settings.get("required_all_features" if all_features else "required_default", []))
             try:
-                metadata = metadata_runner(manifest, all_features, manifest_patches, allow_lock_update)
-                graph_errors = inspect_graph(metadata, manifest, manifest_patches, required)
+                expected_sources = {"qubit-io": settings["io_manifest"]}
+                graph_paths = {**manifest_patches, **expected_sources}
+                metadata = metadata_runner(
+                    manifest, all_features, manifest_patches, allow_lock_update
+                )
+                graph_errors = inspect_graph(
+                    metadata, manifest, graph_paths, required,
+                    expected_versions={"qubit-io": "0.19", "qubit-budget": "0.9.1"},
+                    registry_packages={"qubit-budget"},
+                )
             except (RuntimeError, ValueError, KeyError, json.JSONDecodeError) as error:
                 errors.append(f"{manifest} [{mode}]: {error}")
                 continue
@@ -262,10 +277,9 @@ def check_config(
                 if Path(package["manifest_path"]).resolve() == manifest
             )
             active = reachable_ids(metadata, root_id)
-            for name in manifest_patches:
+            for name in set(manifest_patches) | {"qubit-io", "qubit-budget"}:
                 records = [packages[package_id] for package_id in active if packages[package_id]["name"] == name]
-                if records:
-                    record = records[0]
+                for record in records:
                     print(
                         f"{manifest} [{mode}] {name} {record['version']} "
                         f"source={record.get('source') or 'path'} manifest={Path(record['manifest_path']).resolve()}"

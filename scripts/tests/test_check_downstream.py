@@ -33,12 +33,12 @@ class MetadataGraphTests(unittest.TestCase):
             path.touch()
         self.root_id = "path+file:///root#root@1.0.0"
         self.io_id = "path+file:///rs-io#qubit-io@0.19.0"
-        self.budget_id = "path+file:///rs-budget#qubit-budget@0.9.0"
+        self.budget_id = "registry+https://github.com/rust-lang/crates.io-index#qubit-budget@0.9.1"
         self.metadata = {
             "packages": [
                 self.package(self.root_id, "root", self.root_manifest),
                 self.package(self.io_id, "qubit-io", self.io_manifest),
-                self.package(self.budget_id, "qubit-budget", self.budget_manifest),
+                self.package(self.budget_id, "qubit-budget", self.budget_manifest, "registry+https://github.com/rust-lang/crates.io-index"),
             ],
             "resolve": {
                 "nodes": [
@@ -48,7 +48,7 @@ class MetadataGraphTests(unittest.TestCase):
                 ]
             },
         }
-        self.expected = {"qubit-io": self.io_manifest, "qubit-budget": self.budget_manifest}
+        self.expected = {"qubit-io": self.io_manifest}
 
     def tearDown(self) -> None:
         self.temp.cleanup()
@@ -58,7 +58,7 @@ class MetadataGraphTests(unittest.TestCase):
         return {
             "id": package_id,
             "name": name,
-            "version": "1.0.0",
+            "version": {"qubit-io": "0.19.0", "qubit-budget": "0.9.1"}.get(name, "1.0.0"),
             "source": source,
             "manifest_path": str(manifest),
         }
@@ -85,10 +85,56 @@ class MetadataGraphTests(unittest.TestCase):
         errors = checker.inspect_graph(self.metadata, self.root_manifest, self.expected, set())
         self.assertTrue(any("expected one reachable package ID, found 2" in error for error in errors))
 
-    def test_registry_budget_source_fails(self) -> None:
-        self.metadata["packages"][2]["source"] = "registry+https://example.invalid"
-        errors = checker.inspect_graph(self.metadata, self.root_manifest, self.expected, {"qubit-budget"})
-        self.assertTrue(any("qubit-budget: registry/other source" in error for error in errors))
+    def test_crates_io_budget_091_is_accepted_alongside_transitive_old_version(self) -> None:
+        old_id = "registry+https://github.com/rust-lang/crates.io-index#qubit-budget@0.8.0"
+        old_manifest = self.root / "old-budget/Cargo.toml"
+        old_manifest.parent.mkdir()
+        old_manifest.touch()
+        self.metadata["packages"].append(self.package(
+            old_id, "qubit-budget", old_manifest, "registry+https://github.com/rust-lang/crates.io-index"
+        ))
+        self.metadata["resolve"]["nodes"].append({"id": old_id, "deps": []})
+        self.metadata["resolve"]["nodes"][0]["deps"].append({"name": "old", "pkg": old_id})
+        self.assertEqual(checker.inspect_graph(
+            self.metadata, self.root_manifest, self.expected, {"qubit-budget"},
+            expected_versions={"qubit-io": "0.19", "qubit-budget": "0.9.1"},
+            registry_packages={"qubit-budget"},
+        ), [])
+
+    def test_registry_budget_source_and_version_are_enforced(self) -> None:
+        self.metadata["packages"][2]["source"] = "path+file:///somewhere"
+        errors = checker.inspect_graph(
+            self.metadata, self.root_manifest, self.expected, {"qubit-budget"},
+            expected_versions={"qubit-io": "0.19", "qubit-budget": "0.9.1"},
+            registry_packages={"qubit-budget"},
+        )
+        self.assertTrue(any("qubit-budget" in error and "registry" in error for error in errors))
+
+    def test_registry_budget_rejects_a_non_crates_io_registry_id(self) -> None:
+        self.metadata["packages"][2]["source"] = "registry+https://attacker.invalid/crates.io-index"
+        errors = checker.inspect_graph(
+            self.metadata, self.root_manifest, self.expected, {"qubit-budget"},
+            expected_versions={"qubit-budget": "0.9.1"},
+            registry_packages={"qubit-budget"},
+        )
+        self.assertTrue(any("expected crates.io registry source" in error for error in errors))
+
+    def test_registry_budget_requires_exact_current_version(self) -> None:
+        self.metadata["packages"][2]["version"] = "0.9.0"
+        errors = checker.inspect_graph(
+            self.metadata, self.root_manifest, self.expected, {"qubit-budget"},
+            expected_versions={"qubit-budget": "0.9.1"},
+            registry_packages={"qubit-budget"},
+        )
+        self.assertTrue(any("expected crates.io version 0.9.1" in error for error in errors))
+
+    def test_io_version_constraint_is_enforced(self) -> None:
+        self.metadata["packages"][1]["version"] = "0.18.9"
+        errors = checker.inspect_graph(
+            self.metadata, self.root_manifest, self.expected, {"qubit-io"},
+            expected_versions={"qubit-io": "0.19"},
+        )
+        self.assertTrue(any("qubit-io" in error and "expected version 0.19" in error for error in errors))
 
     def test_wrong_canonical_manifest_fails(self) -> None:
         wrong = self.root / "wrong" / "Cargo.toml"
@@ -151,9 +197,7 @@ class MetadataGraphTests(unittest.TestCase):
             config = scripts / "downstream.toml"
             config.write_text(
                 '[project]\nrepository_root = "."\nio_manifest = "io/Cargo.toml"\n'
-                'budget_manifest = "budget/Cargo.toml"\n'
-                '[project.local_patches]\nqubit-io = "io/Cargo.toml"\n'
-                'qubit-budget = "budget/Cargo.toml"\n'
+                '[project.local_patches]\n'
                 'qubit-fs = "fs/Cargo.toml"\nqubit-fs-testkit = "fs-testkit/Cargo.toml"\n'
                 '[[manifest]]\npath = "missing/Cargo.toml"\n',
                 encoding="utf-8",
@@ -188,9 +232,7 @@ class MetadataGraphTests(unittest.TestCase):
             config = scripts / "downstream.toml"
             config.write_text(
                 '[project]\nrepository_root = ".."\nio_manifest = "rs-io/Cargo.toml"\n'
-                'budget_manifest = "rs-budget/Cargo.toml"\n'
-                '[project.local_patches]\nqubit-io = "rs-io/Cargo.toml"\n'
-                'qubit-budget = "rs-budget/Cargo.toml"\n'
+                '[project.local_patches]\n'
                 'qubit-fs = "rs-fs/Cargo.toml"\n'
                 'qubit-fs-testkit = "rs-fs-testkit/Cargo.toml"\n'
                 '[[manifest]]\npath = "rs-json/Cargo.toml"\n',
@@ -198,12 +240,13 @@ class MetadataGraphTests(unittest.TestCase):
             )
             root, expected, manifests = checker.load_config(config)
             self.assertEqual(root, common.resolve())
-            self.assertEqual(expected["qubit-io"], (worktree / "Cargo.toml").resolve())
+            self.assertNotIn("qubit-io", expected)
             self.assertEqual(manifests[0][0], expected_manifests[2].resolve())
+            self.assertEqual(manifests[0][1]["io_manifest"], expected_manifests[0].resolve())
 
 
 class DownstreamCommandTests(unittest.TestCase):
-    def create_override_config(self, root: Path, override: str = "rs-io/Cargo.toml") -> tuple[Path, Path, Path]:
+    def create_source_config(self, root: Path) -> tuple[Path, Path, Path]:
         scripts = root / "scripts"
         scripts.mkdir(parents=True)
         for relative, name in (("rs-io", "qubit-io"), ("rs-budget", "qubit-budget"),
@@ -223,19 +266,15 @@ class DownstreamCommandTests(unittest.TestCase):
         config = scripts / "downstream.toml"
         config.write_text(
             '[project]\nrepository_root = "."\nio_manifest = "rs-io/Cargo.toml"\n'
-            'budget_manifest = "rs-budget/Cargo.toml"\n'
-            '[project.local_patches]\nqubit-io = "rs-io/Cargo.toml"\n'
-            'qubit-budget = "rs-budget/Cargo.toml"\nqubit-fs = "rs-fs/Cargo.toml"\n'
+            '[project.local_patches]\nqubit-fs = "rs-fs/Cargo.toml"\n'
             'qubit-fs-testkit = "rs-fs-testkit/Cargo.toml"\n'
             '[[manifest]]\npath = "consumer/Cargo.toml"\n'
             '[[manifest]]\npath = "s3-contract/Cargo.toml"\n'
-            f'patch_overrides = {{ "qubit-io" = "{override}" }}\n', encoding="utf-8")
-        return config, candidate.resolve(), (root / override).resolve()
+            '', encoding="utf-8")
+        return config, candidate.resolve(), (root / "rs-io/Cargo.toml").resolve()
 
     def test_metadata_command_quotes_all_local_patches_and_lock_policy(self) -> None:
         patches = {
-            "qubit-io": Path("/tmp/candidate rs-io/Cargo.toml"),
-            "qubit-budget": Path("/tmp/rust common/rs-budget/Cargo.toml"),
             "qubit-fs": Path("/tmp/rust common/rs-fs/Cargo.toml"),
             "qubit-fs-testkit": Path("/tmp/rust common/rs-fs-testkit/Cargo.toml"),
         }
@@ -243,7 +282,7 @@ class DownstreamCommandTests(unittest.TestCase):
         self.assertIn("--locked", command)
         self.assertNotIn("--all-features", command)
         config_args = [command[index + 1] for index, arg in enumerate(command[:-1]) if arg == "--config"]
-        self.assertEqual(len(config_args), 4)
+        self.assertEqual(len(config_args), 2)
         self.assertEqual(
             config_args,
             [
@@ -255,7 +294,7 @@ class DownstreamCommandTests(unittest.TestCase):
         self.assertNotIn("--locked", update_command)
         self.assertIn("--all-features", update_command)
 
-    def test_candidate_worktree_io_patch_uses_candidate_manifest(self) -> None:
+    def test_worktree_io_expectation_uses_canonical_sibling_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             common = root / "rust-common"
@@ -277,15 +316,15 @@ class DownstreamCommandTests(unittest.TestCase):
             config = scripts / "downstream.toml"
             config.write_text(
                 '[project]\nrepository_root = ".."\nio_manifest = "rs-io/Cargo.toml"\n'
-                'budget_manifest = "rs-budget/Cargo.toml"\n'
-                '[project.local_patches]\nqubit-io = "rs-io/Cargo.toml"\n'
-                'qubit-budget = "rs-budget/Cargo.toml"\nqubit-fs = "rs-fs/Cargo.toml"\n'
+                '[project.local_patches]\nqubit-fs = "rs-fs/Cargo.toml"\n'
                 'qubit-fs-testkit = "rs-fs-testkit/Cargo.toml"\n'
                 '[[manifest]]\npath = "rs-json/Cargo.toml"\n', encoding="utf-8")
-            _, expected, _ = checker.load_config(config)
-            patches = checker.load_local_patches(common, checker.tomllib.loads(config.read_text())["project"], worktree / "Cargo.toml")
-            self.assertEqual(expected["qubit-io"], (worktree / "Cargo.toml").resolve())
-            self.assertEqual(patches["qubit-io"], (worktree / "Cargo.toml").resolve())
+            _, expected, manifests = checker.load_config(config)
+            patches = checker.load_local_patches(common, checker.tomllib.loads(config.read_text())["project"])
+            self.assertNotIn("qubit-io", expected)
+            self.assertNotIn("qubit-io", patches)
+            self.assertEqual(manifests[0][1]["io_manifest"], (main_repo / "Cargo.toml").resolve())
+            self.assertNotEqual(manifests[0][1]["io_manifest"], (worktree / "Cargo.toml").resolve())
 
     def test_auxiliary_local_package_source_is_checked_when_reachable(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -305,25 +344,26 @@ class DownstreamCommandTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             config = {"local_patches": {
-                "qubit-io": "rs-io/Cargo.toml", "qubit-budget": "rs-budget/Cargo.toml",
                 "qubit-fs": "rs-fs/Cargo.toml", "qubit-fs-testkit": "rs-fs-testkit/Cargo.toml",
             }}
-            for relative, name in (("rs-budget", "qubit-budget"), ("rs-fs", "qubit-fs"),
-                                   ("rs-fs-testkit", "qubit-fs-testkit")):
+            for relative, name in (("rs-budget", "qubit-budget"), ("rs-fs", "qubit-fs")):
                 manifest = root / relative / "Cargo.toml"
                 manifest.parent.mkdir(parents=True)
                 manifest.write_text(f'[package]\nname = "{name}"\nversion = "1.0.0"\n', encoding="utf-8")
             candidate = root / "candidate/Cargo.toml"
             with self.assertRaises((FileNotFoundError, ValueError)):
-                checker.load_local_patches(root, config, candidate)
+                checker.load_local_patches(root, config)
+            testkit = root / "rs-fs-testkit/Cargo.toml"
+            testkit.parent.mkdir(parents=True)
+            testkit.write_text('[package]\nname = "qubit-fs-testkit"\nversion = "1.0.0"\n', encoding="utf-8")
             wrong = root / "wrong/Cargo.toml"
             wrong.parent.mkdir()
             wrong.write_text('[package]\nname = "not-qubit-io"\nversion = "1.0.0"\n', encoding="utf-8")
-            config["local_patches"]["qubit-budget"] = "wrong/Cargo.toml"
+            config["local_patches"]["qubit-fs"] = "wrong/Cargo.toml"
             candidate.parent.mkdir()
             candidate.write_text('[package]\nname = "qubit-io"\nversion = "1.0.0"\n', encoding="utf-8")
             with self.assertRaises(ValueError):
-                checker.load_local_patches(root, config, candidate)
+                checker.load_local_patches(root, config)
 
     def test_workspace_patch_conflict_is_reported(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -376,9 +416,7 @@ class DownstreamCommandTests(unittest.TestCase):
             config = scripts / "downstream.toml"
             config.write_text(
                 '[project]\nrepository_root = "."\nio_manifest = "rs-io/Cargo.toml"\n'
-                'budget_manifest = "rs-budget/Cargo.toml"\n'
-                '[project.local_patches]\nqubit-io = "rs-io/Cargo.toml"\n'
-                'qubit-budget = "rs-budget/Cargo.toml"\nqubit-fs = "rs-fs/Cargo.toml"\n'
+                '[project.local_patches]\nqubit-fs = "rs-fs/Cargo.toml"\n'
                 'qubit-fs-testkit = "rs-fs-testkit/Cargo.toml"\n'
                 '[[manifest]]\npath = "consumer/Cargo.toml"\n', encoding="utf-8")
             calls = []
@@ -397,23 +435,24 @@ class DownstreamCommandTests(unittest.TestCase):
             )
             self.assertEqual(errors, [])
             self.assertEqual([call[1] for call in calls], [False, True])
-            self.assertTrue(all(call[2]["qubit-io"] == candidate.resolve() for call in calls))
+            self.assertTrue(all("qubit-io" not in call[2] for call in calls))
             self.assertTrue(all(call[3] for call in calls))
 
-    def test_manifest_patch_override_selects_sibling_only_for_s3_entry(self) -> None:
+    def test_all_manifests_expect_the_canonical_sibling_io_source(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            config, candidate, sibling = self.create_override_config(root)
+            config, candidate, sibling = self.create_source_config(root)
             calls = []
 
             def fake_runner(manifest, all_features, patches, _allow_lock_update):
-                calls.append((manifest, all_features, patches["qubit-io"]))
+                io_manifest = sibling
+                calls.append((manifest, all_features, patches, io_manifest))
                 root_id = manifest.stem
                 io_id = f"io-{root_id}"
                 return {
                     "packages": [
                         {"id": root_id, "name": root_id, "version": "1.0.0", "manifest_path": str(manifest), "source": None},
-                        {"id": io_id, "name": "qubit-io", "version": "0.19.0", "manifest_path": str(patches["qubit-io"]), "source": None},
+                        {"id": io_id, "name": "qubit-io", "version": "0.19.0", "manifest_path": str(io_manifest), "source": None},
                     ],
                     "resolve": {"nodes": [
                         {"id": root_id, "deps": [{"pkg": io_id}]}, {"id": io_id, "deps": []},
@@ -425,30 +464,18 @@ class DownstreamCommandTests(unittest.TestCase):
                 workspace_locator=lambda manifest: manifest,
             )
             self.assertEqual(errors, [])
-            self.assertEqual([path for path, _, _ in calls], [root / "consumer/Cargo.toml"] * 2 + [root / "s3-contract/Cargo.toml"] * 2)
-            self.assertEqual([patch for _, _, patch in calls], [candidate, candidate, sibling, sibling])
+            self.assertEqual([path for path, _, _, _ in calls], [root / "consumer/Cargo.toml"] * 2 + [root / "s3-contract/Cargo.toml"] * 2)
+            self.assertTrue(all("qubit-io" not in patches for _, _, patches, _ in calls))
+            self.assertEqual([io for _, _, _, io in calls], [sibling, sibling, sibling, sibling])
 
-    def test_manifest_patch_override_rejects_missing_and_wrong_package(self) -> None:
+    def test_patch_conflict_checks_only_actual_local_patch_names(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            missing_config, _, _ = self.create_override_config(root, "missing/Cargo.toml")
-            with self.assertRaises((FileNotFoundError, ValueError)):
-                checker.load_config(missing_config)
-
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            wrong_config, _, _ = self.create_override_config(root, "rs-budget/Cargo.toml")
-            with self.assertRaises(ValueError):
-                checker.load_config(wrong_config)
-
-    def test_manifest_patch_conflict_uses_override_target(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            config, candidate, sibling = self.create_override_config(root)
+            config, _, _ = self.create_source_config(root)
             s3_manifest = root / "s3-contract/Cargo.toml"
             s3_manifest.write_text(
                 '[package]\nname = "s3-contract"\nversion = "1.0.0"\n'
-                '[patch.crates-io]\nqubit-io = { path = ".." }\n', encoding="utf-8")
+                '[patch.crates-io]\nqubit-fs = { path = ".." }\n', encoding="utf-8")
 
             def fake_runner(manifest, *_args):
                 if manifest == s3_manifest:
@@ -464,7 +491,7 @@ class DownstreamCommandTests(unittest.TestCase):
                 metadata_runner=fake_runner,
                 workspace_locator=lambda manifest: manifest,
             )
-            self.assertTrue(any(str(candidate) in error and str(sibling) in error for error in errors))
+            self.assertTrue(any("qubit-fs" in error for error in errors))
 
     def test_allow_lock_update_prints_warning_before_check(self) -> None:
         stderr = io.StringIO()
@@ -474,7 +501,7 @@ class DownstreamCommandTests(unittest.TestCase):
         self.assertIn("may create or update downstream Cargo.lock", stderr.getvalue())
 
     @unittest.skipUnless(shutil.which("cargo"), "Cargo is required for the offline integration fixture")
-    def test_offline_cargo_metadata_uses_local_patch_for_both_feature_modes(self) -> None:
+    def test_cargo_path_metadata_passes_checker_source_and_version_assertions(self) -> None:
         with tempfile.TemporaryDirectory(prefix="downstream fixture ") as temporary:
             root = Path(temporary)
             candidate = root / "candidate qubit-io"
@@ -490,13 +517,11 @@ class DownstreamCommandTests(unittest.TestCase):
             consumer_manifest = consumer / "Cargo.toml"
             consumer_manifest.write_text(
                 '[package]\nname = "consumer"\nversion = "0.1.0"\nedition = "2021"\n'
-                '[dependencies]\nqubit-io = { version = "0.19", features = [] }\n', encoding="utf-8")
+                f'[dependencies]\nqubit-io = {{ version = "0.19", path = {json.dumps(str(candidate))}, features = [] }}\n', encoding="utf-8")
             (consumer / "src").mkdir()
             (consumer / "src/lib.rs").write_text("pub fn consumer() {}\n", encoding="utf-8")
-            patches = {"qubit-io": candidate_manifest.resolve()}
+            patches = {}
             lock_command = ["cargo", "generate-lockfile", "--manifest-path", str(consumer_manifest), "--offline"]
-            for name, patch_manifest in sorted(patches.items()):
-                lock_command.extend(["--config", f"patch.crates-io.{name}.path={json.dumps(str(patch_manifest.parent))}"])
             lock_result = subprocess.run(lock_command, check=False, capture_output=True, text=True)
             self.assertEqual(lock_result.returncode, 0, lock_result.stderr)
             for all_features in (False, True):
@@ -506,6 +531,16 @@ class DownstreamCommandTests(unittest.TestCase):
                 package = next(item for item in metadata["packages"] if item["name"] == "qubit-io")
                 self.assertIsNone(package["source"])
                 self.assertEqual(Path(package["manifest_path"]).resolve(), candidate_manifest.resolve())
+                self.assertEqual(
+                    checker.inspect_graph(
+                        metadata,
+                        consumer_manifest.resolve(),
+                        {"qubit-io": candidate_manifest.resolve()},
+                        {"qubit-io"},
+                        expected_versions={"qubit-io": "0.19"},
+                    ),
+                    [],
+                )
 
 
 if __name__ == "__main__":
