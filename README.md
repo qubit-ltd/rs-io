@@ -289,6 +289,14 @@ start's `CountingInput<BufferedInput<LimitInput<_>>>` is still an
 | Content digests | `DigestInput`, `DigestOutput` | `AsyncDigestInput`, `AsyncDigestOutput` | `u8`; `digest` feature and caller-supplied algorithm |
 | Tee | `TeeInput`, `TeeOutput`, `SyncSeekTeeInput` | — | Generic items; synchronized seeking requires seekable source and branch |
 
+Tee wrappers preserve progress already reported by the primary stream. An
+`Ok(n)` therefore confirms `n` primary items, not a complete mirror. Check
+`branch_error()` after finite input transfers and check output `flush()`; all
+three `into_parts()` methods now return `(primary, branch, error)`. A branch
+failure does not roll back the primary, so do not blindly replay its prefix.
+The [user guide](doc/user_guide.md#8-mirror-input-and-output) covers this
+migration and recovery boundary.
+
 Wrapper order determines what is observed. A counter outside an input buffer
 counts items consumed by the algorithm; a counter inside it also counts
 prefetched items. A limit bounds the items exposed or accepted by its wrapper;
@@ -455,6 +463,14 @@ cargo test --all-features
 # Check code coverage
 ./.infra/bin/coverage.sh
 ```
+
+To verify local sibling checkout dependency sources without compiling them,
+run `python3 -B scripts/check-downstream.py --metadata-only`. The checker uses
+`--locked` by default and injects explicit local patches, so it requires the
+configured sibling checkouts and is not suitable for a standalone remote
+checkout. `--allow-lock-update` permits Cargo to create or update downstream
+lockfiles. Metadata verifies dependency resolution and source paths; it does
+not compile downstream code.
 
 ## License
 

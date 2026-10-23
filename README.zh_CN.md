@@ -270,6 +270,11 @@ fn main() -> io::Result<()> {
 | 内容摘要 | `DigestInput`、`DigestOutput` | `AsyncDigestInput`、`AsyncDigestOutput` | `u8`；启用 `digest`，调用方提供算法 |
 | 分流 | `TeeInput`、`TeeOutput`、`SyncSeekTeeInput` | — | 泛型元素；同步定位要求源流和分支流均可定位 |
 
+tee 会保留主路已经报告的进度。`Ok(n)` 只表示主路传输了 n 个元素，不能证明分支也完整接收。
+有限输入处理结束后检查 `branch_error()`；输出则检查 `flush()`。三个类型的
+`into_parts()` 现在都返回 `(primary, branch, error)`。分支失败不会回滚主路，不能盲目重放
+已经推进的前缀。迁移和恢复边界见[用户指南](doc/user_guide.zh_CN.md#8-镜像输入与输出)。
+
 包装顺序决定观察到的数据范围。计数器放在输入缓冲外侧时，统计算法实际消费的元素；
 放在缓冲内侧时，还会计入预取的元素。限量包装器约束自身暴露或接收的元素数量，
 应用仍须执行自己的校验，例如分配内存前检查消息声明的长度，参见
@@ -420,6 +425,11 @@ cargo test --all-features
 # 检查代码覆盖率
 ./.infra/bin/coverage.sh
 ```
+
+若要检查本地同级 checkout 的依赖来源而不编译下游代码，可运行
+`python3 -B scripts/check-downstream.py --metadata-only`。检查器默认使用 `--locked`，并显式注入本地
+patch，因此需要配置中的同级 checkout；只有单仓的远端 checkout 不适合直接运行。
+`--allow-lock-update` 允许 Cargo 创建或更新下游锁文件。metadata 只验证依赖解析和来源路径，不会编译下游代码。
 
 ## 许可证
 

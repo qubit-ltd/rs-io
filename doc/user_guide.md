@@ -603,11 +603,11 @@ Wrapper order follows chapter 6: `DigestInput<BufferedInput<_>, _>` tracks consu
 
 ## 8. Mirror input and output
 
-To give chapter 2 two revenue sinks, replace `Collected(Vec::new())` with `TeeOutput::new(Collected(Vec::new()), Collected(Vec::new()))`, and import `TeeOutput`. Keep buffering and counting in their existing positions. At result inspection, split the sink using `into_parts()` and check both `Collected` values. The application supplies the actual business sinks.
+To give chapter 2 two revenue sinks, replace `Collected(Vec::new())` with `TeeOutput::new(Collected(Vec::new()), Collected(Vec::new()))`, and import `TeeOutput`. Keep buffering and counting in their existing positions. At result inspection, split the sink using `into_parts()` and check both `Collected` values and the returned error. The application supplies the actual business sinks.
 
 `TeeInput` reads the source first, then writes the successful prefix to its branch. `TeeOutput` writes its primary first, then fully mirrors the accepted prefix. Both support non-byte items, but execute in order without atomicity.
 
-This independent byte example demonstrates success and a branch with an insufficient quota:
+This independent byte example demonstrates a healthy mirror and a branch with an insufficient quota. A tee returns the primary stream's reported progress even when mirroring fails. A later non-empty transfer, output flush, `branch_error()`, or `into_parts()` exposes the latched branch error. A finite input can finish its last exact read without another read to expose that error, so query it before treating the input as fully mirrored.
 
 <!-- example: tee profile=core mode=run -->
 ```rust
@@ -618,24 +618,27 @@ fn main() -> io::Result<()> {
     let mut success = TeeOutput::new(Vec::<u8>::new(), Vec::<u8>::new());
     success.write_fully(b"abc")?;
     success.flush()?;
-    let (primary, branch) = success.into_parts();
+    let (primary, branch, error) = success.into_parts();
+    assert!(error.is_none());
     assert_eq!(primary, branch);
 
     let mut failed = TeeOutput::new(Vec::<u8>::new(),
                                    LimitOutput::new(Vec::<u8>::new(), 2));
-    let error = failed.write_fully(b"abc").unwrap_err();
-    assert_eq!(error.kind(), ErrorKind::WriteZero);
-    let (primary, branch) = failed.into_parts();
+    failed.write_fully(b"abc")?;
+    assert_eq!(failed.branch_error().unwrap().kind(), ErrorKind::WriteZero);
+    assert_eq!(failed.flush().unwrap_err().kind(), ErrorKind::WriteZero);
+    let (primary, branch, error) = failed.into_parts();
     assert_eq!(primary, b"abc");
     assert_eq!(branch.into_inner(), b"ab");
-    // The primary has already accepted abc. Do not resend the entire batch.
+    assert_eq!(error.unwrap().kind(), ErrorKind::WriteZero);
+    // The primary has already accepted abc. Do not replay its prefix blindly.
     Ok(())
 }
 ```
 
-On branch failure, a `TeeInput` source and the caller's destination slice may already have advanced or changed. A `TeeOutput` primary may contain the entire batch while its branch contains only a prefix. Stop ordinary processing, inspect both paths, and apply application-specific idempotency or compensation. Do not interpret an error as no transfer and blindly resend. An outer counter may not reflect those side effects either.
+On branch failure, the operation still reports the primary's completed count; the source and caller's destination slice for `TeeInput` may have advanced or changed, and a `TeeOutput` primary may contain the entire batch while its branch contains only a prefix. Stop ordinary processing, inspect both paths, and apply application-specific idempotency or compensation. Do not blindly replay the primary prefix. An outer counter may not reflect these branch side effects either. `read_exactly` or `write_fully` can return success when the requested primary count is complete, even though the branch failed; success from those helpers does not mean both paths completed.
 
-`TeeOutput::flush` flushes the primary first and only then the branch. `into_parts()` does not flush. A `TeeInput` branch is an output that the caller must flush separately, for example through `branch_mut()`. Direct transfers through `inner_mut()` or `branch_mut()` can make the paths diverge.
+`TeeOutput::flush` first reports a latched branch error; while healthy, it flushes the primary and then the branch. Check its result when finishing output. `into_parts()` does not flush and returns `(primary, branch, error)`; inspect all three values. A `TeeInput` branch is an output that the caller must flush separately, for example through `branch_mut()`, and finite input must check `branch_error()` even if its last exact read succeeded. Direct transfers through `inner_mut()` or `branch_mut()` can make the paths diverge.
 
 Choose seek semantics explicitly: ordinary `TeeInput` seeks only its source. `TeeInput::with_sync_branch_seek` returns `SyncSeekTeeInput`, which seeks the source and then aligns the branch. `TeeOutput` likewise seeks its primary before aligning the branch. A second-path seek failure does not roll back the first. These types currently have no async tee equivalents.
 

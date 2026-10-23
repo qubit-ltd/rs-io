@@ -589,11 +589,11 @@ fn main() -> io::Result<()> {
 
 ## 8. 镜像输入与输出
 
-第 2 章若需要两路收入输出，可将原来的 `Collected(Vec::new())` 替换为 `TeeOutput::new(Collected(Vec::new()), Collected(Vec::new()))`，并导入 `TeeOutput`；其余缓冲与计数层保持原位置。结果检查时将接收端用 `into_parts()` 拆成两个 `Collected`，分别检查记录。两路实际的业务接收端由应用提供。
+第 2 章若需要两路收入输出，可将原来的 `Collected(Vec::new())` 替换为 `TeeOutput::new(Collected(Vec::new()), Collected(Vec::new()))`，并导入 `TeeOutput`；其余缓冲与计数层保持原位置。结果检查时将接收端用 `into_parts()` 拆开，检查两个 `Collected` 和额外返回的错误。两路实际的业务接收端由应用提供。
 
 `TeeInput` 先读取来源，再把成功读取的前缀写入分支；`TeeOutput` 先写主路，再将主路接纳的前缀完整写入分支。它们支持非字节元素，但有序执行，不提供原子性。
 
-下面的独立字节示例同时展示正常镜像与分支额度不足：
+下面的独立字节示例展示正常镜像和分支额度不足。即使分支写入失败，tee 仍返回主路已报告的进度；后续非空传输、输出刷新、`branch_error()` 或 `into_parts()` 可以观察到锁存的分支错误。有限输入的最后一次精确读取可能不会再发起下一次读取来报告错误，因此处理结束前要主动查询错误。
 
 <!-- example: tee profile=core mode=run -->
 ```rust
@@ -604,24 +604,27 @@ fn main() -> io::Result<()> {
     let mut success = TeeOutput::new(Vec::<u8>::new(), Vec::<u8>::new());
     success.write_fully(b"abc")?;
     success.flush()?;
-    let (primary, branch) = success.into_parts();
+    let (primary, branch, error) = success.into_parts();
+    assert!(error.is_none());
     assert_eq!(primary, branch);
 
     let mut failed = TeeOutput::new(Vec::<u8>::new(),
                                    LimitOutput::new(Vec::<u8>::new(), 2));
-    let error = failed.write_fully(b"abc").unwrap_err();
-    assert_eq!(error.kind(), ErrorKind::WriteZero);
-    let (primary, branch) = failed.into_parts();
+    failed.write_fully(b"abc")?;
+    assert_eq!(failed.branch_error().unwrap().kind(), ErrorKind::WriteZero);
+    assert_eq!(failed.flush().unwrap_err().kind(), ErrorKind::WriteZero);
+    let (primary, branch, error) = failed.into_parts();
     assert_eq!(primary, b"abc");
     assert_eq!(branch.into_inner(), b"ab");
-    // The primary has already accepted abc. Do not resend the entire batch.
+    assert_eq!(error.unwrap().kind(), ErrorKind::WriteZero);
+    // The primary has already accepted abc. Do not replay its prefix blindly.
     Ok(())
 }
 ```
 
-分支失败时，`TeeInput` 的来源和调用方目标切片可能已经推进或改变；`TeeOutput` 的主路可能已经接收整批，而分支只有一部分。应用应停止常规处理，检查两路状态，依据自身幂等或补偿机制处理，不能把错误当作“完全没有传输”而盲目重试。外侧计数器也未必反映这些副作用。
+分支失败时，这次操作仍返回主路已报告的数量；`TeeInput` 的来源和调用方目标切片可能已经推进或改变，`TeeOutput` 的主路也可能已接收整批，而分支只收到一部分。应用应停止常规处理，检查两路状态，并依据自身的幂等或补偿机制处理，不能盲目重放主路前缀。外侧计数器也未必反映分支副作用。请求数量恰好完成时，`read_exactly` 或 `write_fully` 可能返回成功，但这不代表两路都完成；处理有限输入时，即使最后一次精确读取成功，也要查询 `branch_error()`。
 
-`TeeOutput::flush` 先刷新主路，主路成功后才刷新分支。`into_parts()` 不刷新；`TeeInput` 的分支是输出端，需要调用方自行刷新，例如经 `branch_mut()`。经 `inner_mut()` 或 `branch_mut()` 直接传输会使两路分离。
+`TeeOutput::flush` 会先报告已锁存的分支错误；状态正常时才依次刷新主路和分支。结束输出时要检查刷新结果。`into_parts()` 不刷新，返回 `(primary, branch, error)`，三个值都要检查。`TeeInput` 的分支是输出端，需要调用方自行刷新，例如经 `branch_mut()`；有限输入结束时也要检查 `branch_error()`。经 `inner_mut()` 或 `branch_mut()` 直接传输会使两路分离。
 
 seek 也要选对语义：普通 `TeeInput` 仅定位来源；`TeeInput::with_sync_branch_seek` 返回 `SyncSeekTeeInput`，定位来源后再对齐分支。`TeeOutput` 同样先定位主路，再对齐分支。第二路定位失败不回滚第一路。这些类型目前没有对应的异步 tee 包装器。
 
