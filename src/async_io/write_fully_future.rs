@@ -16,6 +16,7 @@ use std::task::Poll;
 
 use super::read_fully_future::MAX_READY_OPERATIONS_PER_POLL;
 use crate::AsyncOutput;
+use crate::traits::validate_write_count;
 
 /// Future that writes every item from its source slice.
 ///
@@ -147,7 +148,9 @@ where
     /// # Errors
     ///
     /// Returns [`ErrorKind::WriteZero`] if the output accepts no item before
-    /// completion. Other errors are propagated from the output.
+    /// completion. Returns [`ErrorKind::InvalidData`] if the output reports
+    /// accepting more items than the remaining source contains. Other errors
+    /// are propagated from the output.
     ///
     /// # Panics
     ///
@@ -158,6 +161,7 @@ where
         let mut ready_operations = 0_usize;
         while this.written < this.input.len() {
             let remaining = &this.input[this.written..];
+            let requested = remaining.len();
             match this.output.as_mut().poll_write(cx, remaining) {
                 Poll::Ready(Ok(0)) => {
                     this.completed = true;
@@ -167,6 +171,10 @@ where
                     )));
                 }
                 Poll::Ready(Ok(written)) => {
+                    if let Err(error) = validate_write_count(written, requested) {
+                        this.completed = true;
+                        return Poll::Ready(Err(error));
+                    }
                     this.written += written;
                     ready_operations += 1;
                     if this.written < this.input.len() && ready_operations >= MAX_READY_OPERATIONS_PER_POLL {

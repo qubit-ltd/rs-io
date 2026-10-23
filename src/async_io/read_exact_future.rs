@@ -16,6 +16,7 @@ use std::task::Poll;
 
 use super::read_fully_future::MAX_READY_OPERATIONS_PER_POLL;
 use crate::AsyncInput;
+use crate::traits::validate_read_count;
 
 /// Future that reads until its destination is full.
 ///
@@ -154,7 +155,9 @@ where
     /// # Errors
     ///
     /// Returns [`ErrorKind::UnexpectedEof`] when EOF is reached before the
-    /// destination is full. Other errors are propagated from the input.
+    /// destination is full. Returns [`ErrorKind::InvalidData`] if the input
+    /// reports more items than the remaining destination can hold. Other
+    /// errors are propagated from the input.
     ///
     /// # Panics
     ///
@@ -165,6 +168,7 @@ where
         let mut ready_operations = 0_usize;
         while this.read < this.output.len() {
             let remaining = &mut this.output[this.read..];
+            let requested = remaining.len();
             match this.input.as_mut().poll_read(cx, remaining) {
                 Poll::Ready(Ok(0)) => {
                     this.completed = true;
@@ -174,6 +178,10 @@ where
                     )));
                 }
                 Poll::Ready(Ok(read)) => {
+                    if let Err(error) = validate_read_count(read, requested) {
+                        this.completed = true;
+                        return Poll::Ready(Err(error));
+                    }
                     this.read += read;
                     ready_operations += 1;
                     if this.read < this.output.len() && ready_operations >= MAX_READY_OPERATIONS_PER_POLL {

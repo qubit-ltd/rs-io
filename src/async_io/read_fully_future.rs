@@ -13,6 +13,7 @@ use std::task::Context;
 use std::task::Poll;
 
 use crate::AsyncInput;
+use crate::traits::validate_read_count;
 
 /// Maximum successful inner operations performed by one outer poll.
 pub(crate) const MAX_READY_OPERATIONS_PER_POLL: usize = 64;
@@ -154,7 +155,9 @@ where
     ///
     /// # Errors
     ///
-    /// Returns an I/O error reported by the input.
+    /// Returns an I/O error reported by the input. Returns
+    /// [`std::io::ErrorKind::InvalidData`] if the input reports more items than
+    /// the remaining destination can hold.
     ///
     /// # Panics
     ///
@@ -165,12 +168,17 @@ where
         let mut ready_operations = 0_usize;
         while this.read < this.output.len() {
             let remaining = &mut this.output[this.read..];
+            let requested = remaining.len();
             match this.input.as_mut().poll_read(cx, remaining) {
                 Poll::Ready(Ok(0)) => {
                     this.completed = true;
                     return Poll::Ready(Ok(this.read));
                 }
                 Poll::Ready(Ok(read)) => {
+                    if let Err(error) = validate_read_count(read, requested) {
+                        this.completed = true;
+                        return Poll::Ready(Err(error));
+                    }
                     this.read += read;
                     ready_operations += 1;
                     if this.read < this.output.len() && ready_operations >= MAX_READY_OPERATIONS_PER_POLL {

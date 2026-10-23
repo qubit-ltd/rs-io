@@ -18,6 +18,92 @@ use qubit_io::AsyncClose;
 use qubit_io::AsyncInput;
 use qubit_io::AsyncOutput;
 
+/// Input that emits an optional valid prefix, then reports one item too many.
+pub(super) struct SafeOverreportedInput {
+    prefix: usize,
+    prefix_emitted: bool,
+}
+
+impl SafeOverreportedInput {
+    pub(super) const fn new(prefix: usize) -> Self {
+        Self {
+            prefix,
+            prefix_emitted: false,
+        }
+    }
+}
+
+impl AsyncInput for SafeOverreportedInput {
+    type Item = u8;
+
+    unsafe fn poll_read_unchecked(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+        _output: &mut [u8],
+        _index: usize,
+        _count: usize,
+    ) -> Poll<Result<usize>> {
+        unreachable!("test must exercise the safe override")
+    }
+
+    fn poll_read(self: Pin<&mut Self>, _cx: &mut Context<'_>, output: &mut [u8]) -> Poll<Result<usize>> {
+        let this = self.get_mut();
+        if !this.prefix_emitted && this.prefix > 0 {
+            let n = this.prefix.min(output.len());
+            output[..n].fill(0xA5);
+            this.prefix_emitted = true;
+            return Poll::Ready(Ok(n));
+        }
+        Poll::Ready(Ok(output.len() + 1))
+    }
+}
+
+/// Output that accepts an optional valid prefix, then reports one too many.
+pub(super) struct SafeOverreportedOutput {
+    prefix: usize,
+    prefix_emitted: bool,
+    pub(super) accepted: Vec<u8>,
+}
+
+impl SafeOverreportedOutput {
+    pub(super) fn new(prefix: usize) -> Self {
+        Self {
+            prefix,
+            prefix_emitted: false,
+            accepted: Vec::new(),
+        }
+    }
+}
+
+impl AsyncOutput for SafeOverreportedOutput {
+    type Item = u8;
+
+    unsafe fn poll_write_unchecked(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+        _input: &[u8],
+        _index: usize,
+        _count: usize,
+    ) -> Poll<Result<usize>> {
+        unreachable!("test must exercise the safe override")
+    }
+
+    fn poll_write(self: Pin<&mut Self>, _cx: &mut Context<'_>, input: &[u8]) -> Poll<Result<usize>> {
+        let this = self.get_mut();
+        if !this.prefix_emitted && this.prefix > 0 {
+            let n = this.prefix.min(input.len());
+            this.accepted.extend_from_slice(&input[..n]);
+            this.prefix_emitted = true;
+            return Poll::Ready(Ok(n));
+        }
+        Poll::Ready(Ok(input.len() + 1))
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<()>> {
+        Poll::Ready(Ok(()))
+    }
+}
+
 pub(super) struct TestInput;
 
 impl AsyncInput for TestInput {

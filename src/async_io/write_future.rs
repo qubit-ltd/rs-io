@@ -13,6 +13,7 @@ use std::task::Context;
 use std::task::Poll;
 
 use crate::AsyncOutput;
+use crate::traits::validate_write_count;
 
 /// Future for one [`AsyncOutput`] write operation.
 ///
@@ -133,7 +134,9 @@ where
     ///
     /// # Errors
     ///
-    /// Returns an I/O error reported by the output.
+    /// Returns an I/O error reported by the output. Returns
+    /// [`std::io::ErrorKind::InvalidData`] if the output reports accepting more
+    /// items than requested.
     ///
     /// # Panics
     ///
@@ -142,7 +145,14 @@ where
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
         assert!(!this.completed, "WriteFuture polled after completion");
+        let requested = this.input.len();
         let result = this.output.as_mut().poll_write(cx, this.input);
+        let result = result.map(|result| {
+            result.and_then(|written| {
+                validate_write_count(written, requested)?;
+                Ok(written)
+            })
+        });
         if result.is_ready() {
             this.completed = true;
         }

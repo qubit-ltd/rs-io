@@ -19,12 +19,47 @@ use std::task::Waker;
 use qubit_io::ReadFullyFuture;
 
 use super::support_tests::PollResult;
+use super::support_tests::SafeOverreportedInput;
 use super::support_tests::ScriptedInput;
 use super::support_tests::TestInput;
 
 #[test]
 fn test_read_fully_future_type_is_public() {
     assert!(std::any::type_name::<ReadFullyFuture<'static, TestInput>>().contains("ReadFullyFuture"));
+}
+
+#[test]
+fn test_read_fully_rejects_safe_overreported_count_and_preserves_valid_progress() {
+    let mut input = SafeOverreportedInput::new(1);
+    let mut output = [0_u8; 2];
+    let mut future = ReadFullyFuture::new(Pin::new(&mut input), &mut output);
+    let mut cx = Context::from_waker(Waker::noop());
+
+    match Future::poll(Pin::new(&mut future), &mut cx) {
+        Poll::Ready(Err(error)) => assert_eq!(ErrorKind::InvalidData, error.kind()),
+        other => panic!("expected InvalidData, got {other:?}"),
+    }
+    assert_eq!(1, future.items_read());
+    assert!(
+        catch_unwind(AssertUnwindSafe(|| {
+            let _ = Future::poll(Pin::new(&mut future), &mut cx);
+        }))
+        .is_err()
+    );
+}
+
+#[test]
+fn test_read_fully_reports_no_progress_before_initial_overreport() {
+    let mut input = SafeOverreportedInput::new(0);
+    let mut output = [0_u8; 2];
+    let mut future = ReadFullyFuture::new(Pin::new(&mut input), &mut output);
+    let mut cx = Context::from_waker(Waker::noop());
+
+    match Future::poll(Pin::new(&mut future), &mut cx) {
+        Poll::Ready(Err(error)) => assert_eq!(ErrorKind::InvalidData, error.kind()),
+        other => panic!("expected InvalidData, got {other:?}"),
+    }
+    assert_eq!(0, future.items_read());
 }
 
 #[test]

@@ -13,6 +13,7 @@ use std::task::Context;
 use std::task::Poll;
 
 use crate::AsyncInput;
+use crate::traits::validate_read_count;
 
 /// Future for one [`AsyncInput`] read operation.
 ///
@@ -82,7 +83,9 @@ where
     ///
     /// # Errors
     ///
-    /// Returns an I/O error reported by the input.
+    /// Returns an I/O error reported by the input. Returns
+    /// [`std::io::ErrorKind::InvalidData`] if the input reports more items than
+    /// requested.
     ///
     /// # Panics
     ///
@@ -91,7 +94,14 @@ where
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
         assert!(!this.completed, "ReadFuture polled after completion");
+        let requested = this.output.len();
         let result = this.input.as_mut().poll_read(cx, this.output);
+        let result = result.map(|result| {
+            result.and_then(|read| {
+                validate_read_count(read, requested)?;
+                Ok(read)
+            })
+        });
         if result.is_ready() {
             this.completed = true;
         }
