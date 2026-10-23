@@ -20,6 +20,12 @@ use crate::traits::validate_read_count;
 /// Seeking changes only the source position; it does not reset or otherwise
 /// modify the accumulated checksum.
 ///
+/// Each successful non-empty read prefix is passed to [`Hasher::write`] as a
+/// separate chunk. Chunk boundaries are preserved, and whether different
+/// chunkings produce the same checksum depends on the supplied hasher. Empty
+/// reads do not update the hasher. Use a digest API when a content fingerprint
+/// independent of read boundaries is required.
+///
 /// # Examples
 ///
 /// ```
@@ -185,7 +191,9 @@ where
     unsafe fn read_unchecked(&mut self, output: &mut [u8], index: usize, count: usize) -> io::Result<usize> {
         let read = self.inner.read(&mut output[index..index + count])?;
         validate_read_count(read, count)?;
-        self.hasher.write(&output[index..index + read]);
+        if read != 0 {
+            self.hasher.write(&output[index..index + read]);
+        }
         Ok(read)
     }
 }

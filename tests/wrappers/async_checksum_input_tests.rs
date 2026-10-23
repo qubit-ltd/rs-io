@@ -8,10 +8,52 @@
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::Hasher;
+use std::io;
+use std::pin::Pin;
+use std::task::Context;
+use std::task::Poll;
 
 use qubit_io::AsyncChecksumInput;
+use qubit_io::AsyncInput;
 
 use super::support_tests::TestStream;
+
+#[derive(Default)]
+struct RecordingHasher {
+    calls: Vec<Vec<u8>>,
+}
+
+impl Hasher for RecordingHasher {
+    fn finish(&self) -> u64 {
+        self.calls.len() as u64
+    }
+    fn write(&mut self, bytes: &[u8]) {
+        self.calls.push(bytes.to_vec());
+    }
+}
+
+struct SliceInput {
+    bytes: &'static [u8],
+    position: usize,
+}
+
+impl qubit_io::AsyncInput for SliceInput {
+    type Item = u8;
+
+    unsafe fn poll_read_unchecked(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+        output: &mut [u8],
+        index: usize,
+        count: usize,
+    ) -> Poll<io::Result<usize>> {
+        let this = unsafe { self.get_unchecked_mut() };
+        let read = count.min(this.bytes.len() - this.position);
+        output[index..index + read].copy_from_slice(&this.bytes[this.position..this.position + read]);
+        this.position += read;
+        Poll::Ready(Ok(read))
+    }
+}
 
 #[test]
 fn test_async_checksum_input_starts_with_hasher_checksum() {
@@ -36,4 +78,33 @@ fn test_async_checksum_input_rejects_safe_overreported_count() {
         matches!(result, std::task::Poll::Ready(Err(ref error)) if error.kind() == std::io::ErrorKind::InvalidData)
     );
     assert_eq!(before, wrapper.checksum());
+}
+
+#[test]
+fn test_async_checksum_input_preserves_chunks_and_skips_empty_reads() {
+    let mut input = AsyncChecksumInput::new(
+        SliceInput {
+            bytes: b"abc",
+            position: 0,
+        },
+        RecordingHasher::default(),
+    );
+    let waker = std::task::Waker::noop();
+    let mut cx = Context::from_waker(waker);
+    let mut empty = [];
+    assert!(matches!(
+        Pin::new(&mut input).poll_read(&mut cx, &mut empty),
+        Poll::Ready(Ok(0))
+    ));
+    let mut first = [0; 1];
+    assert!(matches!(
+        Pin::new(&mut input).poll_read(&mut cx, &mut first),
+        Poll::Ready(Ok(1))
+    ));
+    let mut rest = [0; 2];
+    assert!(matches!(
+        Pin::new(&mut input).poll_read(&mut cx, &mut rest),
+        Poll::Ready(Ok(2))
+    ));
+    assert_eq!(vec![b"a".to_vec(), b"bc".to_vec()], input.hasher().calls);
 }

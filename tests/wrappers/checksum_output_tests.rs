@@ -12,6 +12,20 @@ use std::hash::Hasher;
 use std::io::ErrorKind;
 use std::io::SeekFrom;
 
+#[derive(Default)]
+struct RecordingHasher {
+    calls: Vec<Vec<u8>>,
+}
+
+impl Hasher for RecordingHasher {
+    fn finish(&self) -> u64 {
+        self.calls.len() as u64
+    }
+    fn write(&mut self, bytes: &[u8]) {
+        self.calls.push(bytes.to_vec());
+    }
+}
+
 use qubit_io::ChecksumOutput;
 use qubit_io::Output;
 use qubit_io::Seekable;
@@ -74,4 +88,13 @@ fn test_checksum_output_rejects_safe_overreported_count() {
     let error = unsafe { qubit_io::Output::write_unchecked(&mut wrapper, b"abcd", 1, 2) }.unwrap_err();
     assert_eq!(std::io::ErrorKind::InvalidData, error.kind());
     assert_eq!(before, std::hash::Hasher::finish(wrapper.hasher()));
+}
+
+#[test]
+fn test_checksum_output_preserves_nonempty_chunks_and_skips_empty_writes() {
+    let mut output = ChecksumOutput::new(ScriptedOutput::<u8>::accepting(), RecordingHasher::default());
+    assert_eq!(0, output.write(b"").expect("empty write should succeed"));
+    assert_eq!(1, output.write(b"a").expect("first write should succeed"));
+    assert_eq!(2, output.write(b"bc").expect("second write should succeed"));
+    assert_eq!(vec![b"a".to_vec(), b"bc".to_vec()], output.hasher().calls);
 }

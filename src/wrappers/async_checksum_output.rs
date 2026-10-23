@@ -22,6 +22,11 @@ use crate::traits::validate_write_count;
 ///
 /// Pending and failed writes do not change the hasher. The checksum algorithm
 /// and stability guarantees are those of the supplied [`Hasher`].
+/// Each successful non-empty written prefix is passed to [`Hasher::write`] as
+/// a separate chunk. Chunk boundaries are preserved, and different chunkings
+/// are equivalent only when the supplied hasher guarantees that property.
+/// Empty writes do not update the hasher. Use a digest API for a content
+/// fingerprint independent of write boundaries.
 ///
 /// # Examples
 ///
@@ -36,19 +41,23 @@ use crate::traits::validate_write_count;
 /// use qubit_io::AsyncChecksumOutput;
 /// use qubit_io::AsyncOutput;
 ///
-/// struct EmptyOutput;
+/// #[derive(Default)]
+/// struct VecOutput(Vec<u8>);
 ///
-/// impl AsyncOutput for EmptyOutput {
+/// impl AsyncOutput for VecOutput {
 ///     type Item = u8;
 ///
 ///     unsafe fn poll_write_unchecked(
 ///         self: Pin<&mut Self>,
 ///         _cx: &mut Context<'_>,
-///         _input: &[u8],
-///         _index: usize,
-///         _count: usize,
+///         input: &[u8],
+///         index: usize,
+///         count: usize,
 ///     ) -> Poll<io::Result<usize>> {
-///         Poll::Ready(Ok(0))
+///         // SAFETY: This type has no address-sensitive fields.
+///         let this = unsafe { self.get_unchecked_mut() };
+///         this.0.extend_from_slice(&input[index..index + count]);
+///         Poll::Ready(Ok(count))
 ///     }
 ///
 ///     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
@@ -56,8 +65,15 @@ use crate::traits::validate_write_count;
 ///     }
 /// }
 ///
-/// let output = AsyncChecksumOutput::new(EmptyOutput, DefaultHasher::new());
-/// assert_eq!(output.checksum(), output.hasher().finish());
+/// let mut output = AsyncChecksumOutput::new(VecOutput::default(), DefaultHasher::new());
+/// let waker = std::task::Waker::noop();
+/// let mut cx = Context::from_waker(waker);
+/// assert!(matches!(Pin::new(&mut output).poll_write(&mut cx, b"abc"), Poll::Ready(Ok(3))));
+/// assert!(matches!(Pin::new(&mut output).poll_flush(&mut cx), Poll::Ready(Ok(()))));
+/// assert_eq!(output.inner().0, b"abc");
+/// let mut expected = DefaultHasher::new();
+/// expected.write(b"abc");
+/// assert_eq!(output.checksum(), expected.finish());
 /// ```
 ///
 /// # Type Parameters
@@ -261,7 +277,9 @@ where
                 if let Err(error) = validate_write_count(written, requested) {
                     return Poll::Ready(Err(error));
                 }
-                this.hasher.write(&input[index..index + written]);
+                if written != 0 {
+                    this.hasher.write(&input[index..index + written]);
+                }
                 Poll::Ready(Ok(written))
             }
             Poll::Ready(Err(error)) => Poll::Ready(Err(error)),

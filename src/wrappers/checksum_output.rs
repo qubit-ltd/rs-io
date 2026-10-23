@@ -20,6 +20,12 @@ use crate::traits::validate_write_count;
 /// Seeking changes only the output position; it does not reset or otherwise
 /// modify the accumulated checksum.
 ///
+/// Each successful non-empty written prefix is passed to [`Hasher::write`] as
+/// a separate chunk. Chunk boundaries are preserved, and whether different
+/// chunkings produce the same checksum depends on the supplied hasher. Empty
+/// writes do not update the hasher. Use a digest API when a content fingerprint
+/// independent of write boundaries is required.
+///
 /// # Type Parameters
 ///
 /// * `O` - Wrapped byte output type.
@@ -185,7 +191,9 @@ where
     unsafe fn write_unchecked(&mut self, input: &[u8], index: usize, count: usize) -> io::Result<usize> {
         let written = self.inner.write(&input[index..index + count])?;
         validate_write_count(written, count)?;
-        self.hasher.write(&input[index..index + written]);
+        if written != 0 {
+            self.hasher.write(&input[index..index + written]);
+        }
         Ok(written)
     }
 
