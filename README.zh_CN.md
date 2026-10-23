@@ -327,7 +327,7 @@ fn main() -> io::Result<()> {
 ```toml
 [dependencies]
 qubit-io = { version = "0.19", features = ["tokio"] }
-tokio = { version = "1.54", features = ["macros", "rt", "io-util"] }
+tokio = { version = "1", features = ["macros", "rt", "io-util"] }
 ```
 
 <!-- example: tokio-reader profile=tokio mode=run -->

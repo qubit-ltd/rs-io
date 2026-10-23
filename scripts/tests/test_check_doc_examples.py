@@ -19,6 +19,10 @@ SPEC.loader.exec_module(checker)
 PROFILES = {
     "core": {"features": [], "dependencies": {}},
     "digest": {"features": ["digest"], "dependencies": {"sha2": '"0.11"'}},
+    "tokio": {
+        "features": ["tokio"],
+        "dependencies": {"tokio": '{ version = "1", features = ["rt"] }'},
+    },
 }
 
 
@@ -79,6 +83,62 @@ fn main() {}
 """
         with self.assertRaisesRegex(checker.ExampleError, "do not match profile"):
             checker.validate_toml_profiles("README.md", text, PROFILES)
+
+    def validate_dependency(self, declaration: str, profile: str = "digest", profiles: dict = PROFILES) -> None:
+        text = (
+            '```toml\n[dependencies]\n'
+            'qubit-io = { version = "0.19", features = ["digest"] }\n'
+            f"sha2 = {declaration}\n```\n"
+            f"<!-- example: sample profile={profile} mode=run -->\n"
+            "```rust\nfn main() {}\n```\n"
+        )
+        checker.validate_toml_profiles("README.md", text, profiles)
+
+    def test_rejects_incompatible_zero_minor_version(self) -> None:
+        with self.assertRaisesRegex(checker.ExampleError, "sha2 version"):
+            self.validate_dependency('"0.10"')
+
+    def test_accepts_matching_zero_minor_version(self) -> None:
+        profiles = {**PROFILES, "digest": {"features": ["digest"], "dependencies": {"sha2": '"0.11"'}}}
+        text = (
+            '```toml\n[dependencies]\n'
+            'qubit-io = { version = "0.19", features = ["digest"] }\n'
+            'sha2 = " 0.11 "\n```\n'
+            '<!-- example: sample profile=digest mode=run -->\n'
+            '```rust\nfn main() {}\n```\n'
+        )
+        checker.validate_toml_profiles("README.md", text, profiles)
+
+    def test_accepts_matching_string_and_table_versions(self) -> None:
+        self.validate_dependency('{ version = "0.11", features = [] }')
+
+    def test_rejects_stable_major_width_mismatch(self) -> None:
+        profiles = {**PROFILES, "tokio": {"features": ["tokio"], "dependencies": {"tokio": '"1"'}}}
+        text = (
+            '```toml\n[dependencies]\n'
+            'qubit-io = { version = "0.19", features = ["tokio"] }\n'
+            'tokio = "1.54"\n```\n'
+            '<!-- example: sample profile=tokio mode=run -->\n'
+            '```rust\nfn main() {}\n```\n'
+        )
+        with self.assertRaisesRegex(checker.ExampleError, "tokio version"):
+            checker.validate_toml_profiles("README.md", text, profiles)
+
+    def test_accepts_same_complex_requirement(self) -> None:
+        profiles = {**PROFILES, "digest": {"features": ["digest"], "dependencies": {"sha2": '"^0.11, < 0.12"'}}}
+        self.validate_dependency('"^0.11, < 0.12"', profiles=profiles)
+
+    def test_rejects_dependency_without_version(self) -> None:
+        profiles = {**PROFILES, "digest": {"features": ["digest"], "dependencies": {"sha2": '"0.11"'}}}
+        text = (
+            '```toml\n[dependencies]\n'
+            'qubit-io = { version = "0.19", features = ["digest"] }\n'
+            'sha2 = { features = [] }\n```\n'
+            '<!-- example: sample profile=digest mode=run -->\n'
+            '```rust\nfn main() {}\n```\n'
+        )
+        with self.assertRaisesRegex(checker.ExampleError, r"README.md:1:.*sha2.*has no version.*profile.*requires one"):
+            checker.validate_toml_profiles("README.md", text, profiles)
 
 
 class CargoExecutionTests(unittest.TestCase):

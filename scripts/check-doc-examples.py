@@ -138,7 +138,12 @@ def validate_documents(config: dict, root: Path = ROOT) -> list[Example]:
 
 
 def validate_toml_profiles(document: str, text: str, profiles: dict) -> None:
-    """Tie each published Cargo dependency snippet to its following Rust example."""
+    """Tie dependency snippets to profiles using exact, whitespace-trimmed versions.
+
+    This intentionally requires matching declarations even when Cargo would treat
+    different requirement strings as compatible. Update the profile whenever a
+    published snippet changes its dependency requirement.
+    """
     rust_markers = list(re.finditer(
         r"(?m)^<!-- example: ([a-z0-9][a-z0-9_-]*) profile=([a-z0-9_-]+) mode=",
         text,
@@ -172,14 +177,17 @@ def validate_toml_profiles(document: str, text: str, profiles: dict) -> None:
                 f"do not match profile {profile_name!r} ({sorted(expected)})"
             )
         for name in expected:
+            line = text.count("\n", 0, block.start()) + 1
             source_spec = dependencies[name]
             configured = tomllib.loads(f"value = {profile['dependencies'][name]}")["value"]
             observed = source_spec.get("version") if isinstance(source_spec, dict) else source_spec
             expected_version = configured.get("version") if isinstance(configured, dict) else configured
             if not isinstance(observed, str) or not isinstance(expected_version, str):
-                raise ExampleError(f"{document}: profile {profile_name!r} dependency {name!r} needs a version")
-            if observed.split(".", 1)[0] != expected_version.split(".", 1)[0]:
-                line = text.count("\n", 0, block.start()) + 1
+                raise ExampleError(
+                    f"{document}:{line}: {name} declaration {source_spec!r} has no version; "
+                    f"profile {profile_name!r} declaration {configured!r} requires one"
+                )
+            if observed.strip() != expected_version.strip():
                 raise ExampleError(
                     f"{document}:{line}: {name} version {observed!r} does not match "
                     f"profile {profile_name!r} ({expected_version!r})"
