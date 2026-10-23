@@ -2,4 +2,5 @@
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-python3 "$script_dir/check-doc-examples.py" --check
+python3 -B -m unittest discover -s "$script_dir/tests" -p 'test_*.py'
+python3 -B "$script_dir/check-doc-examples.py" --check
