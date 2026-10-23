@@ -17,6 +17,7 @@ use digest::Digest;
 use crate::AsyncByteInput;
 use crate::DEFAULT_COPY_BUFFER_SIZE;
 use crate::async_io::MAX_READY_OPERATIONS_PER_POLL;
+use crate::traits::validate_read_count;
 
 /// Future that reads the remaining bytes of an input and returns their digest.
 ///
@@ -96,8 +97,9 @@ where
     ///
     /// # Errors
     ///
-    /// Returns the input's read error without rewinding consumed bytes or
-    /// returning a partial digest.
+    /// Returns the input's read error, or [`io::ErrorKind::InvalidData`] if
+    /// the input reports more bytes than requested. Errors do not rewind
+    /// consumed bytes or return a partial digest.
     ///
     /// # Panics
     ///
@@ -112,6 +114,10 @@ where
                     return Poll::Ready(Ok(hasher.finalize()));
                 }
                 Poll::Ready(Ok(read)) => {
+                    if let Err(error) = validate_read_count(read, this.buffer.len()) {
+                        this.hasher = None;
+                        return Poll::Ready(Err(error));
+                    }
                     this.hasher
                         .as_mut()
                         .expect("digest state is present until completion")

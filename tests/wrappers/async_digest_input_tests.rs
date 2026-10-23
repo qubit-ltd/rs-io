@@ -9,8 +9,10 @@
 
 use std::future::Future;
 use std::io::ErrorKind;
+use std::io::Result;
 use std::pin::Pin;
 use std::task::Context;
+use std::task::Poll;
 use std::task::Waker;
 
 use qubit_io::AsyncDigestInput;
@@ -25,6 +27,35 @@ use super::digest_support_tests::PinnedStream;
 use super::digest_support_tests::Step;
 use super::digest_support_tests::error_kind;
 use super::digest_support_tests::ready;
+
+struct OverreportedSafeInput {
+    transferred: bool,
+}
+
+impl AsyncInput for OverreportedSafeInput {
+    type Item = u8;
+
+    unsafe fn poll_read_unchecked(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+        _output: &mut [u8],
+        _index: usize,
+        _count: usize,
+    ) -> Poll<Result<usize>> {
+        panic!("the safe override must be used")
+    }
+
+    fn poll_read(self: Pin<&mut Self>, _cx: &mut Context<'_>, output: &mut [u8]) -> Poll<Result<usize>> {
+        let this = self.get_mut();
+        if this.transferred {
+            Poll::Ready(Ok(output.len() + 1))
+        } else {
+            this.transferred = true;
+            output[0] = b'a';
+            Poll::Ready(Ok(1))
+        }
+    }
+}
 
 #[test]
 fn test_async_digest_input_pending_partial_reads_errors_and_pinning() {
@@ -124,6 +155,25 @@ fn test_async_digest_input_digest_all_preserves_progress_across_pending() {
     assert_eq!(3, stream.state.borrow().position);
     let mut future = AsyncDigestInput::<_, Sha256>::digest_all(stream.as_mut());
     assert_eq!(Sha256::digest(b""), ready(Pin::new(&mut future).poll(&mut cx)));
+}
+
+#[test]
+fn test_async_digest_input_digest_all_rejects_safe_overreported_count() {
+    let mut input = OverreportedSafeInput { transferred: true };
+    let mut future = AsyncDigestInput::<_, Sha256>::digest_all(Pin::new(&mut input));
+    let mut cx = Context::from_waker(Waker::noop());
+    let result = Pin::new(&mut future).poll(&mut cx);
+    assert!(matches!(result, Poll::Ready(Err(error)) if error.kind() == ErrorKind::InvalidData));
+}
+
+#[test]
+fn test_async_digest_input_digest_all_rejects_overreport_after_progress() {
+    let mut input = OverreportedSafeInput { transferred: false };
+    let mut future = AsyncDigestInput::<_, Sha256>::digest_all(Pin::new(&mut input));
+    let mut cx = Context::from_waker(Waker::noop());
+    let result = Pin::new(&mut future).poll(&mut cx);
+    assert!(matches!(result, Poll::Ready(Err(error)) if error.kind() == ErrorKind::InvalidData));
+    assert!(input.transferred);
 }
 
 #[test]
