@@ -3,6 +3,12 @@ repository_root = ".."
 io_manifest = "rs-io/Cargo.toml"
 budget_manifest = "rs-budget/Cargo.toml"
 
+[project.local_patches]
+qubit-io = "rs-io/Cargo.toml"
+qubit-budget = "rs-budget/Cargo.toml"
+qubit-fs = "rs-fs/Cargo.toml"
+qubit-fs-testkit = "rs-fs-testkit/Cargo.toml"
+
 [[manifest]]
 path = "rs-codec/Cargo.toml"
 required_all_features = ["qubit-io"]

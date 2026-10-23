@@ -3,9 +3,15 @@
 from __future__ import annotations
 
 import importlib.util
+import io
+import json
+import shutil
+import subprocess
 import tempfile
 import unittest
+from contextlib import redirect_stderr
 from pathlib import Path
+from unittest.mock import patch
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / "check-downstream.py"
@@ -132,13 +138,23 @@ class MetadataGraphTests(unittest.TestCase):
             config_root = Path(temporary)
             scripts = config_root / "scripts"
             scripts.mkdir()
-            for dependency in (config_root / "io/Cargo.toml", config_root / "budget/Cargo.toml"):
+            for dependency in (config_root / "io/Cargo.toml", config_root / "budget/Cargo.toml",
+                               config_root / "fs/Cargo.toml", config_root / "fs-testkit/Cargo.toml"):
                 dependency.parent.mkdir(parents=True, exist_ok=True)
-                dependency.touch()
+                package = {
+                    "io": "qubit-io", "budget": "qubit-budget",
+                    "fs": "qubit-fs", "fs-testkit": "qubit-fs-testkit",
+                }[dependency.parent.name]
+                dependency.write_text(f'[package]\nname = "{package}"\nversion = "1.0.0"\n', encoding="utf-8")
+            (config_root / "Cargo.toml").write_text(
+                '[package]\nname = "qubit-io"\nversion = "0.19.0"\n', encoding="utf-8")
             config = scripts / "downstream.toml"
             config.write_text(
                 '[project]\nrepository_root = "."\nio_manifest = "io/Cargo.toml"\n'
                 'budget_manifest = "budget/Cargo.toml"\n'
+                '[project.local_patches]\nqubit-io = "io/Cargo.toml"\n'
+                'qubit-budget = "budget/Cargo.toml"\n'
+                'qubit-fs = "fs/Cargo.toml"\nqubit-fs-testkit = "fs-testkit/Cargo.toml"\n'
                 '[[manifest]]\npath = "missing/Cargo.toml"\n',
                 encoding="utf-8",
             )
@@ -158,25 +174,243 @@ class MetadataGraphTests(unittest.TestCase):
             scripts.mkdir(parents=True)
             gitdir.mkdir(parents=True)
             (worktree / ".git").write_text(f"gitdir: {gitdir}\n", encoding="utf-8")
-            expected_manifests = (
-                common / "rs-io/Cargo.toml",
-                common / "rs-budget/Cargo.toml",
-                common / "rs-json/Cargo.toml",
-            )
+            expected_manifests = (common / "rs-io/Cargo.toml", common / "rs-budget/Cargo.toml", common / "rs-json/Cargo.toml")
             for manifest in expected_manifests:
                 manifest.parent.mkdir(parents=True, exist_ok=True)
-                manifest.touch()
+                name = {"rs-io": "qubit-io", "rs-budget": "qubit-budget", "rs-json": "qubit-json"}[manifest.parent.name]
+                manifest.write_text(f'[package]\nname = "{name}"\nversion = "1.0.0"\n', encoding="utf-8")
+            for directory, name in (("rs-fs", "qubit-fs"), ("rs-fs-testkit", "qubit-fs-testkit")):
+                manifest = common / directory / "Cargo.toml"
+                manifest.parent.mkdir(parents=True, exist_ok=True)
+                manifest.write_text(f'[package]\nname = "{name}"\nversion = "1.0.0"\n', encoding="utf-8")
+            (worktree / "Cargo.toml").write_text(
+                '[package]\nname = "qubit-io"\nversion = "0.19.0"\n', encoding="utf-8")
             config = scripts / "downstream.toml"
             config.write_text(
                 '[project]\nrepository_root = ".."\nio_manifest = "rs-io/Cargo.toml"\n'
                 'budget_manifest = "rs-budget/Cargo.toml"\n'
+                '[project.local_patches]\nqubit-io = "rs-io/Cargo.toml"\n'
+                'qubit-budget = "rs-budget/Cargo.toml"\n'
+                'qubit-fs = "rs-fs/Cargo.toml"\n'
+                'qubit-fs-testkit = "rs-fs-testkit/Cargo.toml"\n'
                 '[[manifest]]\npath = "rs-json/Cargo.toml"\n',
                 encoding="utf-8",
             )
             root, expected, manifests = checker.load_config(config)
             self.assertEqual(root, common.resolve())
-            self.assertEqual(expected["qubit-io"], expected_manifests[0].resolve())
+            self.assertEqual(expected["qubit-io"], (worktree / "Cargo.toml").resolve())
             self.assertEqual(manifests[0][0], expected_manifests[2].resolve())
+
+
+class DownstreamCommandTests(unittest.TestCase):
+    def test_metadata_command_quotes_all_local_patches_and_lock_policy(self) -> None:
+        patches = {
+            "qubit-io": Path("/tmp/candidate rs-io/Cargo.toml"),
+            "qubit-budget": Path("/tmp/rust common/rs-budget/Cargo.toml"),
+            "qubit-fs": Path("/tmp/rust common/rs-fs/Cargo.toml"),
+            "qubit-fs-testkit": Path("/tmp/rust common/rs-fs-testkit/Cargo.toml"),
+        }
+        command = checker.metadata_command(Path("/tmp/downstream/Cargo.toml"), False, patches, False)
+        self.assertIn("--locked", command)
+        self.assertNotIn("--all-features", command)
+        config_args = [command[index + 1] for index, arg in enumerate(command[:-1]) if arg == "--config"]
+        self.assertEqual(len(config_args), 4)
+        self.assertEqual(
+            config_args,
+            [
+                f"patch.crates-io.{name}.path={json.dumps(str(patches[name].parent))}"
+                for name in sorted(patches)
+            ],
+        )
+        update_command = checker.metadata_command(Path("/tmp/downstream/Cargo.toml"), True, patches, True)
+        self.assertNotIn("--locked", update_command)
+        self.assertIn("--all-features", update_command)
+
+    def test_candidate_worktree_io_patch_uses_candidate_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            common = root / "rust-common"
+            main_repo = common / "rs-io"
+            worktree = root / "candidate checkout"
+            scripts = worktree / "scripts"
+            scripts.mkdir(parents=True)
+            gitdir = main_repo / ".git/worktrees/worker"
+            gitdir.mkdir(parents=True)
+            (worktree / ".git").write_text(f"gitdir: {gitdir}\n", encoding="utf-8")
+            for base, name in ((worktree, "qubit-io"), (common / "rs-budget", "qubit-budget"),
+                               (common / "rs-fs", "qubit-fs"),
+                               (common / "rs-fs-testkit", "qubit-fs-testkit")):
+                manifest = base / "Cargo.toml"
+                manifest.parent.mkdir(parents=True, exist_ok=True)
+                manifest.write_text(f'[package]\nname = "{name}"\nversion = "1.0.0"\n', encoding="utf-8")
+            (main_repo / "Cargo.toml").write_text(
+                '[package]\nname = "qubit-io"\nversion = "0.19.0"\n', encoding="utf-8")
+            config = scripts / "downstream.toml"
+            config.write_text(
+                '[project]\nrepository_root = ".."\nio_manifest = "rs-io/Cargo.toml"\n'
+                'budget_manifest = "rs-budget/Cargo.toml"\n'
+                '[project.local_patches]\nqubit-io = "rs-io/Cargo.toml"\n'
+                'qubit-budget = "rs-budget/Cargo.toml"\nqubit-fs = "rs-fs/Cargo.toml"\n'
+                'qubit-fs-testkit = "rs-fs-testkit/Cargo.toml"\n'
+                '[[manifest]]\npath = "rs-json/Cargo.toml"\n', encoding="utf-8")
+            _, expected, _ = checker.load_config(config)
+            patches = checker.load_local_patches(common, checker.tomllib.loads(config.read_text())["project"], worktree / "Cargo.toml")
+            self.assertEqual(expected["qubit-io"], (worktree / "Cargo.toml").resolve())
+            self.assertEqual(patches["qubit-io"], (worktree / "Cargo.toml").resolve())
+
+    def test_auxiliary_local_package_source_is_checked_when_reachable(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            metadata = {
+                "packages": [
+                    {"id": "root", "name": "root", "manifest_path": str(root / "root/Cargo.toml"), "source": None},
+                    {"id": "other", "name": "qubit-fs", "manifest_path": str(root / "registry/Cargo.toml"), "source": "registry+https://example.invalid"},
+                ],
+                "resolve": {"nodes": [{"id": "root", "deps": [{"pkg": "other"}]}, {"id": "other", "deps": []}]},
+            }
+            errors = checker.inspect_graph(metadata, (root / "root/Cargo.toml").resolve(),
+                {"qubit-fs": (root / "local/Cargo.toml").resolve()}, set())
+            self.assertTrue(any("qubit-fs" in error and "registry" in error for error in errors))
+
+    def test_local_patch_configuration_rejects_missing_and_mismatched_packages(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config = {"local_patches": {
+                "qubit-io": "rs-io/Cargo.toml", "qubit-budget": "rs-budget/Cargo.toml",
+                "qubit-fs": "rs-fs/Cargo.toml", "qubit-fs-testkit": "rs-fs-testkit/Cargo.toml",
+            }}
+            for relative, name in (("rs-budget", "qubit-budget"), ("rs-fs", "qubit-fs"),
+                                   ("rs-fs-testkit", "qubit-fs-testkit")):
+                manifest = root / relative / "Cargo.toml"
+                manifest.parent.mkdir(parents=True)
+                manifest.write_text(f'[package]\nname = "{name}"\nversion = "1.0.0"\n', encoding="utf-8")
+            candidate = root / "candidate/Cargo.toml"
+            with self.assertRaises((FileNotFoundError, ValueError)):
+                checker.load_local_patches(root, config, candidate)
+            wrong = root / "wrong/Cargo.toml"
+            wrong.parent.mkdir()
+            wrong.write_text('[package]\nname = "not-qubit-io"\nversion = "1.0.0"\n', encoding="utf-8")
+            config["local_patches"]["qubit-budget"] = "wrong/Cargo.toml"
+            candidate.parent.mkdir()
+            candidate.write_text('[package]\nname = "qubit-io"\nversion = "1.0.0"\n', encoding="utf-8")
+            with self.assertRaises(ValueError):
+                checker.load_local_patches(root, config, candidate)
+
+    def test_workspace_patch_conflict_is_reported(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = root / "member/Cargo.toml"
+            manifest.parent.mkdir()
+            manifest.write_text('[package]\nname = "consumer"\nversion = "1.0.0"\n', encoding="utf-8")
+            (manifest.parent / "src").mkdir()
+            (manifest.parent / "src/lib.rs").write_text("", encoding="utf-8")
+            (root / "Cargo.toml").write_text(
+                '[workspace]\nmembers = ["member"]\n\n[patch.crates-io]\n'
+                'qubit-io = { path = "../other-rs-io" }\n', encoding="utf-8")
+            conflict = checker.check_patch_conflicts(manifest, {"qubit-io": root / "candidate/Cargo.toml"})
+            self.assertTrue(any("qubit-io" in error and str(root / "Cargo.toml") in error for error in conflict))
+
+    def test_matching_workspace_patch_is_allowed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest = root / "member/Cargo.toml"
+            manifest.parent.mkdir()
+            manifest.write_text('[package]\nname = "consumer"\nversion = "1.0.0"\n', encoding="utf-8")
+            (manifest.parent / "src").mkdir()
+            (manifest.parent / "src/lib.rs").write_text("", encoding="utf-8")
+            candidate = root / "candidate"
+            candidate.mkdir()
+            (root / "Cargo.toml").write_text(
+                '[workspace]\nmembers = ["member"]\n\n[patch.crates-io]\n'
+                'qubit-io = { path = "candidate" }\n', encoding="utf-8")
+            self.assertEqual(
+                checker.check_patch_conflicts(manifest, {"qubit-io": candidate / "Cargo.toml"}), []
+            )
+
+    def test_check_config_passes_patch_and_lock_policy_to_fake_runner(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            scripts = root / "scripts"
+            scripts.mkdir()
+            for relative, name in (("rs-io", "qubit-io"), ("rs-budget", "qubit-budget"), ("rs-fs", "qubit-fs"),
+                                   ("rs-fs-testkit", "qubit-fs-testkit")):
+                manifest = root / relative / "Cargo.toml"
+                manifest.parent.mkdir()
+                manifest.write_text(f'[package]\nname = "{name}"\nversion = "1.0.0"\n', encoding="utf-8")
+            candidate = root / "Cargo.toml"
+            candidate.write_text('[package]\nname = "qubit-io"\nversion = "0.19.0"\n', encoding="utf-8")
+            consumer = root / "consumer/Cargo.toml"
+            consumer.parent.mkdir()
+            consumer.write_text('[package]\nname = "consumer"\nversion = "1.0.0"\n', encoding="utf-8")
+            (consumer.parent / "src").mkdir()
+            (consumer.parent / "src/lib.rs").write_text("", encoding="utf-8")
+            config = scripts / "downstream.toml"
+            config.write_text(
+                '[project]\nrepository_root = "."\nio_manifest = "rs-io/Cargo.toml"\n'
+                'budget_manifest = "rs-budget/Cargo.toml"\n'
+                '[project.local_patches]\nqubit-io = "rs-io/Cargo.toml"\n'
+                'qubit-budget = "rs-budget/Cargo.toml"\nqubit-fs = "rs-fs/Cargo.toml"\n'
+                'qubit-fs-testkit = "rs-fs-testkit/Cargo.toml"\n'
+                '[[manifest]]\npath = "consumer/Cargo.toml"\n', encoding="utf-8")
+            calls = []
+
+            def fake_runner(manifest, all_features, patches, allow_lock_update):
+                calls.append((manifest, all_features, patches, allow_lock_update))
+                package_id = "consumer"
+                return {
+                    "packages": [{"id": package_id, "name": "consumer", "manifest_path": str(manifest), "source": None}],
+                    "resolve": {"nodes": [{"id": package_id, "deps": []}]},
+                }
+
+            errors = checker.check_config(
+                config, allow_lock_update=True, metadata_runner=fake_runner,
+                workspace_locator=lambda _manifest: consumer,
+            )
+            self.assertEqual(errors, [])
+            self.assertEqual([call[1] for call in calls], [False, True])
+            self.assertTrue(all(call[2]["qubit-io"] == candidate.resolve() for call in calls))
+            self.assertTrue(all(call[3] for call in calls))
+
+    def test_allow_lock_update_prints_warning_before_check(self) -> None:
+        stderr = io.StringIO()
+        with patch.object(checker.sys, "argv", [str(SCRIPT), "--metadata-only", "--allow-lock-update"]), \
+             patch.object(checker, "check_config", return_value=[]), redirect_stderr(stderr):
+            self.assertEqual(checker.main(), 0)
+        self.assertIn("may create or update downstream Cargo.lock", stderr.getvalue())
+
+    @unittest.skipUnless(shutil.which("cargo"), "Cargo is required for the offline integration fixture")
+    def test_offline_cargo_metadata_uses_local_patch_for_both_feature_modes(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="downstream fixture ") as temporary:
+            root = Path(temporary)
+            candidate = root / "candidate qubit-io"
+            consumer = root / "consumer"
+            candidate.mkdir()
+            consumer.mkdir()
+            candidate_manifest = candidate / "Cargo.toml"
+            candidate_manifest.write_text(
+                '[package]\nname = "qubit-io"\nversion = "0.19.0"\nedition = "2021"\n'
+                '[features]\nextra = []\n', encoding="utf-8")
+            (candidate / "src").mkdir()
+            (candidate / "src/lib.rs").write_text("pub fn fixture() {}\n", encoding="utf-8")
+            consumer_manifest = consumer / "Cargo.toml"
+            consumer_manifest.write_text(
+                '[package]\nname = "consumer"\nversion = "0.1.0"\nedition = "2021"\n'
+                '[dependencies]\nqubit-io = { version = "0.19", features = [] }\n', encoding="utf-8")
+            (consumer / "src").mkdir()
+            (consumer / "src/lib.rs").write_text("pub fn consumer() {}\n", encoding="utf-8")
+            patches = {"qubit-io": candidate_manifest.resolve()}
+            lock_command = ["cargo", "generate-lockfile", "--manifest-path", str(consumer_manifest), "--offline"]
+            for name, patch_manifest in sorted(patches.items()):
+                lock_command.extend(["--config", f"patch.crates-io.{name}.path={json.dumps(str(patch_manifest.parent))}"])
+            lock_result = subprocess.run(lock_command, check=False, capture_output=True, text=True)
+            self.assertEqual(lock_result.returncode, 0, lock_result.stderr)
+            for all_features in (False, True):
+                result = subprocess.run(checker.metadata_command(consumer_manifest, all_features, patches),
+                                        check=True, capture_output=True, text=True)
+                metadata = json.loads(result.stdout)
+                package = next(item for item in metadata["packages"] if item["name"] == "qubit-io")
+                self.assertIsNone(package["source"])
+                self.assertEqual(Path(package["manifest_path"]).resolve(), candidate_manifest.resolve())
 
 
 if __name__ == "__main__":
