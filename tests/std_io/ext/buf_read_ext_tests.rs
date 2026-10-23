@@ -7,6 +7,7 @@
 // =============================================================================
 
 use std::io::BufRead;
+use std::io::BufReader;
 use std::io::Cursor;
 use std::io::ErrorKind;
 
@@ -241,4 +242,126 @@ fn test_discard_until_limited_rejects_zero_limit_without_consuming() {
 
     assert_eq!(ErrorKind::InvalidData, error.kind());
     assert_eq!(b"abcdef\n", input.fill_buf().expect("remaining bytes should exist"));
+}
+
+#[test]
+fn test_limited_delimiter_boundaries_preserve_consumption_and_rollback() {
+    struct Case<'a> {
+        bytes: &'a [u8],
+        limit: usize,
+        expected: Option<&'a [u8]>,
+        position: u64,
+    }
+
+    let cases = [
+        Case {
+            bytes: b"",
+            limit: 0,
+            expected: Some(b""),
+            position: 0,
+        },
+        Case {
+            bytes: b"x",
+            limit: 0,
+            expected: None,
+            position: 0,
+        },
+        Case {
+            bytes: b"a\n",
+            limit: 2,
+            expected: Some(b"a\n"),
+            position: 2,
+        },
+        Case {
+            bytes: b"ab\n",
+            limit: 2,
+            expected: None,
+            position: 2,
+        },
+        Case {
+            bytes: b"ab",
+            limit: 2,
+            expected: Some(b"ab"),
+            position: 2,
+        },
+    ];
+
+    for Case {
+        bytes,
+        limit,
+        expected,
+        position,
+    } in cases
+    {
+        let mut input = Cursor::new(bytes.to_vec());
+        let mut output = b"prefix".to_vec();
+        let result = input.read_until_limited_into(b'\n', &mut output, limit);
+        assert_eq!(expected.is_none(), result.is_err(), "bytes={bytes:?}, limit={limit}");
+        assert_eq!(position, input.position());
+        if let Some(expected) = expected {
+            assert_eq!(expected, &output[b"prefix".len()..]);
+        } else {
+            assert_eq!(b"prefix", output.as_slice());
+            assert_eq!(
+                ErrorKind::InvalidData,
+                result.expect_err("limit should be exceeded").kind()
+            );
+        }
+
+        let mut input = Cursor::new(bytes.to_vec());
+        let result = input.discard_until_limited(b'\n', limit);
+        assert_eq!(expected.is_none(), result.is_err(), "bytes={bytes:?}, limit={limit}");
+        assert_eq!(position, input.position());
+        if expected.is_none() {
+            assert_eq!(
+                ErrorKind::InvalidData,
+                result.expect_err("limit should be exceeded").kind()
+            );
+        }
+    }
+}
+
+#[test]
+fn test_limited_delimiter_rejects_large_buffer_after_consuming_only_limit() {
+    let bytes = vec![b'x'; 1024 * 1024];
+    let mut input = Cursor::new(bytes.clone());
+    let mut output = b"prefix".to_vec();
+
+    let error = input
+        .read_until_limited_into(b'\n', &mut output, 1)
+        .expect_err("input beyond the one byte limit should be rejected");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!(b"prefix", output.as_slice());
+    assert_eq!(1, input.position());
+
+    let mut input = Cursor::new(bytes);
+    let error = input
+        .discard_until_limited(b'\n', 1)
+        .expect_err("input beyond the one byte limit should be rejected");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!(1, input.position());
+}
+
+#[test]
+fn test_limited_delimiter_handles_small_buffer_reader_chunks() {
+    let mut input = BufReader::with_capacity(2, Cursor::new(b"ab\nrest".to_vec()));
+    let mut output = b"prefix".to_vec();
+
+    let error = input
+        .read_until_limited_into(b'\n', &mut output, 2)
+        .expect_err("delimiter beyond the limit should be rejected across chunks");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!(b"prefix", output.as_slice());
+    assert_eq!(b"\nr", input.fill_buf().expect("buffer should retain unread bytes"));
+
+    let mut input = BufReader::with_capacity(2, Cursor::new(b"ab\nrest".to_vec()));
+    let error = input
+        .discard_until_limited(b'\n', 2)
+        .expect_err("delimiter beyond the limit should be rejected across chunks");
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!(b"\nr", input.fill_buf().expect("buffer should retain unread bytes"));
 }

@@ -65,3 +65,7 @@ harness = false
 [[bench]]
 name = "async_buffered"
 harness = false
+
+[[bench]]
+name = "bounded_delimiter"
+harness = false

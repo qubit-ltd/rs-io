@@ -272,9 +272,10 @@ where
                 return Ok(discarded);
             }
 
-            let delimiter_position = available.iter().position(|byte| *byte == delimiter);
-            let requested = delimiter_position.map_or(available.len(), |position| position + 1);
             let remaining = max_len.saturating_sub(discarded);
+            let search_len = available.len().min(remaining);
+            let delimiter_position = available[..search_len].iter().position(|byte| *byte == delimiter);
+            let requested = delimiter_position.map_or(available.len(), |position| position + 1);
             if requested > remaining {
                 if remaining > 0 {
                     self.consume(remaining);
