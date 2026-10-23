@@ -7,6 +7,7 @@
 // =============================================================================
 
 use std::io::Cursor;
+use std::io::IoSliceMut;
 use std::io::Read;
 use std::io::Seek;
 use std::io::SeekFrom;
@@ -16,6 +17,144 @@ use qubit_io::Input;
 use qubit_io::InputRef;
 use qubit_io::LimitOutput;
 use qubit_io::TeeInput;
+
+struct VectorInput;
+
+impl Input for VectorInput {
+    type Item = u8;
+    unsafe fn read_unchecked(&mut self, _: &mut [u8], _: usize, _: usize) -> std::io::Result<usize> {
+        panic!("scalar read called")
+    }
+    fn read_vectored(&mut self, buffers: &mut [&mut [u8]]) -> std::io::Result<usize> {
+        let mut bytes = b"abcd".iter();
+        let mut total = 0;
+        for buffer in buffers {
+            for slot in buffer.iter_mut() {
+                let Some(byte) = bytes.next() else {
+                    return Ok(total);
+                };
+                *slot = *byte;
+                total += 1;
+            }
+        }
+        Ok(total)
+    }
+}
+
+#[test]
+fn vectored_std_adapter_keeps_inner_override() {
+    let mut reader = qubit_io::StdRead::new(VectorInput);
+    let mut first = [0; 2];
+    let mut second = [0; 2];
+    assert_eq!(
+        Read::read_vectored(
+            &mut reader,
+            &mut [IoSliceMut::new(&mut first), IoSliceMut::new(&mut second)]
+        )
+        .unwrap(),
+        4
+    );
+    assert_eq!((&first, &second), (b"ab", b"cd"));
+}
+
+struct EdgeInput {
+    reply: Result<usize, std::io::ErrorKind>,
+    calls: usize,
+}
+
+impl Input for EdgeInput {
+    type Item = u8;
+
+    unsafe fn read_unchecked(&mut self, _: &mut [u8], _: usize, _: usize) -> std::io::Result<usize> {
+        panic!("scalar read called")
+    }
+
+    fn read_vectored(&mut self, buffers: &mut [&mut [u8]]) -> std::io::Result<usize> {
+        self.calls += 1;
+        let count = self.reply.map_err(std::io::Error::from)?;
+        let mut remaining = count;
+        for buffer in buffers {
+            for slot in buffer.iter_mut() {
+                if remaining == 0 {
+                    return Ok(count);
+                }
+                *slot = b'x';
+                remaining -= 1;
+            }
+        }
+        Ok(count)
+    }
+}
+
+#[test]
+fn vectored_std_adapter_preserves_empty_short_error_and_count_contracts() {
+    let mut reader = qubit_io::StdRead::new(EdgeInput { reply: Ok(0), calls: 0 });
+    assert_eq!(Read::read_vectored(&mut reader, &mut []).unwrap(), 0);
+    assert_eq!(
+        Read::read_vectored(&mut reader, &mut [IoSliceMut::new(&mut [])]).unwrap(),
+        0
+    );
+    assert_eq!(reader.get_ref().calls, 0);
+
+    let mut reader = qubit_io::StdRead::new(EdgeInput { reply: Ok(1), calls: 0 });
+    let mut first = [b'!'; 2];
+    let mut second = [b'?'; 2];
+    assert_eq!(
+        Read::read_vectored(
+            &mut reader,
+            &mut [IoSliceMut::new(&mut first), IoSliceMut::new(&mut second)]
+        )
+        .unwrap(),
+        1
+    );
+    assert_eq!(first, [b'x', b'!']);
+    assert_eq!(second, [b'?', b'?']);
+    assert_eq!(reader.get_ref().calls, 1);
+
+    for kind in [std::io::ErrorKind::Interrupted, std::io::ErrorKind::PermissionDenied] {
+        let mut reader = qubit_io::StdRead::new(EdgeInput {
+            reply: Err(kind),
+            calls: 0,
+        });
+        assert_eq!(
+            Read::read_vectored(&mut reader, &mut [IoSliceMut::new(&mut [0])])
+                .unwrap_err()
+                .kind(),
+            kind
+        );
+        assert_eq!(reader.get_ref().calls, 1);
+    }
+
+    let mut reader = qubit_io::StdRead::new(EdgeInput { reply: Ok(5), calls: 0 });
+    let mut first = [0; 2];
+    let mut second = [0; 2];
+    assert_eq!(
+        Read::read_vectored(
+            &mut reader,
+            &mut [IoSliceMut::new(&mut first), IoSliceMut::new(&mut second)]
+        )
+        .unwrap_err()
+        .kind(),
+        std::io::ErrorKind::InvalidData
+    );
+    assert_eq!(reader.get_ref().calls, 1);
+}
+
+#[test]
+fn vectored_std_read_adapter_nested_bridge_does_not_recurse() {
+    let mut reader = qubit_io::StdRead::new(qubit_io::StdRead::new(VectorInput));
+    let mut first = [0; 2];
+    let mut second = [0; 2];
+    assert_eq!(
+        Read::read_vectored(
+            &mut reader,
+            &mut [IoSliceMut::new(&mut first), IoSliceMut::new(&mut second)]
+        )
+        .unwrap(),
+        4
+    );
+    assert_eq!((&first, &second), (b"ab", b"cd"));
+}
 
 #[test]
 fn test_std_read_delegates_to_input() {

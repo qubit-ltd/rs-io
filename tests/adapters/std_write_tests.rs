@@ -7,6 +7,7 @@
 // =============================================================================
 
 use std::io::Cursor;
+use std::io::IoSlice;
 use std::io::Seek;
 use std::io::SeekFrom;
 use std::io::Write;
@@ -16,6 +17,134 @@ use qubit_io::LimitOutput;
 use qubit_io::Output;
 use qubit_io::OutputRef;
 use qubit_io::TeeOutput;
+
+#[derive(Default)]
+struct VectorOutput(Vec<u8>);
+
+impl Output for VectorOutput {
+    type Item = u8;
+    unsafe fn write_unchecked(&mut self, _: &[u8], _: usize, _: usize) -> std::io::Result<usize> {
+        panic!("scalar write called")
+    }
+    fn write_vectored(&mut self, buffers: &[&[u8]]) -> std::io::Result<usize> {
+        let before = self.0.len();
+        for buffer in buffers {
+            self.0.extend_from_slice(buffer);
+        }
+        Ok(self.0.len() - before)
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+#[test]
+fn vectored_std_adapter_keeps_inner_override() {
+    let mut writer = qubit_io::StdWrite::new(VectorOutput::default());
+    assert_eq!(
+        Write::write_vectored(&mut writer, &[IoSlice::new(b"ab"), IoSlice::new(b"cd")]).unwrap(),
+        4
+    );
+    assert_eq!(writer.into_inner().0, b"abcd");
+}
+
+struct EdgeOutput {
+    reply: Result<usize, std::io::ErrorKind>,
+    bytes: Vec<u8>,
+    calls: usize,
+}
+
+impl Output for EdgeOutput {
+    type Item = u8;
+
+    unsafe fn write_unchecked(&mut self, _: &[u8], _: usize, _: usize) -> std::io::Result<usize> {
+        panic!("scalar write called")
+    }
+
+    fn write_vectored(&mut self, buffers: &[&[u8]]) -> std::io::Result<usize> {
+        self.calls += 1;
+        let count = self.reply.map_err(std::io::Error::from)?;
+        let mut remaining = count;
+        for buffer in buffers {
+            let copied = remaining.min(buffer.len());
+            self.bytes.extend_from_slice(&buffer[..copied]);
+            remaining -= copied;
+            if remaining == 0 {
+                break;
+            }
+        }
+        Ok(count)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+#[test]
+fn vectored_std_write_adapter_preserves_empty_short_error_and_count_contracts() {
+    let mut writer = qubit_io::StdWrite::new(EdgeOutput {
+        reply: Ok(0),
+        bytes: Vec::new(),
+        calls: 0,
+    });
+    assert_eq!(Write::write_vectored(&mut writer, &[]).unwrap(), 0);
+    assert_eq!(
+        Write::write_vectored(&mut writer, &[IoSlice::new(b""), IoSlice::new(b"")]).unwrap(),
+        0
+    );
+    assert_eq!(writer.get_ref().calls, 0);
+
+    let mut writer = qubit_io::StdWrite::new(EdgeOutput {
+        reply: Ok(1),
+        bytes: Vec::new(),
+        calls: 0,
+    });
+    assert_eq!(
+        Write::write_vectored(&mut writer, &[IoSlice::new(b"ab"), IoSlice::new(b"cd")]).unwrap(),
+        1
+    );
+    assert_eq!(writer.get_ref().bytes, b"a");
+    assert_eq!(writer.get_ref().calls, 1);
+
+    for kind in [std::io::ErrorKind::Interrupted, std::io::ErrorKind::PermissionDenied] {
+        let mut writer = qubit_io::StdWrite::new(EdgeOutput {
+            reply: Err(kind),
+            bytes: Vec::new(),
+            calls: 0,
+        });
+        assert_eq!(
+            Write::write_vectored(&mut writer, &[IoSlice::new(b"a")])
+                .unwrap_err()
+                .kind(),
+            kind
+        );
+        assert_eq!(writer.get_ref().calls, 1);
+    }
+
+    let mut writer = qubit_io::StdWrite::new(EdgeOutput {
+        reply: Ok(5),
+        bytes: Vec::new(),
+        calls: 0,
+    });
+    assert_eq!(
+        Write::write_vectored(&mut writer, &[IoSlice::new(b"ab"), IoSlice::new(b"cd")])
+            .unwrap_err()
+            .kind(),
+        std::io::ErrorKind::InvalidData
+    );
+    assert_eq!(writer.get_ref().calls, 1);
+}
+
+#[test]
+fn vectored_std_write_adapter_nested_bridge_does_not_recurse() {
+    let mut writer = qubit_io::StdWrite::new(qubit_io::StdWrite::new(VectorOutput::default()));
+    assert_eq!(
+        Write::write_vectored(&mut writer, &[IoSlice::new(b"ab"), IoSlice::new(b"cd")]).unwrap(),
+        4
+    );
+    assert_eq!(writer.into_inner().into_inner().0, b"abcd");
+}
 
 #[test]
 fn test_std_write_delegates_to_output() {

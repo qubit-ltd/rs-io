@@ -154,6 +154,73 @@ pub trait Input {
         Ok(read)
     }
 
+    /// Reads from the first non-empty buffer in a list.
+    ///
+    /// The default implementation performs at most one call to [`Input::read`]
+    /// and does not continue to later buffers after a short read. It returns
+    /// the number of items read, or the underlying error; an impossible count
+    /// is reported as [`ErrorKind::InvalidData`]. Empty lists and lists whose
+    /// buffers are all empty return `Ok(0)` without performing I/O. Interrupted
+    /// errors are not retried. Implementations may override this method to use
+    /// multiple buffers in one operation. Use UFCS when a standard I/O method
+    /// with the same name is also in scope.
+    ///
+    /// # Parameters
+    ///
+    /// - `buffers`: Mutable destination slices, in the order to read them.
+    ///
+    /// # Returns
+    ///
+    /// The number of items read across the buffers.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error from the input operation, or [`ErrorKind::InvalidData`]
+    /// if the implementation reports more items than the selected buffer can
+    /// hold.
+    ///
+    /// # Examples
+    ///
+    /// This example uses a non-byte stream through a trait object. The default
+    /// method reads only the first non-empty slice; an override may use more.
+    ///
+    /// ```
+    /// use qubit_io::Input;
+    ///
+    /// struct Characters;
+    /// impl Input for Characters {
+    ///     type Item = char;
+    ///     unsafe fn read_unchecked(
+    ///         &mut self,
+    ///         output: &mut [char],
+    ///         index: usize,
+    ///         count: usize,
+    ///     ) -> std::io::Result<usize> {
+    ///         if count == 0 {
+    ///             return Ok(0);
+    ///         }
+    ///         output[index] = '甲';
+    ///         Ok(1)
+    ///     }
+    /// }
+    /// let mut input = Characters;
+    /// let input: &mut dyn Input<Item = char> = &mut input;
+    /// let mut first = ['!'; 2];
+    /// let mut second = ['?'; 2];
+    /// assert_eq!(Input::read_vectored(input, &mut [&mut first, &mut second])?, 1);
+    /// assert_eq!(first, ['甲', '!']);
+    /// assert_eq!(second, ['?', '?']);
+    /// # Ok::<(), std::io::Error>(())
+    /// ```
+    fn read_vectored(&mut self, buffers: &mut [&mut [Self::Item]]) -> Result<usize> {
+        let Some(buffer) = buffers.iter_mut().find(|buffer| !buffer.is_empty()) else {
+            return Ok(0);
+        };
+        let count = self.read(buffer)?;
+        validate_read_count(count, buffer.len())?;
+        Ok(count)
+    }
+
     /// Reads items into an indexed output range until it is full or EOF is
     /// reached.
     ///

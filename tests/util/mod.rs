@@ -8,3 +8,5 @@
 
 mod allocation_tests;
 mod streams_tests;
+#[cfg(coverage)]
+mod vectored_coverage_tests;

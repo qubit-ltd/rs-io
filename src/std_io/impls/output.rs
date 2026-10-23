@@ -76,6 +76,17 @@ where
         Ok(written)
     }
 
+    fn write_vectored(&mut self, buffers: &[&[u8]]) -> Result<usize> {
+        let capacity = crate::util::requested_items(buffers.iter().map(|buffer| buffer.len()))?;
+        if capacity == 0 {
+            return Ok(0);
+        }
+        let slices = crate::util::io_slices(buffers)?;
+        let count = Write::write_vectored(self, &slices)?;
+        validate_write_count(count, capacity)?;
+        Ok(count)
+    }
+
     /// Flushes the standard writer.
     ///
     /// # Returns

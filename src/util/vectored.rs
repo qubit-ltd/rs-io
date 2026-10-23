@@ -1,0 +1,62 @@
+// =============================================================================
+//    Copyright (c) 2026 Haixing Hu.
+//
+//    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
+// =============================================================================
+
+// qubit-style: allow coverage-cfg
+use std::io;
+use std::io::IoSlice;
+use std::io::IoSliceMut;
+
+use super::allocation_error;
+use super::try_reserve_vec;
+
+pub(crate) fn requested_items(mut lengths: impl Iterator<Item = usize>) -> io::Result<usize> {
+    lengths.try_fold(0_usize, |total, len| {
+        total
+            .checked_add(len)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "vectored item count exceeds usize"))
+    })
+}
+
+pub(crate) fn io_slices<'a>(buffers: &[&'a [u8]]) -> io::Result<Vec<IoSlice<'a>>> {
+    let mut result = Vec::new();
+    try_reserve_vec(&mut result, buffers.len()).map_err(allocation_error)?;
+    result.extend(buffers.iter().map(|buffer| IoSlice::new(buffer)));
+    Ok(result)
+}
+
+pub(crate) fn io_slices_mut<'a>(buffers: &'a mut [&mut [u8]]) -> io::Result<Vec<IoSliceMut<'a>>> {
+    let mut result = Vec::new();
+    try_reserve_vec(&mut result, buffers.len()).map_err(allocation_error)?;
+    result.extend(buffers.iter_mut().map(|buffer| IoSliceMut::new(buffer)));
+    Ok(result)
+}
+
+pub(crate) fn byte_slices<'a>(buffers: &'a [IoSlice<'_>]) -> io::Result<Vec<&'a [u8]>> {
+    let mut result = Vec::new();
+    try_reserve_vec(&mut result, buffers.len()).map_err(allocation_error)?;
+    result.extend(buffers.iter().map(|buffer| &buffer[..]));
+    Ok(result)
+}
+
+pub(crate) fn byte_slices_mut<'a>(buffers: &'a mut [IoSliceMut<'_>]) -> io::Result<Vec<&'a mut [u8]>> {
+    let mut result = Vec::new();
+    try_reserve_vec(&mut result, buffers.len()).map_err(allocation_error)?;
+    result.extend(buffers.iter_mut().map(|buffer| &mut buffer[..]));
+    Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::requested_items;
+
+    #[test]
+    fn vectored_lengths_reject_overflow_without_io() {
+        let error = requested_items([usize::MAX, 1].into_iter()).unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+    }
+}

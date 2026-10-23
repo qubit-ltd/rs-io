@@ -10,6 +10,7 @@
 
 mod allocation;
 mod streams;
+mod vectored;
 
 // qubit-style: allow coverage-cfg
 pub(crate) use allocation::allocation_error;
@@ -38,3 +39,8 @@ pub use streams::coverage_fail_next_add_item_count;
 #[cfg(coverage)]
 #[doc(hidden)]
 pub use streams::coverage_reset_add_item_count_hooks;
+pub(crate) use vectored::byte_slices;
+pub(crate) use vectored::byte_slices_mut;
+pub(crate) use vectored::io_slices;
+pub(crate) use vectored::io_slices_mut;
+pub(crate) use vectored::requested_items;

@@ -79,6 +79,18 @@ where
     fn read(&mut self, output: &mut [u8]) -> Result<usize> {
         Input::read(&mut self.inner, output)
     }
+
+    #[inline]
+    fn read_vectored(&mut self, buffers: &mut [std::io::IoSliceMut<'_>]) -> Result<usize> {
+        let capacity = crate::util::requested_items(buffers.iter().map(|buffer| buffer.len()))?;
+        if capacity == 0 {
+            return Ok(0);
+        }
+        let mut slices = crate::util::byte_slices_mut(buffers)?;
+        let count = Input::read_vectored(&mut self.inner, &mut slices)?;
+        crate::traits::validate_read_count(count, capacity)?;
+        Ok(count)
+    }
 }
 
 impl<I> Seek for StdRead<I>

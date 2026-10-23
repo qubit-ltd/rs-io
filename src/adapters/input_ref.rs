@@ -152,6 +152,11 @@ where
         self.inner.read(output)
     }
 
+    #[inline(always)]
+    fn read_vectored(&mut self, buffers: &mut [&mut [Self::Item]]) -> io::Result<usize> {
+        self.inner.read_vectored(buffers)
+    }
+
     /// Forwards an unchecked complete read to the wrapped input.
     ///
     /// # Parameters

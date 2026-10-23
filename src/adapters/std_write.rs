@@ -79,6 +79,18 @@ where
     }
 
     #[inline]
+    fn write_vectored(&mut self, buffers: &[std::io::IoSlice<'_>]) -> Result<usize> {
+        let capacity = crate::util::requested_items(buffers.iter().map(|buffer| buffer.len()))?;
+        if capacity == 0 {
+            return Ok(0);
+        }
+        let slices = crate::util::byte_slices(buffers)?;
+        let count = Output::write_vectored(&mut self.inner, &slices)?;
+        crate::traits::validate_write_count(count, capacity)?;
+        Ok(count)
+    }
+
+    #[inline]
     fn flush(&mut self) -> Result<()> {
         Output::flush(&mut self.inner)
     }

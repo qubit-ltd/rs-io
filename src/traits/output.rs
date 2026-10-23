@@ -188,6 +188,56 @@ pub trait Output {
         Ok(written)
     }
 
+    /// Writes to the first non-empty buffer in a list.
+    ///
+    /// The default implementation performs at most one call to
+    /// [`Output::write`] and does not continue to later buffers after a short
+    /// write. It returns the number of items written, or the underlying error;
+    /// an impossible count is reported as [`ErrorKind::InvalidData`]. Empty
+    /// lists and lists whose buffers are all empty return `Ok(0)` without
+    /// performing I/O. Interrupted errors are not retried. Implementations may
+    /// override this method to use multiple buffers in one operation. Use
+    /// UFCS when a standard I/O method with the same name is also in scope.
+    ///
+    /// # Parameters
+    ///
+    /// - `buffers`: Immutable source slices, in the order to write them.
+    ///
+    /// # Returns
+    ///
+    /// The number of items written across the buffers.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error from the output operation, or
+    /// [`ErrorKind::InvalidData`] if the implementation reports more items
+    /// than the selected buffer can hold.
+    ///
+    /// # Examples
+    ///
+    /// A byte-output trait object can use the generic interface. The default
+    /// method need not consume every buffer; an override may use them all.
+    ///
+    /// ```
+    /// use qubit_io::ByteOutput;
+    /// use qubit_io::Output;
+    ///
+    /// let mut bytes = Vec::new();
+    /// let output: &mut dyn ByteOutput = &mut bytes;
+    /// let count = Output::write_vectored(output, &[&b"ab"[..], &b"cd"[..]])?;
+    /// assert!(count <= 4);
+    /// assert_eq!(bytes.as_slice(), &b"abcd"[..count]);
+    /// # Ok::<(), std::io::Error>(())
+    /// ```
+    fn write_vectored(&mut self, buffers: &[&[Self::Item]]) -> Result<usize> {
+        let Some(buffer) = buffers.iter().find(|buffer| !buffer.is_empty()) else {
+            return Ok(0);
+        };
+        let count = self.write(buffer)?;
+        validate_write_count(count, buffer.len())?;
+        Ok(count)
+    }
+
     /// Writes all items from an indexed input range.
     ///
     /// This method repeatedly calls [`Output::write_unchecked`] until all

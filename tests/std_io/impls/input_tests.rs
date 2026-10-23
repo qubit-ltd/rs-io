@@ -11,6 +11,7 @@
 use std::io::Cursor;
 use std::io::Error;
 use std::io::ErrorKind;
+use std::io::IoSliceMut;
 use std::io::Read;
 #[cfg(debug_assertions)]
 use std::panic::AssertUnwindSafe;
@@ -18,6 +19,109 @@ use std::panic::AssertUnwindSafe;
 use std::panic::catch_unwind;
 
 use qubit_io::Input;
+
+struct VectorStdReader;
+
+impl Read for VectorStdReader {
+    fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+        panic!("scalar read called")
+    }
+    fn read_vectored(&mut self, buffers: &mut [IoSliceMut<'_>]) -> std::io::Result<usize> {
+        let mut bytes = b"abcd".iter();
+        let mut total = 0;
+        for buffer in buffers {
+            for slot in buffer.iter_mut() {
+                let Some(byte) = bytes.next() else {
+                    return Ok(total);
+                };
+                *slot = *byte;
+                total += 1;
+            }
+        }
+        Ok(total)
+    }
+}
+
+#[test]
+fn vectored_std_reader_keeps_native_override() {
+    let mut reader = VectorStdReader;
+    let mut first = [0; 2];
+    let mut second = [0; 2];
+    assert_eq!(
+        Input::read_vectored(&mut reader, &mut [&mut first[..], &mut second[..]]).unwrap(),
+        4
+    );
+    assert_eq!((&first, &second), (b"ab", b"cd"));
+}
+
+struct EdgeStdReader {
+    reply: Result<usize, ErrorKind>,
+    calls: usize,
+}
+
+impl Read for EdgeStdReader {
+    fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+        panic!("scalar read called")
+    }
+
+    fn read_vectored(&mut self, buffers: &mut [IoSliceMut<'_>]) -> std::io::Result<usize> {
+        self.calls += 1;
+        let count = self.reply.map_err(Error::from)?;
+        let mut remaining = count;
+        for buffer in buffers {
+            for slot in buffer.iter_mut() {
+                if remaining == 0 {
+                    return Ok(count);
+                }
+                *slot = b'x';
+                remaining -= 1;
+            }
+        }
+        Ok(count)
+    }
+}
+
+#[test]
+fn vectored_std_reader_preserves_empty_short_error_and_count_contracts() {
+    let mut reader = EdgeStdReader { reply: Ok(0), calls: 0 };
+    assert_eq!(Input::read_vectored(&mut reader, &mut []).unwrap(), 0);
+    assert_eq!(Input::read_vectored(&mut reader, &mut [&mut [], &mut []]).unwrap(), 0);
+    assert_eq!(reader.calls, 0);
+
+    let mut reader = EdgeStdReader { reply: Ok(1), calls: 0 };
+    let mut first = [b'!'; 2];
+    let mut second = [b'?'; 2];
+    assert_eq!(
+        Input::read_vectored(&mut reader, &mut [&mut first, &mut second]).unwrap(),
+        1
+    );
+    assert_eq!(first, [b'x', b'!']);
+    assert_eq!(second, [b'?', b'?']);
+    assert_eq!(reader.calls, 1);
+
+    for kind in [ErrorKind::Interrupted, ErrorKind::PermissionDenied] {
+        let mut reader = EdgeStdReader {
+            reply: Err(kind),
+            calls: 0,
+        };
+        assert_eq!(
+            Input::read_vectored(&mut reader, &mut [&mut [0; 1]])
+                .unwrap_err()
+                .kind(),
+            kind
+        );
+        assert_eq!(reader.calls, 1);
+    }
+
+    let mut reader = EdgeStdReader { reply: Ok(5), calls: 0 };
+    assert_eq!(
+        Input::read_vectored(&mut reader, &mut [&mut [0; 2], &mut [0; 2]])
+            .unwrap_err()
+            .kind(),
+        ErrorKind::InvalidData
+    );
+    assert_eq!(reader.calls, 1);
+}
 
 struct OverreportingStdReader;
 

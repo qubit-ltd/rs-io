@@ -26,3 +26,4 @@ mod seekable_input_tests;
 mod seekable_output_tests;
 mod specialized_stream_support;
 mod support_tests;
+mod vectored_tests;

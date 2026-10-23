@@ -11,6 +11,7 @@
 use std::io::Cursor;
 use std::io::Error;
 use std::io::ErrorKind;
+use std::io::IoSlice;
 use std::io::Write;
 #[cfg(debug_assertions)]
 use std::panic::AssertUnwindSafe;
@@ -18,6 +19,105 @@ use std::panic::AssertUnwindSafe;
 use std::panic::catch_unwind;
 
 use qubit_io::Output;
+
+#[derive(Default)]
+struct VectorStdWriter(Vec<u8>);
+
+impl Write for VectorStdWriter {
+    fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+        panic!("scalar write called")
+    }
+    fn write_vectored(&mut self, buffers: &[IoSlice<'_>]) -> std::io::Result<usize> {
+        let before = self.0.len();
+        for buffer in buffers {
+            self.0.extend_from_slice(buffer);
+        }
+        Ok(self.0.len() - before)
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+#[test]
+fn vectored_std_writer_keeps_native_override() {
+    let mut writer = VectorStdWriter::default();
+    assert_eq!(Output::write_vectored(&mut writer, &[b"ab", b"cd"]).unwrap(), 4);
+    assert_eq!(writer.0, b"abcd");
+}
+
+struct EdgeStdWriter {
+    reply: Result<usize, ErrorKind>,
+    bytes: Vec<u8>,
+    calls: usize,
+}
+
+impl Write for EdgeStdWriter {
+    fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+        panic!("scalar write called")
+    }
+
+    fn write_vectored(&mut self, buffers: &[IoSlice<'_>]) -> std::io::Result<usize> {
+        self.calls += 1;
+        let count = self.reply.map_err(Error::from)?;
+        let mut remaining = count;
+        for buffer in buffers {
+            let copied = remaining.min(buffer.len());
+            self.bytes.extend_from_slice(&buffer[..copied]);
+            remaining -= copied;
+            if remaining == 0 {
+                break;
+            }
+        }
+        Ok(count)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+#[test]
+fn vectored_std_writer_preserves_empty_short_error_and_count_contracts() {
+    let mut writer = EdgeStdWriter {
+        reply: Ok(0),
+        bytes: Vec::new(),
+        calls: 0,
+    };
+    assert_eq!(Output::write_vectored(&mut writer, &[]).unwrap(), 0);
+    assert_eq!(Output::write_vectored(&mut writer, &[b"", b""]).unwrap(), 0);
+    assert_eq!(writer.calls, 0);
+
+    let mut writer = EdgeStdWriter {
+        reply: Ok(1),
+        bytes: Vec::new(),
+        calls: 0,
+    };
+    assert_eq!(Output::write_vectored(&mut writer, &[b"ab", b"cd"]).unwrap(), 1);
+    assert_eq!(writer.bytes, b"a");
+    assert_eq!(writer.calls, 1);
+
+    for kind in [ErrorKind::Interrupted, ErrorKind::PermissionDenied] {
+        let mut writer = EdgeStdWriter {
+            reply: Err(kind),
+            bytes: Vec::new(),
+            calls: 0,
+        };
+        assert_eq!(Output::write_vectored(&mut writer, &[b"a"]).unwrap_err().kind(), kind);
+        assert_eq!(writer.calls, 1);
+    }
+
+    let mut writer = EdgeStdWriter {
+        reply: Ok(5),
+        bytes: Vec::new(),
+        calls: 0,
+    };
+    assert_eq!(
+        Output::write_vectored(&mut writer, &[b"ab", b"cd"]).unwrap_err().kind(),
+        ErrorKind::InvalidData
+    );
+    assert_eq!(writer.calls, 1);
+}
 
 struct OverreportingStdWriter;
 

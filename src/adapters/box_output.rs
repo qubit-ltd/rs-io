@@ -148,6 +148,11 @@ where
         self.inner.write(input)
     }
 
+    #[inline(always)]
+    fn write_vectored(&mut self, buffers: &[&[Self::Item]]) -> io::Result<usize> {
+        self.inner.as_mut().write_vectored(buffers)
+    }
+
     /// Forwards an unchecked complete write to the boxed output.
     ///
     /// # Parameters

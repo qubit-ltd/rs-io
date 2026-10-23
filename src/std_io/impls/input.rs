@@ -74,4 +74,15 @@ where
         validate_read_count(read, output.len())?;
         Ok(read)
     }
+
+    fn read_vectored(&mut self, buffers: &mut [&mut [u8]]) -> Result<usize> {
+        let capacity = crate::util::requested_items(buffers.iter().map(|buffer| buffer.len()))?;
+        if capacity == 0 {
+            return Ok(0);
+        }
+        let mut slices = crate::util::io_slices_mut(buffers)?;
+        let count = Read::read_vectored(self, &mut slices)?;
+        validate_read_count(count, capacity)?;
+        Ok(count)
+    }
 }
