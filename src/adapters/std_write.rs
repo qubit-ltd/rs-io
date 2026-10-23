@@ -18,6 +18,10 @@ use crate::Output;
 
 /// Adapts an [`Output`] of bytes to [`std::io::Write`].
 ///
+/// A wrapped tee reports successful primary progress even if its mirror branch
+/// fails. Check `flush` after finite writes; a later non-empty write and flush
+/// return the latched error.
+///
 /// # Type Parameters
 ///
 /// - `O`: Output that accepts bytes.

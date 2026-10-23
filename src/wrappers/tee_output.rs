@@ -12,11 +12,15 @@ use std::io::SeekFrom;
 use crate::Output;
 use crate::Seekable;
 use crate::traits::validate_write_count;
+use crate::wrappers::internal::tee_failure::TeeFailure;
 
 /// Output wrapper that mirrors successfully accepted items to a branch output.
 ///
-/// Operations are ordered and not transactional. A branch write or seek
-/// failure can leave the primary output advanced while the branch is behind.
+/// Operations are ordered and not transactional. A branch write failure is
+/// latched after primary progress; the write reports that progress, and later
+/// non-empty writes, flushes, and seeks return the stored error. Check `flush`
+/// after finite writes or inspect the error from [`into_parts`](Self::into_parts).
+/// A returned `Ok(n)` describes primary progress, not successful mirroring.
 ///
 /// # Type Parameters
 ///
@@ -43,6 +47,7 @@ pub struct TeeOutput<P, B> {
     inner: P,
     /// Branch output receiving mirrored items.
     branch: B,
+    failure: TeeFailure,
 }
 
 impl<P, B> TeeOutput<P, B> {
@@ -58,7 +63,11 @@ impl<P, B> TeeOutput<P, B> {
     /// Returns a wrapper that mirrors successfully accepted items.
     #[inline(always)]
     pub const fn new(inner: P, branch: B) -> Self {
-        Self { inner, branch }
+        Self {
+            inner,
+            branch,
+            failure: TeeFailure::new(),
+        }
     }
 
     /// Returns a shared reference to the primary output.
@@ -109,6 +118,14 @@ impl<P, B> TeeOutput<P, B> {
         &mut self.branch
     }
 
+    /// Returns `Some(error)` after the first branch write failure, or `None`
+    /// while mirroring has not failed.
+    ///
+    /// This state does not cover panics or arbitrary effects of custom streams.
+    pub fn branch_error(&self) -> Option<&io::Error> {
+        self.failure.error()
+    }
+
     /// Consumes this wrapper without flushing either output.
     ///
     /// This method performs no I/O. Any buffering owned by the returned primary
@@ -116,11 +133,11 @@ impl<P, B> TeeOutput<P, B> {
     ///
     /// # Returns
     ///
-    /// Returns the primary output and branch output.
+    /// Returns the primary output, branch output, and first branch error.
     #[inline(always)]
     #[must_use]
-    pub fn into_parts(self) -> (P, B) {
-        (self.inner, self.branch)
+    pub fn into_parts(self) -> (P, B, Option<io::Error>) {
+        (self.inner, self.branch, self.failure.into_error())
     }
 }
 
@@ -156,9 +173,9 @@ where
     ///
     /// # Errors
     ///
-    /// Returns a primary error before touching the branch. If mirroring fails,
-    /// returns the branch error after the primary has accepted the reported
-    /// prefix.
+    /// Returns primary progress even if mirroring fails. The first branch
+    /// error is latched and prevents later non-empty writes; callers must check
+    /// [`branch_error`](Self::branch_error) or `flush` after finite writes.
     ///
     /// An invalid count returns [`io::ErrorKind::InvalidData`] before the
     /// branch is written.
@@ -167,10 +184,23 @@ where
     ///
     /// `index..index + count` must be valid in `input`.
     #[inline]
-    unsafe fn write_unchecked(&mut self, input: &[Self::Item], index: usize, count: usize) -> io::Result<usize> {
+    unsafe fn write_unchecked(
+        &mut self,
+        input: &[Self::Item],
+        index: usize,
+        count: usize,
+    ) -> io::Result<usize> {
+        if count == 0 {
+            return Ok(0);
+        }
+        self.failure.check()?;
         let written = self.inner.write(&input[index..index + count])?;
         validate_write_count(written, count)?;
-        self.branch.write_fully(&input[index..index + written])?;
+        if written != 0 {
+            if let Err(error) = self.branch.write_fully(&input[index..index + written]) {
+                self.failure.record(error);
+            }
+        }
         Ok(written)
     }
 
@@ -186,6 +216,7 @@ where
     /// the branch flush error after the primary has flushed successfully.
     #[inline]
     fn flush(&mut self) -> io::Result<()> {
+        self.failure.check()?;
         self.inner.flush()?;
         self.branch.flush()
     }
@@ -215,6 +246,7 @@ where
     /// seek fails, the primary remains at its new position.
     #[inline]
     fn seek_to(&mut self, position: SeekFrom) -> io::Result<u64> {
+        self.failure.check()?;
         let position = self.inner.seek_to(position)?;
         self.branch.seek_to(SeekFrom::Start(position))?;
         Ok(position)

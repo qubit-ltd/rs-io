@@ -18,6 +18,10 @@ use crate::Input;
 
 /// Adapts an [`Input`] of bytes to [`std::io::Read`].
 ///
+/// A wrapped tee reports successful primary progress even if its mirror branch
+/// fails. Check the tee's branch error after finite reads; a later non-empty
+/// read returns the latched error.
+///
 /// # Type Parameters
 ///
 /// - `I`: Input that supplies bytes to the standard reader.

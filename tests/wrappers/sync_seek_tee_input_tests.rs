@@ -7,6 +7,7 @@
 // =============================================================================
 //! Tests for [`qubit_io::SyncSeekTeeInput`].
 
+use std::io::Cursor;
 use std::io::ErrorKind;
 use std::io::SeekFrom;
 
@@ -31,14 +32,18 @@ fn test_sync_seek_tee_input_mirrors_generic_items_and_exposes_parts() {
     assert_eq!([10, 20], output);
     assert_eq!(vec![10, 20], input.branch().items);
 
-    let (source, branch) = input.into_parts();
+    let (source, branch, error) = input.into_parts();
+    assert!(error.is_none());
     assert_eq!(0, source.remaining_len());
     assert_eq!(vec![10, 20], branch.items);
 }
 
 #[test]
 fn test_sync_seek_tee_input_mutable_accessors_modify_both_paths() {
-    let mut input = SyncSeekTeeInput::new(ScriptedInput::items(vec![1_u16]), ScriptedOutput::accepting());
+    let mut input = SyncSeekTeeInput::new(
+        ScriptedInput::items(vec![1_u16]),
+        ScriptedOutput::accepting(),
+    );
     input.inner_mut().action = InputAction::Items(vec![2]);
     input.branch_mut().items.push(1);
     let mut output = [0_u16; 1];
@@ -65,18 +70,84 @@ fn test_sync_seek_tee_input_propagates_read_path_errors() {
         ScriptedInput::items(vec![1_u16, 2]),
         ScriptedOutput::failing_write("branch failed"),
     );
-    let error = branch_failure
-        .read(&mut output)
-        .expect_err("branch error should be returned");
-    assert_eq!(ErrorKind::Other, error.kind());
+    assert_eq!(
+        2,
+        branch_failure
+            .read(&mut output)
+            .expect("primary progress should be returned")
+    );
+    assert_eq!(
+        ErrorKind::Other,
+        branch_failure.branch_error().unwrap().kind()
+    );
     assert_eq!([1, 2], output);
+    assert_eq!(0, branch_failure.inner().remaining_len());
+    assert_eq!(
+        ErrorKind::Other,
+        branch_failure.read(&mut output).unwrap_err().kind()
+    );
     assert_eq!(0, branch_failure.inner().remaining_len());
 }
 
 #[test]
+fn test_sync_seek_tee_input_std_read_preserves_primary_progress() {
+    let tee = SyncSeekTeeInput::new(Cursor::new(&b"abcd"[..]), FailingSeekableOutput);
+    let mut reader = qubit_io::StdRead::new(tee);
+    let mut bytes = [0; 3];
+    assert_eq!(3, std::io::Read::read(&mut reader, &mut bytes).unwrap());
+    assert_eq!(&bytes, b"abc");
+    assert_eq!(
+        ErrorKind::WriteZero,
+        std::io::Read::read(&mut reader, &mut [0])
+            .unwrap_err()
+            .kind()
+    );
+    assert_eq!(3, reader.get_ref().inner().position());
+}
+
+struct FailingSeekableOutput;
+
+impl qubit_io::Output for FailingSeekableOutput {
+    type Item = u8;
+
+    unsafe fn write_unchecked(
+        &mut self,
+        _input: &[u8],
+        _index: usize,
+        count: usize,
+    ) -> std::io::Result<usize> {
+        Ok(count)
+    }
+
+    fn write_fully(&mut self, _input: &[u8]) -> std::io::Result<()> {
+        Err(ErrorKind::WriteZero.into())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl Seekable for FailingSeekableOutput {
+    type Unit = u8;
+
+    fn seek_to(&mut self, _position: SeekFrom) -> std::io::Result<u64> {
+        Ok(0)
+    }
+}
+
+#[test]
 fn test_sync_seek_tee_input_seeks_source_then_aligns_branch() {
-    let mut input = SyncSeekTeeInput::new(ScriptedInput::items(vec![1_u16]), ScriptedOutput::accepting());
-    assert_eq!(5, input.seek_to(SeekFrom::Start(5)).expect("seek should succeed"));
+    let mut input = SyncSeekTeeInput::new(
+        ScriptedInput::items(vec![1_u16]),
+        ScriptedOutput::accepting(),
+    );
+    assert_eq!(
+        5,
+        input
+            .seek_to(SeekFrom::Start(5))
+            .expect("seek should succeed")
+    );
     assert_eq!(5, input.inner().position);
     assert_eq!(5, input.branch().position);
 

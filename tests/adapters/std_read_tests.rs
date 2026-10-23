@@ -14,22 +14,49 @@ use std::io::SeekFrom;
 use qubit_io::ChecksumInput;
 use qubit_io::Input;
 use qubit_io::InputRef;
+use qubit_io::LimitOutput;
+use qubit_io::TeeInput;
 
 #[test]
 fn test_std_read_delegates_to_input() {
     let mut reader = Cursor::new(b"abcd").into_std_read();
     let mut bytes = [0; 4];
-    reader.read_exact(&mut bytes).expect("reader should fill output");
+    reader
+        .read_exact(&mut bytes)
+        .expect("reader should fill output");
     assert_eq!(&bytes, b"abcd");
     assert_eq!(reader.into_inner().position(), 4);
 }
 
 #[test]
+fn test_std_read_reports_tee_primary_progress_before_branch_failure() {
+    let tee = TeeInput::new(Cursor::new(b"abcd"), LimitOutput::new(Vec::<u8>::new(), 2));
+    let mut reader = qubit_io::StdRead::new(tee);
+    let mut bytes = [0; 3];
+    assert_eq!(std::io::Read::read(&mut reader, &mut bytes).unwrap(), 3);
+    assert_eq!(&bytes, b"abc");
+    let mut next = [9];
+    assert_eq!(
+        std::io::Read::read(&mut reader, &mut next)
+            .unwrap_err()
+            .kind(),
+        std::io::ErrorKind::WriteZero
+    );
+    assert_eq!(next, [9]);
+    assert_eq!(reader.get_ref().inner().position(), 3);
+}
+
+#[test]
 fn test_into_std_read_preserves_checksum_state_and_stream_position() {
-    let input = ChecksumInput::new(Cursor::new(b"abcd"), std::collections::hash_map::DefaultHasher::new());
+    let input = ChecksumInput::new(
+        Cursor::new(b"abcd"),
+        std::collections::hash_map::DefaultHasher::new(),
+    );
     let mut reader = input.into_std_read();
     let mut bytes = [0; 2];
-    reader.read_exact(&mut bytes).expect("reader should fill output");
+    reader
+        .read_exact(&mut bytes)
+        .expect("reader should fill output");
     assert_eq!(&bytes, b"ab");
     let input = reader.into_inner();
     assert_eq!(2, input.inner().position());
@@ -45,7 +72,12 @@ fn test_into_std_read_supports_borrowed_and_dyn_inputs() {
         let mut bytes = [0; 1];
         reader.read_exact(&mut bytes).expect("read should succeed");
         assert_eq!(&bytes, b"a");
-        assert_eq!(2, reader.seek(SeekFrom::Current(1)).expect("seek should succeed"));
+        assert_eq!(
+            2,
+            reader
+                .seek(SeekFrom::Current(1))
+                .expect("seek should succeed")
+        );
     }
     assert_eq!(2, cursor.position());
 
@@ -60,10 +92,18 @@ fn test_into_std_read_supports_borrowed_and_dyn_inputs() {
 #[test]
 fn test_std_read_seek_forwards_position_and_errors() {
     let mut reader = Cursor::new(b"abcd").into_std_read();
-    assert_eq!(3, reader.seek(SeekFrom::Start(3)).expect("seek should succeed"));
+    assert_eq!(
+        3,
+        reader
+            .seek(SeekFrom::Start(3))
+            .expect("seek should succeed")
+    );
 
     let mut reader = ErrorSeekInput.into_std_read();
-    assert_eq!("seek failed", reader.seek(SeekFrom::Start(1)).unwrap_err().to_string());
+    assert_eq!(
+        "seek failed",
+        reader.seek(SeekFrom::Start(1)).unwrap_err().to_string()
+    );
 }
 
 #[test]
@@ -86,7 +126,9 @@ fn test_into_std_read_retries_interrupted_and_handles_short_reads() {
     };
     let mut reader = input.into_std_read();
     let mut bytes = [0; 3];
-    reader.read_exact(&mut bytes).expect("read_exact should retry and fill");
+    reader
+        .read_exact(&mut bytes)
+        .expect("read_exact should retry and fill");
     assert_eq!(&bytes, b"abc");
 }
 
@@ -95,7 +137,12 @@ struct ReadOnlyInput;
 impl Input for ReadOnlyInput {
     type Item = u8;
 
-    unsafe fn read_unchecked(&mut self, _output: &mut [u8], _index: usize, _count: usize) -> std::io::Result<usize> {
+    unsafe fn read_unchecked(
+        &mut self,
+        _output: &mut [u8],
+        _index: usize,
+        _count: usize,
+    ) -> std::io::Result<usize> {
         Ok(0)
     }
 }
@@ -105,7 +152,12 @@ struct ErrorSeekInput;
 impl Input for ErrorSeekInput {
     type Item = u8;
 
-    unsafe fn read_unchecked(&mut self, _output: &mut [u8], _index: usize, _count: usize) -> std::io::Result<usize> {
+    unsafe fn read_unchecked(
+        &mut self,
+        _output: &mut [u8],
+        _index: usize,
+        _count: usize,
+    ) -> std::io::Result<usize> {
         Ok(0)
     }
 }
@@ -126,7 +178,12 @@ struct ShortInput {
 impl Input for ShortInput {
     type Item = u8;
 
-    unsafe fn read_unchecked(&mut self, output: &mut [u8], index: usize, count: usize) -> std::io::Result<usize> {
+    unsafe fn read_unchecked(
+        &mut self,
+        output: &mut [u8],
+        index: usize,
+        count: usize,
+    ) -> std::io::Result<usize> {
         if self.interrupted {
             self.interrupted = false;
             return Err(std::io::ErrorKind::Interrupted.into());

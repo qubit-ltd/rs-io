@@ -61,3 +61,4 @@ pub use position_guard::PositionGuard;
 pub use sync_seek_tee_input::SyncSeekTeeInput;
 pub use tee_input::TeeInput;
 pub use tee_output::TeeOutput;
+mod internal;

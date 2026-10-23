@@ -13,8 +13,14 @@ use crate::Input;
 use crate::Output;
 use crate::Seekable;
 use crate::traits::validate_read_count;
+use crate::wrappers::internal::tee_failure::TeeFailure;
 
 /// Tee input whose branch position follows every source seek.
+///
+/// A branch write failure is latched after source progress. The read reports
+/// that progress, and later non-empty reads and seeks return the stored error.
+/// Check [`branch_error`](Self::branch_error) after finite reads or inspect the
+/// error returned by [`into_parts`](Self::into_parts).
 ///
 /// # Examples
 ///
@@ -54,6 +60,7 @@ pub struct SyncSeekTeeInput<I, B> {
     inner: I,
     /// Branch output receiving mirrored items.
     branch: B,
+    failure: TeeFailure,
 }
 
 impl<I, B> SyncSeekTeeInput<I, B> {
@@ -69,7 +76,11 @@ impl<I, B> SyncSeekTeeInput<I, B> {
     /// Returns a wrapper that keeps the branch position synchronized on seeks.
     #[inline(always)]
     pub const fn new(inner: I, branch: B) -> Self {
-        Self { inner, branch }
+        Self {
+            inner,
+            branch,
+            failure: TeeFailure::new(),
+        }
     }
 
     /// Returns a shared reference to the source input.
@@ -120,15 +131,23 @@ impl<I, B> SyncSeekTeeInput<I, B> {
         &mut self.branch
     }
 
+    /// Returns `Some(error)` after the first branch write failure, or `None`
+    /// while mirroring has not failed.
+    ///
+    /// This state does not cover panics or arbitrary effects of custom streams.
+    pub fn branch_error(&self) -> Option<&io::Error> {
+        self.failure.error()
+    }
+
     /// Consumes this wrapper and returns its source and branch.
     ///
     /// # Returns
     ///
-    /// Returns the source input and branch output.
+    /// Returns the source input, branch output, and first branch error.
     #[inline(always)]
     #[must_use]
-    pub fn into_parts(self) -> (I, B) {
-        (self.inner, self.branch)
+    pub fn into_parts(self) -> (I, B, Option<io::Error>) {
+        (self.inner, self.branch, self.failure.into_error())
     }
 }
 
@@ -164,9 +183,9 @@ where
     ///
     /// # Errors
     ///
-    /// Returns a source error before touching the branch. If mirroring fails,
-    /// returns the branch error after the source has advanced and the
-    /// destination has been modified.
+    /// Returns primary progress even if mirroring fails. The first branch
+    /// error is latched and prevents later non-empty reads; inspect
+    /// [`branch_error`](Self::branch_error) after finite reads.
     ///
     /// An invalid count returns [`io::ErrorKind::InvalidData`] before the
     /// branch is written.
@@ -175,10 +194,23 @@ where
     ///
     /// `index..index + count` must be valid in `output`.
     #[inline]
-    unsafe fn read_unchecked(&mut self, output: &mut [Self::Item], index: usize, count: usize) -> io::Result<usize> {
+    unsafe fn read_unchecked(
+        &mut self,
+        output: &mut [Self::Item],
+        index: usize,
+        count: usize,
+    ) -> io::Result<usize> {
+        if count == 0 {
+            return Ok(0);
+        }
+        self.failure.check()?;
         let read = self.inner.read(&mut output[index..index + count])?;
         validate_read_count(read, count)?;
-        self.branch.write_fully(&output[index..index + read])?;
+        if read != 0 {
+            if let Err(error) = self.branch.write_fully(&output[index..index + read]) {
+                self.failure.record(error);
+            }
+        }
         Ok(read)
     }
 }
@@ -207,6 +239,7 @@ where
     /// seek fails, the source remains at its new position.
     #[inline]
     fn seek_to(&mut self, position: SeekFrom) -> io::Result<u64> {
+        self.failure.check()?;
         let position = self.inner.seek_to(position)?;
         self.branch.seek_to(SeekFrom::Start(position))?;
         Ok(position)

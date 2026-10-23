@@ -12,16 +12,33 @@ use std::io::SeekFrom;
 use std::io::Write;
 
 use qubit_io::ChecksumOutput;
+use qubit_io::LimitOutput;
 use qubit_io::Output;
 use qubit_io::OutputRef;
+use qubit_io::TeeOutput;
 
 #[test]
 fn test_std_write_delegates_to_output() {
     let mut writer = Cursor::new(Vec::<u8>::new()).into_std_write();
-    writer.write_all(b"abcd").expect("writer should accept input");
+    writer
+        .write_all(b"abcd")
+        .expect("writer should accept input");
     Write::flush(&mut writer).expect("writer should flush");
     assert_eq!(writer.get_ref().get_ref(), b"abcd");
     assert_eq!(writer.into_inner().into_inner(), b"abcd");
+}
+
+#[test]
+fn test_std_write_reports_tee_primary_progress_before_branch_failure() {
+    let tee = TeeOutput::new(Vec::<u8>::new(), LimitOutput::new(Vec::<u8>::new(), 2));
+    let mut writer = qubit_io::StdWrite::new(tee);
+    assert_eq!(std::io::Write::write(&mut writer, b"abc").unwrap(), 3);
+    assert_eq!(writer.get_ref().inner(), b"abc");
+    assert_eq!(
+        std::io::Write::write(&mut writer, b"d").unwrap_err().kind(),
+        std::io::ErrorKind::WriteZero
+    );
+    assert_eq!(writer.get_ref().inner(), b"abc");
 }
 
 #[test]
@@ -43,7 +60,12 @@ fn test_into_std_write_supports_borrowed_and_dyn_outputs() {
     {
         let mut writer = OutputRef::new(&mut cursor).into_std_write();
         writer.write_all(b"abc").expect("write should succeed");
-        assert_eq!(1, writer.seek(SeekFrom::Start(1)).expect("seek should succeed"));
+        assert_eq!(
+            1,
+            writer
+                .seek(SeekFrom::Start(1))
+                .expect("seek should succeed")
+        );
     }
     assert_eq!(b"abc", cursor.get_ref().as_slice());
 
@@ -58,10 +80,18 @@ fn test_into_std_write_supports_borrowed_and_dyn_outputs() {
 #[test]
 fn test_std_write_seek_forwards_position_and_errors() {
     let mut writer = Cursor::new(Vec::<u8>::new()).into_std_write();
-    assert_eq!(3, writer.seek(SeekFrom::Start(3)).expect("seek should succeed"));
+    assert_eq!(
+        3,
+        writer
+            .seek(SeekFrom::Start(3))
+            .expect("seek should succeed")
+    );
 
     let mut writer = ErrorSeekOutput.into_std_write();
-    assert_eq!("seek failed", writer.seek(SeekFrom::Start(1)).unwrap_err().to_string());
+    assert_eq!(
+        "seek failed",
+        writer.seek(SeekFrom::Start(1)).unwrap_err().to_string()
+    );
 }
 
 #[test]
@@ -74,7 +104,9 @@ fn test_std_write_is_not_seekable_without_inner_seekability() {
 #[test]
 fn test_into_std_write_handles_short_writes_zero_progress_and_flush_errors() {
     let mut writer = ShortOutput { bytes: Vec::new() }.into_std_write();
-    writer.write_all(b"abc").expect("write_all should retry short writes");
+    writer
+        .write_all(b"abc")
+        .expect("write_all should retry short writes");
     assert_eq!(b"abc", writer.into_inner().bytes.as_slice());
 
     let mut writer = ZeroOutput.into_std_write();
@@ -84,7 +116,10 @@ fn test_into_std_write_handles_short_writes_zero_progress_and_flush_errors() {
     );
 
     let mut writer = FlushErrorOutput.into_std_write();
-    assert_eq!("flush failed", Write::flush(&mut writer).unwrap_err().to_string());
+    assert_eq!(
+        "flush failed",
+        Write::flush(&mut writer).unwrap_err().to_string()
+    );
 }
 
 struct WriteOnlyOutput;
@@ -92,7 +127,12 @@ struct WriteOnlyOutput;
 impl Output for WriteOnlyOutput {
     type Item = u8;
 
-    unsafe fn write_unchecked(&mut self, _input: &[u8], _index: usize, count: usize) -> std::io::Result<usize> {
+    unsafe fn write_unchecked(
+        &mut self,
+        _input: &[u8],
+        _index: usize,
+        count: usize,
+    ) -> std::io::Result<usize> {
         Ok(count)
     }
 
@@ -106,7 +146,12 @@ struct ErrorSeekOutput;
 impl Output for ErrorSeekOutput {
     type Item = u8;
 
-    unsafe fn write_unchecked(&mut self, _input: &[u8], _index: usize, count: usize) -> std::io::Result<usize> {
+    unsafe fn write_unchecked(
+        &mut self,
+        _input: &[u8],
+        _index: usize,
+        count: usize,
+    ) -> std::io::Result<usize> {
         Ok(count)
     }
 
@@ -130,7 +175,12 @@ struct ShortOutput {
 impl Output for ShortOutput {
     type Item = u8;
 
-    unsafe fn write_unchecked(&mut self, input: &[u8], index: usize, count: usize) -> std::io::Result<usize> {
+    unsafe fn write_unchecked(
+        &mut self,
+        input: &[u8],
+        index: usize,
+        count: usize,
+    ) -> std::io::Result<usize> {
         let written = count.min(1);
         self.bytes.extend_from_slice(&input[index..index + written]);
         Ok(written)
@@ -146,7 +196,12 @@ struct ZeroOutput;
 impl Output for ZeroOutput {
     type Item = u8;
 
-    unsafe fn write_unchecked(&mut self, _input: &[u8], _index: usize, _count: usize) -> std::io::Result<usize> {
+    unsafe fn write_unchecked(
+        &mut self,
+        _input: &[u8],
+        _index: usize,
+        _count: usize,
+    ) -> std::io::Result<usize> {
         Ok(0)
     }
 
@@ -160,7 +215,12 @@ struct FlushErrorOutput;
 impl Output for FlushErrorOutput {
     type Item = u8;
 
-    unsafe fn write_unchecked(&mut self, _input: &[u8], _index: usize, count: usize) -> std::io::Result<usize> {
+    unsafe fn write_unchecked(
+        &mut self,
+        _input: &[u8],
+        _index: usize,
+        count: usize,
+    ) -> std::io::Result<usize> {
         Ok(count)
     }
 
