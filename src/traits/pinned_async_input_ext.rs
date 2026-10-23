@@ -18,6 +18,67 @@ use crate::ReadFuture;
 /// This extension serves inputs that are not Unpin and pinned input trait
 /// objects, for which AsyncInput convenience methods taking a movable mutable
 /// reference are unavailable.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_io::{AsyncInput, PinnedAsyncInputExt};
+/// use std::future::Future;
+/// use std::io;
+/// use std::pin::Pin;
+/// use std::sync::Arc;
+/// use std::task::{Context, Poll, Wake, Waker};
+///
+/// struct ReadyInput {
+///     bytes: &'static [u8],
+///     position: usize,
+/// }
+///
+/// impl AsyncInput for ReadyInput {
+///     type Item = u8;
+///
+///     unsafe fn poll_read_unchecked(
+///         self: Pin<&mut Self>,
+///         _cx: &mut Context<'_>,
+///         output: &mut [u8],
+///         index: usize,
+///         count: usize,
+///     ) -> Poll<io::Result<usize>> {
+///         let this = self.get_mut();
+///         let available = this.bytes.len().saturating_sub(this.position);
+///         let read = count.min(available);
+///         output[index..index + read]
+///             .copy_from_slice(&this.bytes[this.position..this.position + read]);
+///         this.position += read;
+///         Poll::Ready(Ok(read))
+///     }
+/// }
+///
+/// struct NoopWake;
+/// impl Wake for NoopWake {
+///     fn wake(self: Arc<Self>) {}
+/// }
+///
+/// let mut input: Pin<Box<dyn AsyncInput<Item = u8>>> = Box::pin(ReadyInput {
+///     bytes: b"abc",
+///     position: 0,
+/// });
+/// let waker = Waker::from(Arc::new(NoopWake));
+/// let mut cx = Context::from_waker(&waker);
+/// let operation = async {
+///     let mut bytes = [0; 3];
+///     let mut pinned = input.as_mut();
+///     pinned.read_exactly_async(&mut bytes).await?;
+///     assert_eq!(&bytes, b"abc");
+///     io::Result::Ok(())
+/// };
+/// let mut operation = std::pin::pin!(operation);
+/// match operation.as_mut().poll(&mut cx) {
+///     Poll::Ready(Ok(())) => {}
+///     Poll::Ready(Err(error)) => panic!("I/O failed: {error}"),
+///     Poll::Pending => panic!("the input must always be ready"),
+/// }
+/// ```
 pub trait PinnedAsyncInputExt {
     /// The pinned asynchronous input type.
     type Input: AsyncInput + ?Sized;

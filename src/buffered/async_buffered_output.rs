@@ -33,36 +33,66 @@ use crate::traits::normalize_async_error;
 /// # Examples
 ///
 /// ```
+/// use std::future::Future;
 /// use qubit_io::AsyncBufferedOutput;
 /// use qubit_io::AsyncOutput;
 /// use std::io;
 /// use std::pin::Pin;
-/// use std::task::Context;
-/// use std::task::Poll;
+/// use std::sync::Arc;
+/// use std::task::{Context, Poll, Wake, Waker};
 ///
-/// struct DiscardOutput;
+/// struct RecordingOutput {
+///     bytes: Vec<u8>,
+///     flushed: bool,
+/// }
 ///
-/// impl AsyncOutput for DiscardOutput {
+/// impl AsyncOutput for RecordingOutput {
 ///     type Item = u8;
 ///
 ///     unsafe fn poll_write_unchecked(
 ///         self: Pin<&mut Self>,
 ///         _cx: &mut Context<'_>,
-///         _input: &[u8],
-///         _index: usize,
+///         input: &[u8],
+///         index: usize,
 ///         count: usize,
 ///     ) -> Poll<io::Result<usize>> {
+///         self.get_mut().bytes.extend_from_slice(&input[index..index + count]);
 ///         Poll::Ready(Ok(count))
 ///     }
 ///
 ///     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+///         self.get_mut().flushed = true;
 ///         Poll::Ready(Ok(()))
 ///     }
 /// }
 ///
-/// let mut output = AsyncBufferedOutput::with_capacity(DiscardOutput, 4);
-/// assert_eq!(output.capacity(), 4);
-/// assert!(output.pending().is_empty());
+/// struct NoopWake;
+/// impl Wake for NoopWake {
+///     fn wake(self: Arc<Self>) {}
+/// }
+///
+/// let waker = Waker::from(Arc::new(NoopWake));
+/// let mut cx = Context::from_waker(&waker);
+/// let mut output = AsyncBufferedOutput::with_capacity(
+///     RecordingOutput { bytes: Vec::new(), flushed: false },
+///     8,
+/// );
+/// let operation = async {
+///     output.write_fully_async(b"abc").await?;
+///     assert_eq!(output.pending(), b"abc");
+///     assert!(output.inner().bytes.is_empty());
+///     output.flush_async().await?;
+///     assert!(output.pending().is_empty());
+///     assert_eq!(output.inner().bytes, b"abc");
+///     assert!(output.inner().flushed);
+///     io::Result::Ok(())
+/// };
+/// let mut operation = std::pin::pin!(operation);
+/// match operation.as_mut().poll(&mut cx) {
+///     Poll::Ready(Ok(())) => {}
+///     Poll::Ready(Err(error)) => panic!("I/O failed: {error}"),
+///     Poll::Pending => panic!("the recording output must always be ready"),
+/// }
 /// ```
 ///
 /// # Type Parameters

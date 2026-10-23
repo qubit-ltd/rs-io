@@ -30,38 +30,69 @@ use crate::traits::normalize_async_error;
 /// # Examples
 ///
 /// ```
+/// use std::future::Future;
 /// use sha2::Digest;
 /// use sha2::Sha256;
 /// use std::io;
 /// use std::pin::Pin;
-/// use std::task::Context;
-/// use std::task::Poll;
+/// use std::sync::Arc;
+/// use std::task::{Context, Poll, Wake, Waker};
 ///
 /// use qubit_io::AsyncDigestOutput;
 /// use qubit_io::AsyncOutput;
 ///
-/// struct EmptyOutput;
+/// struct RecordingOutput {
+///     bytes: Vec<u8>,
+///     flushed: bool,
+/// }
 ///
-/// impl AsyncOutput for EmptyOutput {
+/// impl AsyncOutput for RecordingOutput {
 ///     type Item = u8;
 ///
 ///     unsafe fn poll_write_unchecked(
 ///         self: Pin<&mut Self>,
 ///         _cx: &mut Context<'_>,
-///         _input: &[u8],
-///         _index: usize,
-///         _count: usize,
+///         input: &[u8],
+///         index: usize,
+///         count: usize,
 ///     ) -> Poll<io::Result<usize>> {
-///         Poll::Ready(Ok(0))
+///         self.get_mut().bytes.extend_from_slice(&input[index..index + count]);
+///         Poll::Ready(Ok(count))
 ///     }
 ///
 ///     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+///         self.get_mut().flushed = true;
 ///         Poll::Ready(Ok(()))
 ///     }
 /// }
 ///
-/// let output = AsyncDigestOutput::new(EmptyOutput, Sha256::new());
-/// assert_eq!(output.digest(), Sha256::digest(b""));
+/// struct NoopWake;
+/// impl Wake for NoopWake {
+///     fn wake(self: Arc<Self>) {}
+/// }
+///
+/// let waker = Waker::from(Arc::new(NoopWake));
+/// let mut cx = Context::from_waker(&waker);
+/// let mut output = AsyncDigestOutput::new(
+///     RecordingOutput { bytes: Vec::new(), flushed: false },
+///     Sha256::new(),
+/// );
+/// let operation = async {
+///     output.write_fully_async(b"abc").await?;
+///     assert_eq!(output.digest(), Sha256::digest(b"abc"));
+///     output.flush_async().await?;
+///     let (inner, digest) = output.finalize();
+///     assert!(inner.flushed);
+///     assert_eq!(inner.bytes, b"abc");
+///     assert_eq!(digest, Sha256::digest(b"abc"));
+///     io::Result::Ok(())
+/// };
+/// let mut operation = std::pin::pin!(operation);
+/// match operation.as_mut().poll(&mut cx) {
+///     Poll::Ready(Ok(())) => {}
+///     Poll::Ready(Err(error)) => panic!("I/O failed: {error}"),
+///     Poll::Pending => panic!("the recording output must always be ready"),
+/// }
 /// ```
 ///
 /// # Type Parameters

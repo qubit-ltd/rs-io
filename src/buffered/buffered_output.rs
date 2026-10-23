@@ -640,11 +640,13 @@ where
         })
     }
 
-    /// Seeks the wrapped output in items, flushing buffered items first.
+    /// Seeks the wrapped output in items.
     ///
-    /// Pending items accepted into the internal buffer are written to the
-    /// wrapped output before [`Seekable::seek_to`] is invoked, so the seek
-    /// position is relative to data already committed to the underlying sink.
+    /// For [`SeekFrom::Current`] (0), returns the logical position including
+    /// pending items without draining the buffer. Other seek requests drain
+    /// pending items before repositioning the inner output. Call
+    /// [`Self::flush`] explicitly and check its result when buffered data
+    /// must be passed to the inner output.
     ///
     /// # Parameters
     ///
