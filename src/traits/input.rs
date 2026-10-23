@@ -114,7 +114,16 @@ pub trait Input {
     /// # Returns
     ///
     /// The number of items written into `output[index..index + count]`. The
-    /// value must be in `0..=count`.
+    /// value must be in `0..=count`. A successful call transfers a prefix of
+    /// the requested range and may be short. For a non-empty request, `Ok(0)`
+    /// means that no items were available in this call or that the stream
+    /// reached its end; it does not promise permanent EOF. Aggregate reads
+    /// stop on this zero progress: [`Input::read_fully`] returns the
+    /// accumulated count, while [`Input::read_exactly`] reports
+    /// [`ErrorKind::UnexpectedEof`] if the destination is not full. For a
+    /// zero-length request, a successful call returns zero, which does not
+    /// establish EOF. Empty requests are not guaranteed to suppress
+    /// implementation errors or avoid an inner call.
     ///
     /// # Errors
     ///
@@ -139,7 +148,15 @@ pub trait Input {
     /// - `output`: Destination storage.
     ///
     /// # Returns
-    /// The number of items read into `output`.
+    /// The number of items read into `output`. A successful call transfers a
+    /// prefix and may be short. For a non-empty request, `Ok(0)` means that no
+    /// items were available in this call or that the stream reached its end;
+    /// it does not promise permanent EOF. Aggregate reads stop on this zero
+    /// progress: [`Input::read_fully`] returns the accumulated count, while
+    /// [`Input::read_exactly`] reports [`ErrorKind::UnexpectedEof`] if the
+    /// destination is not full. For a zero-length request, a successful call
+    /// returns zero, which does not establish EOF. Empty requests are not
+    /// guaranteed to suppress implementation errors or avoid an inner call.
     ///
     /// # Errors
     ///

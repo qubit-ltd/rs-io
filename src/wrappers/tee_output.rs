@@ -240,6 +240,16 @@ where
     ///
     /// Returns a primary seek error without seeking the branch. If the branch
     /// seek fails, the primary remains at its new position.
+    ///
+    /// A branch seek error is returned directly and is not latched in
+    /// `branch_error()`. Later transfers can still succeed at the streams'
+    /// different positions. Stop ordinary transfers after such an error.
+    /// Once the underlying seek failure is resolved, explicitly seek both
+    /// streams through this wrapper to a chosen absolute position and check
+    /// success before resuming. This applies only when no earlier
+    /// mirror-transfer failure is latched. Repositioning aligns future
+    /// transfers; it does not repair bytes already mirrored at an incorrect
+    /// offset or roll back effects.
     #[inline]
     fn seek_to(&mut self, position: SeekFrom) -> io::Result<u64> {
         self.failure.check()?;

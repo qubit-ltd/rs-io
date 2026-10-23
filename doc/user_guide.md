@@ -642,6 +642,8 @@ On branch failure, the operation still reports the primary's completed count; th
 
 Choose seek semantics explicitly: ordinary `TeeInput` seeks only its source. `TeeInput::with_sync_branch_seek` returns `SyncSeekTeeInput`, which seeks the source and then aligns the branch. `TeeOutput` likewise seeks its primary before aligning the branch. A second-path seek failure does not roll back the first. These types currently have no async tee equivalents.
 
+A branch seek error is returned directly and is not latched in `branch_error()`. Later transfers can still succeed at the streams' different positions. Stop ordinary transfers after such an error. Once the underlying seek failure is resolved, explicitly seek both streams through the same tee to a chosen absolute position and check success before resuming. This applies only when no earlier mirror-transfer failure is latched. Repositioning aligns future transfers; it does not repair bytes already mirrored at an incorrect offset or roll back effects.
+
 ## 9. Seek, copy, and compare
 
 ### Seek and restore positions

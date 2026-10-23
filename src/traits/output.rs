@@ -143,7 +143,14 @@ pub trait Output {
     /// # Returns
     ///
     /// The number of items accepted from `input[index..index + count]`. The
-    /// value must be in `0..=count`.
+    /// value must be in `0..=count`. A successful call accepts a prefix of the
+    /// requested range and may be short. For a non-empty request, `Ok(0)`
+    /// reports that no items were accepted in this call.
+    /// [`Output::write_fully`] treats this as [`ErrorKind::WriteZero`];
+    /// already accepted prefixes are not rolled back. For a zero-length
+    /// request, a successful call returns zero, which does not establish
+    /// that later writes cannot make progress. Empty requests are not
+    /// guaranteed to suppress implementation errors or avoid an inner call.
     ///
     /// # Errors
     ///
@@ -173,7 +180,14 @@ pub trait Output {
     ///
     /// # Returns
     ///
-    /// The number of items accepted from `input`.
+    /// The number of items accepted from `input`. A successful call accepts a
+    /// prefix and may be short. For a non-empty request, `Ok(0)` reports that
+    /// no items were accepted in this call. [`Output::write_fully`] treats
+    /// this as [`ErrorKind::WriteZero`]; already accepted prefixes are not
+    /// rolled back. For a zero-length request, a successful call returns
+    /// zero, which does not establish that later writes cannot make progress.
+    /// Empty requests are not guaranteed to suppress implementation errors or
+    /// avoid an inner call.
     ///
     /// # Errors
     ///
