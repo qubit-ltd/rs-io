@@ -54,6 +54,18 @@ fn test_sync_seek_tee_input_mutable_accessors_modify_both_paths() {
 }
 
 #[test]
+fn test_sync_seek_tee_input_empty_read_does_not_touch_healthy_paths() {
+    let mut input = SyncSeekTeeInput::new(
+        ScriptedInput::<u16>::failing("empty read touched source"),
+        ScriptedOutput::<u16>::failing_write("empty read touched branch"),
+    );
+    assert_eq!(0, input.read(&mut []).expect("empty read should succeed"));
+    assert_eq!(0, input.inner().position);
+    assert_eq!(0, input.branch().position);
+    assert!(input.branch().items.is_empty());
+}
+
+#[test]
 fn test_sync_seek_tee_input_propagates_read_path_errors() {
     let mut source_failure = SyncSeekTeeInput::new(
         ScriptedInput::<u16>::failing("source failed"),
@@ -82,6 +94,26 @@ fn test_sync_seek_tee_input_propagates_read_path_errors() {
     );
     assert_eq!([1, 2], output);
     assert_eq!(0, branch_failure.inner().remaining_len());
+    let source_position = branch_failure.inner().position;
+    let branch_position = branch_failure.branch().position;
+    branch_failure.inner_mut().action = InputAction::Error("empty read touched source");
+    assert_eq!(
+        0,
+        branch_failure
+            .read(&mut [])
+            .expect("empty read should succeed after failure")
+    );
+    assert_eq!(source_position, branch_failure.inner().position);
+    assert_eq!(branch_position, branch_failure.branch().position);
+    assert_eq!(
+        ErrorKind::Other,
+        branch_failure
+            .seek_to(SeekFrom::Start(42))
+            .expect_err("seek after branch failure should be rejected")
+            .kind()
+    );
+    assert_eq!(source_position, branch_failure.inner().position);
+    assert_eq!(branch_position, branch_failure.branch().position);
     assert_eq!(
         ErrorKind::Other,
         branch_failure.read(&mut output).unwrap_err().kind()

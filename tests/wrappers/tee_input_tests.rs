@@ -69,6 +69,17 @@ fn test_tee_input_returns_source_errors_without_writing_branch() {
 }
 
 #[test]
+fn test_tee_input_empty_read_does_not_touch_healthy_paths() {
+    let mut input = TeeInput::new(
+        ScriptedInput::<u16>::failing("empty read touched source"),
+        ScriptedOutput::<u16>::failing_write("empty read touched branch"),
+    );
+    assert_eq!(0, input.read(&mut []).expect("empty read should succeed"));
+    assert_eq!(0, input.inner().position);
+    assert!(input.branch().items.is_empty());
+}
+
+#[test]
 fn test_tee_input_reports_branch_error_after_source_progress() {
     let mut input = TeeInput::new(
         ScriptedInput::items(vec![1_u16, 2]),
@@ -85,12 +96,23 @@ fn test_tee_input_reports_branch_error_after_source_progress() {
     assert_eq!(ErrorKind::Other, input.branch_error().unwrap().kind());
     assert_eq!([1, 2], output);
     assert_eq!(0, input.inner().remaining_len());
+    let source_position = input.inner().position;
+    input.inner_mut().action = InputAction::Error("empty read touched source");
     assert_eq!(
         0,
         input
             .read(&mut [])
             .expect("empty read should succeed after failure")
     );
+    assert_eq!(source_position, input.inner().position);
+    assert_eq!(
+        ErrorKind::Other,
+        input
+            .seek_to(SeekFrom::Start(42))
+            .expect_err("seek after branch failure should be rejected")
+            .kind()
+    );
+    assert_eq!(source_position, input.inner().position);
     assert_eq!(
         ErrorKind::Other,
         input.read(&mut output).unwrap_err().kind()

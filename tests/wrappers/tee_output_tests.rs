@@ -87,6 +87,17 @@ fn test_tee_output_returns_primary_errors_without_writing_branch() {
 }
 
 #[test]
+fn test_tee_output_empty_write_does_not_touch_healthy_paths() {
+    let mut output = TeeOutput::new(
+        ScriptedOutput::<u16>::failing_write("empty write touched primary"),
+        ScriptedOutput::<u16>::failing_write("empty write touched branch"),
+    );
+    assert_eq!(0, output.write(&[]).expect("empty write should succeed"));
+    assert!(output.inner().items.is_empty());
+    assert!(output.branch().items.is_empty());
+}
+
+#[test]
 fn test_tee_output_reports_branch_error_after_primary_progress() {
     let mut output = TeeOutput::new(
         ScriptedOutput::accepting(),
@@ -101,6 +112,21 @@ fn test_tee_output_reports_branch_error_after_primary_progress() {
 
     assert_eq!(ErrorKind::Other, output.branch_error().unwrap().kind());
     assert_eq!(vec![1, 2], output.inner().items);
+    output.inner_mut().write_error = Some("empty write touched primary");
+    let primary_position = output.inner().position;
+    let branch_position = output.branch().position;
+    assert_eq!(0, output.write(&[]).expect("empty write should succeed after failure"));
+    assert_eq!(primary_position, output.inner().position);
+    assert_eq!(branch_position, output.branch().position);
+    assert_eq!(
+        ErrorKind::Other,
+        output
+            .seek_to(SeekFrom::Start(42))
+            .expect_err("seek after branch failure should be rejected")
+            .kind()
+    );
+    assert_eq!(primary_position, output.inner().position);
+    assert_eq!(branch_position, output.branch().position);
     assert_eq!(ErrorKind::Other, output.write(&[3]).unwrap_err().kind());
     assert_eq!(vec![1, 2], output.inner().items);
     assert_eq!(ErrorKind::Other, output.flush().unwrap_err().kind());
