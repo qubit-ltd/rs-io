@@ -18,6 +18,16 @@ use crate::Output;
 
 /// Adapts an [`Output`] of bytes to [`std::io::Write`].
 ///
+/// Vectored writes forward the inner [`Output::write_vectored`] override when
+/// buffers are non-empty; actual scatter/gather behavior depends on that
+/// implementation and the platform. Constructing the adapter does not
+/// allocate, but a vectored call may allocate temporary descriptors without
+/// copying the payload. Length overflow returns `InvalidInput` and descriptor
+/// allocation failure returns `OutOfMemory` before the inner call. A count
+/// larger than the total capacity returns `InvalidData` after the inner call;
+/// its side effects are not undone. Short progress and inner errors are
+/// returned as reported, and interrupted writes are not retried.
+///
 /// A wrapped tee reports successful primary progress even if its mirror branch
 /// fails. Check `flush` after finite writes; a later non-empty write and flush
 /// return the latched error.
@@ -78,6 +88,9 @@ where
         Output::write(&mut self.inner, input)
     }
 
+    /// Writes from the supplied buffers in order, forwarding the inner
+    /// vectored override. Descriptor preparation can fail before the inner
+    /// call; an invalid count is detected after that call.
     #[inline]
     fn write_vectored(&mut self, buffers: &[std::io::IoSlice<'_>]) -> Result<usize> {
         let capacity = crate::util::requested_items(buffers.iter().map(|buffer| buffer.len()))?;

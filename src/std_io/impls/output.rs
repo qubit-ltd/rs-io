@@ -76,6 +76,12 @@ where
         Ok(written)
     }
 
+    /// Writes from the buffers in order using the standard writer's vectored
+    /// method. Returns `InvalidInput` if their total length overflows,
+    /// `OutOfMemory` if descriptor preparation fails before I/O, or
+    /// `InvalidData` if the writer reports more than the total capacity. Short
+    /// progress and writer errors are returned without retrying or undoing
+    /// underlying side effects.
     fn write_vectored(&mut self, buffers: &[&[u8]]) -> Result<usize> {
         let capacity = crate::util::requested_items(buffers.iter().map(|buffer| buffer.len()))?;
         if capacity == 0 {

@@ -18,6 +18,16 @@ use crate::Input;
 
 /// Adapts an [`Input`] of bytes to [`std::io::Read`].
 ///
+/// Vectored reads forward the inner [`Input::read_vectored`] override when
+/// buffers are non-empty; actual scatter/gather behavior depends on that
+/// implementation and the platform. Constructing the adapter does not
+/// allocate, but a vectored call may allocate temporary descriptors without
+/// copying the payload. Length overflow returns `InvalidInput` and descriptor
+/// allocation failure returns `OutOfMemory` before the inner call. A count
+/// larger than the total capacity returns `InvalidData` after the inner call;
+/// its side effects are not undone. Short progress and inner errors are
+/// returned as reported, and interrupted reads are not retried.
+///
 /// A wrapped tee reports successful primary progress even if its mirror branch
 /// fails. Check the tee's branch error after finite reads; a later non-empty
 /// read returns the latched error.
@@ -80,6 +90,9 @@ where
         Input::read(&mut self.inner, output)
     }
 
+    /// Reads into the supplied buffers in order, forwarding the inner
+    /// vectored override. Descriptor preparation can fail before the inner
+    /// call; an invalid count is detected after that call.
     #[inline]
     fn read_vectored(&mut self, buffers: &mut [std::io::IoSliceMut<'_>]) -> Result<usize> {
         let capacity = crate::util::requested_items(buffers.iter().map(|buffer| buffer.len()))?;

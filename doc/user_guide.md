@@ -385,7 +385,7 @@ fn main() -> io::Result<()> {
 }
 ```
 
-`StdRead` and `StdWrite` provide `get_ref`, `get_mut`, and `into_inner`, and forward standard `Seek` when the inner stream implements byte-oriented `Seekable`. Conversion constructs a wrapper without allocating, transferring, flushing, or closing. Standard vectored operations use the default fallback; they do not promise to retain the inner stream's scatter/gather optimization.
+`StdRead` and `StdWrite` provide `get_ref`, `get_mut`, and `into_inner`, and forward standard `Seek` when the inner stream implements byte-oriented `Seekable`. Conversion constructs a wrapper without allocating, transferring, flushing, or closing. Their standard vectored methods forward to the inner `read_vectored` or `write_vectored` override; actual scatter/gather behavior depends on that implementation and the platform. A non-empty vectored call may allocate temporary descriptors, but does not copy payloads to combine slices. Length overflow returns `InvalidInput` and descriptor allocation failure returns `OutOfMemory` before the inner I/O call; a count exceeding total capacity returns `InvalidData` after that call, without undoing its side effects. Ordinary state wrappers may instead use the trait's default first-non-empty-slice fallback.
 
 For dynamic dispatch, use `InputRef` around a borrowed `dyn Input<Item = u8>` and `BoxInput` around an owned boxed input trait object. The output equivalents are `OutputRef` and `BoxOutput`. These adapters also support object streams, but conversion to standard `Read` or `Write` remains restricted to `u8`.
 

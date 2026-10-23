@@ -75,6 +75,12 @@ where
         Ok(read)
     }
 
+    /// Reads from the buffers in order using the standard reader's vectored
+    /// method. Returns `InvalidInput` if their total length overflows,
+    /// `OutOfMemory` if descriptor preparation fails before I/O, or
+    /// `InvalidData` if the reader reports more than the total capacity. Short
+    /// progress and reader errors are returned without retrying or undoing
+    /// underlying side effects.
     fn read_vectored(&mut self, buffers: &mut [&mut [u8]]) -> Result<usize> {
         let capacity = crate::util::requested_items(buffers.iter().map(|buffer| buffer.len()))?;
         if capacity == 0 {

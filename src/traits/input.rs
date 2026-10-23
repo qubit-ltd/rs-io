@@ -154,16 +154,24 @@ pub trait Input {
         Ok(read)
     }
 
-    /// Reads from the first non-empty buffer in a list.
+    /// Reads items into multiple buffers in list order.
     ///
-    /// The default implementation performs at most one call to [`Input::read`]
-    /// and does not continue to later buffers after a short read. It returns
-    /// the number of items read, or the underlying error; an impossible count
-    /// is reported as [`ErrorKind::InvalidData`]. Empty lists and lists whose
-    /// buffers are all empty return `Ok(0)` without performing I/O. Interrupted
-    /// errors are not retried. Implementations may override this method to use
-    /// multiple buffers in one operation. Use UFCS when a standard I/O method
-    /// with the same name is also in scope.
+    /// The buffers form one logical sequence in list order. `Ok(n)` means that
+    /// the first `n` items of that sequence were read, and `n` must not exceed
+    /// the total requested length. A read may make short progress and need not
+    /// fill every buffer; `n` may cross a buffer boundary. For a non-empty
+    /// request, `Ok(0)` means that no data was available in this call or that
+    /// the stream reached its end; it does not promise permanent EOF.
+    ///
+    /// The default implementation skips empty buffers and calls [`Input::read`]
+    /// once on the first non-empty buffer. It does not continue to later
+    /// buffers after a short read. This is only the default strategy, not a
+    /// limit on overrides. Empty lists and lists whose buffers are all empty
+    /// return `Ok(0)` without performing I/O. Interrupted errors are not
+    /// retried. An error does not undo progress from earlier independent calls.
+    /// An override must uphold the sequence and count contract itself; this
+    /// trait does not validate counts returned by arbitrary overrides. Use
+    /// UFCS when a standard I/O method with the same name is also in scope.
     ///
     /// # Parameters
     ///
@@ -171,18 +179,25 @@ pub trait Input {
     ///
     /// # Returns
     ///
-    /// The number of items read across the buffers.
+    /// The number of items read from the start of the logical sequence.
     ///
     /// # Errors
     ///
-    /// Returns an error from the input operation, or [`ErrorKind::InvalidData`]
-    /// if the implementation reports more items than the selected buffer can
-    /// hold.
+    /// Returns an error from the input operation. The default implementation
+    /// returns [`ErrorKind::InvalidData`] if the selected buffer reports more
+    /// items than it can hold. The standard I/O blanket implementation also
+    /// returns [`ErrorKind::InvalidInput`] if the total length overflows,
+    /// [`ErrorKind::OutOfMemory`] if preparing descriptors fails, or
+    /// [`ErrorKind::InvalidData`] if the standard reader reports more than the
+    /// total capacity. A custom override is responsible for its own checks.
     ///
     /// # Examples
     ///
     /// This example uses a non-byte stream through a trait object. The default
     /// method reads only the first non-empty slice; an override may use more.
+    /// For vectored overrides, a count can cross a slice boundary: if two
+    /// destination slices each have length 2, `Ok(3)` means the first slice
+    /// and the first item of the second slice were filled.
     ///
     /// ```
     /// use qubit_io::Input;

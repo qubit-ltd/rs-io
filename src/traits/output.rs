@@ -188,16 +188,23 @@ pub trait Output {
         Ok(written)
     }
 
-    /// Writes to the first non-empty buffer in a list.
+    /// Writes items from multiple buffers in list order.
     ///
-    /// The default implementation performs at most one call to
-    /// [`Output::write`] and does not continue to later buffers after a short
-    /// write. It returns the number of items written, or the underlying error;
-    /// an impossible count is reported as [`ErrorKind::InvalidData`]. Empty
-    /// lists and lists whose buffers are all empty return `Ok(0)` without
-    /// performing I/O. Interrupted errors are not retried. Implementations may
-    /// override this method to use multiple buffers in one operation. Use
-    /// UFCS when a standard I/O method with the same name is also in scope.
+    /// The buffers form one logical sequence in list order. `Ok(n)` means that
+    /// the first `n` items of that sequence were written, and `n` must not
+    /// exceed the total requested length. A write may make short progress and
+    /// need not consume every buffer; `n` may cross a buffer boundary.
+    ///
+    /// The default implementation skips empty buffers and calls
+    /// [`Output::write`] once on the first non-empty buffer. It does not
+    /// continue to later buffers after a short write. This is only the default
+    /// strategy, not a limit on overrides. Empty lists and lists whose buffers
+    /// are all empty return `Ok(0)` without performing I/O. Interrupted errors
+    /// are not retried. An error does not undo progress from earlier
+    /// independent calls. An override must uphold the sequence and count
+    /// contract itself; this trait does not validate counts returned by
+    /// arbitrary overrides. Use UFCS when a standard I/O method with the same
+    /// name is also in scope.
     ///
     /// # Parameters
     ///
@@ -205,13 +212,17 @@ pub trait Output {
     ///
     /// # Returns
     ///
-    /// The number of items written across the buffers.
+    /// The number of items written from the start of the logical sequence.
     ///
     /// # Errors
     ///
-    /// Returns an error from the output operation, or
-    /// [`ErrorKind::InvalidData`] if the implementation reports more items
-    /// than the selected buffer can hold.
+    /// Returns an error from the output operation. The default implementation
+    /// returns [`ErrorKind::InvalidData`] if the selected buffer reports more
+    /// items than it contains. The standard I/O blanket implementation also
+    /// returns [`ErrorKind::InvalidInput`] if the total length overflows,
+    /// [`ErrorKind::OutOfMemory`] if preparing descriptors fails, or
+    /// [`ErrorKind::InvalidData`] if the standard writer reports more than the
+    /// total capacity. A custom override is responsible for its own checks.
     ///
     /// # Examples
     ///
@@ -228,6 +239,64 @@ pub trait Output {
     /// assert!(count <= 4);
     /// assert_eq!(bytes.as_slice(), &b"abcd"[..count]);
     /// # Ok::<(), std::io::Error>(())
+    /// ```
+    ///
+    /// A vectored write can stop across a buffer boundary. The returned count
+    /// describes a prefix of the concatenated buffers, so the next request
+    /// starts at the remaining suffix.
+    ///
+    /// ```
+    /// use std::io;
+    /// use std::io::IoSlice;
+    /// use std::io::Write;
+    ///
+    /// use qubit_io::Output;
+    /// use qubit_io::StdWrite;
+    ///
+    /// #[derive(Default)]
+    /// struct PrefixOutput(Vec<u8>);
+    ///
+    /// impl Output for PrefixOutput {
+    ///     type Item = u8;
+    ///
+    ///     unsafe fn write_unchecked(
+    ///         &mut self,
+    ///         _input: &[u8],
+    ///         _index: usize,
+    ///         _count: usize,
+    ///     ) -> io::Result<usize> {
+    ///         panic!("this example must use the vectored override")
+    ///     }
+    ///
+    ///     fn write_vectored(&mut self, buffers: &[&[u8]]) -> io::Result<usize> {
+    ///         let mut remaining = 3_usize;
+    ///         let mut written = 0;
+    ///         for buffer in buffers {
+    ///             let count = remaining.min(buffer.len());
+    ///             self.0.extend_from_slice(&buffer[..count]);
+    ///             written += count;
+    ///             remaining -= count;
+    ///             if remaining == 0 {
+    ///                 break;
+    ///             }
+    ///         }
+    ///         Ok(written)
+    ///     }
+    ///
+    ///     fn flush(&mut self) -> io::Result<()> {
+    ///         Ok(())
+    ///     }
+    /// }
+    ///
+    /// let mut writer = StdWrite::new(PrefixOutput::default());
+    /// let count = Write::write_vectored(
+    ///     &mut writer,
+    ///     &[IoSlice::new(b"ab"), IoSlice::new(b"cd")],
+    /// )?;
+    /// assert_eq!(count, 3);
+    /// assert_eq!(writer.into_inner().0, b"abc");
+    /// // The next request must start at the remaining suffix, b"d".
+    /// # Ok::<(), io::Error>(())
     /// ```
     fn write_vectored(&mut self, buffers: &[&[Self::Item]]) -> Result<usize> {
         let Some(buffer) = buffers.iter().find(|buffer| !buffer.is_empty()) else {

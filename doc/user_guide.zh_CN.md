@@ -373,7 +373,7 @@ fn main() -> io::Result<()> {
 }
 ```
 
-`StdRead`、`StdWrite` 提供 `get_ref`、`get_mut`、`into_inner`，在内部流实现字节单位的 `Seekable` 时也转发标准 `Seek`。这些转换只构造包装器，不分配、不读写、不刷新或关闭；标准向量读写采用默认回退，不承诺保留内部流的 scatter/gather 优化。
+`StdRead`、`StdWrite` 提供 `get_ref`、`get_mut`、`into_inner`，在内部流实现字节单位的 `Seekable` 时也转发标准 `Seek`。转换时只构造包装器，不分配、不传输数据、不刷新或关闭。它们的标准向量方法会转发给内部的 `read_vectored` 或 `write_vectored` 覆写；实际能否散布/聚集取决于该实现和平台。非空向量调用可能为描述符临时分配内存，但不会复制载荷来合并切片。总长度溢出会在内部 I/O 调用前返回 `InvalidInput`，描述符分配失败会在调用前返回 `OutOfMemory`；计数超过总容量则在调用后返回 `InvalidData`，不会撤销底层副作用。普通状态包装器则可能使用 trait 默认的“只处理首个非空切片”策略。
 
 动态分发时，借用的 `dyn Input<Item = u8>` 可先放进 `InputRef`，拥有的 boxed trait object 使用 `BoxInput`；输出分别使用 `OutputRef`、`BoxOutput`。这些适配器也适用于对象流，但转换成标准 `Read`、`Write` 仍只允许 `u8`。
 
