@@ -277,7 +277,8 @@ where
 /// Returns [`ErrorKind::InvalidData`] if reaching the delimiter or EOF requires
 /// more than `max_len` bytes, [`ErrorKind::OutOfMemory`] if `output` cannot
 /// grow, or the first error reported by `reader`. Bytes appended before an
-/// error remain in `output`.
+/// error remain in `output`. Interrupted errors are retried without resetting
+/// accumulated progress; other I/O errors are returned.
 fn read_until_limited_into_inner<T>(
     reader: &mut T,
     delimiter: u8,
@@ -289,7 +290,11 @@ where
 {
     let mut appended = 0;
     loop {
-        let available = reader.fill_buf()?;
+        let available = match reader.fill_buf() {
+            Ok(available) => available,
+            Err(error) if error.kind() == ErrorKind::Interrupted => continue,
+            Err(error) => return Err(error),
+        };
         if available.is_empty() {
             return Ok(appended);
         }

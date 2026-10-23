@@ -679,6 +679,8 @@ Import the required extension traits from `qubit_io::std_io::ext` when working d
 | `SeekExt` | `stream_size` |
 | `WriteExt` | Low-level writes over ranges whose validity has already been proved |
 
+The bounded `BufReadExt` methods retry interrupted reads without resetting accumulated progress; other I/O errors are returned.
+
 This independent program checks source position and output after quota failure instead of assuming rollback:
 
 <!-- example: limited profile=core mode=run -->

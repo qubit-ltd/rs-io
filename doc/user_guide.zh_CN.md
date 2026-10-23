@@ -667,6 +667,8 @@ fn main() -> io::Result<()> {
 | `SeekExt` | `stream_size` |
 | `WriteExt` | 面向已证明合法范围的低层写入方法 |
 
+`BufReadExt` 有界方法遇到中断读取时会保留已累计进度并继续重试；其他 I/O 错误会直接返回。
+
 下面的独立程序观察超限后的位置和输出，不假设错误意味着回滚：
 
 <!-- example: limited profile=core mode=run -->

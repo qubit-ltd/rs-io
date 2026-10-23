@@ -55,7 +55,9 @@ pub trait BufReadExt: BufRead {
     /// Returns [`ErrorKind::InvalidData`] when more than `max_len` bytes are
     /// required before reaching `delimiter` or EOF. Returns
     /// [`ErrorKind::OutOfMemory`] when the result vector cannot grow. Returns
-    /// the first I/O error reported by the underlying reader.
+    /// the first I/O error reported by the underlying reader. Interrupted
+    /// errors are retried without resetting accumulated progress; other I/O
+    /// errors are returned.
     fn read_until_limited(&mut self, delimiter: u8, max_len: usize) -> Result<Vec<u8>>;
 
     /// Reads bytes through `delimiter` into `output` while enforcing `max_len`.
@@ -77,7 +79,9 @@ pub trait BufReadExt: BufRead {
     /// Returns [`ErrorKind::InvalidData`] when more than `max_len` bytes are
     /// required before reaching `delimiter` or EOF. Returns
     /// [`ErrorKind::OutOfMemory`] when `output` cannot grow. Returns the first
-    /// I/O error reported by the underlying reader.
+    /// I/O error reported by the underlying reader. Interrupted errors are
+    /// retried without resetting accumulated progress; other I/O errors are
+    /// returned.
     fn read_until_limited_into(&mut self, delimiter: u8, output: &mut Vec<u8>, max_len: usize) -> Result<usize>;
 
     /// Reads one UTF-8 line while enforcing `max_len`.
@@ -96,7 +100,8 @@ pub trait BufReadExt: BufRead {
     /// Returns [`ErrorKind::InvalidData`] when the line exceeds `max_len` or is
     /// not valid UTF-8. Returns [`ErrorKind::OutOfMemory`] when the result
     /// buffers cannot grow. Returns the first I/O error reported by the
-    /// underlying reader.
+    /// underlying reader. Interrupted errors are retried without resetting
+    /// accumulated progress; other I/O errors are returned.
     fn read_line_limited(&mut self, max_len: usize) -> Result<String>;
 
     /// Reads one UTF-8 line into `output` while enforcing `max_len`.
@@ -117,7 +122,8 @@ pub trait BufReadExt: BufRead {
     /// Returns [`ErrorKind::InvalidData`] when the line exceeds `max_len` or is
     /// not valid UTF-8. Returns [`ErrorKind::OutOfMemory`] when the temporary
     /// byte buffer or `output` cannot grow. Returns the first I/O error
-    /// reported by the underlying reader.
+    /// reported by the underlying reader. Interrupted errors are retried
+    /// without resetting accumulated progress; other I/O errors are returned.
     fn read_line_limited_into(&mut self, output: &mut String, max_len: usize) -> Result<usize>;
 
     /// Discards bytes through `delimiter` while enforcing `max_len`.
@@ -136,7 +142,8 @@ pub trait BufReadExt: BufRead {
     /// # Errors
     /// Returns [`ErrorKind::InvalidData`] when more than `max_len` bytes are
     /// required before reaching `delimiter` or EOF. Returns the first I/O error
-    /// reported by the underlying reader.
+    /// reported by the underlying reader. Interrupted errors are retried
+    /// without resetting accumulated progress; other I/O errors are returned.
     fn discard_until_limited(&mut self, delimiter: u8, max_len: usize) -> Result<usize>;
 }
 
@@ -159,6 +166,8 @@ where
     ///
     /// Returns [`ErrorKind::InvalidData`] for oversized input, the first reader
     /// error, or [`ErrorKind::OutOfMemory`] when the result vector cannot grow.
+    /// Interrupted errors are retried without resetting accumulated progress;
+    /// other I/O errors are returned.
     #[inline]
     fn read_until_limited(&mut self, delimiter: u8, max_len: usize) -> Result<Vec<u8>> {
         let mut output = Vec::new();
@@ -183,7 +192,8 @@ where
     ///
     /// Returns [`ErrorKind::InvalidData`] for oversized input, the first reader
     /// error, or [`ErrorKind::OutOfMemory`] when `output` cannot grow. `output`
-    /// is restored on failure.
+    /// is restored on failure. Interrupted errors are retried without resetting
+    /// accumulated progress; other I/O errors are returned.
     #[inline(always)]
     fn read_until_limited_into(&mut self, delimiter: u8, output: &mut Vec<u8>, max_len: usize) -> Result<usize> {
         read_ext_impl::read_until_limited_into(self, delimiter, output, max_len)
@@ -203,7 +213,8 @@ where
     ///
     /// Returns [`ErrorKind::InvalidData`] for oversized or invalid UTF-8 input,
     /// the first reader error, or [`ErrorKind::OutOfMemory`] when the result
-    /// buffers cannot grow.
+    /// buffers cannot grow. Interrupted errors are retried without resetting
+    /// accumulated progress; other I/O errors are returned.
     #[inline]
     fn read_line_limited(&mut self, max_len: usize) -> Result<String> {
         let mut output = String::new();
@@ -227,6 +238,8 @@ where
     /// Returns [`ErrorKind::InvalidData`] for oversized or invalid UTF-8 input,
     /// the first reader error, or [`ErrorKind::OutOfMemory`] when the temporary
     /// byte buffer or `output` cannot grow. `output` is restored on failure.
+    /// Interrupted errors are retried without resetting accumulated progress;
+    /// other I/O errors are returned.
     fn read_line_limited_into(&mut self, output: &mut String, max_len: usize) -> Result<usize> {
         let original_len = output.len();
         let mut bytes = Vec::new();
@@ -264,10 +277,16 @@ where
     ///
     /// Returns [`ErrorKind::InvalidData`] if reaching the delimiter or EOF
     /// requires more than `max_len` bytes, or the first reader error.
+    /// Interrupted errors are retried without resetting accumulated progress;
+    /// other I/O errors are returned.
     fn discard_until_limited(&mut self, delimiter: u8, max_len: usize) -> Result<usize> {
         let mut discarded = 0;
         loop {
-            let available = self.fill_buf()?;
+            let available = match self.fill_buf() {
+                Ok(available) => available,
+                Err(error) if error.kind() == ErrorKind::Interrupted => continue,
+                Err(error) => return Err(error),
+            };
             if available.is_empty() {
                 return Ok(discarded);
             }

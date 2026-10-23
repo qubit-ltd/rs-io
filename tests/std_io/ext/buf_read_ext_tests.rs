@@ -10,8 +10,53 @@ use std::io::BufRead;
 use std::io::BufReader;
 use std::io::Cursor;
 use std::io::ErrorKind;
+use std::io::Read;
 
 use qubit_io::std_io::ext::BufReadExt;
+
+struct InterruptingReader {
+    bytes: Cursor<Vec<u8>>,
+    calls: usize,
+    interrupts: Vec<usize>,
+}
+
+impl Read for InterruptingReader {
+    fn read(&mut self, output: &mut [u8]) -> std::io::Result<usize> {
+        self.calls += 1;
+        if self.interrupts.contains(&self.calls) {
+            return Err(ErrorKind::Interrupted.into());
+        }
+        self.bytes.read(output)
+    }
+}
+
+fn interrupted_reader(interrupts: Vec<usize>) -> BufReader<InterruptingReader> {
+    BufReader::with_capacity(
+        2,
+        InterruptingReader {
+            bytes: Cursor::new(b"abc\n".to_vec()),
+            calls: 0,
+            interrupts,
+        },
+    )
+}
+
+// Emits one Other error on the selected underlying read call.
+struct ErrorReader {
+    bytes: Cursor<Vec<u8>>,
+    calls: usize,
+    error_at: usize,
+}
+
+impl Read for ErrorReader {
+    fn read(&mut self, output: &mut [u8]) -> std::io::Result<usize> {
+        self.calls += 1;
+        if self.calls == self.error_at {
+            return Err(ErrorKind::Other.into());
+        }
+        self.bytes.read(output)
+    }
+}
 
 #[test]
 fn test_read_until_limited_reads_through_delimiter() {
@@ -59,6 +104,86 @@ fn test_read_until_limited_into_appends_through_delimiter() {
     assert_eq!(4, count);
     assert_eq!(b"prefix-abc,", output.as_slice());
     assert_eq!(b"def", input.fill_buf().expect("remaining bytes should exist"));
+}
+
+#[test]
+fn test_read_until_limited_retries_interrupted() {
+    let mut reader = interrupted_reader(vec![1]);
+
+    assert_eq!(b"abc\n", reader.read_until_limited(b'\n', 4).unwrap().as_slice());
+}
+
+#[test]
+fn test_read_until_limited_into_retries_interrupted_after_progress() {
+    let mut reader = interrupted_reader(vec![2]);
+    let mut output = b"prefix-".to_vec();
+    assert_eq!(4, reader.read_until_limited_into(b'\n', &mut output, 4).unwrap());
+    assert_eq!(b"prefix-abc\n", output.as_slice());
+}
+
+#[test]
+fn test_read_line_limited_retries_interrupted() {
+    let mut reader = interrupted_reader(vec![1, 2]);
+
+    assert_eq!("abc\n", reader.read_line_limited(4).unwrap());
+}
+
+#[test]
+fn test_read_line_limited_into_retries_interrupted_after_progress() {
+    let mut reader = interrupted_reader(vec![2]);
+    let mut output = String::from("prefix-");
+
+    assert_eq!(4, reader.read_line_limited_into(&mut output, 4).unwrap());
+    assert_eq!("prefix-abc\n", output);
+}
+
+#[test]
+fn test_discard_until_limited_retries_interrupted_after_progress() {
+    let mut reader = interrupted_reader(vec![2]);
+
+    assert_eq!(4, reader.discard_until_limited(b'\n', 4).unwrap());
+    assert!(reader.fill_buf().unwrap().is_empty());
+}
+
+#[test]
+fn test_read_until_limited_into_preserves_limit_behavior_after_interrupted() {
+    let mut reader = interrupted_reader(vec![2]);
+    let mut output = b"prefix-".to_vec();
+
+    let error = reader.read_until_limited_into(b'\n', &mut output, 3).unwrap_err();
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!(b"prefix-", output.as_slice());
+    assert_eq!(b"\n", reader.fill_buf().unwrap());
+}
+
+#[test]
+fn test_discard_until_limited_preserves_limit_behavior_after_interrupted() {
+    let mut reader = interrupted_reader(vec![2]);
+
+    let error = reader.discard_until_limited(b'\n', 3).unwrap_err();
+
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!(b"\n", reader.fill_buf().unwrap());
+}
+
+#[test]
+fn test_read_until_limited_into_restores_output_on_other_error_after_progress() {
+    let mut reader = BufReader::with_capacity(
+        2,
+        ErrorReader {
+            bytes: Cursor::new(b"abc\n".to_vec()),
+            calls: 0,
+            error_at: 2,
+        },
+    );
+    let mut output = b"prefix-".to_vec();
+
+    let error = reader.read_until_limited_into(b'\n', &mut output, 4).unwrap_err();
+
+    assert_eq!(ErrorKind::Other, error.kind());
+    assert_eq!(b"prefix-", output.as_slice());
+    assert_eq!(b"c\n", reader.fill_buf().unwrap());
 }
 
 #[test]
