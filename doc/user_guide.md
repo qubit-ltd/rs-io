@@ -312,7 +312,7 @@ operations and asynchronous character/byte polling. The caller supplies the
 concrete stream; asynchronous callers also supply its pinned borrow and task
 context:
 
-<!-- example: character-poll profile=core mode=skip reason="API contract fragment requires caller supplied stream state" -->
+<!-- example: character-poll profile=core mode=compile -->
 ```rust
 use std::io;
 use std::pin::Pin;
@@ -464,7 +464,9 @@ fn main() -> io::Result<()> {
 }
 ```
 
-Retain the wrapper after flush failure. If draining fails normally, successfully written prefixes are removed from the pending window; do not resend the entire batch. If an inner I/O call panics, the wrapper becomes poisoned and future I/O through it is rejected. `into_parts()` then returns `Indeterminate`, including when the buffer is empty, because completed side effects cannot be inferred. Do not replay that payload without application-level reconciliation. Without a panic, `into_parts()` returns `Pending`; its window may be empty while the inner `flush` failed. Retry flushing only when the underlying failure and its side effects permit retry.
+These output states and poisoning behavior describe synchronous `BufferedOutput`. Retain that wrapper after flush failure. If draining fails normally, successfully written prefixes are removed from the pending window; do not resend the entire batch. If an inner I/O call panics, the wrapper becomes poisoned and future I/O through it is rejected. `into_parts()` then returns `Indeterminate`, including when the buffer is empty, because completed side effects cannot be inferred. Do not replay that payload without application-level reconciliation. Without a panic, `into_parts()` returns `Pending`; its window may be empty while the inner `flush` failed. Retry flushing only when the underlying failure and its side effects permit retry.
+
+`AsyncBufferedOutput` returns `(inner, Buffer)` rather than `BufferedOutputRecovery` and does not track poisoning after an inner I/O panic. If a panic is caught, the retained window alone cannot establish which external writes occurred; reconcile those effects before retrying or replaying data. Normally returned errors and cancellation follow the reported-progress rules described below. These recovery rules assume that inner I/O calls obey their normal return contracts.
 
 Synchronous `BufferedOutput` drop only attempts to drain its own buffer and ignores errors; it does not replace explicit `flush`. Async buffering performs no I/O on drop. Direct reads through `inner_mut()` may skip unread prefetched items; direct writes may overtake pending output. Transfer normally through the wrapper.
 
@@ -685,6 +687,8 @@ Call `Streams` methods as associated functions; it is a utility namespace. These
 | Copy to EOF | `copy_input_to_output` | `copy` |
 | Copy at most N items or bytes | `copy_input_to_output_at_most` | `copy_at_most` |
 | Require the entire remaining input to fit within N | `copy_input_to_output_end_limited` | `copy_to_end_limited` |
+
+The ordinary generic copy methods forward each successful read prefix before reading again. Later read errors leave earlier forwarded prefixes in output. They do not flush automatically or return a recovery buffer for a failed write. The end-limited generic method keeps its collect-before-write policy.
 
 Generic copying requires `Clone + Default`. Both end-limited variants can consume one excess item to detect oversized input, but their output behavior differs. The generic version collects first: oversized input and failures during collection leave the output untouched, at the cost of temporary memory growing to the item limit. After EOF is confirmed, output can still fail partially. The standard byte variant streams into the writer, so oversized input can leave N bytes in the output. Chapter 6's `LimitInput` only truncates the visible range; it does not validate the entire input this way.
 

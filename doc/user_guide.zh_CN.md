@@ -303,7 +303,7 @@ fn main() -> io::Result<()> {
 下面是供调用方接入的 API 定义片段，分别展示同步字符操作、异步字符读取和异步字节写入。
 具体流由调用方提供；异步调用还需要已固定的借用和任务上下文：
 
-<!-- example: character-poll profile=core mode=skip reason="API contract fragment requires caller supplied stream state" -->
+<!-- example: character-poll profile=core mode=compile -->
 ```rust
 use std::io;
 use std::pin::Pin;
@@ -450,7 +450,9 @@ fn main() -> io::Result<()> {
 }
 ```
 
-flush 失败后应保留包装器。若排空时正常返回错误，已成功写出的前缀会从待写窗口移除；不要重发整批数据。若底层 I/O 调用 panic，包装器会进入中毒状态，后续经包装器发起的 I/O 会被拒绝。此时 `into_parts()` 返回 `Indeterminate`，即使缓冲为空也不能据此判断底层没有副作用；应先由应用核对外部状态，不要直接重放。没有发生 panic 时，`into_parts()` 返回 `Pending`。底层 `flush` 失败时待写窗口也可能已经为空；只有错误语义及其副作用允许时才重试刷新。
+这些输出状态和中毒行为描述的是同步 `BufferedOutput`。flush 失败后应保留该包装器。若排空时正常返回错误，已成功写出的前缀会从待写窗口移除；不要重发整批数据。若底层 I/O 调用 panic，包装器会进入中毒状态，后续经包装器发起的 I/O 会被拒绝。此时 `into_parts()` 返回 `Indeterminate`，即使缓冲为空也不能据此判断底层没有副作用；应先由应用核对外部状态，不要直接重放。没有发生 panic 时，`into_parts()` 返回 `Pending`。底层 `flush` 失败时待写窗口也可能已经为空；只有错误语义及其副作用允许时才重试刷新。
+
+`AsyncBufferedOutput` 返回 `(inner, Buffer)`，不返回 `BufferedOutputRecovery`，也不记录底层 I/O panic 后的中毒状态。若捕获了 panic，不能仅凭保留窗口判断哪些写入已在外部发生；应核对副作用后再决定是否重试或重放。正常返回的错误和取消仍遵循下文所述的已报告进度规则。这些恢复规则以底层 I/O 调用遵守正常返回合同为前提。
 
 同步 `BufferedOutput` 析构只尽力排空自身缓冲，忽略错误，不能代替显式 `flush`。异步缓冲析构不执行 I/O。通过 `inner_mut()` 直接读取可能越过预读数据，直接写入可能排在待写数据之前；正常传输应经过包装器。
 
@@ -671,6 +673,8 @@ fn main() -> io::Result<()> {
 | 复制到 EOF | `copy_input_to_output` | `copy` |
 | 最多复制 N 个元素或字节 | `copy_input_to_output_at_most` | `copy_at_most` |
 | 要求整个剩余输入不超过 N | `copy_input_to_output_end_limited` | `copy_to_end_limited` |
+
+普通泛型复制方法每次成功读到一个前缀后就先写出，再继续读取；后续读取报错不会撤销之前的输出。它们不自动刷新，写入失败时也不返回恢复缓冲。完整输入限长版本仍先收集并确认 EOF，随后才写出。
 
 泛型复制要求 `Clone + Default`。两种完整输入限长方法都可能消费一个额外元素来检测超限，但输出行为不同：泛型版本先收集，超限或读入阶段失败时不写输出，临时内存可增长到上限对应的元素规模；确认 EOF 后写出仍可能部分失败。标准字节版本边读边写，超限时输出可能已有 N 字节。第 6 章的 `LimitInput` 只截断可见范围，不提供这种完整输入验证。
 

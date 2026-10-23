@@ -30,6 +30,12 @@ use crate::traits::validate_write_count;
 /// flushing cancellation-safe. Dropping this type cannot perform asynchronous
 /// I/O; callers that need delivery guarantees must poll `flush` to completion
 /// or recover the pending buffer through [`Self::into_parts`].
+/// Recovery assumes that inner I/O calls obey their normal return contracts.
+/// This type does not track poisoning or indeterminate delivery after an inner
+/// I/O panic. If such a panic is caught, pending items may overlap with
+/// external side effects; do not retry flushing or replay them without
+/// reconciliation. Cancellation after normally returned polls retains the
+/// reported progress, but does not provide a panic-recovery guarantee.
 ///
 /// # Examples
 ///
@@ -217,7 +223,10 @@ where
     /// asynchronous I/O. Call [`AsyncOutput::flush_async`] before this method
     /// for normal completion. Otherwise, the returned buffer contains the
     /// pending items that the caller must write before continuing the logical
-    /// stream.
+    /// stream. Recovery assumes that inner I/O calls obey their normal return
+    /// contracts. This type does not track poisoning or indeterminate delivery
+    /// after an inner I/O panic; if such a panic is caught, reconcile external
+    /// side effects before retrying or replaying pending items.
     ///
     /// # Returns
     ///
