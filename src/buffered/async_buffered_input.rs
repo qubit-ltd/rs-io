@@ -21,6 +21,7 @@ use crate::AsyncInput;
 use crate::Buffer;
 use crate::async_io::MAX_READY_OPERATIONS_PER_POLL;
 use crate::buffered::DEFAULT_BUFFER_CAPACITY;
+use crate::traits::validate_read_count;
 
 /// Buffered asynchronous item input.
 ///
@@ -315,7 +316,10 @@ where
     /// # Errors
     ///
     /// Returns [`ErrorKind::InvalidInput`] when the buffer is full with no
-    /// consumed prefix to reclaim, or an error reported by the wrapped input.
+    /// consumed prefix to reclaim, [`ErrorKind::InvalidData`] when the wrapped
+    /// input reports more items than requested, or another error reported by
+    /// the wrapped input. An invalid count does not advance this buffer's
+    /// readable window.
     pub fn poll_fill_more(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<bool>> {
         // SAFETY: `inner` remains pinned for the duration of this projection.
         let this = unsafe { self.as_mut().get_unchecked_mut() };
@@ -331,6 +335,7 @@ where
             }
         }
 
+        let requested = this.buffer.spare_capacity();
         let result = {
             // SAFETY: The projection does not move `inner`.
             let inner = unsafe { Pin::new_unchecked(&mut this.inner) };
@@ -339,7 +344,10 @@ where
         match result {
             Poll::Ready(Ok(0)) => Poll::Ready(Ok(false)),
             Poll::Ready(Ok(read)) => {
-                // SAFETY: `poll_read` validated `read` against the spare tail.
+                if let Err(error) = validate_read_count(read, requested) {
+                    return Poll::Ready(Err(error));
+                }
+                // SAFETY: The local check validated `read` against the spare tail.
                 unsafe {
                     this.buffer.advance(read);
                 }
@@ -365,7 +373,8 @@ where
     /// # Errors
     ///
     /// Returns [`ErrorKind::InvalidInput`] when `count` exceeds the buffer
-    /// capacity, or an error reported by the wrapped input.
+    /// capacity, [`ErrorKind::InvalidData`] when the wrapped input reports an
+    /// excessive count, or another error reported by the wrapped input.
     pub fn poll_fill_until(mut self: Pin<&mut Self>, cx: &mut Context<'_>, count: usize) -> Poll<io::Result<bool>> {
         if count > self.as_ref().get_ref().buffer.capacity() {
             return Poll::Ready(Err(Error::new(
@@ -409,7 +418,9 @@ where
     ///
     /// Returns [`ErrorKind::UnexpectedEof`] after discarding an incomplete
     /// unread window, [`ErrorKind::InvalidInput`] when `count` exceeds the
-    /// buffer capacity, or an error reported by the wrapped input.
+    /// buffer capacity, [`ErrorKind::InvalidData`] when the wrapped input
+    /// reports an excessive count, or another error reported by the wrapped
+    /// input.
     pub fn poll_ensure_available(mut self: Pin<&mut Self>, cx: &mut Context<'_>, count: usize) -> Poll<io::Result<()>> {
         match self.as_mut().poll_fill_until(cx, count) {
             Poll::Ready(Ok(true)) => Poll::Ready(Ok(())),
@@ -526,7 +537,9 @@ where
     ///
     /// # Errors
     ///
-    /// Returns an I/O error reported by the wrapped input.
+    /// Returns [`ErrorKind::InvalidData`] when the wrapped input reports more
+    /// items than requested, or another I/O error reported by the wrapped
+    /// input. An invalid count does not advance this buffer's readable window.
     ///
     /// # Panics
     ///
@@ -565,7 +578,11 @@ where
             let destination = &mut output[index..index + count];
             // SAFETY: The pinned wrapper never moves `inner`.
             let inner = unsafe { Pin::new_unchecked(&mut this.inner) };
-            return inner.poll_read(cx, destination);
+            return match inner.poll_read(cx, destination) {
+                Poll::Ready(Ok(read)) => Poll::Ready(validate_read_count(read, count).map(|()| read)),
+                Poll::Ready(Err(error)) => Poll::Ready(Err(error)),
+                Poll::Pending => Poll::Pending,
+            };
         }
 
         let result = {
@@ -576,8 +593,10 @@ where
         match result {
             Poll::Ready(Ok(0)) => Poll::Ready(Ok(0)),
             Poll::Ready(Ok(fetched)) => {
-                // SAFETY: `AsyncInput::poll_read` validated `fetched` against
-                // the complete backing-buffer length.
+                if let Err(error) = validate_read_count(fetched, this.buffer.capacity()) {
+                    return Poll::Ready(Err(error));
+                }
+                // SAFETY: The local check validated `fetched` against the backing buffer.
                 unsafe {
                     this.buffer.advance(fetched);
                 }

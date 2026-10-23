@@ -21,6 +21,7 @@ use crate::Buffer;
 use crate::async_io::MAX_READY_OPERATIONS_PER_POLL;
 use crate::buffered::DEFAULT_BUFFER_CAPACITY;
 use crate::traits::normalize_async_error;
+use crate::traits::validate_write_count;
 
 /// Buffered asynchronous item output.
 ///
@@ -401,8 +402,10 @@ where
                     return Poll::Ready(Err(io::ErrorKind::WriteZero.into()));
                 }
                 Poll::Ready(Ok(written)) => {
-                    // SAFETY: `poll_write` validated the returned count against
-                    // the pending slice length.
+                    if let Err(error) = validate_write_count(written, this.buffer.available()) {
+                        return Poll::Ready(Err(error));
+                    }
+                    // SAFETY: The local check validated `written` against the pending slice.
                     unsafe {
                         this.buffer.consume(written);
                     }
@@ -487,8 +490,10 @@ where
     ///
     /// # Errors
     ///
-    /// Returns [`io::ErrorKind::WriteZero`] if draining makes no progress.
-    /// Other errors are propagated from the wrapped output.
+    /// Returns [`io::ErrorKind::WriteZero`] if draining makes no progress,
+    /// [`io::ErrorKind::InvalidData`] if the wrapped output reports more items
+    /// than requested, or another error from the wrapped output. An invalid
+    /// count does not consume this buffer's pending window.
     ///
     /// # Panics
     ///
@@ -538,7 +543,11 @@ where
             let source = &input[index..index + count];
             // SAFETY: The pinned wrapper never moves `inner`.
             let inner = unsafe { Pin::new_unchecked(&mut this.inner) };
-            return inner.poll_write(cx, source);
+            return match inner.poll_write(cx, source) {
+                Poll::Ready(Ok(written)) => Poll::Ready(validate_write_count(written, count).map(|()| written)),
+                Poll::Ready(Err(error)) => Poll::Ready(Err(error)),
+                Poll::Pending => Poll::Pending,
+            };
         }
 
         // SAFETY: Draining cleared the buffer, `count` fits its total
@@ -562,9 +571,10 @@ where
     ///
     /// # Errors
     ///
-    /// Returns [`io::ErrorKind::WriteZero`] if draining makes no progress, or
-    /// an error reported by the wrapped output. Invalid asynchronous error
-    /// kinds from the flush operation are normalized to
+    /// Returns [`io::ErrorKind::WriteZero`] if draining makes no progress,
+    /// [`io::ErrorKind::InvalidData`] if the wrapped output reports an
+    /// excessive count, or another error from the wrapped output. Invalid
+    /// asynchronous error kinds from the flush operation are normalized to
     /// [`io::ErrorKind::InvalidData`].
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         match self.as_mut().poll_drain_buffer(cx) {
@@ -599,9 +609,10 @@ where
     ///
     /// # Errors
     ///
-    /// Returns [`io::ErrorKind::WriteZero`] if draining makes no progress, or
-    /// an error reported by the wrapped output. Invalid asynchronous error
-    /// kinds from the close operation are normalized to
+    /// Returns [`io::ErrorKind::WriteZero`] if draining makes no progress,
+    /// [`io::ErrorKind::InvalidData`] if the wrapped output reports an
+    /// excessive count, or another error from the wrapped output. Invalid
+    /// asynchronous error kinds from the close operation are normalized to
     /// [`io::ErrorKind::InvalidData`].
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         match self.as_mut().poll_drain_buffer(cx) {
