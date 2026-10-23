@@ -18,54 +18,78 @@ use qubit_io::std_io::ext::WriteSeekExt;
 
 struct FailingWriteSeek {
     original_position: u64,
+    position: u64,
+    seek_calls: Vec<SeekFrom>,
+    written: Vec<u8>,
     rejected_offset: Option<u64>,
     fail_write: bool,
     fail_restore: bool,
+    write_once: bool,
 }
 
 impl FailingWriteSeek {
     fn write_error(original_position: u64) -> Self {
         Self {
             original_position,
+            position: original_position,
+            seek_calls: Vec::new(),
+            written: Vec::new(),
             rejected_offset: None,
             fail_write: true,
             fail_restore: false,
+            write_once: false,
         }
     }
 
     fn offset_seek_error(original_position: u64, rejected_offset: u64) -> Self {
         Self {
             original_position,
+            position: original_position,
+            seek_calls: Vec::new(),
+            written: Vec::new(),
             rejected_offset: Some(rejected_offset),
             fail_write: false,
             fail_restore: false,
+            write_once: false,
         }
     }
 
     fn write_and_restore_error(original_position: u64) -> Self {
         Self {
             original_position,
+            position: original_position,
+            seek_calls: Vec::new(),
+            written: Vec::new(),
             rejected_offset: None,
             fail_write: true,
             fail_restore: true,
+            write_once: false,
         }
     }
 
     fn offset_seek_and_restore_error(original_position: u64, rejected_offset: u64) -> Self {
         Self {
             original_position,
+            position: original_position,
+            seek_calls: Vec::new(),
+            written: Vec::new(),
             rejected_offset: Some(rejected_offset),
             fail_write: false,
             fail_restore: true,
+            write_once: false,
         }
     }
 
     fn restore_error(original_position: u64) -> Self {
         Self {
             original_position,
+            position: original_position,
+            seek_calls: Vec::new(),
+            written: Vec::new(),
             rejected_offset: None,
             fail_write: false,
             fail_restore: true,
+            write_once: false,
         }
     }
 }
@@ -73,10 +97,19 @@ impl FailingWriteSeek {
 impl Write for FailingWriteSeek {
     fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
         if self.fail_write {
-            Err(Error::other("write failed"))
-        } else {
-            Ok(buffer.len())
+            if self.write_once || buffer.is_empty() {
+                return Err(Error::other("write failed"));
+            }
+            self.write_once = true;
+            self.written.push(buffer[0]);
+            self.position += 1;
+            return Ok(1);
         }
+        if !buffer.is_empty() {
+            self.written.extend_from_slice(buffer);
+            self.position += buffer.len() as u64;
+        }
+        Ok(buffer.len())
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
@@ -86,15 +119,20 @@ impl Write for FailingWriteSeek {
 
 impl Seek for FailingWriteSeek {
     fn seek(&mut self, position: SeekFrom) -> std::io::Result<u64> {
+        self.seek_calls.push(position);
         match position {
-            SeekFrom::Current(0) => Ok(self.original_position),
+            SeekFrom::Current(0) => Ok(self.position),
             SeekFrom::Start(position) if Some(position) == self.rejected_offset => {
+                self.position = position;
                 Err(Error::other("offset seek failed"))
             }
             SeekFrom::Start(position) if position == self.original_position && self.fail_restore => {
                 Err(Error::other("restore failed"))
             }
-            SeekFrom::Start(position) => Ok(position),
+            SeekFrom::Start(position) => {
+                self.position = position;
+                Ok(position)
+            }
             SeekFrom::Current(_) | SeekFrom::End(_) => Err(Error::new(ErrorKind::Unsupported, "unsupported seek")),
         }
     }
@@ -179,6 +217,12 @@ fn test_write_all_at_preserving_position_returns_write_error_after_restore() {
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("write failed", error.to_string());
+    assert_eq!(b"a", writer.written.as_slice());
+    assert_eq!(4, writer.position);
+    assert_eq!(
+        vec![SeekFrom::Current(0), SeekFrom::Start(1), SeekFrom::Start(4)],
+        writer.seek_calls
+    );
 }
 
 #[test]
@@ -191,6 +235,12 @@ fn test_write_all_at_preserving_position_prefers_restore_error_over_write_error(
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("restore failed", error.to_string());
+    assert_eq!(b"a", writer.written.as_slice());
+    assert_eq!(2, writer.position);
+    assert_eq!(
+        vec![SeekFrom::Current(0), SeekFrom::Start(1), SeekFrom::Start(4)],
+        writer.seek_calls
+    );
 }
 
 #[test]
@@ -203,6 +253,11 @@ fn test_write_all_at_preserving_position_returns_offset_seek_error_after_restore
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("offset seek failed", error.to_string());
+    assert_eq!(4, writer.position);
+    assert_eq!(
+        vec![SeekFrom::Current(0), SeekFrom::Start(1), SeekFrom::Start(4)],
+        writer.seek_calls
+    );
 }
 
 #[test]
@@ -215,6 +270,11 @@ fn test_write_all_at_preserving_position_prefers_restore_error_over_offset_seek_
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("restore failed", error.to_string());
+    assert_eq!(1, writer.position);
+    assert_eq!(
+        vec![SeekFrom::Current(0), SeekFrom::Start(1), SeekFrom::Start(4)],
+        writer.seek_calls
+    );
 }
 
 #[test]

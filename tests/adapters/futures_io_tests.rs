@@ -6,11 +6,18 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
+use std::cell::Cell;
 use std::io::Error;
 use std::io::ErrorKind;
+use std::marker::PhantomPinned;
 use std::pin::Pin;
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
 use std::task::Context;
 use std::task::Poll;
+use std::task::Wake;
 use std::task::Waker;
 
 use futures_io::AsyncRead;
@@ -133,6 +140,443 @@ impl AsyncOutput for QubitOutput {
 
 fn context() -> Context<'static> {
     Context::from_waker(Waker::noop())
+}
+
+#[derive(Default)]
+struct WakeCounter(AtomicUsize);
+impl Wake for WakeCounter {
+    fn wake(self: Arc<Self>) {
+        self.0.fetch_add(1, Ordering::SeqCst);
+    }
+    fn wake_by_ref(self: &Arc<Self>) {
+        self.0.fetch_add(1, Ordering::SeqCst);
+    }
+}
+#[derive(Default)]
+struct Gate {
+    ready: bool,
+    waker: Option<Waker>,
+}
+impl Gate {
+    fn poll(&mut self, cx: &Context<'_>) -> Poll<()> {
+        if self.ready {
+            Poll::Ready(())
+        } else {
+            self.waker = Some(cx.waker().clone());
+            Poll::Pending
+        }
+    }
+}
+fn release(gate: &Arc<Mutex<Gate>>) {
+    let waker = {
+        let mut gate = gate.lock().expect("wake gate mutex");
+        gate.ready = true;
+        gate.waker.take().expect("pending operation must save its waker")
+    };
+    waker.wake();
+}
+
+struct WakeableFuturesReader {
+    gate: Arc<Mutex<Gate>>,
+    read: bool,
+}
+impl AsyncRead for WakeableFuturesReader {
+    fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, out: &mut [u8]) -> Poll<std::io::Result<usize>> {
+        if self.gate.lock().expect("wake gate mutex").poll(cx).is_pending() {
+            return Poll::Pending;
+        }
+        if self.read || out.is_empty() {
+            return Poll::Ready(Ok(0));
+        }
+        out[0] = b'a';
+        self.read = true;
+        Poll::Ready(Ok(1))
+    }
+}
+struct WakeableQubitReader {
+    gate: Arc<Mutex<Gate>>,
+    read: bool,
+}
+impl AsyncInput for WakeableQubitReader {
+    type Item = u8;
+    unsafe fn poll_read_unchecked(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        out: &mut [u8],
+        index: usize,
+        count: usize,
+    ) -> Poll<std::io::Result<usize>> {
+        if self.gate.lock().expect("wake gate mutex").poll(cx).is_pending() {
+            return Poll::Pending;
+        }
+        if self.read || count == 0 {
+            return Poll::Ready(Ok(0));
+        }
+        out[index] = b'a';
+        self.read = true;
+        Poll::Ready(Ok(1))
+    }
+}
+#[test]
+fn test_futures_read_bridges_save_wake_and_resume() {
+    let counter = Arc::new(WakeCounter::default());
+    let waker = Waker::from(counter.clone());
+    let mut cx = Context::from_waker(&waker);
+    let gate = Arc::new(Mutex::new(Gate::default()));
+    let mut input = FuturesInput::new(WakeableFuturesReader {
+        gate: gate.clone(),
+        read: false,
+    });
+    let mut bytes = [0; 2];
+    assert!(AsyncInput::poll_read(Pin::new(&mut input), &mut cx, &mut bytes).is_pending());
+    release(&gate);
+    assert_eq!(1, counter.0.load(Ordering::SeqCst));
+    assert_eq!(
+        1,
+        AsyncInput::poll_read(Pin::new(&mut input), &mut cx, &mut bytes)
+            .expect_ready("read resumes")
+            .expect("read succeeds")
+    );
+    assert_eq!(b'a', bytes[0]);
+    assert_eq!(
+        0,
+        AsyncInput::poll_read(Pin::new(&mut input), &mut cx, &mut bytes)
+            .expect_ready("reader reaches EOF")
+            .expect("EOF read succeeds")
+    );
+    let gate = Arc::new(Mutex::new(Gate::default()));
+    let mut input = FuturesAsyncRead::new(WakeableQubitReader {
+        gate: gate.clone(),
+        read: false,
+    });
+    assert!(AsyncRead::poll_read(Pin::new(&mut input), &mut cx, &mut bytes).is_pending());
+    release(&gate);
+    assert_eq!(
+        1,
+        AsyncRead::poll_read(Pin::new(&mut input), &mut cx, &mut bytes)
+            .expect_ready("read resumes")
+            .expect("read succeeds")
+    );
+    assert_eq!(b'a', bytes[0]);
+    assert_eq!(
+        0,
+        AsyncRead::poll_read(Pin::new(&mut input), &mut cx, &mut bytes)
+            .expect_ready("reader reaches EOF")
+            .expect("EOF read succeeds")
+    );
+}
+
+struct WakeableFuturesWriter {
+    write_gate: Arc<Mutex<Gate>>,
+    flush_gate: Arc<Mutex<Gate>>,
+    close_gate: Arc<Mutex<Gate>>,
+    data: Vec<u8>,
+    closed: bool,
+}
+impl AsyncWrite for WakeableFuturesWriter {
+    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, input: &[u8]) -> Poll<std::io::Result<usize>> {
+        if self.write_gate.lock().expect("write gate mutex").poll(cx).is_pending() {
+            return Poll::Pending;
+        }
+        let n = input.len().min(1);
+        self.data.extend_from_slice(&input[..n]);
+        Poll::Ready(Ok(n))
+    }
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        self.flush_gate
+            .lock()
+            .expect("flush gate mutex")
+            .poll(cx)
+            .map(|()| Ok(()))
+    }
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        if self.close_gate.lock().expect("close gate mutex").poll(cx).is_pending() {
+            return Poll::Pending;
+        }
+        self.closed = true;
+        Poll::Ready(Ok(()))
+    }
+}
+struct WakeableQubitWriter {
+    write_gate: Arc<Mutex<Gate>>,
+    flush_gate: Arc<Mutex<Gate>>,
+    close_gate: Arc<Mutex<Gate>>,
+    data: Vec<u8>,
+    closed: bool,
+}
+impl AsyncOutput for WakeableQubitWriter {
+    type Item = u8;
+    unsafe fn poll_write_unchecked(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        input: &[u8],
+        index: usize,
+        count: usize,
+    ) -> Poll<std::io::Result<usize>> {
+        if self.write_gate.lock().expect("write gate mutex").poll(cx).is_pending() {
+            return Poll::Pending;
+        }
+        let n = count.min(1);
+        self.data.extend_from_slice(&input[index..index + n]);
+        Poll::Ready(Ok(n))
+    }
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        self.flush_gate
+            .lock()
+            .expect("flush gate mutex")
+            .poll(cx)
+            .map(|()| Ok(()))
+    }
+}
+impl AsyncClose for WakeableQubitWriter {
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        if self.close_gate.lock().expect("close gate mutex").poll(cx).is_pending() {
+            return Poll::Pending;
+        }
+        self.closed = true;
+        Poll::Ready(Ok(()))
+    }
+}
+#[test]
+fn test_futures_write_bridges_save_wake_and_resume_each_stage() {
+    let counter = Arc::new(WakeCounter::default());
+    let waker = Waker::from(counter.clone());
+    let mut cx = Context::from_waker(&waker);
+    let make_gate = || Arc::new(Mutex::new(Gate::default()));
+    let (write_gate, flush_gate, close_gate) = (make_gate(), make_gate(), make_gate());
+    let mut output = FuturesOutput::new(WakeableFuturesWriter {
+        write_gate: write_gate.clone(),
+        flush_gate: flush_gate.clone(),
+        close_gate: close_gate.clone(),
+        data: Vec::new(),
+        closed: false,
+    });
+    assert!(AsyncOutput::poll_write(Pin::new(&mut output), &mut cx, b"ab").is_pending());
+    release(&write_gate);
+    assert_eq!(
+        1,
+        AsyncOutput::poll_write(Pin::new(&mut output), &mut cx, b"ab")
+            .expect_ready("write resumes")
+            .expect("write succeeds")
+    );
+    assert_eq!(b"a", output.get_ref().data.as_slice());
+    assert!(AsyncOutput::poll_flush(Pin::new(&mut output), &mut cx).is_pending());
+    release(&flush_gate);
+    AsyncOutput::poll_flush(Pin::new(&mut output), &mut cx)
+        .expect_ready("flush resumes")
+        .expect("flush succeeds");
+    assert!(AsyncClose::poll_close(Pin::new(&mut output), &mut cx).is_pending());
+    release(&close_gate);
+    AsyncClose::poll_close(Pin::new(&mut output), &mut cx)
+        .expect_ready("close resumes")
+        .expect("close succeeds");
+    assert!(output.get_ref().closed);
+    let (write_gate, flush_gate, close_gate) = (make_gate(), make_gate(), make_gate());
+    let mut output = FuturesAsyncWrite::new(WakeableQubitWriter {
+        write_gate: write_gate.clone(),
+        flush_gate: flush_gate.clone(),
+        close_gate: close_gate.clone(),
+        data: Vec::new(),
+        closed: false,
+    });
+    assert!(AsyncWrite::poll_write(Pin::new(&mut output), &mut cx, b"xy").is_pending());
+    release(&write_gate);
+    assert_eq!(
+        1,
+        AsyncWrite::poll_write(Pin::new(&mut output), &mut cx, b"xy")
+            .expect_ready("write resumes")
+            .expect("write succeeds")
+    );
+    assert_eq!(b"x", output.get_ref().data.as_slice());
+    assert!(AsyncWrite::poll_flush(Pin::new(&mut output), &mut cx).is_pending());
+    release(&flush_gate);
+    AsyncWrite::poll_flush(Pin::new(&mut output), &mut cx)
+        .expect_ready("flush resumes")
+        .expect("flush succeeds");
+    assert!(AsyncWrite::poll_close(Pin::new(&mut output), &mut cx).is_pending());
+    release(&close_gate);
+    AsyncWrite::poll_close(Pin::new(&mut output), &mut cx)
+        .expect_ready("close resumes")
+        .expect("close succeeds");
+    assert!(output.get_ref().closed);
+    let mut output = FuturesAsyncWrite::new(QubitOutput::default());
+    assert_eq!(
+        0,
+        AsyncWrite::poll_write(Pin::new(&mut output), &mut cx, b"")
+            .expect_ready("empty write is ready")
+            .expect("empty write succeeds")
+    );
+}
+
+struct PinnedFuturesInput {
+    address: Cell<usize>,
+    position: usize,
+    _pin: PhantomPinned,
+}
+impl PinnedFuturesInput {
+    fn check(&self) {
+        let address = self as *const Self as usize;
+        let old = self.address.replace(address);
+        assert!(old == 0 || old == address, "pinned futures input moved");
+    }
+}
+impl AsyncRead for PinnedFuturesInput {
+    fn poll_read(self: Pin<&mut Self>, _cx: &mut Context<'_>, output: &mut [u8]) -> Poll<std::io::Result<usize>> {
+        // SAFETY: only ordinary fields are accessed; the !Unpin inner remains in its
+        // pinned box.
+        let this = unsafe { self.get_unchecked_mut() };
+        this.check();
+        if this.position == 0 && !output.is_empty() {
+            output[0] = b'p';
+            this.position = 1;
+            return Poll::Ready(Ok(1));
+        }
+        Poll::Ready(Ok(0))
+    }
+}
+impl AsyncInput for PinnedFuturesInput {
+    type Item = u8;
+    unsafe fn poll_read_unchecked(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+        output: &mut [u8],
+        index: usize,
+        count: usize,
+    ) -> Poll<std::io::Result<usize>> {
+        // SAFETY: only ordinary fields are accessed; the !Unpin inner remains in its
+        // pinned box.
+        let this = unsafe { self.get_unchecked_mut() };
+        this.check();
+        if this.position == 0 && count > 0 {
+            output[index] = b'p';
+            this.position = 1;
+            return Poll::Ready(Ok(1));
+        }
+        Poll::Ready(Ok(0))
+    }
+}
+struct PinnedFuturesOutput {
+    address: Cell<usize>,
+    data: Vec<u8>,
+    _pin: PhantomPinned,
+}
+impl PinnedFuturesOutput {
+    fn check(&self) {
+        let address = self as *const Self as usize;
+        let old = self.address.replace(address);
+        assert!(old == 0 || old == address, "pinned futures output moved");
+    }
+}
+impl AsyncWrite for PinnedFuturesOutput {
+    fn poll_write(self: Pin<&mut Self>, _cx: &mut Context<'_>, input: &[u8]) -> Poll<std::io::Result<usize>> {
+        // SAFETY: only an ordinary Vec field is changed; the pinned value is not moved.
+        let this = unsafe { self.get_unchecked_mut() };
+        this.check();
+        this.data.extend_from_slice(input);
+        Poll::Ready(Ok(input.len()))
+    }
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        // SAFETY: only an ordinary field is read; the pinned value is not moved.
+        unsafe { self.get_unchecked_mut() }.check();
+        Poll::Ready(Ok(()))
+    }
+    fn poll_close(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        // SAFETY: only an ordinary field is read; the pinned value is not moved.
+        unsafe { self.get_unchecked_mut() }.check();
+        Poll::Ready(Ok(()))
+    }
+}
+impl AsyncOutput for PinnedFuturesOutput {
+    type Item = u8;
+    unsafe fn poll_write_unchecked(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+        input: &[u8],
+        index: usize,
+        count: usize,
+    ) -> Poll<std::io::Result<usize>> {
+        // SAFETY: only an ordinary Vec field is changed; the pinned value is not moved.
+        let this = unsafe { self.get_unchecked_mut() };
+        this.check();
+        this.data.extend_from_slice(&input[index..index + count]);
+        Poll::Ready(Ok(count))
+    }
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        // SAFETY: only an ordinary field is read; the pinned value is not moved.
+        unsafe { self.get_unchecked_mut() }.check();
+        Poll::Ready(Ok(()))
+    }
+}
+impl AsyncClose for PinnedFuturesOutput {
+    fn poll_close(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        // SAFETY: only an ordinary field is read; the pinned value is not moved.
+        unsafe { self.get_unchecked_mut() }.check();
+        Poll::Ready(Ok(()))
+    }
+}
+#[test]
+fn test_futures_bridges_support_pinned_inner_values() {
+    let mut cx = context();
+    let mut input = Box::pin(FuturesInput::new(PinnedFuturesInput {
+        address: Cell::new(0),
+        position: 0,
+        _pin: PhantomPinned,
+    }));
+    let mut bytes = [0; 1];
+    assert_eq!(
+        1,
+        AsyncInput::poll_read(input.as_mut(), &mut cx, &mut bytes)
+            .expect_ready("pinned input ready")
+            .expect("read succeeds")
+    );
+    let _ = AsyncInput::poll_read(input.as_mut(), &mut cx, &mut bytes)
+        .expect_ready("pinned EOF ready")
+        .expect("read succeeds");
+    let mut input = Box::pin(FuturesAsyncRead::new(PinnedFuturesInput {
+        address: Cell::new(0),
+        position: 0,
+        _pin: PhantomPinned,
+    }));
+    assert_eq!(
+        1,
+        AsyncRead::poll_read(input.as_mut(), &mut cx, &mut bytes)
+            .expect_ready("pinned futures read ready")
+            .expect("read succeeds")
+    );
+    let mut output = Box::pin(FuturesOutput::new(PinnedFuturesOutput {
+        address: Cell::new(0),
+        data: Vec::new(),
+        _pin: PhantomPinned,
+    }));
+    assert_eq!(
+        2,
+        AsyncOutput::poll_write(output.as_mut(), &mut cx, b"ab")
+            .expect_ready("pinned output ready")
+            .expect("write succeeds")
+    );
+    AsyncOutput::poll_flush(output.as_mut(), &mut cx)
+        .expect_ready("pinned flush ready")
+        .expect("flush succeeds");
+    AsyncClose::poll_close(output.as_mut(), &mut cx)
+        .expect_ready("pinned close ready")
+        .expect("close succeeds");
+    let mut output = Box::pin(FuturesAsyncWrite::new(PinnedFuturesOutput {
+        address: Cell::new(0),
+        data: Vec::new(),
+        _pin: PhantomPinned,
+    }));
+    assert_eq!(
+        2,
+        AsyncWrite::poll_write(output.as_mut(), &mut cx, b"cd")
+            .expect_ready("pinned futures write ready")
+            .expect("write succeeds")
+    );
+    AsyncWrite::poll_flush(output.as_mut(), &mut cx)
+        .expect_ready("pinned futures flush ready")
+        .expect("flush succeeds");
+    AsyncWrite::poll_close(output.as_mut(), &mut cx)
+        .expect_ready("pinned futures close ready")
+        .expect("close succeeds");
 }
 
 #[test]

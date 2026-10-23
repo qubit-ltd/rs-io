@@ -17,14 +17,18 @@ use qubit_io::std_io::ReadSeek;
 use qubit_io::std_io::ext::ReadSeekExt;
 
 struct RestoreFailingReader {
-    restored_position: u64,
+    original_position: u64,
+    position: u64,
+    seek_calls: Vec<SeekFrom>,
     read_once: bool,
 }
 
 impl RestoreFailingReader {
     fn new(restored_position: u64) -> Self {
         Self {
-            restored_position,
+            original_position: restored_position,
+            position: restored_position,
+            seek_calls: Vec::new(),
             read_once: false,
         }
     }
@@ -37,16 +41,21 @@ impl Read for RestoreFailingReader {
         }
         self.read_once = true;
         buffer[0] = b'x';
+        self.position += 1;
         Ok(1)
     }
 }
 
 impl Seek for RestoreFailingReader {
     fn seek(&mut self, position: SeekFrom) -> std::io::Result<u64> {
+        self.seek_calls.push(position);
         match position {
-            SeekFrom::Current(0) => Ok(self.restored_position),
-            SeekFrom::Start(position) if position == self.restored_position => Err(Error::other("restore failed")),
-            SeekFrom::Start(position) => Ok(position),
+            SeekFrom::Current(0) => Ok(self.position),
+            SeekFrom::Start(position) if position == self.original_position => Err(Error::other("restore failed")),
+            SeekFrom::Start(position) => {
+                self.position = position;
+                Ok(position)
+            }
             SeekFrom::Current(_) | SeekFrom::End(_) => Err(Error::new(ErrorKind::Unsupported, "unsupported seek")),
         }
     }
@@ -54,39 +63,62 @@ impl Seek for RestoreFailingReader {
 
 struct ReadFailingReadSeek {
     original_position: u64,
+    position: u64,
+    seek_calls: Vec<SeekFrom>,
     fail_restore: bool,
+    read_once: bool,
+    bytes_read: Vec<u8>,
 }
 
 impl ReadFailingReadSeek {
     fn new(original_position: u64) -> Self {
         Self {
             original_position,
+            position: original_position,
+            seek_calls: Vec::new(),
             fail_restore: false,
+            read_once: false,
+            bytes_read: Vec::new(),
         }
     }
 
     fn with_restore_error(original_position: u64) -> Self {
         Self {
             original_position,
+            position: original_position,
+            seek_calls: Vec::new(),
             fail_restore: true,
+            read_once: false,
+            bytes_read: Vec::new(),
         }
     }
 }
 
 impl Read for ReadFailingReadSeek {
-    fn read(&mut self, _buffer: &mut [u8]) -> std::io::Result<usize> {
-        Err(Error::other("read failed"))
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        if self.read_once || buffer.is_empty() {
+            return Err(Error::other("read failed"));
+        }
+        self.read_once = true;
+        buffer[0] = b'a';
+        self.bytes_read.push(b'a');
+        self.position += 1;
+        Ok(1)
     }
 }
 
 impl Seek for ReadFailingReadSeek {
     fn seek(&mut self, position: SeekFrom) -> std::io::Result<u64> {
+        self.seek_calls.push(position);
         match position {
-            SeekFrom::Current(0) => Ok(self.original_position),
+            SeekFrom::Current(0) => Ok(self.position),
             SeekFrom::Start(position) if position == self.original_position && self.fail_restore => {
                 Err(Error::other("restore failed"))
             }
-            SeekFrom::Start(position) => Ok(position),
+            SeekFrom::Start(position) => {
+                self.position = position;
+                Ok(position)
+            }
             SeekFrom::Current(_) | SeekFrom::End(_) => Err(Error::new(ErrorKind::Unsupported, "unsupported seek")),
         }
     }
@@ -94,6 +126,8 @@ impl Seek for ReadFailingReadSeek {
 
 struct OffsetSeekFailingReadSeek {
     original_position: u64,
+    position: u64,
+    seek_calls: Vec<SeekFrom>,
     rejected_offset: u64,
     fail_restore: bool,
 }
@@ -102,6 +136,8 @@ impl OffsetSeekFailingReadSeek {
     fn new(original_position: u64, rejected_offset: u64) -> Self {
         Self {
             original_position,
+            position: original_position,
+            seek_calls: Vec::new(),
             rejected_offset,
             fail_restore: false,
         }
@@ -110,6 +146,8 @@ impl OffsetSeekFailingReadSeek {
     fn with_restore_error(original_position: u64, rejected_offset: u64) -> Self {
         Self {
             original_position,
+            position: original_position,
+            seek_calls: Vec::new(),
             rejected_offset,
             fail_restore: true,
         }
@@ -124,13 +162,20 @@ impl Read for OffsetSeekFailingReadSeek {
 
 impl Seek for OffsetSeekFailingReadSeek {
     fn seek(&mut self, position: SeekFrom) -> std::io::Result<u64> {
+        self.seek_calls.push(position);
         match position {
-            SeekFrom::Current(0) => Ok(self.original_position),
+            SeekFrom::Current(0) => Ok(self.position),
             SeekFrom::Start(position) if position == self.original_position && self.fail_restore => {
                 Err(Error::other("restore failed"))
             }
-            SeekFrom::Start(position) if position == self.rejected_offset => Err(Error::other("offset seek failed")),
-            SeekFrom::Start(position) => Ok(position),
+            SeekFrom::Start(position) if position == self.rejected_offset => {
+                self.position = position;
+                Err(Error::other("offset seek failed"))
+            }
+            SeekFrom::Start(position) => {
+                self.position = position;
+                Ok(position)
+            }
             SeekFrom::Current(_) | SeekFrom::End(_) => Err(Error::new(ErrorKind::Unsupported, "unsupported seek")),
         }
     }
@@ -240,12 +285,14 @@ fn test_peek_exact_or_eof_returns_restore_error_when_restore_fails() {
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("restore failed", error.to_string());
+    assert_eq!(8, reader.position);
+    assert_eq!(vec![SeekFrom::Current(0), SeekFrom::Start(7)], reader.seek_calls);
 }
 
 #[test]
 fn test_peek_exact_or_eof_returns_read_error_after_restore() {
-    let mut reader = ReadFailingReadSeek::new(3);
-    let mut buffer = [0; 1];
+    let mut reader = ReadFailingReadSeek::new(2);
+    let mut buffer = [0; 2];
 
     let error = reader
         .peek_exact_or_eof(&mut buffer)
@@ -253,12 +300,15 @@ fn test_peek_exact_or_eof_returns_read_error_after_restore() {
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("read failed", error.to_string());
+    assert_eq!(b"a", reader.bytes_read.as_slice());
+    assert_eq!(2, reader.position);
+    assert_eq!(vec![SeekFrom::Current(0), SeekFrom::Start(2)], reader.seek_calls);
 }
 
 #[test]
 fn test_peek_exact_or_eof_prefers_restore_error_over_read_error() {
-    let mut reader = ReadFailingReadSeek::with_restore_error(3);
-    let mut buffer = [0; 1];
+    let mut reader = ReadFailingReadSeek::with_restore_error(2);
+    let mut buffer = [0; 2];
 
     let error = reader
         .peek_exact_or_eof(&mut buffer)
@@ -266,6 +316,9 @@ fn test_peek_exact_or_eof_prefers_restore_error_over_read_error() {
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("restore failed", error.to_string());
+    assert_eq!(b"a", reader.bytes_read.as_slice());
+    assert_eq!(3, reader.position);
+    assert_eq!(vec![SeekFrom::Current(0), SeekFrom::Start(2)], reader.seek_calls);
 }
 
 #[test]
@@ -363,6 +416,11 @@ fn test_read_exact_or_eof_at_returns_offset_seek_error_after_restore() {
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("offset seek failed", error.to_string());
+    assert_eq!(5, reader.position);
+    assert_eq!(
+        vec![SeekFrom::Current(0), SeekFrom::Start(2), SeekFrom::Start(5)],
+        reader.seek_calls
+    );
 }
 
 #[test]
@@ -376,12 +434,17 @@ fn test_read_exact_or_eof_at_prefers_restore_error_over_offset_seek_error() {
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("restore failed", error.to_string());
+    assert_eq!(2, reader.position);
+    assert_eq!(
+        vec![SeekFrom::Current(0), SeekFrom::Start(2), SeekFrom::Start(5)],
+        reader.seek_calls
+    );
 }
 
 #[test]
 fn test_read_exact_or_eof_at_returns_read_error_after_restore() {
-    let mut reader = ReadFailingReadSeek::new(3);
-    let mut buffer = [0; 1];
+    let mut reader = ReadFailingReadSeek::new(2);
+    let mut buffer = [0; 2];
 
     let error = reader
         .read_exact_or_eof_at(1, &mut buffer)
@@ -389,12 +452,18 @@ fn test_read_exact_or_eof_at_returns_read_error_after_restore() {
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("read failed", error.to_string());
+    assert_eq!(b"a", reader.bytes_read.as_slice());
+    assert_eq!(2, reader.position);
+    assert_eq!(
+        vec![SeekFrom::Current(0), SeekFrom::Start(1), SeekFrom::Start(2)],
+        reader.seek_calls
+    );
 }
 
 #[test]
 fn test_read_exact_or_eof_at_prefers_restore_error_over_read_error() {
-    let mut reader = ReadFailingReadSeek::with_restore_error(3);
-    let mut buffer = [0; 1];
+    let mut reader = ReadFailingReadSeek::with_restore_error(2);
+    let mut buffer = [0; 2];
 
     let error = reader
         .read_exact_or_eof_at(1, &mut buffer)
@@ -402,6 +471,12 @@ fn test_read_exact_or_eof_at_prefers_restore_error_over_read_error() {
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("restore failed", error.to_string());
+    assert_eq!(b"a", reader.bytes_read.as_slice());
+    assert_eq!(2, reader.position);
+    assert_eq!(
+        vec![SeekFrom::Current(0), SeekFrom::Start(1), SeekFrom::Start(2)],
+        reader.seek_calls
+    );
 }
 
 #[test]

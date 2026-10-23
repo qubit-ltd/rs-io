@@ -16,6 +16,8 @@ use qubit_io::std_io::ext::SeekExt;
 
 struct FailingSeek {
     original_position: u64,
+    position: u64,
+    seek_calls: Vec<SeekFrom>,
     end_result: std::io::Result<u64>,
     restore_result: std::io::Result<u64>,
 }
@@ -24,6 +26,8 @@ impl FailingSeek {
     fn size_error(original_position: u64) -> Self {
         Self {
             original_position,
+            position: original_position,
+            seek_calls: Vec::new(),
             end_result: Err(Error::other("size failed")),
             restore_result: Ok(original_position),
         }
@@ -32,6 +36,8 @@ impl FailingSeek {
     fn restore_error(original_position: u64, size: u64) -> Self {
         Self {
             original_position,
+            position: original_position,
+            seek_calls: Vec::new(),
             end_result: Ok(size),
             restore_result: Err(Error::other("restore failed")),
         }
@@ -40,6 +46,8 @@ impl FailingSeek {
     fn size_and_restore_error(original_position: u64) -> Self {
         Self {
             original_position,
+            position: original_position,
+            seek_calls: Vec::new(),
             end_result: Err(Error::other("size failed")),
             restore_result: Err(Error::other("restore failed")),
         }
@@ -48,19 +56,31 @@ impl FailingSeek {
 
 impl Seek for FailingSeek {
     fn seek(&mut self, position: SeekFrom) -> std::io::Result<u64> {
+        self.seek_calls.push(position);
         match position {
-            SeekFrom::Current(0) => Ok(self.original_position),
-            SeekFrom::End(0) => self
-                .end_result
-                .as_ref()
-                .copied()
-                .map_err(|error| Error::new(error.kind(), error.to_string())),
-            SeekFrom::Start(position) if position == self.original_position => self
-                .restore_result
-                .as_ref()
-                .copied()
-                .map_err(|error| Error::new(error.kind(), error.to_string())),
-            SeekFrom::Start(position) => Ok(position),
+            SeekFrom::Current(0) => Ok(self.position),
+            SeekFrom::End(0) => {
+                self.position = self.end_result.as_ref().copied().unwrap_or(99);
+                self.end_result
+                    .as_ref()
+                    .copied()
+                    .map_err(|error| Error::new(error.kind(), error.to_string()))
+            }
+            SeekFrom::Start(position) if position == self.original_position => {
+                let result = self
+                    .restore_result
+                    .as_ref()
+                    .copied()
+                    .map_err(|error| Error::new(error.kind(), error.to_string()));
+                if result.is_ok() {
+                    self.position = position;
+                }
+                result
+            }
+            SeekFrom::Start(position) => {
+                self.position = position;
+                Ok(position)
+            }
             SeekFrom::Current(_) | SeekFrom::End(_) => Err(Error::new(ErrorKind::Unsupported, "unsupported seek")),
         }
     }
@@ -101,6 +121,11 @@ fn test_stream_size_returns_size_error_after_restore() {
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("size failed", error.to_string());
+    assert_eq!(4, stream.position);
+    assert_eq!(
+        vec![SeekFrom::Current(0), SeekFrom::End(0), SeekFrom::Start(4)],
+        stream.seek_calls
+    );
 }
 
 #[test]
@@ -111,6 +136,11 @@ fn test_stream_size_returns_restore_error() {
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("restore failed", error.to_string());
+    assert_eq!(10, stream.position);
+    assert_eq!(
+        vec![SeekFrom::Current(0), SeekFrom::End(0), SeekFrom::Start(4)],
+        stream.seek_calls
+    );
 }
 
 #[test]
@@ -123,6 +153,11 @@ fn test_stream_size_prefers_restore_error_over_size_error() {
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!("restore failed", error.to_string());
+    assert_eq!(99, stream.position);
+    assert_eq!(
+        vec![SeekFrom::Current(0), SeekFrom::End(0), SeekFrom::Start(4)],
+        stream.seek_calls
+    );
 }
 
 #[test]

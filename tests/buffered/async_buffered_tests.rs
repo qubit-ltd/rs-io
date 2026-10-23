@@ -123,6 +123,7 @@ struct ScriptedOutput {
     marker: usize,
     closed: bool,
     close_error: Option<ErrorKind>,
+    close_pending: bool,
 }
 
 #[derive(Default)]
@@ -158,6 +159,7 @@ impl ScriptedOutput {
             marker: 0,
             closed: false,
             close_error: None,
+            close_pending: false,
         }
     }
 
@@ -165,10 +167,19 @@ impl ScriptedOutput {
         self.close_error = Some(kind);
         self
     }
+
+    fn with_close_pending(mut self) -> Self {
+        self.close_pending = true;
+        self
+    }
 }
 
 impl AsyncClose for ScriptedOutput {
     fn poll_close(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        if self.close_pending {
+            self.close_pending = false;
+            return Poll::Pending;
+        }
         if let Some(kind) = self.close_error.take() {
             return Poll::Ready(Err(Error::new(kind, "scripted close failure")));
         }
@@ -449,6 +460,85 @@ fn test_async_buffered_output_handles_pending_and_partial_drains() -> io::Result
     drop(future);
     assert_eq!(&[1, 2, 3], output.inner().values.as_slice());
     assert_eq!(0, output.pending_len());
+    Ok(())
+}
+
+#[test]
+fn test_async_buffered_output_recreates_cancelled_flush() -> io::Result<()> {
+    let inner = ScriptedOutput::new([WriteStep::Accept(1), WriteStep::Pending, WriteStep::Accept(2)], []);
+    let mut output = AsyncBufferedOutput::with_capacity(inner, 4);
+    assert_eq!(3, complete(output.write_async(&[97, 98, 99]))?);
+    let mut cx = Context::from_waker(Waker::noop());
+    let mut flush = output.flush_async();
+    assert!(Future::poll(Pin::new(&mut flush), &mut cx).is_pending());
+    drop(flush);
+
+    assert_eq!(&[97], output.inner().values.as_slice());
+    assert_eq!(&[98, 99], output.pending());
+    complete(output.flush_async())?;
+    assert_eq!(&[97, 98, 99], output.inner().values.as_slice());
+    assert!(output.pending().is_empty());
+    Ok(())
+}
+
+#[test]
+fn test_async_buffered_output_recreates_cancelled_write_after_drain() -> io::Result<()> {
+    let inner = ScriptedOutput::new([WriteStep::Accept(1), WriteStep::Pending, WriteStep::Accept(2)], []);
+    let mut output = AsyncBufferedOutput::with_capacity(inner, 4);
+    assert_eq!(3, complete(output.write_async(&[97, 98, 99]))?);
+    let mut cx = Context::from_waker(Waker::noop());
+    let mut write = output.write_async(&[100, 101]);
+    assert!(Future::poll(Pin::new(&mut write), &mut cx).is_pending());
+    drop(write);
+
+    assert_eq!(&[97], output.inner().values.as_slice());
+    assert_eq!(&[98, 99], output.pending());
+    assert_eq!(2, complete(output.write_async(&[100, 101]))?);
+    complete(output.flush_async())?;
+    assert_eq!(&[97, 98, 99, 100, 101], output.inner().values.as_slice());
+    assert!(output.pending().is_empty());
+    Ok(())
+}
+
+#[test]
+fn test_async_buffered_output_recovers_parts_after_cancelled_flush() -> io::Result<()> {
+    let inner = ScriptedOutput::new([WriteStep::Accept(1), WriteStep::Pending], []);
+    let mut output = AsyncBufferedOutput::with_capacity(inner, 4);
+    assert_eq!(3, complete(output.write_async(&[97, 98, 99]))?);
+    let mut cx = Context::from_waker(Waker::noop());
+    let mut flush = output.flush_async();
+    assert!(Future::poll(Pin::new(&mut flush), &mut cx).is_pending());
+    drop(flush);
+
+    let (inner, pending) = output.into_parts();
+    assert_eq!(&[97], inner.values.as_slice());
+    assert_eq!(&[98, 99], pending.readable());
+    Ok(())
+}
+
+#[test]
+fn test_async_buffered_output_recreates_cancelled_close() -> io::Result<()> {
+    let inner =
+        ScriptedOutput::new([WriteStep::Accept(1), WriteStep::Pending, WriteStep::Accept(2)], []).with_close_pending();
+    let mut output = AsyncBufferedOutput::with_capacity(inner, 4);
+    assert_eq!(3, complete(output.write_async(&[97, 98, 99]))?);
+    let mut cx = Context::from_waker(Waker::noop());
+
+    let mut close = output.close_async();
+    assert!(Future::poll(Pin::new(&mut close), &mut cx).is_pending());
+    drop(close);
+    assert_eq!(&[97], output.inner().values.as_slice());
+    assert_eq!(&[98, 99], output.pending());
+    assert!(!output.inner().closed);
+
+    let mut close = output.close_async();
+    assert!(Future::poll(Pin::new(&mut close), &mut cx).is_pending());
+    drop(close);
+    assert_eq!(&[97, 98, 99], output.inner().values.as_slice());
+    assert!(!output.inner().closed);
+    complete(output.close_async())?;
+    assert!(output.inner().closed);
+    assert!(output.pending().is_empty());
     Ok(())
 }
 

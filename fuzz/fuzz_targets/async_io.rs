@@ -13,6 +13,9 @@ use std::io;
 use std::io::Error;
 use std::io::ErrorKind;
 use std::pin::Pin;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use std::task::Context;
 use std::task::Poll;
 use std::task::Waker;
@@ -32,6 +35,7 @@ fuzz_target!(|data: &[u8]| {
     fuzz_buffered_input(data);
     fuzz_buffered_output(data);
     fuzz_forbidden_errors(data);
+    fuzz_buffered_state_sequence(data);
 });
 
 struct ChunkedInput<'a> {
@@ -233,6 +237,273 @@ fn fuzz_forbidden_errors(data: &[u8]) {
 
     assert_eq!(ErrorKind::InvalidData, flush_error.kind());
     assert_eq!(ErrorKind::InvalidData, close_error.kind());
+}
+
+/// Runs a bounded sequence of buffered input and output state transitions.
+fn fuzz_buffered_state_sequence(data: &[u8]) {
+    if data.len() < 3 {
+        return;
+    }
+    let capacity = usize::from(data[0] % 16) + 1;
+    let chunk_size = usize::from(data[1] % 8) + 1;
+    let sequence = &data[2..];
+    let midpoint = sequence.len() / 2;
+    let (operations, source) = sequence.split_at(midpoint);
+    let max_steps = operations.len().min(128);
+    let wake = Arc::new(ObservedWake::default());
+    let waker = Waker::from(Arc::clone(&wake));
+    let mut context = Context::from_waker(&waker);
+
+    let inner = ChunkedInput {
+        bytes: source,
+        position: 0,
+        chunk_size,
+        pending: false,
+        enable_pending: true,
+    };
+    let mut input = AsyncBufferedInput::with_capacity(inner, capacity);
+    let mut cursor = 0;
+    let mut input_done = false;
+    let mut accepted = Vec::new();
+    let mut output = AsyncBufferedOutput::with_capacity(
+        ChunkedOutput {
+            bytes: Vec::new(),
+            chunk_size,
+            write_pending: false,
+            flush_pending: false,
+            close_pending: false,
+            enable_pending: true,
+            closed: false,
+        },
+        capacity,
+    );
+    let mut output_closed = false;
+
+    for (step, operation) in operations.iter().copied().take(max_steps).enumerate() {
+        wake.0.store(false, Ordering::SeqCst);
+        let kind = operation % 8;
+        let cancel_once = operation & 0x80 != 0;
+        match kind {
+            0 => {
+                let request = usize::from(operation % capacity as u8) + 1;
+                let mut buffer = vec![0; request];
+                let mut future = input.read_async(&mut buffer);
+                let first = Future::poll(Pin::new(&mut future), &mut context);
+                let result = match first {
+                    Poll::Ready(result) => Some(result),
+                    Poll::Pending if cancel_once => {
+                        assert!(wake.0.swap(false, Ordering::SeqCst), "scripted Pending must wake");
+                        drop(future);
+                        None
+                    }
+                    Poll::Pending => {
+                        let mut ready = None;
+                        for _ in 0..256 {
+                            match Future::poll(Pin::new(&mut future), &mut context) {
+                                Poll::Ready(result) => {
+                                    ready = Some(result);
+                                    break;
+                                }
+                                Poll::Pending => {
+                                    assert!(wake.0.swap(false, Ordering::SeqCst), "scripted Pending must wake")
+                                }
+                            }
+                        }
+                        drop(future);
+                        Some(ready.expect("bounded read should complete"))
+                    }
+                };
+                if let Some(result) = result {
+                    let read = result.expect("scripted input should not fail");
+                    assert_eq!(&source[cursor..cursor + read], &buffer[..read]);
+                    cursor += read;
+                    input_done = read == 0;
+                }
+            }
+            1 if !input_done => {
+                let filled = if cancel_once {
+                    match Pin::new(&mut input).poll_fill_more(&mut context) {
+                        Poll::Pending => {
+                            assert!(wake.0.swap(false, Ordering::SeqCst), "scripted Pending must wake");
+                            None
+                        }
+                        Poll::Ready(result) => Some(result),
+                    }
+                } else {
+                    Some(
+                        drive_observed(
+                            std::future::poll_fn(|cx| Pin::new(&mut input).poll_fill_more(cx)),
+                            256,
+                            &mut context,
+                            &wake,
+                        )
+                        .expect("bounded refill should complete"),
+                    )
+                };
+                if let Some(result) = filled {
+                    match result {
+                        Ok(filled) => input_done = !filled,
+                        Err(error)
+                            if error.kind() == ErrorKind::InvalidInput && input.unread_len() == input.capacity() => {}
+                        Err(error) => panic!("scripted refill failed unexpectedly: {error}"),
+                    }
+                }
+            }
+            2 if !input_done => {
+                let request = usize::from(operation % capacity as u8) + 1;
+                let filled = if cancel_once {
+                    match Pin::new(&mut input).poll_fill_until(&mut context, request) {
+                        Poll::Pending => {
+                            assert!(wake.0.swap(false, Ordering::SeqCst), "scripted Pending must wake");
+                            None
+                        }
+                        Poll::Ready(result) => Some(result),
+                    }
+                } else {
+                    Some(
+                        drive_observed(
+                            std::future::poll_fn(|cx| Pin::new(&mut input).poll_fill_until(cx, request)),
+                            256,
+                            &mut context,
+                            &wake,
+                        )
+                        .expect("bounded fill_until should complete"),
+                    )
+                };
+                if let Some(result) = filled {
+                    input_done = !result.expect("scripted fill_until should not fail");
+                }
+            }
+            3 => {
+                let count = usize::from(operation >> 5).min(input.unread_len());
+                assert!(count <= input.unread_len());
+                // SAFETY: `count` is bounded by the current unread window above.
+                unsafe { input.consume(count) };
+                cursor += count;
+            }
+            4 if !output_closed => {
+                let byte = source.get(step % source.len().max(1)).copied().unwrap_or_default();
+                let input = [byte];
+                let mut future = output.write_async(&input);
+                let first = Future::poll(Pin::new(&mut future), &mut context);
+                match first {
+                    Poll::Ready(Ok(written)) => accepted.extend_from_slice(&input[..written]),
+                    Poll::Ready(Err(error)) => panic!("scripted write failed: {error}"),
+                    Poll::Pending if cancel_once => {
+                        assert!(wake.0.swap(false, Ordering::SeqCst), "scripted Pending must wake");
+                        drop(future);
+                    }
+                    Poll::Pending => {
+                        let result =
+                            drive_observed(future, 256, &mut context, &wake).expect("bounded write should complete");
+                        let written = result.expect("scripted write should not fail");
+                        accepted.extend_from_slice(&input[..written]);
+                    }
+                }
+            }
+            5 if !output_closed => {
+                let count = usize::from(operation % capacity as u8) + 1;
+                if cancel_once {
+                    let result = Pin::new(&mut output).poll_ensure_spare_capacity(&mut context, count);
+                    if result.is_pending() {
+                        assert!(wake.0.swap(false, Ordering::SeqCst), "scripted Pending must wake");
+                    }
+                } else {
+                    drive_observed(
+                        std::future::poll_fn(|cx| Pin::new(&mut output).poll_ensure_spare_capacity(cx, count)),
+                        256,
+                        &mut context,
+                        &wake,
+                    )
+                    .expect("bounded capacity operation should complete")
+                    .expect("scripted capacity operation should not fail");
+                }
+            }
+            6 if !output_closed => {
+                if cancel_once {
+                    let mut flush = output.flush_async();
+                    if Future::poll(Pin::new(&mut flush), &mut context).is_pending() {
+                        assert!(wake.0.swap(false, Ordering::SeqCst), "scripted Pending must wake");
+                        drop(flush);
+                    } else {
+                        drop(flush);
+                    }
+                } else {
+                    drive_observed(output.flush_async(), 256, &mut context, &wake)
+                        .expect("bounded flush should complete")
+                        .expect("scripted flush should not fail");
+                }
+            }
+            7 if !output_closed => {
+                if cancel_once {
+                    let mut close = output.close_async();
+                    match Future::poll(Pin::new(&mut close), &mut context) {
+                        Poll::Pending => {
+                            assert!(wake.0.swap(false, Ordering::SeqCst), "scripted Pending must wake");
+                        }
+                        Poll::Ready(Ok(())) => output_closed = true,
+                        Poll::Ready(Err(error)) => {
+                            panic!("scripted close should not fail: {error}");
+                        }
+                    }
+                    drop(close);
+                } else {
+                    drive_observed(output.close_async(), 256, &mut context, &wake)
+                        .expect("bounded close should complete")
+                        .expect("scripted close should not fail");
+                    output_closed = true;
+                }
+            }
+            _ => {}
+        }
+
+        let buffered_end = cursor + input.unread_len();
+        assert!(buffered_end <= input.inner().position);
+        assert_eq!(&source[cursor..buffered_end], input.unread());
+        let mut remaining = input.unread().to_vec();
+        remaining.extend_from_slice(&input.inner().bytes[input.inner().position..]);
+        assert_eq!(&source[cursor..], remaining);
+        let mut actual = output.inner().bytes.clone();
+        actual.extend_from_slice(output.pending());
+        assert_eq!(accepted, actual);
+    }
+
+    let (output_inner, pending) = output.into_parts();
+    let mut recovered = output_inner.bytes;
+    recovered.extend_from_slice(pending.readable());
+    assert_eq!(accepted, recovered);
+
+    let (input_inner, unread) = input.into_parts();
+    let mut remaining = unread.readable().to_vec();
+    remaining.extend_from_slice(&source[input_inner.position..]);
+    assert_eq!(&source[cursor..], remaining);
+}
+
+#[derive(Default)]
+struct ObservedWake(AtomicBool);
+
+impl std::task::Wake for ObservedWake {
+    fn wake(self: Arc<Self>) {
+        self.0.store(true, Ordering::SeqCst);
+    }
+
+    fn wake_by_ref(self: &Arc<Self>) {
+        self.0.store(true, Ordering::SeqCst);
+    }
+}
+
+fn drive_observed<F>(future: F, max_polls: usize, context: &mut Context<'_>, wake: &ObservedWake) -> Option<F::Output>
+where
+    F: Future,
+{
+    let mut future = std::pin::pin!(future);
+    for _ in 0..max_polls {
+        match future.as_mut().poll(context) {
+            Poll::Ready(output) => return Some(output),
+            Poll::Pending => assert!(wake.0.swap(false, Ordering::SeqCst), "scripted Pending must wake"),
+        }
+    }
+    None
 }
 
 /// Polls a self-waking test future with a caller-selected runaway guard.
