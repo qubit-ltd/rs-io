@@ -118,7 +118,14 @@ pub trait Input {
     ///
     /// # Errors
     ///
-    /// Returns the input error reported by the implementation.
+    /// Returns the input error reported by the implementation. An
+    /// [`ErrorKind::Interrupted`] result is retried by aggregate read methods
+    /// and therefore means this call made no confirmed transfer. If a valid
+    /// prefix was transferred, return `Ok(n)` for it and report a later error
+    /// on a subsequent call. A later aggregate error does not undo successful
+    /// earlier calls. Errors with applied or uncertain side effects must not
+    /// be represented as retryable `Interrupted` solely to request a retry;
+    /// the adapter or caller must choose a policy for those effects.
     ///
     /// # Safety
     ///

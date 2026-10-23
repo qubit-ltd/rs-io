@@ -21,27 +21,32 @@ use crate::traits::validate_write_count;
 /// # Examples
 ///
 /// ```
+/// use std::future::Future;
 /// use std::io;
 /// use std::pin::Pin;
 /// use std::task::Context;
 /// use std::task::Poll;
+/// use std::task::Waker;
 ///
 /// use qubit_io::AsyncLimitOutput;
 /// use qubit_io::AsyncOutput;
 ///
-/// struct EmptyOutput;
+/// struct VecOutput {
+///     bytes: Vec<u8>,
+/// }
 ///
-/// impl AsyncOutput for EmptyOutput {
+/// impl AsyncOutput for VecOutput {
 ///     type Item = u8;
 ///
 ///     unsafe fn poll_write_unchecked(
 ///         self: Pin<&mut Self>,
 ///         _cx: &mut Context<'_>,
-///         _input: &[u8],
-///         _index: usize,
-///         _count: usize,
+///         input: &[u8],
+///         index: usize,
+///         count: usize,
 ///     ) -> Poll<io::Result<usize>> {
-///         Poll::Ready(Ok(0))
+///         self.get_mut().bytes.extend_from_slice(&input[index..index + count]);
+///         Poll::Ready(Ok(count))
 ///     }
 ///
 ///     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
@@ -49,8 +54,13 @@ use crate::traits::validate_write_count;
 ///     }
 /// }
 ///
-/// let output = AsyncLimitOutput::new(EmptyOutput, 3);
-/// assert_eq!(output.remaining(), 3);
+/// let mut output = AsyncLimitOutput::new(VecOutput { bytes: Vec::new() }, 2);
+/// let waker = Waker::noop();
+/// let mut cx = Context::from_waker(waker);
+/// let mut write = output.write_async(b"abc");
+/// assert!(matches!(Pin::new(&mut write).poll(&mut cx), Poll::Ready(Ok(2))));
+/// assert_eq!(output.remaining(), 0);
+/// assert_eq!(output.inner().bytes, b"ab");
 /// ```
 ///
 /// # Type Parameters

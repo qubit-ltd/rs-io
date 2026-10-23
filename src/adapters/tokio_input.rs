@@ -19,6 +19,26 @@ use crate::util::UncheckedSlice;
 
 /// Adapts a Tokio [`AsyncRead`] value to Qubit's [`AsyncInput`].
 ///
+/// # Examples
+///
+/// ```
+/// use std::pin::Pin;
+/// use std::task::Context;
+/// use std::task::Poll;
+/// use std::task::Waker;
+///
+/// use qubit_io::AsyncInput;
+/// use qubit_io::TokioInput;
+///
+/// let mut input = TokioInput::new(&b"abc"[..]);
+/// let mut output = [0; 3];
+/// let waker = Waker::noop();
+/// let mut cx = Context::from_waker(waker);
+/// let mut read = input.read_async(&mut output);
+/// assert!(matches!(Pin::new(&mut read).poll(&mut cx), Poll::Ready(Ok(3))));
+/// assert_eq!(&output, b"abc");
+/// ```
+///
 /// # Type Parameters
 ///
 /// - `T`: Tokio reader type.

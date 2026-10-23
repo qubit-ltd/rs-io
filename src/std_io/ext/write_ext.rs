@@ -18,6 +18,22 @@ use crate::util::UncheckedSlice;
 /// `WriteExt` provides small method-style helpers for byte writers. The
 /// methods are implemented for every type that implements [`Write`], including
 /// `dyn Write` trait objects.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_io::std_io::ext::WriteExt;
+///
+/// let bytes = b"_abc_";
+/// let mut output = Vec::new();
+/// // SAFETY: 1..3 is within the five-byte source slice.
+/// let written = unsafe { output.write_unchecked(bytes, 1, 2)? };
+/// assert_eq!(2, written);
+/// // SAFETY: 3..4 is within the same source slice.
+/// unsafe { output.write_all_unchecked(bytes, 3, 1)? };
+/// assert_eq!(b"abc", output.as_slice());
+/// # Ok::<(), std::io::Error>(())
+/// ```
 pub trait WriteExt: Write {
     /// Writes bytes from a range of `buffer` without checking the range bounds
     /// in release builds.
@@ -25,7 +41,9 @@ pub trait WriteExt: Write {
     /// This method delegates to [`Write::write`] after creating the source
     /// slice with raw pointer arithmetic. It performs at most one write
     /// operation and returns the number of bytes written, keeping the same
-    /// short-write and error behavior as [`Write::write`].
+    /// short-write and error behavior as [`Write::write`]. A single call may
+    /// accept only a prefix; use [`Self::write_all_unchecked`] when the full
+    /// range must be written.
     ///
     /// # Parameters
     /// - `buffer`: Source buffer.

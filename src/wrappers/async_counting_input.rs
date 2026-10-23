@@ -20,32 +20,51 @@ use crate::traits::validate_read_count;
 /// # Examples
 ///
 /// ```
+/// use std::future::Future;
 /// use std::io;
 /// use std::pin::Pin;
 /// use std::task::Context;
 /// use std::task::Poll;
+/// use std::task::Waker;
 ///
 /// use qubit_io::AsyncCountingInput;
 /// use qubit_io::AsyncInput;
 ///
-/// struct EmptyInput;
+/// struct SliceInput {
+///     bytes: &'static [u8],
+///     position: usize,
+/// }
 ///
-/// impl AsyncInput for EmptyInput {
+/// impl AsyncInput for SliceInput {
 ///     type Item = u8;
 ///
 ///     unsafe fn poll_read_unchecked(
 ///         self: Pin<&mut Self>,
 ///         _cx: &mut Context<'_>,
-///         _output: &mut [u8],
-///         _index: usize,
-///         _count: usize,
+///         output: &mut [u8],
+///         index: usize,
+///         count: usize,
 ///     ) -> Poll<io::Result<usize>> {
-///         Poll::Ready(Ok(0))
+///         let this = self.get_mut();
+///         let count = count.min(this.bytes.len() - this.position);
+///         output[index..index + count]
+///             .copy_from_slice(&this.bytes[this.position..this.position + count]);
+///         this.position += count;
+///         Poll::Ready(Ok(count))
 ///     }
 /// }
 ///
-/// let input = AsyncCountingInput::new(EmptyInput);
-/// assert_eq!(input.items_read(), 0);
+/// let mut input = AsyncCountingInput::new(SliceInput {
+///     bytes: b"abc",
+///     position: 0,
+/// });
+/// let mut output = [0; 3];
+/// let waker = Waker::noop();
+/// let mut cx = Context::from_waker(waker);
+/// let mut read = input.read_async(&mut output);
+/// assert!(matches!(Pin::new(&mut read).poll(&mut cx), Poll::Ready(Ok(3))));
+/// assert_eq!(&output, b"abc");
+/// assert_eq!(input.items_read(), 3);
 /// ```
 ///
 /// # Type Parameters

@@ -16,6 +16,30 @@ use crate::traits::validate_read_count;
 
 /// Tee input whose branch position follows every source seek.
 ///
+/// # Examples
+///
+/// ```
+/// use std::io::Cursor;
+/// use std::io::SeekFrom;
+///
+/// use qubit_io::Input;
+/// use qubit_io::Seekable;
+/// use qubit_io::SyncSeekTeeInput;
+///
+/// let mut input = SyncSeekTeeInput::new(Cursor::new(b"abc"), Cursor::new(Vec::new()));
+/// let mut bytes = [0; 2];
+/// assert_eq!(2, input.read(&mut bytes)?);
+/// assert_eq!(&bytes, b"ab");
+/// assert_eq!(1, input.seek_to(SeekFrom::Start(1))?);
+/// assert_eq!(1, input.inner().position());
+/// assert_eq!(1, input.branch().position());
+/// # Ok::<(), std::io::Error>(())
+/// ```
+///
+/// Construction does not align the branch with the source. Seek and mirror
+/// operations are ordered but not transactional; a branch error can leave the
+/// source advanced while the branch is behind.
+///
 /// Operations are ordered and not transactional. A branch write or seek
 /// failure can leave the source advanced while the branch is behind.
 ///

@@ -405,6 +405,30 @@ Object buffering is not a zero-cost move: initialization and transfer may call `
 
 Inputs can prefetch. Inspect `unread()` and `unread_len()` for items not yet delivered. `fill_more` and `fill_until` replenish the window; `ensure_available` reports an error if the requested count cannot be obtained. `into_parts()` performs no I/O and returns the inner input plus its `Buffer`. Process that buffer's `readable()` window before continuing with the inner source.
 
+`fill_until(n)` returns `false` at EOF when fewer than `n` items are available and keeps the unread tail. `ensure_available(n)` instead returns `UnexpectedEof` and consumes that insufficient window. The synchronous and asynchronous input buffers follow the same distinction. Use `fill_until` when truncated data must be retained; after `ensure_available` fails, do not expect the window to remain available.
+
+<!-- example: buffer-eof-recovery profile=core mode=run -->
+```rust
+use std::io;
+use std::io::Cursor;
+use std::io::ErrorKind;
+
+use qubit_io::BufferedInput;
+
+fn main() -> io::Result<()> {
+    let mut retained = BufferedInput::with_capacity(Cursor::new(b"ab"), 3);
+    assert!(!retained.fill_until(3)?);
+    assert_eq!(b"ab", retained.unread());
+
+    let mut consumed = BufferedInput::with_capacity(Cursor::new(b"ab"), 3);
+    let error = consumed.ensure_available(3).expect_err("input is truncated");
+    assert_eq!(ErrorKind::UnexpectedEof, error.kind());
+    assert!(consumed.unread().is_empty());
+    Ok(())
+}
+```
+
+
 A successful output `write_fully` can mean acceptance into a buffer. On normal completion, explicitly `flush` and check the result. `into_parts()` does not flush: it returns the inner output and a `BufferedOutputRecovery` state. `Pending` contains items not reported as written by a normally returning inner call; `Indeterminate` means an inner I/O call panicked and some buffered items may already have taken effect, so blind replay is unsafe. This program splits an unflushed output to show how the caller handles the normal `Pending` case:
 
 <!-- example: buffer profile=core mode=run -->
@@ -502,7 +526,7 @@ Chapter 2 puts the input limit inside the buffer, preventing prefetch beyond two
 
 ### Hasher-based checksums
 
-`ChecksumInput` and `ChecksumOutput` accept a caller-supplied `std::hash::Hasher` and operate only on `u8`. They feed successfully transferred prefixes to the hasher; `checksum()` returns the current `u64`. This example uses `DefaultHasher` to demonstrate the interface, not as a stable cross-version file format or cryptographic digest:
+`ChecksumInput` and `ChecksumOutput` accept a caller-supplied `std::hash::Hasher` and operate only on `u8`. They feed successfully transferred prefixes to the hasher; `checksum()` returns the current `u64`. Each successful non-empty transfer prefix is passed to `Hasher::write` in that operation; the resulting checksum can therefore depend on transfer chunking and the hasher implementation. Empty operations and zero progress do not update the hasher. Use the `Digest` wrappers when the requirement is a content digest whose result is independent of transfer chunk boundaries. This example uses `DefaultHasher` to demonstrate the interface, not as a stable cross-version file format or cryptographic digest:
 
 <!-- example: checksum profile=core mode=run -->
 ```rust
@@ -850,6 +874,8 @@ Explicitly call `flush_async` on async output, and use `close_async` according t
 ## 11. Implement your own streams
 
 ### Start with synchronous adapters
+
+For synchronous streams, `Interrupted` is retried by the aggregate read/write helpers, so it means the current primitive call made no confirmed transfer. If a primitive has already transferred a valid prefix, return `Ok(n)` first and report a later error on a subsequent call. An aggregate operation that later returns an error does not undo successful earlier calls. A domain error with applied or uncertain side effects must not be mapped to retryable `Interrupted` solely to trigger a retry; the adapter or application must choose a policy that accounts for those effects. This synchronous rule does not apply to async traits, where `Interrupted` must be handled internally and must not cross the async boundary.
 
 Chapter 2 contains complete `Records<T>` and `Collected<T>` implementations. Their `T: Clone` bounds reflect their copying strategy, not a universal core-trait requirement. Input implementors provide `type Item` and `read_unchecked`; output implementors provide `type Item`, `write_unchecked`, and `flush`.
 

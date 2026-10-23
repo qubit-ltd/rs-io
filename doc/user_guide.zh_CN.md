@@ -391,7 +391,29 @@ fn main() -> io::Result<()> {
 
 ### 预读、待写数据与所有权恢复
 
-输入可能预读。`unread()`、`unread_len()` 查看尚未交给调用方的元素；`fill_more`、`fill_until` 可以补充缓冲，`ensure_available` 在无法取得所需数量时返回错误。`into_parts()` 不执行 I/O，返回底层输入和 `Buffer`，后者的 `readable()` 是必须先处理的未读窗口。
+输入可能预读。`unread()`、`unread_len()` 查看尚未交给调用方的元素；`fill_more`、`fill_until` 可以补充缓冲，`ensure_available` 在无法取得所需数量时返回错误。`into_parts()` 不执行 I/O，返回底层输入和 `Buffer`，后者的 `readable()` 是必须先处理的未读窗口。`fill_until(n)` 在 EOF 且不足 `n` 项时返回 `false`，并保留未读尾部；`ensure_available(n)` 则返回 `UnexpectedEof` 并消费这个不足窗口。同步与异步输入缓冲遵循相同区别。需要保留截断内容时使用 `fill_until`；`ensure_available` 失败后不要假设窗口仍然存在。
+
+<!-- example: buffer-eof-recovery profile=core mode=run -->
+```rust
+use std::io;
+use std::io::Cursor;
+use std::io::ErrorKind;
+
+use qubit_io::BufferedInput;
+
+fn main() -> io::Result<()> {
+    let mut retained = BufferedInput::with_capacity(Cursor::new(b"ab"), 3);
+    assert!(!retained.fill_until(3)?);
+    assert_eq!(b"ab", retained.unread());
+
+    let mut consumed = BufferedInput::with_capacity(Cursor::new(b"ab"), 3);
+    let error = consumed.ensure_available(3).expect_err("input is truncated");
+    assert_eq!(ErrorKind::UnexpectedEof, error.kind());
+    assert!(consumed.unread().is_empty());
+    Ok(())
+}
+```
+
 
 输出的 `write_fully` 成功可能仅表示进入缓冲。正常结束时先 `flush` 并检查结果；`into_parts()` 不刷新，而是返回底层输出和 `BufferedOutputRecovery` 状态。`Pending` 表示依据正常返回的写入结果尚未报告写出的窗口；`Indeterminate` 表示底层 I/O 调用曾 panic，缓冲中的元素可能已经产生副作用，不能盲目重放。以下程序在未刷新时拆开输出，展示正常 `Pending` 情况下如何接管数据：
 
@@ -490,7 +512,7 @@ fn main() -> io::Result<()> {
 
 ### 基于 Hasher 的校验和
 
-`ChecksumInput`、`ChecksumOutput` 接受调用方提供的 `std::hash::Hasher`，只处理 `u8`。它们将成功传输的字节前缀传给 hasher，`checksum()` 返回当前 `u64` 值。下面用 `DefaultHasher` 演示接口，不将其数值作为稳定的跨版本文件格式或密码学摘要：
+`ChecksumInput`、`ChecksumOutput` 接受调用方提供的 `std::hash::Hasher`，只处理 `u8`。它们将成功传输的字节前缀传给 hasher，`checksum()` 返回当前 `u64` 值。每次成功的非空传输都会将该次前缀传给 `Hasher::write`，因此校验和可能受传输分块和 hasher 实现影响。空操作和零进展不会更新 hasher。若需要不受传输分块影响的内容摘要，请使用 `Digest` 包装器。下面用 `DefaultHasher` 演示接口，不将其数值作为稳定的跨版本文件格式或密码学摘要：
 
 <!-- example: checksum profile=core mode=run -->
 ```rust
@@ -838,6 +860,8 @@ async fn main() -> io::Result<()> {
 ## 11. 实现自己的输入输出流
 
 ### 从同步适配器开始
+
+同步流的聚合读写方法会重试 `Interrupted`，因此该错误表示本次 primitive 调用没有已确认的传输。如果 primitive 已传输了合法前缀，应先返回 `Ok(n)`，再由后续调用报告错误。聚合操作后来返回错误，不会撤销之前成功调用的效果。领域错误若已有副作用或副作用不确定，不应仅为触发重试而映射成可重试的 `Interrupted`；适配层或应用应根据副作用选择策略。此同步规则不适用于异步 trait；异步边界要求在内部处理 `Interrupted`，不能向外返回该错误。
 
 第 2 章给出了完整的 `Records<T>`、`Collected<T>` 实现。它们使用 `T: Clone` 是自身的复制策略，不是核心 trait 的统一要求。实现输入需要 `type Item` 与 `read_unchecked`；实现输出需要 `type Item`、`write_unchecked` 和 `flush`。
 
