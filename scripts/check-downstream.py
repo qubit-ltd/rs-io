@@ -127,7 +127,29 @@ def load_config(config_path: Path) -> tuple[Path, dict[str, Path], list[tuple[Pa
     manifests = []
     for item in data["manifest"]:
         path = (repository_root / item["path"]).resolve()
-        manifests.append((path, item))
+        settings = dict(item)
+        overrides = settings.get("patch_overrides", {})
+        if not isinstance(overrides, dict):
+            raise ValueError(f"patch_overrides must be a table for {path}")
+        resolved_overrides: dict[str, Path] = {}
+        for name, relative_manifest in overrides.items():
+            if name not in expected:
+                raise ValueError(f"unknown patch override {name} for {path}")
+            if not isinstance(relative_manifest, str) or Path(relative_manifest).is_absolute():
+                raise ValueError(f"patch override path for {name} must be relative to repository_root")
+            override_manifest = canonical(repository_root / relative_manifest)
+            try:
+                package = tomllib.loads(override_manifest.read_text(encoding="utf-8"))["package"]
+                package_name = package["name"]
+            except (OSError, tomllib.TOMLDecodeError, KeyError, TypeError) as error:
+                raise ValueError(f"invalid patch override for {name}: {override_manifest}: {error}") from error
+            if package_name != name:
+                raise ValueError(
+                    f"patch override {name} points to package {package_name} at {override_manifest}"
+                )
+            resolved_overrides[name] = override_manifest
+        settings["patch_overrides"] = resolved_overrides
+        manifests.append((path, settings))
     return repository_root, expected, manifests
 
 
@@ -217,8 +239,9 @@ def check_config(
         if not manifest.is_file():
             errors.append(f"missing configured manifest: {manifest}")
             continue
+        manifest_patches = {**expected, **settings.get("patch_overrides", {})}
         try:
-            conflicts = check_patch_conflicts(manifest, expected, workspace_locator)
+            conflicts = check_patch_conflicts(manifest, manifest_patches, workspace_locator)
         except RuntimeError as error:
             errors.append(f"{manifest}: {error}")
             continue
@@ -228,8 +251,8 @@ def check_config(
         for all_features, mode in ((False, "default"), (True, "all-features")):
             required = set(settings.get("required_all_features" if all_features else "required_default", []))
             try:
-                metadata = metadata_runner(manifest, all_features, expected, allow_lock_update)
-                graph_errors = inspect_graph(metadata, manifest, expected, required)
+                metadata = metadata_runner(manifest, all_features, manifest_patches, allow_lock_update)
+                graph_errors = inspect_graph(metadata, manifest, manifest_patches, required)
             except (RuntimeError, ValueError, KeyError, json.JSONDecodeError) as error:
                 errors.append(f"{manifest} [{mode}]: {error}")
                 continue
@@ -239,7 +262,7 @@ def check_config(
                 if Path(package["manifest_path"]).resolve() == manifest
             )
             active = reachable_ids(metadata, root_id)
-            for name in expected:
+            for name in manifest_patches:
                 records = [packages[package_id] for package_id in active if packages[package_id]["name"] == name]
                 if records:
                     record = records[0]

@@ -52,6 +52,7 @@ required_all_features = ["qubit-io", "qubit-budget"]
 path = "rs-fs-testkit/fixtures/s3-contract/Cargo.toml"
 required_default = ["qubit-io", "qubit-budget"]
 required_all_features = ["qubit-io", "qubit-budget"]
+patch_overrides = { "qubit-io" = "rs-io/Cargo.toml" }
 
 [[manifest]]
 path = "rs-local-files/Cargo.toml"

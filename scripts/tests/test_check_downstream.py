@@ -203,6 +203,35 @@ class MetadataGraphTests(unittest.TestCase):
 
 
 class DownstreamCommandTests(unittest.TestCase):
+    def create_override_config(self, root: Path, override: str = "rs-io/Cargo.toml") -> tuple[Path, Path, Path]:
+        scripts = root / "scripts"
+        scripts.mkdir(parents=True)
+        for relative, name in (("rs-io", "qubit-io"), ("rs-budget", "qubit-budget"),
+                               ("rs-fs", "qubit-fs"), ("rs-fs-testkit", "qubit-fs-testkit")):
+            manifest = root / relative / "Cargo.toml"
+            manifest.parent.mkdir(parents=True)
+            manifest.write_text(f'[package]\nname = "{name}"\nversion = "1.0.0"\n', encoding="utf-8")
+        candidate = root / "Cargo.toml"
+        candidate.write_text('[package]\nname = "qubit-io"\nversion = "0.19.0"\n', encoding="utf-8")
+        regular = root / "consumer/Cargo.toml"
+        s3 = root / "s3-contract/Cargo.toml"
+        for manifest, name in ((regular, "consumer"), (s3, "s3-contract")):
+            manifest.parent.mkdir(parents=True)
+            manifest.write_text(f'[package]\nname = "{name}"\nversion = "1.0.0"\n', encoding="utf-8")
+            (manifest.parent / "src").mkdir()
+            (manifest.parent / "src/lib.rs").write_text("", encoding="utf-8")
+        config = scripts / "downstream.toml"
+        config.write_text(
+            '[project]\nrepository_root = "."\nio_manifest = "rs-io/Cargo.toml"\n'
+            'budget_manifest = "rs-budget/Cargo.toml"\n'
+            '[project.local_patches]\nqubit-io = "rs-io/Cargo.toml"\n'
+            'qubit-budget = "rs-budget/Cargo.toml"\nqubit-fs = "rs-fs/Cargo.toml"\n'
+            'qubit-fs-testkit = "rs-fs-testkit/Cargo.toml"\n'
+            '[[manifest]]\npath = "consumer/Cargo.toml"\n'
+            '[[manifest]]\npath = "s3-contract/Cargo.toml"\n'
+            f'patch_overrides = {{ "qubit-io" = "{override}" }}\n', encoding="utf-8")
+        return config, candidate.resolve(), (root / override).resolve()
+
     def test_metadata_command_quotes_all_local_patches_and_lock_policy(self) -> None:
         patches = {
             "qubit-io": Path("/tmp/candidate rs-io/Cargo.toml"),
@@ -370,6 +399,72 @@ class DownstreamCommandTests(unittest.TestCase):
             self.assertEqual([call[1] for call in calls], [False, True])
             self.assertTrue(all(call[2]["qubit-io"] == candidate.resolve() for call in calls))
             self.assertTrue(all(call[3] for call in calls))
+
+    def test_manifest_patch_override_selects_sibling_only_for_s3_entry(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config, candidate, sibling = self.create_override_config(root)
+            calls = []
+
+            def fake_runner(manifest, all_features, patches, _allow_lock_update):
+                calls.append((manifest, all_features, patches["qubit-io"]))
+                root_id = manifest.stem
+                io_id = f"io-{root_id}"
+                return {
+                    "packages": [
+                        {"id": root_id, "name": root_id, "version": "1.0.0", "manifest_path": str(manifest), "source": None},
+                        {"id": io_id, "name": "qubit-io", "version": "0.19.0", "manifest_path": str(patches["qubit-io"]), "source": None},
+                    ],
+                    "resolve": {"nodes": [
+                        {"id": root_id, "deps": [{"pkg": io_id}]}, {"id": io_id, "deps": []},
+                    ]},
+                }
+
+            errors = checker.check_config(
+                config, metadata_runner=fake_runner,
+                workspace_locator=lambda manifest: manifest,
+            )
+            self.assertEqual(errors, [])
+            self.assertEqual([path for path, _, _ in calls], [root / "consumer/Cargo.toml"] * 2 + [root / "s3-contract/Cargo.toml"] * 2)
+            self.assertEqual([patch for _, _, patch in calls], [candidate, candidate, sibling, sibling])
+
+    def test_manifest_patch_override_rejects_missing_and_wrong_package(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            missing_config, _, _ = self.create_override_config(root, "missing/Cargo.toml")
+            with self.assertRaises((FileNotFoundError, ValueError)):
+                checker.load_config(missing_config)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            wrong_config, _, _ = self.create_override_config(root, "rs-budget/Cargo.toml")
+            with self.assertRaises(ValueError):
+                checker.load_config(wrong_config)
+
+    def test_manifest_patch_conflict_uses_override_target(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config, candidate, sibling = self.create_override_config(root)
+            s3_manifest = root / "s3-contract/Cargo.toml"
+            s3_manifest.write_text(
+                '[package]\nname = "s3-contract"\nversion = "1.0.0"\n'
+                '[patch.crates-io]\nqubit-io = { path = ".." }\n', encoding="utf-8")
+
+            def fake_runner(manifest, *_args):
+                if manifest == s3_manifest:
+                    self.fail("metadata must not run after patch conflict")
+                return {
+                    "packages": [{"id": "consumer", "name": "consumer", "version": "1.0.0",
+                                  "manifest_path": str(manifest), "source": None}],
+                    "resolve": {"nodes": [{"id": "consumer", "deps": []}]},
+                }
+
+            errors = checker.check_config(
+                config,
+                metadata_runner=fake_runner,
+                workspace_locator=lambda manifest: manifest,
+            )
+            self.assertTrue(any(str(candidate) in error and str(sibling) in error for error in errors))
 
     def test_allow_lock_update_prints_warning_before_check(self) -> None:
         stderr = io.StringIO()
