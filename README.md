@@ -408,6 +408,8 @@ pinning, and cancellation behavior.
 | Tool | Purpose |
 | --- | --- |
 | `Seekable`, `SeekableInput`, `SeekableOutput` | Synchronous positioning in stream item units |
+| `SeekableByteInput`, `SeekableByteOutput` | Byte streams whose read/write and seek units are bytes |
+| `SeekableCharInput`, `SeekableCharOutput` | Character streams whose read/write and seek units are Unicode scalar values |
 | `PositionGuard` | Restore a saved position; use explicit `restore()` to observe restoration errors |
 | `Streams` | Copy generic item streams; copy, compare, and check equality of standard byte streams |
 | `std_io::ext` | Extend standard I/O with bounded reads, line reads, copying, and position-preserving operations |

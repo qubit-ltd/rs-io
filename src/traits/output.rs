@@ -202,6 +202,81 @@ pub trait Output {
         Ok(written)
     }
 
+    /// Writes all items from an indexed input range.
+    ///
+    /// This method repeatedly calls [`Output::write_unchecked`] until all
+    /// `count` items are accepted. Interrupted writes are retried. A zero
+    /// progress report before the range is complete is converted to
+    /// [`ErrorKind::WriteZero`].
+    ///
+    /// # Parameters
+    ///
+    /// * `input` - Source storage.
+    /// * `index` - Start index inside `input`.
+    /// * `count` - Number of items to write.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` after the requested range has been written completely.
+    ///
+    /// # Errors
+    ///
+    /// Returns the output error reported by the implementation. Returns
+    /// [`ErrorKind::WriteZero`] if the implementation accepts zero items before
+    /// the requested range is complete. Returns [`ErrorKind::InvalidData`] if
+    /// the implementation reports accepting more items than requested.
+    ///
+    /// # Panics
+    ///
+    /// Panics in debug builds if the requested input range does not fit.
+    ///
+    /// # Safety
+    ///
+    /// The caller must guarantee that `index..index + count` is a valid range
+    /// inside `input` and that the addition does not overflow.
+    unsafe fn write_fully_unchecked(&mut self, input: &[Self::Item], index: usize, count: usize) -> Result<()> {
+        debug_assert!(
+            SliceRange::range_fits(input.len(), index, count),
+            "unchecked write-fully range exceeds input buffer"
+        );
+        let mut written = 0;
+        while written < count {
+            let remaining = count - written;
+            // SAFETY: The caller guarantees the original source range is valid;
+            // `written < count`, so this suffix remains inside it.
+            match unsafe { self.write_unchecked(input, index + written, remaining) } {
+                Ok(0) => {
+                    return Err(Error::new(ErrorKind::WriteZero, "failed to write whole output range"));
+                }
+                Ok(progress) => {
+                    validate_write_count(progress, remaining)?;
+                    written += progress;
+                }
+                Err(error) if error.kind() == ErrorKind::Interrupted => {}
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(())
+    }
+
+    /// Writes all items from the full input slice.
+    ///
+    /// # Parameters
+    /// - `input`: Source items.
+    ///
+    /// # Returns
+    /// `Ok(())` after every item in `input` has been written.
+    ///
+    /// # Errors
+    /// Returns the output error reported by the implementation. Returns
+    /// [`ErrorKind::WriteZero`] if no progress is made before all items are
+    /// accepted, or [`ErrorKind::InvalidData`] for impossible reported counts.
+    #[inline(always)]
+    fn write_fully(&mut self, input: &[Self::Item]) -> Result<()> {
+        // SAFETY: The full input slice is a valid source range.
+        unsafe { self.write_fully_unchecked(input, 0, input.len()) }
+    }
+
     /// Writes items from multiple buffers in list order.
     ///
     /// The buffers form one logical sequence in list order. `Ok(n)` means that
@@ -319,81 +394,6 @@ pub trait Output {
         let count = self.write(buffer)?;
         validate_write_count(count, buffer.len())?;
         Ok(count)
-    }
-
-    /// Writes all items from an indexed input range.
-    ///
-    /// This method repeatedly calls [`Output::write_unchecked`] until all
-    /// `count` items are accepted. Interrupted writes are retried. A zero
-    /// progress report before the range is complete is converted to
-    /// [`ErrorKind::WriteZero`].
-    ///
-    /// # Parameters
-    ///
-    /// * `input` - Source storage.
-    /// * `index` - Start index inside `input`.
-    /// * `count` - Number of items to write.
-    ///
-    /// # Returns
-    ///
-    /// `Ok(())` after the requested range has been written completely.
-    ///
-    /// # Errors
-    ///
-    /// Returns the output error reported by the implementation. Returns
-    /// [`ErrorKind::WriteZero`] if the implementation accepts zero items before
-    /// the requested range is complete. Returns [`ErrorKind::InvalidData`] if
-    /// the implementation reports accepting more items than requested.
-    ///
-    /// # Panics
-    ///
-    /// Panics in debug builds if the requested input range does not fit.
-    ///
-    /// # Safety
-    ///
-    /// The caller must guarantee that `index..index + count` is a valid range
-    /// inside `input` and that the addition does not overflow.
-    unsafe fn write_fully_unchecked(&mut self, input: &[Self::Item], index: usize, count: usize) -> Result<()> {
-        debug_assert!(
-            SliceRange::range_fits(input.len(), index, count),
-            "unchecked write-fully range exceeds input buffer"
-        );
-        let mut written = 0;
-        while written < count {
-            let remaining = count - written;
-            // SAFETY: The caller guarantees the original source range is valid;
-            // `written < count`, so this suffix remains inside it.
-            match unsafe { self.write_unchecked(input, index + written, remaining) } {
-                Ok(0) => {
-                    return Err(Error::new(ErrorKind::WriteZero, "failed to write whole output range"));
-                }
-                Ok(progress) => {
-                    validate_write_count(progress, remaining)?;
-                    written += progress;
-                }
-                Err(error) if error.kind() == ErrorKind::Interrupted => {}
-                Err(error) => return Err(error),
-            }
-        }
-        Ok(())
-    }
-
-    /// Writes all items from the full input slice.
-    ///
-    /// # Parameters
-    /// - `input`: Source items.
-    ///
-    /// # Returns
-    /// `Ok(())` after every item in `input` has been written.
-    ///
-    /// # Errors
-    /// Returns the output error reported by the implementation. Returns
-    /// [`ErrorKind::WriteZero`] if no progress is made before all items are
-    /// accepted, or [`ErrorKind::InvalidData`] for impossible reported counts.
-    #[inline(always)]
-    fn write_fully(&mut self, input: &[Self::Item]) -> Result<()> {
-        // SAFETY: The full input slice is a valid source range.
-        unsafe { self.write_fully_unchecked(input, 0, input.len()) }
     }
 
     /// Flushes any internally buffered items.

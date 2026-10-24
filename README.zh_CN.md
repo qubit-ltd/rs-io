@@ -374,6 +374,8 @@ async fn main() -> io::Result<()> {
 | 工具 | 用途 |
 | --- | --- |
 | `Seekable`、`SeekableInput`、`SeekableOutput` | 同步定位，位置以流元素为单位 |
+| `SeekableByteInput`、`SeekableByteOutput` | 可定位字节流，读写和定位均以字节为单位 |
+| `SeekableCharInput`、`SeekableCharOutput` | 可定位字符流，读写和定位均以 Unicode 标量值为单位 |
 | `PositionGuard` | 恢复保存的位置；需要检查恢复错误时显式调用 `restore()` |
 | `Streams` | 复制泛型元素流；复制、比较标准字节流及判断其内容是否相等 |
 | `std_io::ext` | 为标准库 I/O 增加有上限的读取、行读取、复制及保留当前位置的操作 |

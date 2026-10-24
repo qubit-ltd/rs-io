@@ -650,6 +650,15 @@ A branch seek error is returned directly and is not latched in `branch_error()`.
 
 `Seekable` measures positions using its associated `Unit`. `SeekableInput` and `SeekableOutput` combine stream and matching-unit seek capabilities without implementing storage. Standard `Seek` integrations use `u8`; object streams may use records. Do not assume every `SeekFrom` offset measures bytes.
 
+For byte-only APIs, use `SeekableByteInput` or `SeekableByteOutput`; both fix
+`Item` and `Unit` to `u8`. For character APIs, `SeekableCharInput` and
+`SeekableCharOutput` fix both to `char`. Matching streams implement these traits
+automatically, including unsized streams. They work as generic bounds, opaque
+return types, or trait objects such as `Box<dyn SeekableByteInput>`, without
+repeating associated types. Character positions count Unicode scalar values,
+not encoded bytes or grapheme clusters; the traits do not encode or decode
+text or promise constant-time seeking.
+
 `PositionGuard` captures the position on creation. Explicit `restore()` lets you observe restoration errors; `dismiss()` disables automatic restoration. Drop-time failure is neither returned nor logged. Buffered input seeking accounts for unread items in its logical position. General buffered output seeks drain pending items first; a `Current(0)` query does not flush.
 
 This independent program reads the beginning temporarily and restores the position, then checks an oversized generic copy:

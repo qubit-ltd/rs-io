@@ -171,88 +171,6 @@ pub trait Input {
         Ok(read)
     }
 
-    /// Reads items into multiple buffers in list order.
-    ///
-    /// The buffers form one logical sequence in list order. `Ok(n)` means that
-    /// the first `n` items of that sequence were read, and `n` must not exceed
-    /// the total requested length. A read may make short progress and need not
-    /// fill every buffer; `n` may cross a buffer boundary. For a non-empty
-    /// request, `Ok(0)` means that no data was available in this call or that
-    /// the stream reached its end; it does not promise permanent EOF.
-    ///
-    /// The default implementation skips empty buffers and calls [`Input::read`]
-    /// once on the first non-empty buffer. It does not continue to later
-    /// buffers after a short read. This is only the default strategy, not a
-    /// limit on overrides. Empty lists and lists whose buffers are all empty
-    /// return `Ok(0)` without performing I/O. Interrupted errors are not
-    /// retried. An error does not undo progress from earlier independent calls.
-    /// An override must uphold the sequence and count contract itself; this
-    /// trait does not validate counts returned by arbitrary overrides. Use
-    /// UFCS when a standard I/O method with the same name is also in scope.
-    ///
-    /// # Parameters
-    ///
-    /// - `buffers`: Mutable destination slices, in the order to read them.
-    ///
-    /// # Returns
-    ///
-    /// The number of items read from the start of the logical sequence.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error from the input operation. The default implementation
-    /// returns [`ErrorKind::InvalidData`] if the selected buffer reports more
-    /// items than it can hold. The standard I/O blanket implementation also
-    /// returns [`ErrorKind::InvalidInput`] if the total length overflows,
-    /// [`ErrorKind::OutOfMemory`] if preparing descriptors fails, or
-    /// [`ErrorKind::InvalidData`] if the standard reader reports more than the
-    /// total capacity. A custom override is responsible for its own checks.
-    ///
-    /// # Examples
-    ///
-    /// This example uses a non-byte stream through a trait object. The default
-    /// method reads only the first non-empty slice; an override may use more.
-    /// For vectored overrides, a count can cross a slice boundary: if two
-    /// destination slices each have length 2, `Ok(3)` means the first slice
-    /// and the first item of the second slice were filled.
-    ///
-    /// ```
-    /// use qubit_io::Input;
-    ///
-    /// struct Characters;
-    /// impl Input for Characters {
-    ///     type Item = char;
-    ///     unsafe fn read_unchecked(
-    ///         &mut self,
-    ///         output: &mut [char],
-    ///         index: usize,
-    ///         count: usize,
-    ///     ) -> std::io::Result<usize> {
-    ///         if count == 0 {
-    ///             return Ok(0);
-    ///         }
-    ///         output[index] = '甲';
-    ///         Ok(1)
-    ///     }
-    /// }
-    /// let mut input = Characters;
-    /// let input: &mut dyn Input<Item = char> = &mut input;
-    /// let mut first = ['!'; 2];
-    /// let mut second = ['?'; 2];
-    /// assert_eq!(Input::read_vectored(input, &mut [&mut first, &mut second])?, 1);
-    /// assert_eq!(first, ['甲', '!']);
-    /// assert_eq!(second, ['?', '?']);
-    /// # Ok::<(), std::io::Error>(())
-    /// ```
-    fn read_vectored(&mut self, buffers: &mut [&mut [Self::Item]]) -> Result<usize> {
-        let Some(buffer) = buffers.iter_mut().find(|buffer| !buffer.is_empty()) else {
-            return Ok(0);
-        };
-        let count = self.read(buffer)?;
-        validate_read_count(count, buffer.len())?;
-        Ok(count)
-    }
-
     /// Reads items into an indexed output range until it is full or EOF is
     /// reached.
     ///
@@ -351,5 +269,87 @@ pub trait Input {
                 "failed to fill whole input buffer",
             ))
         }
+    }
+
+    /// Reads items into multiple buffers in list order.
+    ///
+    /// The buffers form one logical sequence in list order. `Ok(n)` means that
+    /// the first `n` items of that sequence were read, and `n` must not exceed
+    /// the total requested length. A read may make short progress and need not
+    /// fill every buffer; `n` may cross a buffer boundary. For a non-empty
+    /// request, `Ok(0)` means that no data was available in this call or that
+    /// the stream reached its end; it does not promise permanent EOF.
+    ///
+    /// The default implementation skips empty buffers and calls [`Input::read`]
+    /// once on the first non-empty buffer. It does not continue to later
+    /// buffers after a short read. This is only the default strategy, not a
+    /// limit on overrides. Empty lists and lists whose buffers are all empty
+    /// return `Ok(0)` without performing I/O. Interrupted errors are not
+    /// retried. An error does not undo progress from earlier independent calls.
+    /// An override must uphold the sequence and count contract itself; this
+    /// trait does not validate counts returned by arbitrary overrides. Use
+    /// UFCS when a standard I/O method with the same name is also in scope.
+    ///
+    /// # Parameters
+    ///
+    /// - `buffers`: Mutable destination slices, in the order to read them.
+    ///
+    /// # Returns
+    ///
+    /// The number of items read from the start of the logical sequence.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error from the input operation. The default implementation
+    /// returns [`ErrorKind::InvalidData`] if the selected buffer reports more
+    /// items than it can hold. The standard I/O blanket implementation also
+    /// returns [`ErrorKind::InvalidInput`] if the total length overflows,
+    /// [`ErrorKind::OutOfMemory`] if preparing descriptors fails, or
+    /// [`ErrorKind::InvalidData`] if the standard reader reports more than the
+    /// total capacity. A custom override is responsible for its own checks.
+    ///
+    /// # Examples
+    ///
+    /// This example uses a non-byte stream through a trait object. The default
+    /// method reads only the first non-empty slice; an override may use more.
+    /// For vectored overrides, a count can cross a slice boundary: if two
+    /// destination slices each have length 2, `Ok(3)` means the first slice
+    /// and the first item of the second slice were filled.
+    ///
+    /// ```
+    /// use qubit_io::Input;
+    ///
+    /// struct Characters;
+    /// impl Input for Characters {
+    ///     type Item = char;
+    ///     unsafe fn read_unchecked(
+    ///         &mut self,
+    ///         output: &mut [char],
+    ///         index: usize,
+    ///         count: usize,
+    ///     ) -> std::io::Result<usize> {
+    ///         if count == 0 {
+    ///             return Ok(0);
+    ///         }
+    ///         output[index] = '甲';
+    ///         Ok(1)
+    ///     }
+    /// }
+    /// let mut input = Characters;
+    /// let input: &mut dyn Input<Item = char> = &mut input;
+    /// let mut first = ['!'; 2];
+    /// let mut second = ['?'; 2];
+    /// assert_eq!(Input::read_vectored(input, &mut [&mut first, &mut second])?, 1);
+    /// assert_eq!(first, ['甲', '!']);
+    /// assert_eq!(second, ['?', '?']);
+    /// # Ok::<(), std::io::Error>(())
+    /// ```
+    fn read_vectored(&mut self, buffers: &mut [&mut [Self::Item]]) -> Result<usize> {
+        let Some(buffer) = buffers.iter_mut().find(|buffer| !buffer.is_empty()) else {
+            return Ok(0);
+        };
+        let count = self.read(buffer)?;
+        validate_read_count(count, buffer.len())?;
+        Ok(count)
     }
 }

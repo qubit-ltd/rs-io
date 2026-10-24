@@ -640,6 +640,14 @@ seek 也要选对语义：普通 `TeeInput` 仅定位来源；`TeeInput::with_sy
 
 `Seekable` 以关联类型 `Unit` 为位置单位。`SeekableInput`、`SeekableOutput` 组合流与匹配单位的定位能力，不额外实现存储。标准 `Seek` 接入时单位为 `u8`；对象流的单位可以是记录，不能把传入的 `SeekFrom` 一概理解成字节偏移。
 
+只处理字节时，可使用 `SeekableByteInput`、`SeekableByteOutput`，它们将
+`Item` 和 `Unit` 都固定为 `u8`。字符流对应 `SeekableCharInput`、
+`SeekableCharOutput`，两个关联类型都固定为 `char`。满足约束的流（包括动态大小的流）
+会自动实现这些接口。它们可用于泛型约束、`impl Trait` 返回值，或
+`Box<dyn SeekableByteInput>` 这样的 trait object，无须重复指定关联类型。
+字符位置按 Unicode 标量值计数，不是编码后的字节数或字素簇数；这些接口不负责文本
+编解码，也不保证定位具有常数时间复杂度。
+
 `PositionGuard` 记录创建时的位置；显式 `restore()` 可以检查恢复错误，`dismiss()` 放弃自动恢复。析构恢复失败不会报错或记录日志。缓冲输入定位会按逻辑位置处理未读窗口；缓冲输出的一般定位会先排空待写数据，`Current(0)` 查询则不刷新。
 
 下面的独立程序先临时读取开头并恢复位置，再验证泛型有界复制的超限行为：
