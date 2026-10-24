@@ -179,7 +179,7 @@ where
     ///
     /// # Returns
     ///
-    /// Returns the number of source items read and mirrored.
+    /// Returns the number of items read from the primary source.
     ///
     /// # Errors
     ///

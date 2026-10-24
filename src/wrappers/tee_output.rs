@@ -170,7 +170,7 @@ where
     ///
     /// # Returns
     ///
-    /// Returns the number of primary items written and mirrored.
+    /// Returns the number of items accepted by the primary output.
     ///
     /// # Errors
     ///
