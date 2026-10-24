@@ -575,7 +575,9 @@ where
         BufferedOutputRecovery::Pending(buffer) => {
             assert!(buffer.is_empty(), "successful flush should drain pending bytes")
         }
-        BufferedOutputRecovery::Indeterminate(_) => panic!("successful I/O must recover as pending"),
+        BufferedOutputRecovery::Indeterminate(_) => {
+            panic!("successful I/O must recover as pending")
+        }
     }
     inner
 }
@@ -945,7 +947,9 @@ fn test_flush_error_leaves_output_available_for_parts_recovery() {
     assert_eq!(b"", writer.output.as_slice());
     match recovery {
         BufferedOutputRecovery::Pending(buffer) => assert_eq!(b"abc", buffer.readable()),
-        BufferedOutputRecovery::Indeterminate(_) => panic!("ordinary write errors remain retryable"),
+        BufferedOutputRecovery::Indeterminate(_) => {
+            panic!("ordinary write errors remain retryable")
+        }
     }
 }
 
