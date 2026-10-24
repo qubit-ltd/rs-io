@@ -1,8 +1,8 @@
 # Qubit IO User Guide
 
-[简体中文](user_guide.zh_CN.md) | [Project overview](../README.md) | [API documentation](https://docs.rs/qubit-io/0.19.0/qubit_io/)
+[简体中文](user_guide.zh_CN.md) | [Project overview](../README.md) | [API documentation](https://docs.rs/qubit-io/0.19.1/qubit_io/)
 
-This guide is for Rust developers processing streams of bytes, characters, or business objects, and library authors implementing new streams. It describes the current `qubit-io 0.19.0` codebase and requires Rust 1.94 or later, using the Rust 2024 edition.
+This guide is for Rust developers processing streams of bytes, characters, or business objects, and library authors implementing new streams. It describes the current `qubit-io 0.19.1` codebase and requires Rust 1.94 or later, using the Rust 2024 edition.
 
 ## Contents
 
@@ -45,7 +45,7 @@ Create a Rust 2024 binary project and add this dependency to `Cargo.toml`:
 
 ```toml
 [dependencies]
-qubit-io = "0.19.0"
+qubit-io = "0.19.1"
 ```
 
 The default feature set is empty; no async runtime is needed. Save the complete program below as `src/main.rs` and run `cargo run`. Its in-memory source and sink are an introductory exercise. Passing assertions and exit code 0 indicate success; the program prints nothing.
@@ -554,7 +554,7 @@ For fixed-output digests such as SHA-256, enable `digest` and add a compatible a
 
 ```toml
 [dependencies]
-qubit-io = { version = "0.19.0", features = ["digest"] }
+qubit-io = { version = "0.19.1", features = ["digest"] }
 sha2 = "0.11"
 ```
 
@@ -762,7 +762,7 @@ Use these dependencies in an independent project's `Cargo.toml`. The application
 
 ```toml
 [dependencies]
-qubit-io = { version = "0.19.0", features = ["tokio"] }
+qubit-io = { version = "0.19.1", features = ["tokio"] }
 tokio = { version = "1", features = ["rt", "macros", "io-util"] }
 ```
 
@@ -818,7 +818,7 @@ In another independent project, use:
 
 ```toml
 [dependencies]
-qubit-io = { version = "0.19.0", features = ["futures-io"] }
+qubit-io = { version = "0.19.1", features = ["futures-io"] }
 futures = "0.3"
 ```
 
@@ -948,4 +948,4 @@ An always-ready memory stream need not manufacture `Pending`. Network streams sh
 | Bidirectional futures-io bridges | Async byte streams | `futures-io` |
 | Generic copy utilities | `Clone + Default` | Synchronous `Streams` |
 
-Continue with the [API documentation](https://docs.rs/qubit-io/0.19.0/qubit_io/) or return to the [project overview](../README.md). The Chinese counterpart is the [简体中文用户手册](user_guide.zh_CN.md).
+Continue with the [API documentation](https://docs.rs/qubit-io/0.19.1/qubit_io/) or return to the [project overview](../README.md). The Chinese counterpart is the [简体中文用户手册](user_guide.zh_CN.md).

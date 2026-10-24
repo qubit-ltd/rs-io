@@ -1,8 +1,8 @@
 # Qubit IO 用户手册
 
-[English](user_guide.md) | [项目介绍](../README.zh_CN.md) | [API 文档](https://docs.rs/qubit-io/0.19.0/qubit_io/)
+[English](user_guide.md) | [项目介绍](../README.zh_CN.md) | [API 文档](https://docs.rs/qubit-io/0.19.1/qubit_io/)
 
-本手册面向需要处理字节、字符或业务对象流的 Rust 开发者，以及需要扩展流实现的库作者。内容以 `qubit-io 0.19.0` 当前代码为准，要求 Rust 1.94 或更新版本，使用 Rust 2024 edition。
+本手册面向需要处理字节、字符或业务对象流的 Rust 开发者，以及需要扩展流实现的库作者。内容以 `qubit-io 0.19.1` 当前代码为准，要求 Rust 1.94 或更新版本，使用 Rust 2024 edition。
 
 ## 目录
 
@@ -45,7 +45,7 @@ Input<Item = Sale> → 业务处理 → Output<Item = CategoryRevenue>
 
 ```toml
 [dependencies]
-qubit-io = "0.19.0"
+qubit-io = "0.19.1"
 ```
 
 默认 feature 为空，不需要异步运行时。将下列完整程序保存为 `src/main.rs`，运行 `cargo run`。程序使用内存来源和接收端作为入门练习；断言全部通过且退出码为 0 即表示成功，不产生终端输出。
@@ -540,7 +540,7 @@ fn main() -> io::Result<()> {
 
 ```toml
 [dependencies]
-qubit-io = { version = "0.19.0", features = ["digest"] }
+qubit-io = { version = "0.19.1", features = ["digest"] }
 sha2 = "0.11"
 ```
 
@@ -751,7 +751,7 @@ fn main() -> io::Result<()> {
 
 ```toml
 [dependencies]
-qubit-io = { version = "0.19.0", features = ["tokio"] }
+qubit-io = { version = "0.19.1", features = ["tokio"] }
 tokio = { version = "1", features = ["rt", "macros", "io-util"] }
 ```
 
@@ -807,7 +807,7 @@ async fn main() -> io::Result<()> {
 
 ```toml
 [dependencies]
-qubit-io = { version = "0.19.0", features = ["futures-io"] }
+qubit-io = { version = "0.19.1", features = ["futures-io"] }
 futures = "0.3"
 ```
 
@@ -937,4 +937,4 @@ async fn main() -> io::Result<()> {
 | futures-io 双向桥接 | 异步字节流 | `futures-io` |
 | 泛型复制工具 | `Clone + Default` | 同步 `Streams` |
 
-接下来可查阅[API 文档](https://docs.rs/qubit-io/0.19.0/qubit_io/)，或回到[项目介绍](../README.zh_CN.md)。本手册的英文版本见 [English user guide](user_guide.md)。
+接下来可查阅[API 文档](https://docs.rs/qubit-io/0.19.1/qubit_io/)，或回到[项目介绍](../README.zh_CN.md)。本手册的英文版本见 [English user guide](user_guide.md)。
