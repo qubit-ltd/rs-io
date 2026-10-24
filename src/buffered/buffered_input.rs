@@ -994,15 +994,30 @@ where
     ///
     /// Returns [`ErrorKind::InvalidInput`] if a [`SeekFrom::Current`] offset
     /// cannot be adjusted by the unread buffered item count. Returns any seek
-    /// error produced by the wrapped reader.
+    /// error produced by the wrapped reader. If an in-window seek fails while
+    /// querying the wrapped position, the buffered cursor is restored.
     pub fn seek_to(&mut self, position: SeekFrom) -> Result<u64>
     where
         I: SeekableInput,
     {
         match position {
             SeekFrom::Current(offset) => {
+                let previous_cursor = self.buffer.position();
                 if self.seek_within_buffer(offset) {
-                    return self.stream_position();
+                    let result = self.stream_position();
+                    if result.is_err() {
+                        let current_cursor = self.buffer.position();
+                        // SAFETY: Only the cursor changed within the same retained window;
+                        // restoring the prior cursor stays inside its unchanged bounds.
+                        unsafe {
+                            if current_cursor > previous_cursor {
+                                self.buffer.rewind(current_cursor - previous_cursor);
+                            } else {
+                                self.buffer.consume(previous_cursor - current_cursor);
+                            }
+                        }
+                    }
+                    return result;
                 }
                 let position = self.seek_relative_slow(offset)?;
                 self.discard_buffer();

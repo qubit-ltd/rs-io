@@ -809,6 +809,43 @@ struct InconsistentPositionReader {
     position: u64,
 }
 
+struct RejectingCurrentSeekReader {
+    data: Vec<u8>,
+    position: usize,
+}
+
+impl RejectingCurrentSeekReader {
+    fn new(data: &[u8]) -> Self {
+        Self {
+            data: data.to_vec(),
+            position: 0,
+        }
+    }
+}
+
+impl Read for RejectingCurrentSeekReader {
+    fn read(&mut self, output: &mut [u8]) -> std::io::Result<usize> {
+        let count = output.len().min(self.data.len() - self.position);
+        output[..count].copy_from_slice(&self.data[self.position..self.position + count]);
+        self.position += count;
+        Ok(count)
+    }
+}
+
+impl Seek for RejectingCurrentSeekReader {
+    fn seek(&mut self, position: SeekFrom) -> std::io::Result<u64> {
+        match position {
+            SeekFrom::Current(_) => Err(Error::other("current seek rejected")),
+            SeekFrom::Start(position) => {
+                self.position = usize::try_from(position)
+                    .map_err(|_| Error::new(ErrorKind::InvalidInput, "position exceeds usize"))?;
+                Ok(position)
+            }
+            SeekFrom::End(_) => Err(Error::new(ErrorKind::Unsupported, "end seek unsupported")),
+        }
+    }
+}
+
 impl InconsistentPositionReader {
     fn new(data: &[u8]) -> Self {
         Self {
@@ -1413,6 +1450,44 @@ fn test_seek_current_within_buffer_preserves_prefetched_bytes() {
     assert_eq!(3, position);
     assert_eq!(1, input.inner().seek_calls);
     assert_eq!(b"d", unread_units(&input).as_slice());
+}
+
+#[test]
+fn test_seek_window_failure_preserves_unread() {
+    for (consume_count, offset, expected_next) in [(1, 1, 2), (2, -1, 3)] {
+        let mut input = BufferedInput::with_capacity(RejectingCurrentSeekReader::new(&[1, 2, 3, 4, 5]), 5);
+        assert!(input.fill_more().expect("initial refill should succeed"));
+        let mut consumed = vec![0; consume_count];
+        input
+            .read_exactly(&mut consumed)
+            .expect("buffered bytes should be consumed");
+
+        let before = unread_units(&input);
+        let error = input.seek_to(SeekFrom::Current(offset)).expect_err("query must fail");
+        assert_eq!(ErrorKind::Other, error.kind());
+        assert_eq!(before, unread_units(&input));
+        let mut next = [0];
+        input
+            .read_exactly(&mut next)
+            .expect("buffered byte must remain readable");
+        assert_eq!([expected_next], next);
+    }
+
+    for (consume_count, offset) in [(1, 1), (2, -1)] {
+        let mut input = BufferedInput::with_capacity(InconsistentPositionReader::new(&[1, 2, 3, 4, 5]), 5);
+        assert!(input.fill_more().expect("initial refill should succeed"));
+        let mut consumed = vec![0; consume_count];
+        input
+            .read_exactly(&mut consumed)
+            .expect("buffered bytes should be consumed");
+
+        let before = unread_units(&input);
+        let error = input
+            .seek_to(SeekFrom::Current(offset))
+            .expect_err("inconsistent position must fail");
+        assert_eq!(ErrorKind::InvalidData, error.kind());
+        assert_eq!(before, unread_units(&input));
+    }
 }
 
 #[test]
