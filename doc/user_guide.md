@@ -939,4 +939,4 @@ An always-ready memory stream need not manufacture `Pending`. Network streams sh
 | Bidirectional futures-io bridges | Async byte streams | `futures-io` |
 | Generic copy utilities | `Clone + Default` | Synchronous `Streams` |
 
-Continue with the [versioned API documentation](https://docs.rs/qubit-io/0.19.0/qubit_io/) or return to the [project overview](../README.md). The Chinese counterpart is the [简体中文用户手册](user_guide.zh_CN.md).
+Continue with the [API documentation](https://docs.rs/qubit-io/0.19.0/qubit_io/) or return to the [project overview](../README.md). The Chinese counterpart is the [简体中文用户手册](user_guide.zh_CN.md).

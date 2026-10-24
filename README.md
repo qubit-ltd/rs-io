@@ -45,12 +45,6 @@ adapter or digest dependency.
 qubit-io = "0.19"
 ```
 
-For development against an unpublished checkout, use a local `path` dependency
-pointing to this repository and keep the matching `version` requirement, for
-example `qubit-io = { path = "../rs-io", version = "0.19" }` from a sibling
-checkout. The path form is for workspace development; published consumers
-should use the Crates.io dependency above.
-
 ## Quick start: process business records
 
 Consider a sales pipeline that emits category revenue records. Encoding every
@@ -295,7 +289,7 @@ Tee wrappers preserve progress already reported by the primary stream. An
 three `into_parts()` methods now return `(primary, branch, error)`. A branch
 failure does not roll back the primary, so do not blindly replay its prefix.
 The [user guide](doc/user_guide.md#8-mirror-input-and-output) covers this
-migration and recovery boundary.
+recovery boundary.
 
 Wrapper order determines what is observed. A counter outside an input buffer
 counts items consumed by the algorithm; a counter inside it also counts

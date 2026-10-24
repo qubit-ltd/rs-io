@@ -929,4 +929,4 @@ async fn main() -> io::Result<()> {
 | futures-io 双向桥接 | 异步字节流 | `futures-io` |
 | 泛型复制工具 | `Clone + Default` | 同步 `Streams` |
 
-接下来可查阅[当前版本 API 文档](https://docs.rs/qubit-io/0.19.0/qubit_io/)，或回到[项目介绍](../README.zh_CN.md)。本手册的英文版本见 [English user guide](user_guide.md)。
+接下来可查阅[API 文档](https://docs.rs/qubit-io/0.19.0/qubit_io/)，或回到[项目介绍](../README.zh_CN.md)。本手册的英文版本见 [English user guide](user_guide.md)。
