@@ -373,7 +373,7 @@ fn main() -> io::Result<()> {
 }
 ```
 
-`StdRead`、`StdWrite` 提供 `get_ref`、`get_mut`、`into_inner`，在内部流实现字节单位的 `Seekable` 时也转发标准 `Seek`。转换时只构造包装器，不分配、不传输数据、不刷新或关闭。它们的标准向量方法会转发给内部的 `read_vectored` 或 `write_vectored` 覆写；实际能否散布/聚集取决于该实现和平台。非空向量调用可能为描述符临时分配内存，但不会复制载荷来合并切片。总长度溢出会在内部 I/O 调用前返回 `InvalidInput`，描述符分配失败会在调用前返回 `OutOfMemory`；计数超过总容量则在调用后返回 `InvalidData`，不会撤销底层副作用。普通状态包装器则可能使用 trait 默认的“只处理首个非空切片”策略。
+`StdRead`、`StdWrite` 提供 `get_ref`、`get_mut`、`into_inner`，在内部流实现字节单位的 `Seekable` 时也转发标准 `Seek`。转换时只构造包装器，不分配、不传输数据、不刷新或关闭。它们的标准向量方法会转发给内部的 `read_vectored` 或 `write_vectored` 覆写；实际能否散布/聚集取决于该实现和平台。恰好一个描述符时桥接使用栈上存储；多个描述符可能为临时描述符分配内存，底层实现也可能自行分配。总长度溢出会在内部 I/O 调用前返回 `InvalidInput`，多描述符准备失败会在调用前返回 `OutOfMemory`；计数超过总容量则在调用后返回 `InvalidData`，不会撤销底层副作用。普通状态包装器则可能使用 trait 默认的“只处理首个非空切片”策略。
 
 动态分发时，借用的 `dyn Input<Item = u8>` 可先放进 `InputRef`，拥有的 boxed trait object 使用 `BoxInput`；输出分别使用 `OutputRef`、`BoxOutput`。这些适配器也适用于对象流，但转换成标准 `Read`、`Write` 仍只允许 `u8`。
 
@@ -928,7 +928,7 @@ assert_eq!(b"ok", output.as_ref().get_ref().pending());
 
 `InputRef`/`OutputRef` 用于同步借用；拥有的异步 boxed 边界可使用 `BoxAsyncInput`、`BoxAsyncOutput`。已经固定的值应继续保持其固定状态，不应为取得所有权而移动底层 `!Unpin` 值。
 
-一次底层 poll 返回 `Pending` 或错误时不能传输新元素；但 `ReadFullyFuture`、`ReadExactFuture`、`WriteFullyFuture` 等聚合 future 可能已在此前的底层调用中取得进度。需要取消并恢复时，先保留具名 future，在丢弃前读取 `items_read()` 或 `items_written()`；读取进度不是协议解析状态，应用仍要维护消息或批次状态，不能从头重试并假设没有副作用。
+一次底层 poll 返回 `Pending` 或错误时不能传输新元素；但 `ReadFullyFuture`、`ReadExactFuture`、`WriteFullyFuture` 等聚合 future 可能已在此前的底层调用中取得进度。库提供的 future 和缓冲 refill/drain 辅助入口会将安全 poll 覆写返回的 `WouldBlock`、`Interrupted` 规范化为 `InvalidData`，并在原因链中保留原错误；它们不会重试，也不会撤销已有副作用。自定义覆写仍须正确处理就绪状态和中断。需要取消并恢复时，先保留具名 future，在丢弃前读取 `items_read()` 或 `items_written()`；读取进度不是协议解析状态，应用仍要维护消息或批次状态，不能从头重试并假设没有副作用。
 
 异步摘要还提供 `AsyncDigestInput::<_, D>::digest_all(input.as_mut())`，接收 `Pin<&mut I>`，返回 `DigestAllFuture`。它在多次 poll 间保留状态，每次 poll 最多进行 64 次成功读取后让出执行机会；取消会丢弃部分摘要，输入位置保留。完成后再次 poll 会 panic。异步摘要包装器支持底层 `!Unpin`；获取快照可通过共享引用，消费型 `finalize()` 则需要包装器所有权。
 
