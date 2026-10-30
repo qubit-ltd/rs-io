@@ -82,8 +82,8 @@ fn test_vectored_forward_box_output_preserves_empty_list_error() {
 }
 
 struct CharOutput {
-    items: Vec<char>,
-    flushed: bool,
+    items: Rc<RefCell<Vec<char>>>,
+    flushed: Rc<Cell<bool>>,
 }
 
 impl Output for CharOutput {
@@ -94,38 +94,62 @@ impl Output for CharOutput {
     }
 
     unsafe fn write_unchecked(&mut self, input: &[char], index: usize, count: usize) -> io::Result<usize> {
-        self.items.extend_from_slice(&input[index..index + count]);
+        self.items.borrow_mut().extend_from_slice(&input[index..index + count]);
         Ok(count)
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        self.flushed = true;
+        self.flushed.set(true);
         Ok(())
     }
 }
 
 #[test]
 fn test_box_output_forwards_trait_object_output() {
+    let items = Rc::new(RefCell::new(Vec::new()));
+    let flushed = Rc::new(Cell::new(false));
     let inner: Box<dyn Output<Item = char>> = Box::new(CharOutput {
-        items: Vec::new(),
-        flushed: false,
+        items: Rc::clone(&items),
+        flushed: Rc::clone(&flushed),
     });
     let mut output = BoxOutput::new(inner);
 
     assert!(output.is_buffered());
     assert!(output.get_ref().is_buffered());
     assert!(output.get_mut().is_buffered());
-    // SAFETY: `['a', 'b'][1..2]` is a valid source range.
+    assert!(items.borrow().is_empty());
+    assert!(!flushed.get());
+
+    // SAFETY: The source range 1..2 is valid.
     assert_eq!(
         1,
         unsafe { output.write_unchecked(&['a', 'b'], 1, 1) }.expect("unchecked write should succeed")
     );
+    assert_eq!(*items.borrow(), ['b'], "unchecked write must reach the sink");
+
     assert_eq!(1, output.write(&['c']).expect("write should succeed"));
-    // SAFETY: `['d', 'e'][0..1]` is a valid source range.
+    assert_eq!(*items.borrow(), ['b', 'c'], "checked write must reach the sink");
+
+    // SAFETY: The source range 0..1 is valid.
     unsafe { output.write_fully_unchecked(&['d', 'e'], 0, 1) }.expect("unchecked complete write should succeed");
+    assert_eq!(
+        *items.borrow(),
+        ['b', 'c', 'd'],
+        "complete unchecked write must reach the sink"
+    );
+
     output.write_fully(&['e']).expect("complete write should succeed");
+    assert_eq!(
+        *items.borrow(),
+        ['b', 'c', 'd', 'e'],
+        "complete write must reach the sink"
+    );
+    assert!(!flushed.get(), "writes must not substitute for explicit flush");
     output.flush().expect("flush should succeed");
+    assert!(flushed.get(), "flush must reach the sink");
 
     let inner = output.into_inner();
     assert!(inner.is_buffered());
+    assert_eq!(*items.borrow(), ['b', 'c', 'd', 'e']);
+    assert!(flushed.get());
 }
