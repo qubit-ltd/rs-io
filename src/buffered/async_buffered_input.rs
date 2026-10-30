@@ -250,6 +250,35 @@ where
         self.buffer.try_reserve_capacity(capacity)
     }
 
+    /// Tries to reserve at least `capacity` item slots through a pinned borrow.
+    ///
+    /// Existing unread items are retained. This method performs no I/O and
+    /// does not move the pinned inner input.
+    ///
+    /// # Parameters
+    ///
+    /// - `capacity`: Minimum total item capacity to reserve.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` when the backing buffer has at least `capacity` slots.
+    ///
+    /// # Errors
+    ///
+    /// Returns the allocation error if the backing buffer cannot grow.
+    ///
+    /// # Panics
+    ///
+    /// Panics if growth requires `I::Item::default()` or `I::Item::clone()` and
+    /// either operation panics.
+    #[inline]
+    pub fn try_reserve_capacity_pinned(self: Pin<&mut Self>, capacity: usize) -> Result<(), TryReserveError> {
+        // SAFETY: Only the non-structurally-pinned buffer is accessed; the
+        // pinned inner input remains untouched.
+        let this = unsafe { self.get_unchecked_mut() };
+        this.buffer.try_reserve_capacity(capacity)
+    }
+
     /// Advances the unread cursor without checking bounds.
     ///
     /// # Parameters
@@ -264,6 +293,27 @@ where
         // SAFETY: The caller guarantees that `count` fits the unread window.
         unsafe {
             self.buffer.consume(count);
+        }
+    }
+
+    /// Consumes unread items through a pinned borrow without polling the input.
+    ///
+    /// # Parameters
+    ///
+    /// - `count`: Number of items to consume.
+    ///
+    /// # Safety
+    ///
+    /// The caller must guarantee that `count <= self.unread_len()`. The count
+    /// is measured in items; zero is valid.
+    #[inline]
+    pub unsafe fn consume_pinned(self: Pin<&mut Self>, count: usize) {
+        // SAFETY: Only the non-structurally-pinned buffer is accessed; the
+        // pinned inner input remains untouched.
+        let this = unsafe { self.get_unchecked_mut() };
+        // SAFETY: The caller guarantees that count fits the unread window.
+        unsafe {
+            this.buffer.consume(count);
         }
     }
 

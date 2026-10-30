@@ -881,6 +881,62 @@ async fn main() -> io::Result<()> {
 }
 ```
 
+`AsyncBufferedInput` and `AsyncBufferedOutput` also expose pinned window methods for `!Unpin` inner streams. The input window can be inspected through a shared reference, consumed with `consume_pinned`, and retained while `try_reserve_capacity_pinned` grows storage. The output window is `(storage, index, count)`; its writable range is `storage[index..index + count]`. After initializing items in that range, call `advance_pinned`. Both reserve methods can return an allocation error and may panic if item initialization or cloning panics. The unsafe consume/advance calls require their counts to fit the current unread/spare item windows.
+
+<!-- example: pinned-buffer-windows profile=core mode=run -->
+```rust
+use qubit_io::{AsyncBufferedInput, AsyncBufferedOutput, AsyncInput, AsyncOutput};
+use std::cell::Cell;
+use std::io;
+use std::marker::PhantomPinned;
+use std::pin::Pin;
+use std::task::{Context, Poll, Waker};
+
+struct MemoryInput { bytes: &'static [u8], position: Cell<usize>, _pinned: PhantomPinned }
+impl AsyncInput for MemoryInput {
+    type Item = u8;
+    unsafe fn poll_read_unchecked(self: Pin<&mut Self>, _cx: &mut Context<'_>, out: &mut [u8], index: usize, count: usize) -> Poll<io::Result<usize>> {
+        let this = self.as_ref().get_ref();
+        let read = count.min(this.bytes.len() - this.position.get());
+        out[index..index + read].copy_from_slice(&this.bytes[this.position.get()..this.position.get() + read]);
+        this.position.set(this.position.get() + read);
+        Poll::Ready(Ok(read))
+    }
+}
+struct MemoryOutput { bytes: Vec<u8>, _pinned: PhantomPinned }
+impl AsyncOutput for MemoryOutput {
+    type Item = u8;
+    unsafe fn poll_write_unchecked(self: Pin<&mut Self>, _cx: &mut Context<'_>, input: &[u8], index: usize, count: usize) -> Poll<io::Result<usize>> {
+        // SAFETY: Only the ordinary bytes field is mutated; the pinned marker is untouched.
+        let this = unsafe { self.get_unchecked_mut() };
+        this.bytes.extend_from_slice(&input[index..index + count]);
+        Poll::Ready(Ok(count))
+    }
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> { Poll::Ready(Ok(())) }
+}
+fn main() {
+    let mut cx = Context::from_waker(Waker::noop());
+let mut input = Box::pin(AsyncBufferedInput::with_capacity(MemoryInput { bytes: b"data", position: Cell::new(0), _pinned: PhantomPinned }, 2));
+assert!(matches!(input.as_mut().poll_fill_until(&mut cx, 2), Poll::Ready(Ok(true))));
+assert_eq!(b"da", input.as_ref().get_ref().unread());
+// SAFETY: Two items are present in the unread window.
+unsafe { input.as_mut().consume_pinned(2); }
+input.as_mut().try_reserve_capacity_pinned(4).expect("reserve input");
+assert!(matches!(input.as_mut().poll_fill_until(&mut cx, 2), Poll::Ready(Ok(true))));
+assert_eq!(b"ta", input.as_ref().get_ref().unread());
+let mut output = Box::pin(AsyncBufferedOutput::with_capacity(MemoryOutput { bytes: Vec::new(), _pinned: PhantomPinned }, 4));
+{
+    let (storage, index, count) = output.as_mut().spare_raw_parts_mut_pinned();
+    storage[index..index + 2].copy_from_slice(b"ok");
+    assert!(count >= 2);
+}
+// SAFETY: The two advanced items were initialized in the returned spare range.
+unsafe { output.as_mut().advance_pinned(2); }
+output.as_mut().try_reserve_capacity_pinned(8).expect("reserve output");
+assert_eq!(b"ok", output.as_ref().get_ref().pending());
+}
+```
+
 `InputRef`/`OutputRef` serve synchronous borrows. Owned boxed async boundaries can use `BoxAsyncInput` and `BoxAsyncOutput`. Keep pinned values pinned; do not move an inner `!Unpin` value merely to recover ownership.
 
 An underlying poll returning `Pending` or an error must not transfer new items, but aggregate futures such as `ReadFullyFuture`, `ReadExactFuture`, and `WriteFullyFuture` can already contain progress from preceding inner calls. If cancellation and recovery need exact progress, retain a named future and inspect `items_read()` or `items_written()` before dropping it. A count is not protocol state: the application must retain its own message or batch state and cannot assume restarting has no side effects.

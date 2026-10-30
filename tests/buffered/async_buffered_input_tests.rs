@@ -231,3 +231,30 @@ fn test_async_buffered_input_async_buffered_non_unpin_refill_and_direct() {
     assert!(observer_address.get().is_some());
     assert!(polls.get() > 1);
 }
+
+#[test]
+fn test_non_unpin_window_consume_and_reserve() {
+    let inner = pinned_input(1);
+    let polls = inner.polls.clone();
+    let address = inner.address.clone();
+    let mut input = Box::pin(AsyncBufferedInput::with_capacity(inner, 4));
+    assert!(drive_input(|cx| input.as_mut().poll_fill_more(cx)));
+    let original_address = address.get().expect("inner was polled");
+    assert_eq!(b"abcd", input.as_ref().get_ref().unread());
+    let before = polls.get();
+    // SAFETY: The unread window contains four items.
+    unsafe {
+        input.as_mut().consume_pinned(2);
+    }
+    input.as_mut().try_reserve_capacity_pinned(8).expect("reserve");
+    assert_eq!(before, polls.get(), "window operations perform no I/O");
+    assert!(input.as_ref().get_ref().capacity() >= 8);
+    assert_eq!(b"cd", input.as_ref().get_ref().unread());
+    assert!(drive_input(|cx| input.as_mut().poll_fill_until(cx, 4)));
+    assert_eq!(b"cdef", input.as_ref().get_ref().unread());
+    assert_eq!(Some(original_address), address.get());
+    // SAFETY: Consuming zero is within the unread window.
+    unsafe {
+        input.as_mut().consume_pinned(0);
+    }
+}

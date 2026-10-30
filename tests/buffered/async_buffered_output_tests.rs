@@ -313,3 +313,45 @@ fn test_async_buffered_output_async_buffered_non_unpin_direct_write() {
     assert!(observer_address.get().is_some());
     assert!(polls.get() > 1);
 }
+
+#[test]
+fn test_non_unpin_spare_window_advance_and_reserve() {
+    let inner = pinned_output();
+    let state = inner.state.clone();
+    let address = inner.address.clone();
+    let polls = inner.polls.clone();
+    let mut output = Box::pin(AsyncBufferedOutput::with_capacity(inner, 4));
+    {
+        let (storage, index, count) = output.as_mut().spare_raw_parts_mut_pinned();
+        assert_eq!((0, 4), (index, count));
+        storage[index..index + 2].copy_from_slice(b"ab");
+    }
+    // SAFETY: Two initialized items fit the spare window.
+    unsafe {
+        output.as_mut().advance_pinned(2);
+    }
+    {
+        let (storage, index, count) = output.as_mut().spare_raw_parts_mut_pinned();
+        assert_eq!((2, 2), (index, count));
+        storage[index..index + count].copy_from_slice(b"cd");
+    }
+    // SAFETY: The remaining two spare items were filled above.
+    unsafe {
+        output.as_mut().advance_pinned(2);
+    }
+    let before = polls.get();
+    output.as_mut().try_reserve_capacity_pinned(8).expect("reserve");
+    assert_eq!(before, polls.get(), "reserve performs no I/O");
+    assert!(output.as_ref().get_ref().capacity() >= 8);
+    assert_eq!(b"abcd", output.as_ref().get_ref().pending());
+    drive_output(|cx| output.as_mut().poll_flush(cx));
+    assert_eq!(b"abcd", state.borrow().written.as_slice());
+    assert!(output.as_ref().get_ref().pending().is_empty());
+    let first_address = address.get().expect("inner was polled");
+    // SAFETY: Advancing zero always fits the spare window.
+    unsafe {
+        output.as_mut().advance_pinned(0);
+    }
+    drive_output(|cx| output.as_mut().poll_flush(cx));
+    assert_eq!(Some(first_address), address.get());
+}

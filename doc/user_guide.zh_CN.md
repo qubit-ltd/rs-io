@@ -870,6 +870,62 @@ async fn main() -> io::Result<()> {
 }
 ```
 
+`AsyncBufferedInput` 和 `AsyncBufferedOutput` 也为底层 `!Unpin` 流提供 pinned 窗口方法。输入窗口可通过共享引用查看，使用 `consume_pinned` 消费，并在 `try_reserve_capacity_pinned` 扩大存储时保留未读项。输出窗口的形式为 `(storage, index, count)`，可写范围是 `storage[index..index + count]`；初始化该范围中的元素后调用 `advance_pinned`。两个 reserve 方法都可能返回分配错误；元素初始化或克隆 panic 时也可能 panic。unsafe consume/advance 调用要求数量不超过当前未读/空闲元素窗口。
+
+<!-- example: pinned-buffer-windows profile=core mode=run -->
+```rust
+use qubit_io::{AsyncBufferedInput, AsyncBufferedOutput, AsyncInput, AsyncOutput};
+use std::cell::Cell;
+use std::io;
+use std::marker::PhantomPinned;
+use std::pin::Pin;
+use std::task::{Context, Poll, Waker};
+
+struct MemoryInput { bytes: &'static [u8], position: Cell<usize>, _pinned: PhantomPinned }
+impl AsyncInput for MemoryInput {
+    type Item = u8;
+    unsafe fn poll_read_unchecked(self: Pin<&mut Self>, _cx: &mut Context<'_>, out: &mut [u8], index: usize, count: usize) -> Poll<io::Result<usize>> {
+        let this = self.as_ref().get_ref();
+        let read = count.min(this.bytes.len() - this.position.get());
+        out[index..index + read].copy_from_slice(&this.bytes[self.position.get()..self.position.get() + read]);
+        this.position.set(this.position.get() + read);
+        Poll::Ready(Ok(read))
+    }
+}
+struct MemoryOutput { bytes: Vec<u8>, _pinned: PhantomPinned }
+impl AsyncOutput for MemoryOutput {
+    type Item = u8;
+    unsafe fn poll_write_unchecked(self: Pin<&mut Self>, _cx: &mut Context<'_>, input: &[u8], index: usize, count: usize) -> Poll<io::Result<usize>> {
+        // SAFETY: Only the ordinary bytes field is mutated; the pinned marker is untouched.
+        let this = unsafe { self.get_unchecked_mut() };
+        this.bytes.extend_from_slice(&input[index..index + count]);
+        Poll::Ready(Ok(count))
+    }
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> { Poll::Ready(Ok(())) }
+}
+fn main() {
+    let mut cx = Context::from_waker(Waker::noop());
+let mut input = Box::pin(AsyncBufferedInput::with_capacity(MemoryInput { bytes: b"data", position: Cell::new(0), _pinned: PhantomPinned }, 2));
+assert!(matches!(input.as_mut().poll_fill_until(&mut cx, 2), Poll::Ready(Ok(true))));
+assert_eq!(b"da", input.as_ref().get_ref().unread());
+// SAFETY: Two items are present in the unread window.
+unsafe { input.as_mut().consume_pinned(2); }
+input.as_mut().try_reserve_capacity_pinned(4).expect("reserve input");
+assert!(matches!(input.as_mut().poll_fill_until(&mut cx, 2), Poll::Ready(Ok(true))));
+assert_eq!(b"ta", input.as_ref().get_ref().unread());
+let mut output = Box::pin(AsyncBufferedOutput::with_capacity(MemoryOutput { bytes: Vec::new(), _pinned: PhantomPinned }, 4));
+{
+    let (storage, index, count) = output.as_mut().spare_raw_parts_mut_pinned();
+    storage[index..index + 2].copy_from_slice(b"ok");
+    assert!(count >= 2);
+}
+// SAFETY: The two advanced items were initialized in the returned spare range.
+unsafe { output.as_mut().advance_pinned(2); }
+output.as_mut().try_reserve_capacity_pinned(8).expect("reserve output");
+assert_eq!(b"ok", output.as_ref().get_ref().pending());
+}
+```
+
 `InputRef`/`OutputRef` 用于同步借用；拥有的异步 boxed 边界可使用 `BoxAsyncInput`、`BoxAsyncOutput`。已经固定的值应继续保持其固定状态，不应为取得所有权而移动底层 `!Unpin` 值。
 
 一次底层 poll 返回 `Pending` 或错误时不能传输新元素；但 `ReadFullyFuture`、`ReadExactFuture`、`WriteFullyFuture` 等聚合 future 可能已在此前的底层调用中取得进度。需要取消并恢复时，先保留具名 future，在丢弃前读取 `items_read()` 或 `items_written()`；读取进度不是协议解析状态，应用仍要维护消息或批次状态，不能从头重试并假设没有副作用。

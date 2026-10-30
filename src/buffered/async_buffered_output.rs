@@ -297,6 +297,35 @@ where
         self.buffer.try_reserve_capacity(capacity)
     }
 
+    /// Tries to reserve at least `capacity` item slots through a pinned borrow.
+    ///
+    /// Existing pending items are retained. This method performs no I/O and
+    /// does not move the pinned inner output.
+    ///
+    /// # Parameters
+    ///
+    /// - `capacity`: Minimum total item capacity to reserve.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` when the backing buffer has at least `capacity` slots.
+    ///
+    /// # Errors
+    ///
+    /// Returns the allocation error if the backing buffer cannot grow.
+    ///
+    /// # Panics
+    ///
+    /// Panics if growth requires `O::Item::default()` or `O::Item::clone()` and
+    /// either operation panics.
+    #[inline]
+    pub fn try_reserve_capacity_pinned(self: Pin<&mut Self>, capacity: usize) -> Result<(), TryReserveError> {
+        // SAFETY: Only the non-structurally-pinned buffer is accessed; the
+        // pinned inner output remains untouched.
+        let this = unsafe { self.get_unchecked_mut() };
+        this.buffer.try_reserve_capacity(capacity)
+    }
+
     /// Returns the unused capacity in the internal buffer.
     ///
     /// # Returns
@@ -326,6 +355,25 @@ where
         self.buffer.spare_raw_parts_mut()
     }
 
+    /// Returns the spare item window through a pinned borrow.
+    ///
+    /// The returned slice does not structurally pin its items and is tied to
+    /// this mutable borrow. Write initialized items in `storage[index..index +
+    /// count]`, then call [`Self::advance_pinned`] before borrowing again.
+    ///
+    /// # Returns
+    ///
+    /// Returns `(storage, index, count)`, where the writable range is
+    /// `storage[index..index + count]` and `count` is measured in items.
+    #[inline]
+    #[must_use]
+    pub fn spare_raw_parts_mut_pinned(self: Pin<&mut Self>) -> (&mut [O::Item], usize, usize) {
+        // SAFETY: The returned ordinary slice does not structurally pin items;
+        // the pinned inner output remains untouched.
+        let this = unsafe { self.get_unchecked_mut() };
+        this.buffer.spare_raw_parts_mut()
+    }
+
     /// Advances the pending-item limit without checking bounds.
     ///
     /// # Parameters
@@ -342,6 +390,28 @@ where
         // tail.
         unsafe {
             self.buffer.advance(count);
+        }
+    }
+
+    /// Marks initialized spare items as pending through a pinned borrow.
+    ///
+    /// # Parameters
+    ///
+    /// - `count`: Number of initialized spare items to mark as pending.
+    ///
+    /// # Safety
+    ///
+    /// The caller must guarantee that `count <= self.spare_capacity()` and
+    /// that the corresponding spare items have been initialized. The count is
+    /// measured in items; zero is valid.
+    #[inline]
+    pub unsafe fn advance_pinned(self: Pin<&mut Self>, count: usize) {
+        // SAFETY: Only the non-structurally-pinned buffer is accessed; the
+        // pinned inner output remains untouched.
+        let this = unsafe { self.get_unchecked_mut() };
+        // SAFETY: The caller guarantees the spare range is initialized and fits.
+        unsafe {
+            this.buffer.advance(count);
         }
     }
 
