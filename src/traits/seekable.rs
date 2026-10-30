@@ -55,10 +55,11 @@ use std::io::SeekFrom;
 /// The standard I/O integration maps [`std::io::Seek`] to `Unit = u8` for
 /// binary compatibility. If a concrete type already implements `Seek`, it
 /// already has an implicit `Seekable<Unit = u8>` impl from this blanket, so
-/// another `Seekable` impl with the same `(Self, Unit)` pair would be a
-/// coherence conflict.
+/// another `Seekable` impl for that same `Self` would be a coherence conflict.
 ///
-/// For example, this is rejected by the compiler:
+/// The conflict is attached to `Self`: the blanket impl already covers the
+/// type, and choosing a different associated `Unit` does not remove that
+/// overlap. For example, this is rejected by the compiler:
 ///
 /// ```rust,compile_fail,E0119
 /// use std::io::{Result, Seek, SeekFrom};
@@ -74,7 +75,7 @@ use std::io::SeekFrom;
 /// }
 ///
 /// impl Seekable for LegacyStream {
-///     type Unit = u8;
+///     type Unit = char;
 ///     fn seek_to(&mut self, _pos: SeekFrom) -> Result<u64> {
 ///         Ok(0)
 ///     }

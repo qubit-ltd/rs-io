@@ -7,8 +7,10 @@
 // =============================================================================
 
 use std::io;
+use std::io::SeekFrom;
 
 use crate::Output;
+use crate::Seekable;
 
 /// Adapts a mutable borrowed output where an owned [`Output`] value is
 /// required.
@@ -152,6 +154,21 @@ where
         self.inner.write(input)
     }
 
+    /// Forwards a vectored write to the borrowed output.
+    ///
+    /// # Parameters
+    ///
+    /// - `buffers`: Source slices passed to the borrowed output.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of items actually written, which may be less than
+    /// the total length of the slices.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error reported by the borrowed output. This adapter does not
+    /// guarantee that the underlying output uses scatter/gather I/O.
     #[inline(always)]
     fn write_vectored(&mut self, buffers: &[&[Self::Item]]) -> io::Result<usize> {
         self.inner.write_vectored(buffers)
@@ -217,14 +234,29 @@ where
     }
 }
 
-impl<O> crate::Seekable for OutputRef<'_, O>
+impl<O> Seekable for OutputRef<'_, O>
 where
     O: Output + crate::Seekable + ?Sized,
 {
+    /// The seek unit inherited from the borrowed output.
     type Unit = O::Unit;
 
+    /// Seeks the borrowed output to a position and returns its new absolute
+    /// position.
+    ///
+    /// # Parameters
+    ///
+    /// - `position`: Position to seek to, measured in the inner output's units.
+    ///
+    /// # Returns
+    ///
+    /// Returns the inner output's new absolute position.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error reported by the borrowed output.
     #[inline(always)]
-    fn seek_to(&mut self, position: std::io::SeekFrom) -> io::Result<u64> {
-        crate::Seekable::seek_to(self.inner, position)
+    fn seek_to(&mut self, position: SeekFrom) -> io::Result<u64> {
+        Seekable::seek_to(self.inner, position)
     }
 }

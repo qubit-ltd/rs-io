@@ -150,6 +150,21 @@ where
         self.inner.read(output)
     }
 
+    /// Forwards a vectored read to the boxed input.
+    ///
+    /// # Parameters
+    ///
+    /// - `buffers`: Destination slices passed to the boxed input.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of items actually read, which may be less than the
+    /// total capacity of the slices.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error reported by the boxed input. This adapter does not
+    /// guarantee that the underlying input uses scatter/gather I/O.
     #[inline(always)]
     fn read_vectored(&mut self, buffers: &mut [&mut [Self::Item]]) -> io::Result<usize> {
         self.inner.as_mut().read_vectored(buffers)

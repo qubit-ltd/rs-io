@@ -148,6 +148,21 @@ where
         self.inner.write(input)
     }
 
+    /// Forwards a vectored write to the boxed output.
+    ///
+    /// # Parameters
+    ///
+    /// - `buffers`: Source slices passed to the boxed output.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of items actually written, which may be less than
+    /// the total length of the slices.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error reported by the boxed output. This adapter does not
+    /// guarantee that the underlying output uses scatter/gather I/O.
     #[inline(always)]
     fn write_vectored(&mut self, buffers: &[&[Self::Item]]) -> io::Result<usize> {
         self.inner.as_mut().write_vectored(buffers)

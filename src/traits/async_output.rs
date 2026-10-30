@@ -33,6 +33,7 @@ use crate::traits::validate_write_count;
 /// use std::pin::Pin;
 /// use std::task::Context;
 /// use std::task::Poll;
+/// use std::task::Waker;
 ///
 /// use qubit_io::AsyncOutput;
 ///
@@ -61,8 +62,14 @@ use crate::traits::validate_write_count;
 ///     }
 /// }
 ///
-/// let output = VecOutput::default();
+/// let mut output = VecOutput::default();
 /// assert!(!output.is_buffered());
+/// let mut cx = Context::from_waker(Waker::noop());
+/// assert!(matches!(Pin::new(&mut output).poll_write(&mut cx, b"data"),
+///                  Poll::Ready(Ok(4))));
+/// assert!(matches!(Pin::new(&mut output).poll_flush(&mut cx),
+///                  Poll::Ready(Ok(()))));
+/// assert_eq!(b"data", output.items.as_slice());
 /// ```
 pub trait AsyncOutput {
     /// The item type written to this output.

@@ -33,6 +33,7 @@ use crate::traits::validate_read_count;
 /// use std::pin::Pin;
 /// use std::task::Context;
 /// use std::task::Poll;
+/// use std::task::Waker;
 ///
 /// use qubit_io::AsyncInput;
 ///
@@ -61,11 +62,18 @@ use crate::traits::validate_read_count;
 ///     }
 /// }
 ///
-/// let input = SliceInput {
+/// let mut input = SliceInput {
 ///     items: b"data",
 ///     position: 0,
 /// };
 /// assert!(!input.is_buffered());
+/// let mut cx = Context::from_waker(Waker::noop());
+/// let mut bytes = [0; 4];
+/// assert!(matches!(Pin::new(&mut input).poll_read(&mut cx, &mut bytes),
+///                  Poll::Ready(Ok(4))));
+/// assert_eq!(b"data", &bytes);
+/// assert!(matches!(Pin::new(&mut input).poll_read(&mut cx, &mut bytes),
+///                  Poll::Ready(Ok(0))));
 /// ```
 pub trait AsyncInput {
     /// The item type read from this input.

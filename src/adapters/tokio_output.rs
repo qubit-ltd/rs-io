@@ -27,10 +27,20 @@ use crate::util::UncheckedSlice;
 ///
 /// ```
 /// use qubit_io::TokioOutput;
+/// use qubit_io::AsyncOutput;
 /// use std::io::Cursor;
+/// use std::pin::Pin;
+/// use std::task::Context;
+/// use std::task::Poll;
+/// use std::task::Waker;
 ///
-/// let output = TokioOutput::new(Cursor::new(Vec::<u8>::new()));
-/// assert!(output.get_ref().get_ref().is_empty());
+/// let mut output = TokioOutput::new(Cursor::new(Vec::<u8>::new()));
+/// let mut cx = Context::from_waker(Waker::noop());
+/// assert!(matches!(Pin::new(&mut output).poll_write(&mut cx, b"data"),
+///                  Poll::Ready(Ok(4))));
+/// assert!(matches!(Pin::new(&mut output).poll_flush(&mut cx),
+///                  Poll::Ready(Ok(()))));
+/// assert_eq!(b"data", output.get_ref().get_ref().as_slice());
 /// ```
 #[must_use]
 #[repr(transparent)]
