@@ -6,6 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
+use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::collections::hash_map::DefaultHasher;
 use std::future::Future;
@@ -13,11 +14,16 @@ use std::hash::Hasher;
 use std::io;
 use std::io::Error;
 use std::io::ErrorKind;
+use std::marker::PhantomPinned;
 use std::pin::Pin;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
 use std::task::Context;
 use std::task::Poll;
+use std::task::Wake;
 use std::task::Waker;
 
 use qubit_io::AsyncChecksumInput;
@@ -750,4 +756,304 @@ impl<T> PollResultExt<T> for Poll<T> {
             Poll::Pending => panic!("{message}"),
         }
     }
+}
+
+#[derive(Clone, Copy)]
+enum ProbeStage {
+    Read = 0,
+    Write = 1,
+    Flush = 2,
+    Close = 3,
+}
+
+struct ProbeState {
+    address: Option<*const AddressCheckedStream>,
+    read_position: usize,
+    received: Vec<u8>,
+    closed: bool,
+    calls: [usize; 4],
+    ready: [bool; 4],
+    wakers: [Option<Waker>; 4],
+}
+
+struct AddressCheckedStream {
+    state: Rc<RefCell<ProbeState>>,
+    _pin: PhantomPinned,
+}
+
+impl AddressCheckedStream {
+    fn new() -> (Self, Rc<RefCell<ProbeState>>) {
+        let state = Rc::new(RefCell::new(ProbeState {
+            address: None,
+            read_position: 0,
+            received: Vec::new(),
+            closed: false,
+            calls: [0; 4],
+            ready: [false; 4],
+            wakers: std::array::from_fn(|_| None),
+        }));
+        (
+            Self {
+                state: state.clone(),
+                _pin: PhantomPinned,
+            },
+            state,
+        )
+    }
+
+    fn poll_stage(self: Pin<&Self>, cx: &Context<'_>, stage: ProbeStage) -> bool {
+        let this = self.get_ref();
+        let address = this as *const Self;
+        let mut state = this.state.borrow_mut();
+        if let Some(expected) = state.address {
+            assert_eq!(expected, address, "pinned inner stream moved");
+        } else {
+            state.address = Some(address);
+        }
+        let index = stage as usize;
+        state.calls[index] += 1;
+        if state.ready[index] {
+            true
+        } else {
+            state.wakers[index] = Some(cx.waker().clone());
+            false
+        }
+    }
+}
+
+impl AsyncInput for AddressCheckedStream {
+    type Item = u8;
+
+    unsafe fn poll_read_unchecked(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        output: &mut [u8],
+        index: usize,
+        count: usize,
+    ) -> Poll<io::Result<usize>> {
+        if count == 0 {
+            return Poll::Ready(Ok(0));
+        }
+        if !self.as_ref().poll_stage(cx, ProbeStage::Read) {
+            return Poll::Pending;
+        }
+        let this = self.as_ref().get_ref();
+        let mut state = this.state.borrow_mut();
+        let available = 4usize.saturating_sub(state.read_position);
+        let read = available.min(count).min(2);
+        let start = state.read_position;
+        for (offset, byte) in b"abcd"[start..start + read].iter().enumerate() {
+            output[index + offset] = *byte;
+        }
+        state.read_position += read;
+        Poll::Ready(Ok(read))
+    }
+}
+
+impl AsyncOutput for AddressCheckedStream {
+    type Item = u8;
+
+    unsafe fn poll_write_unchecked(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        input: &[u8],
+        index: usize,
+        count: usize,
+    ) -> Poll<io::Result<usize>> {
+        if count == 0 {
+            return Poll::Ready(Ok(0));
+        }
+        if !self.as_ref().poll_stage(cx, ProbeStage::Write) {
+            return Poll::Pending;
+        }
+        let this = self.as_ref().get_ref();
+        let mut state = this.state.borrow_mut();
+        let written = count.min(2);
+        state.received.extend_from_slice(&input[index..index + written]);
+        Poll::Ready(Ok(written))
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        if self.as_ref().poll_stage(cx, ProbeStage::Flush) {
+            Poll::Ready(Ok(()))
+        } else {
+            Poll::Pending
+        }
+    }
+}
+
+impl AsyncClose for AddressCheckedStream {
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        if self.as_ref().poll_stage(cx, ProbeStage::Close) {
+            self.as_ref().get_ref().state.borrow_mut().closed = true;
+            Poll::Ready(Ok(()))
+        } else {
+            Poll::Pending
+        }
+    }
+}
+
+#[derive(Default)]
+struct PinRecordingHasher(Vec<Vec<u8>>);
+
+impl Hasher for PinRecordingHasher {
+    fn finish(&self) -> u64 {
+        self.0.iter().flatten().fold(0u64, |sum, byte| sum + u64::from(*byte))
+    }
+    fn write(&mut self, bytes: &[u8]) {
+        self.0.push(bytes.to_vec());
+    }
+}
+
+#[derive(Default)]
+struct WakeCounter(AtomicUsize);
+
+impl Wake for WakeCounter {
+    fn wake(self: Arc<Self>) {
+        self.0.fetch_add(1, Ordering::SeqCst);
+    }
+    fn wake_by_ref(self: &Arc<Self>) {
+        self.0.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+fn notify_probe(state: &Rc<RefCell<ProbeState>>, stage: ProbeStage, counter: &WakeCounter) {
+    let index = stage as usize;
+    let waker = {
+        let mut state = state.borrow_mut();
+        state.ready[index] = true;
+        state.wakers[index].take().expect("pending probe must save a waker")
+    };
+    let previous = counter.0.load(Ordering::SeqCst);
+    waker.wake();
+    assert_eq!(previous + 1, counter.0.load(Ordering::SeqCst));
+}
+
+fn move_pin_box<T>(value: Pin<Box<T>>) -> Pin<Box<T>> {
+    value
+}
+
+#[test]
+fn test_async_pinned_input_wrappers_keep_inner_address() {
+    let (stream, state) = AddressCheckedStream::new();
+    let wrapped = AsyncCountingInput::new(AsyncChecksumInput::new(
+        AsyncLimitInput::new(stream, 4),
+        PinRecordingHasher::default(),
+    ));
+    let mut input = Box::pin(wrapped);
+    let counter = Arc::new(WakeCounter::default());
+    let waker = Waker::from(counter.clone());
+    let mut cx = Context::from_waker(&waker);
+    let mut buffer = [0xEE; 4];
+    assert!(AsyncInput::poll_read(input.as_mut(), &mut cx, &mut buffer).is_pending());
+    assert_eq!([0xEE; 4], buffer);
+    assert_eq!(0, input.as_ref().get_ref().items_read());
+    assert_eq!(4, input.as_ref().get_ref().inner().inner().remaining());
+    assert!(input.as_ref().get_ref().inner().hasher().0.is_empty());
+    notify_probe(&state, ProbeStage::Read, &counter);
+    assert_eq!(
+        2,
+        AsyncInput::poll_read(input.as_mut(), &mut cx, &mut buffer)
+            .expect_ready("first read ready")
+            .expect("read succeeds")
+    );
+    assert_eq!(b"ab", &buffer[..2]);
+    assert_eq!([b'a', b'b', 0xEE, 0xEE], buffer);
+    assert_eq!(2, input.as_ref().get_ref().items_read());
+    assert_eq!(2, input.as_ref().get_ref().inner().inner().remaining());
+    assert_eq!(vec![b"ab".to_vec()], input.as_ref().get_ref().inner().hasher().0);
+    let mut input = move_pin_box(input);
+    assert_eq!(
+        2,
+        AsyncInput::poll_read(input.as_mut(), &mut cx, &mut buffer)
+            .expect_ready("second read ready")
+            .expect("read succeeds")
+    );
+    assert_eq!(b"cd", &buffer[..2]);
+    assert_eq!(4, input.as_ref().get_ref().items_read());
+    assert_eq!(0, input.as_ref().get_ref().inner().inner().remaining());
+    assert_eq!(
+        vec![b"ab".to_vec(), b"cd".to_vec()],
+        input.as_ref().get_ref().inner().hasher().0
+    );
+    let calls = state.borrow().calls[ProbeStage::Read as usize];
+    assert_eq!(
+        0,
+        AsyncInput::poll_read(input.as_mut(), &mut cx, &mut buffer)
+            .expect_ready("exhausted read ready")
+            .expect("read succeeds")
+    );
+    assert_eq!(calls, state.borrow().calls[ProbeStage::Read as usize]);
+    assert!(state.borrow().address.is_some());
+}
+
+#[test]
+fn test_async_pinned_output_wrappers_keep_inner_address() {
+    let (stream, state) = AddressCheckedStream::new();
+    let wrapped = AsyncCountingOutput::new(AsyncChecksumOutput::new(
+        AsyncLimitOutput::new(stream, 4),
+        PinRecordingHasher::default(),
+    ));
+    let mut output = Box::pin(wrapped);
+    let counter = Arc::new(WakeCounter::default());
+    let waker = Waker::from(counter.clone());
+    let mut cx = Context::from_waker(&waker);
+    assert!(AsyncOutput::poll_write(output.as_mut(), &mut cx, b"abcde").is_pending());
+    assert_eq!(0, output.as_ref().get_ref().items_written());
+    assert_eq!(4, output.as_ref().get_ref().inner().inner().remaining());
+    assert!(state.borrow().received.is_empty());
+    assert!(output.as_ref().get_ref().inner().hasher().0.is_empty());
+    notify_probe(&state, ProbeStage::Write, &counter);
+    assert_eq!(
+        2,
+        AsyncOutput::poll_write(output.as_mut(), &mut cx, b"abcde")
+            .expect_ready("write ready")
+            .expect("write succeeds")
+    );
+    assert_eq!(2, output.as_ref().get_ref().items_written());
+    assert_eq!(2, output.as_ref().get_ref().inner().inner().remaining());
+    assert_eq!(
+        2,
+        AsyncOutput::poll_write(output.as_mut(), &mut cx, b"cde")
+            .expect_ready("write ready")
+            .expect("write succeeds")
+    );
+    assert_eq!(4, output.as_ref().get_ref().items_written());
+    assert_eq!(0, output.as_ref().get_ref().inner().inner().remaining());
+    assert_eq!(b"abcd".to_vec(), state.borrow().received);
+    assert_eq!(
+        vec![b"ab".to_vec(), b"cd".to_vec()],
+        output.as_ref().get_ref().inner().hasher().0
+    );
+    let calls = state.borrow().calls[ProbeStage::Write as usize];
+    assert_eq!(
+        0,
+        AsyncOutput::poll_write(output.as_mut(), &mut cx, b"e")
+            .expect_ready("exhausted write ready")
+            .expect("write succeeds")
+    );
+    assert_eq!(calls, state.borrow().calls[ProbeStage::Write as usize]);
+    assert_eq!(4, output.as_ref().get_ref().items_written());
+
+    assert!(AsyncOutput::poll_flush(output.as_mut(), &mut cx).is_pending());
+    notify_probe(&state, ProbeStage::Flush, &counter);
+    AsyncOutput::poll_flush(output.as_mut(), &mut cx)
+        .expect_ready("flush ready")
+        .expect("flush succeeds");
+    assert!(AsyncClose::poll_close(output.as_mut(), &mut cx).is_pending());
+    assert!(!state.borrow().closed);
+    notify_probe(&state, ProbeStage::Close, &counter);
+    AsyncClose::poll_close(output.as_mut(), &mut cx)
+        .expect_ready("close ready")
+        .expect("close succeeds");
+    assert_eq!(2, state.borrow().calls[ProbeStage::Flush as usize]);
+    assert_eq!(2, state.borrow().calls[ProbeStage::Close as usize]);
+    assert!(state.borrow().closed);
+    assert_eq!(4, output.as_ref().get_ref().items_written());
+    assert_eq!(
+        vec![b"ab".to_vec(), b"cd".to_vec()],
+        output.as_ref().get_ref().inner().hasher().0
+    );
+    assert_eq!(b"abcd".to_vec(), state.borrow().received);
+    assert!(state.borrow().address.is_some());
 }

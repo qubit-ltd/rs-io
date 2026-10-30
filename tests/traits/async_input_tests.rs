@@ -60,6 +60,9 @@ impl AsyncInput for ScriptedAsyncInput {
         index: usize,
         count: usize,
     ) -> Poll<std::io::Result<usize>> {
+        if count == 0 {
+            return Poll::Ready(Ok(0));
+        }
         // SAFETY: This implementation does not move the pinned value.
         let this = unsafe { self.get_unchecked_mut() };
         this.poll_count += 1;
@@ -67,6 +70,9 @@ impl AsyncInput for ScriptedAsyncInput {
             ReadStep::Data(data) => {
                 let read = count.min(data.len());
                 output[index..index + read].copy_from_slice(&data[..read]);
+                if read < data.len() {
+                    this.steps.push_front(ReadStep::Data(data[read..].to_vec()));
+                }
                 Poll::Ready(Ok(read))
             }
             ReadStep::Error(kind) => Poll::Ready(Err(Error::new(kind, "read failed"))),
@@ -77,6 +83,78 @@ impl AsyncInput for ScriptedAsyncInput {
             ReadStep::Eof => Poll::Ready(Ok(0)),
         }
     }
+}
+
+#[test]
+fn test_scripted_async_input_preserves_data_suffix_across_small_reads() {
+    let mut input = Box::pin(ScriptedAsyncInput::new(vec![ReadStep::Data(vec![1, 2, 3])]));
+    let mut cx = context();
+    let mut output = [0];
+
+    for expected in [1, 2, 3] {
+        assert!(matches!(
+            AsyncInput::poll_read(input.as_mut(), &mut cx, &mut output),
+            Poll::Ready(Ok(1))
+        ));
+        assert_eq!(expected, output[0]);
+        let mut empty = [];
+        assert!(matches!(
+            AsyncInput::poll_read(input.as_mut(), &mut cx, &mut empty),
+            Poll::Ready(Ok(0))
+        ));
+    }
+    assert!(matches!(
+        AsyncInput::poll_read(input.as_mut(), &mut cx, &mut output),
+        Poll::Ready(Ok(0))
+    ));
+}
+
+#[test]
+fn test_scripted_async_input_zero_length_read_does_not_consume_data() {
+    let mut input = Box::pin(ScriptedAsyncInput::new(vec![ReadStep::Data(vec![7])]));
+    let mut cx = context();
+    let mut empty = [];
+    // SAFETY: The empty destination and zero count require no memory access; the
+    // pinned input stays in place.
+    assert!(matches!(
+        unsafe { AsyncInput::poll_read_unchecked(input.as_mut(), &mut cx, &mut empty, 0, 0) },
+        Poll::Ready(Ok(0))
+    ));
+    assert_eq!(0, input.as_ref().get_ref().poll_count);
+    assert!(input.as_ref().get_ref().registered_waker.is_none());
+    let mut output = [0];
+    assert!(matches!(
+        AsyncInput::poll_read(input.as_mut(), &mut cx, &mut output),
+        Poll::Ready(Ok(1))
+    ));
+    assert_eq!([7], output);
+}
+
+#[test]
+fn test_scripted_async_input_zero_length_read_does_not_consume_pending_or_error() {
+    let mut input = Box::pin(ScriptedAsyncInput::new(vec![
+        ReadStep::Pending,
+        ReadStep::Error(ErrorKind::PermissionDenied),
+    ]));
+    let mut cx = context();
+    let mut empty = [];
+    // SAFETY: The empty destination and zero count require no memory access; the
+    // pinned input stays in place.
+    assert!(matches!(
+        unsafe { AsyncInput::poll_read_unchecked(input.as_mut(), &mut cx, &mut empty, 0, 0) },
+        Poll::Ready(Ok(0))
+    ));
+    assert_eq!(0, input.as_ref().get_ref().poll_count);
+    assert!(input.as_ref().get_ref().registered_waker.is_none());
+    let mut output = [0];
+    assert!(matches!(
+        AsyncInput::poll_read(input.as_mut(), &mut cx, &mut output),
+        Poll::Pending
+    ));
+    assert!(input.as_ref().get_ref().registered_waker.is_some());
+    assert!(
+        matches!(AsyncInput::poll_read(input.as_mut(), &mut cx, &mut output), Poll::Ready(Err(error)) if error.kind() == ErrorKind::PermissionDenied)
+    );
 }
 
 struct OverreportingAsyncInput;

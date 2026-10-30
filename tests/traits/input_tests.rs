@@ -31,12 +31,14 @@ enum ReadStep {
 
 struct ScriptedInput {
     steps: VecDeque<ReadStep>,
+    read_calls: usize,
 }
 
 impl ScriptedInput {
     fn new(steps: Vec<ReadStep>) -> Self {
         Self {
             steps: VecDeque::from(steps),
+            read_calls: 0,
         }
     }
 }
@@ -45,10 +47,17 @@ impl Input for ScriptedInput {
     type Item = u8;
 
     unsafe fn read_unchecked(&mut self, output: &mut [u8], index: usize, count: usize) -> std::io::Result<usize> {
+        if count == 0 {
+            return Ok(0);
+        }
+        self.read_calls += 1;
         match self.steps.pop_front().unwrap_or(ReadStep::Eof) {
             ReadStep::Data(data) => {
                 let read = count.min(data.len());
                 output[index..index + read].copy_from_slice(&data[..read]);
+                if read < data.len() {
+                    self.steps.push_front(ReadStep::Data(data[read..].to_vec()));
+                }
                 Ok(read)
             }
             ReadStep::Interrupted => Err(Error::new(ErrorKind::Interrupted, "interrupted")),
@@ -56,6 +65,54 @@ impl Input for ScriptedInput {
             ReadStep::Eof => Ok(0),
         }
     }
+}
+
+#[test]
+fn test_scripted_input_preserves_data_suffix_across_small_reads() {
+    let mut input = ScriptedInput::new(vec![ReadStep::Data(vec![1, 2, 3])]);
+    let mut output = [0; 1];
+
+    for expected in [1, 2, 3] {
+        assert_eq!(1, input.read(&mut output).expect("scripted read should succeed"));
+        assert_eq!(expected, output[0]);
+        let mut empty = [];
+        assert_eq!(0, input.read(&mut empty).expect("zero-length read should succeed"));
+    }
+    assert_eq!(0, input.read(&mut output).expect("scripted EOF should succeed"));
+}
+
+#[test]
+fn test_scripted_input_zero_length_read_does_not_consume_data() {
+    let mut input = ScriptedInput::new(vec![ReadStep::Data(vec![7])]);
+    let mut empty = [];
+    // SAFETY: The empty destination and zero count require no memory access; index
+    // zero is valid.
+    assert_eq!(
+        0,
+        unsafe { input.read_unchecked(&mut empty, 0, 0) }.expect("empty read should succeed")
+    );
+    assert_eq!(0, input.read_calls);
+    let mut output = [0];
+    assert_eq!(1, input.read(&mut output).expect("data should remain available"));
+    assert_eq!([7], output);
+}
+
+#[test]
+fn test_scripted_input_zero_length_read_does_not_consume_error_step() {
+    let mut input = ScriptedInput::new(vec![ReadStep::Error(ErrorKind::PermissionDenied, "first")]);
+    let mut empty = [];
+    // SAFETY: The empty destination and zero count require no memory access; index
+    // zero is valid.
+    assert_eq!(
+        0,
+        unsafe { input.read_unchecked(&mut empty, 0, 0) }.expect("empty read should succeed")
+    );
+    assert_eq!(0, input.read_calls);
+    let mut output = [0];
+    assert_eq!(
+        ErrorKind::PermissionDenied,
+        input.read(&mut output).expect_err("error step should remain").kind()
+    );
 }
 
 #[test]

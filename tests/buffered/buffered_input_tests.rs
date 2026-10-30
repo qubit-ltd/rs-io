@@ -143,11 +143,17 @@ impl Input for ScriptedReadFullyInput {
         index: usize,
         count: usize,
     ) -> std::io::Result<usize> {
+        if count == 0 {
+            return Ok(0);
+        }
         self.read_fully_unchecked_calls += 1;
         match self.steps.pop_front() {
             Some(ReadFullyStep::Data(data)) => {
                 let read = count.min(data.len());
                 output[index..index + read].copy_from_slice(&data[..read]);
+                if read < data.len() {
+                    self.steps.push_front(ReadFullyStep::Data(data[read..].to_vec()));
+                }
                 Ok(read)
             }
             Some(ReadFullyStep::Interrupted) => Err(Error::new(ErrorKind::Interrupted, "interrupted")),
@@ -156,6 +162,66 @@ impl Input for ScriptedReadFullyInput {
             None => Ok(0),
         }
     }
+}
+
+#[test]
+fn test_scripted_read_fully_input_preserves_data_suffix_across_small_reads() {
+    let mut input = ScriptedReadFullyInput::new(vec![ReadFullyStep::Data(vec![1, 2, 3, 4, 5])]);
+    let mut first = [0; 4];
+    assert_eq!(4, input.read_fully(&mut first).expect("first read should succeed"));
+    assert_eq!([1, 2, 3, 4], first);
+    let mut empty = [];
+    assert_eq!(
+        0,
+        input.read_fully(&mut empty).expect("zero-length read should succeed")
+    );
+    let mut second = [0; 1];
+    assert_eq!(1, input.read_fully(&mut second).expect("suffix read should succeed"));
+    assert_eq!([5], second);
+    assert_eq!(
+        0,
+        input.read_fully(&mut empty).expect("zero-length read should succeed")
+    );
+    assert_eq!(0, input.read_fully(&mut second).expect("scripted EOF should succeed"));
+}
+
+#[test]
+fn test_scripted_read_fully_input_zero_length_read_does_not_consume_data() {
+    let mut input = ScriptedReadFullyInput::new(vec![ReadFullyStep::Data(vec![7])]);
+    let mut empty = [];
+    // SAFETY: The empty destination and zero count require no memory access; index
+    // zero is valid.
+    assert_eq!(
+        0,
+        unsafe { input.read_fully_unchecked(&mut empty, 0, 0) }.expect("empty read should succeed")
+    );
+    assert_eq!(0, input.read_fully_unchecked_calls);
+    let mut output = [0];
+    assert_eq!(1, input.read_fully(&mut output).expect("data should remain available"));
+    assert_eq!([7], output);
+}
+
+#[test]
+fn test_scripted_read_fully_input_zero_length_read_does_not_consume_error_step() {
+    let mut input = ScriptedReadFullyInput::new(vec![ReadFullyStep::Interrupted, ReadFullyStep::Data(vec![7])]);
+    let mut empty = [];
+    // SAFETY: The empty destination and zero count require no memory access; index
+    // zero is valid.
+    assert_eq!(
+        0,
+        unsafe { input.read_fully_unchecked(&mut empty, 0, 0) }.expect("empty read should succeed")
+    );
+    assert_eq!(0, input.read_fully_unchecked_calls);
+    let mut output = [0];
+    assert_eq!(
+        ErrorKind::Interrupted,
+        input
+            .read_fully(&mut output)
+            .expect_err("interrupted step should remain")
+            .kind()
+    );
+    assert_eq!(1, input.read_fully(&mut output).expect("data should follow the error"));
+    assert_eq!([7], output);
 }
 
 struct OverreportingInput;
