@@ -875,7 +875,9 @@ where
     ///
     /// # Panics
     ///
-    /// Panics in debug builds if the requested output range does not fit.
+    /// May panic if cloning an item panics while copying through the buffer.
+    /// Such panics are not returned as I/O errors. Also panics in debug builds
+    /// if the requested output range does not fit.
     ///
     /// # Safety
     ///
@@ -905,6 +907,11 @@ where
     /// # Errors
     ///
     /// Returns the input error reported by the implementation.
+    ///
+    /// # Panics
+    ///
+    /// May panic if cloning an item panics while copying through the buffer.
+    /// Such panics are not returned as I/O errors.
     #[inline(always)]
     pub fn read(&mut self, output: &mut [I::Item]) -> Result<usize> {
         // SAFETY: The caller ensured the destination slice is valid.
@@ -938,7 +945,9 @@ where
     ///
     /// # Panics
     ///
-    /// Panics in debug builds if the requested output range does not fit.
+    /// May panic if cloning an item panics while copying through the buffer.
+    /// Such panics are not returned as I/O errors. Also panics in debug builds
+    /// if the requested output range does not fit.
     ///
     /// # Safety
     ///
@@ -969,6 +978,11 @@ where
     /// # Errors
     ///
     /// Returns any non-interrupted I/O error produced by the wrapped reader.
+    ///
+    /// # Panics
+    ///
+    /// May panic if cloning an item panics while copying through the buffer.
+    /// Such panics are not returned as I/O errors.
     #[inline(always)]
     pub fn read_fully(&mut self, output: &mut [I::Item]) -> Result<usize> {
         // SAFETY: The full output slice is a valid destination range.
@@ -1187,7 +1201,9 @@ where
     ///
     /// # Panics
     ///
-    /// Panics in debug builds if the requested output range does not fit.
+    /// May panic if cloning an item panics while copying through the buffer.
+    /// Such panics are not returned as I/O errors. Also panics in debug builds
+    /// if the requested output range does not fit.
     ///
     /// # Safety
     ///
@@ -1213,6 +1229,11 @@ where
     ///
     /// Returns [`ErrorKind::InvalidData`] if the wrapped input reports an
     /// invalid count. Other errors are propagated from the wrapped input.
+    ///
+    /// # Panics
+    ///
+    /// May panic if cloning an item panics while copying through the buffer.
+    /// Such panics are not returned as I/O errors.
     #[inline(always)]
     fn read(&mut self, output: &mut [I::Item]) -> Result<usize> {
         BufferedInput::read(self, output)
@@ -1240,7 +1261,9 @@ where
     ///
     /// # Panics
     ///
-    /// Panics in debug builds if the requested output range does not fit.
+    /// May panic if cloning an item panics while copying through the buffer.
+    /// Such panics are not returned as I/O errors. Also panics in debug builds
+    /// if the requested output range does not fit.
     ///
     /// # Safety
     ///

@@ -578,8 +578,10 @@ where
     ///
     /// # Panics
     ///
-    /// May panic if a nonzero requested input range does not fit. Debug builds
-    /// validate buffered-copy ranges before copying.
+    /// May panic if cloning an item panics while copying through the buffer.
+    /// Such panics are not returned as I/O errors. It may also panic if a
+    /// nonzero requested input range does not fit. Debug builds validate
+    /// buffered-copy ranges before copying.
     ///
     /// # Safety
     ///

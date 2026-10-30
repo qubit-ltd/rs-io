@@ -451,7 +451,9 @@ where
     ///
     /// # Panics
     ///
-    /// Panics in debug builds if the requested input range does not fit.
+    /// May panic if cloning an item panics while copying through the buffer.
+    /// Such panics are not returned as I/O errors. Also panics in debug builds
+    /// if the requested input range does not fit.
     ///
     /// # Safety
     ///
@@ -493,6 +495,11 @@ where
     /// [`ErrorKind::InvalidData`] if the wrapped writer reports accepting more
     /// items than requested, or [`ErrorKind::Other`] if an inner I/O operation
     /// previously panicked.
+    ///
+    /// # Panics
+    ///
+    /// May panic if cloning an item panics while copying through the buffer.
+    /// Such panics are not returned as I/O errors.
     #[inline]
     pub fn write(&mut self, input: &[O::Item]) -> Result<usize> {
         // SAFETY: The full input slice is a valid source range.
@@ -568,6 +575,11 @@ where
     /// Returns any I/O error produced while flushing pending items or writing a
     /// large input directly to the wrapped writer, or [`ErrorKind::Other`] if
     /// an inner I/O operation previously panicked.
+    ///
+    /// # Panics
+    ///
+    /// May panic if cloning an item panics while copying through the buffer.
+    /// Such panics are not returned as I/O errors.
     #[inline(always)]
     pub fn write_fully(&mut self, input: &[O::Item]) -> Result<()> {
         // SAFETY: The full input slice is a valid source range.
@@ -747,7 +759,9 @@ where
     /// # Panics
     ///
     /// Panics in debug builds if the input range does not fit or `count`
-    /// exceeds the spare buffer capacity.
+    /// exceeds the spare buffer capacity. May also panic if cloning an item
+    /// panics while copying through the buffer; such panics are not returned
+    /// as I/O errors.
     ///
     /// # Safety
     ///
@@ -967,7 +981,9 @@ where
     ///
     /// # Panics
     ///
-    /// Panics in debug builds if the requested input range does not fit.
+    /// May panic if cloning an item panics while copying through the buffer.
+    /// Such panics are not returned as I/O errors. Also panics in debug builds
+    /// if the requested input range does not fit.
     ///
     /// # Safety
     ///
@@ -993,6 +1009,11 @@ where
     /// Returns [`ErrorKind::WriteZero`] if pending items cannot be drained or
     /// [`ErrorKind::InvalidData`] if the wrapped output reports an invalid
     /// count. Other errors are propagated from the wrapped output.
+    ///
+    /// # Panics
+    ///
+    /// May panic if cloning an item panics while copying through the buffer.
+    /// Such panics are not returned as I/O errors.
     #[inline(always)]
     fn write(&mut self, input: &[Self::Item]) -> Result<usize> {
         BufferedOutput::write(self, input)
@@ -1018,7 +1039,9 @@ where
     ///
     /// # Panics
     ///
-    /// Panics in debug builds if the requested input range does not fit.
+    /// May panic if cloning an item panics while copying through the buffer.
+    /// Such panics are not returned as I/O errors. Also panics in debug builds
+    /// if the requested input range does not fit.
     ///
     /// # Safety
     ///
@@ -1044,6 +1067,11 @@ where
     /// Returns [`ErrorKind::WriteZero`] if the wrapped output cannot make
     /// progress or [`ErrorKind::InvalidData`] if it reports an invalid count.
     /// Other errors are propagated from the wrapped output.
+    ///
+    /// # Panics
+    ///
+    /// May panic if cloning an item panics while copying through the buffer.
+    /// Such panics are not returned as I/O errors.
     #[inline(always)]
     fn write_fully(&mut self, input: &[Self::Item]) -> Result<()> {
         BufferedOutput::write_fully(self, input)

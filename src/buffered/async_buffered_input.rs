@@ -595,8 +595,10 @@ where
     ///
     /// # Panics
     ///
-    /// May panic if a nonzero requested output range does not fit when the
-    /// method copies buffered or newly fetched items into `output`.
+    /// May panic if cloning an item panics while copying through the buffer.
+    /// Such panics are not returned as I/O errors. It may also panic if a
+    /// nonzero requested output range does not fit when the method copies
+    /// buffered or newly fetched items into `output`.
     ///
     /// # Safety
     ///
