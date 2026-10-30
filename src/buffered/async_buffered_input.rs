@@ -32,32 +32,37 @@ use crate::traits::validate_read_count;
 ///
 /// # Examples
 ///
+/// `ByteSlice` is always ready, so this example does not need to arrange a
+/// wakeup:
+///
 /// ```
-/// use qubit_io::AsyncBufferedInput;
-/// use qubit_io::AsyncInput;
+/// use qubit_io::{AsyncBufferedInput, AsyncInput};
 /// use std::io;
 /// use std::pin::Pin;
-/// use std::task::Context;
-/// use std::task::Poll;
-///
-/// struct EmptyInput;
-///
-/// impl AsyncInput for EmptyInput {
+/// use std::task::{Context, Poll, Waker};
+/// struct ByteSlice<'a> { items: &'a [u8], position: usize }
+/// impl AsyncInput for ByteSlice<'_> {
 ///     type Item = u8;
-///
-///     unsafe fn poll_read_unchecked(
-///         self: Pin<&mut Self>,
-///         _cx: &mut Context<'_>,
-///         _output: &mut [Self::Item],
-///         _index: usize,
-///         _count: usize,
-///     ) -> Poll<io::Result<usize>> {
-///         Poll::Ready(Ok(0))
+///     unsafe fn poll_read_unchecked(self: Pin<&mut Self>, _cx: &mut Context<'_>, output: &mut [u8], index: usize, count: usize) -> Poll<io::Result<usize>> {
+///         let this = self.get_mut();
+///         let n = count.min(this.items.len() - this.position);
+///         output[index..index + n].copy_from_slice(&this.items[this.position..this.position + n]);
+///         this.position += n;
+///         Poll::Ready(Ok(n))
 ///     }
 /// }
-///
-/// let input = AsyncBufferedInput::new(EmptyInput);
-/// assert_eq!(input.unread_len(), 0);
+/// let mut input = Box::pin(AsyncBufferedInput::with_capacity(ByteSlice { items: b"abcd", position: 0 }, 2));
+/// let mut cx = Context::from_waker(Waker::noop());
+/// assert!(matches!(input.as_mut().poll_fill_until(&mut cx, 2), Poll::Ready(Ok(true))));
+/// assert_eq!(input.as_ref().get_ref().unread(), b"ab");
+/// // SAFETY: The unread window contains the two items being consumed.
+/// unsafe { input.as_mut().consume_pinned(2); }
+/// assert!(matches!(input.as_mut().poll_fill_until(&mut cx, 2), Poll::Ready(Ok(true))));
+/// assert_eq!(input.as_ref().get_ref().unread(), b"cd");
+/// let mut tail = [0; 2];
+/// assert!(matches!(input.as_mut().poll_read(&mut cx, &mut tail), Poll::Ready(Ok(2))));
+/// assert_eq!(&tail, b"cd");
+/// assert!(matches!(input.as_mut().poll_read(&mut cx, &mut tail), Poll::Ready(Ok(0))));
 /// ```
 ///
 /// # Type Parameters

@@ -19,20 +19,33 @@ use crate::AsyncOutput;
 /// implementors do not need to be `Unpin`.
 ///
 /// # Examples
+/// `ByteSink` is always ready and stores each written byte in memory:
 ///
 /// ```
 /// use std::io;
 /// use std::pin::Pin;
-/// use std::task::{Context, Poll};
-/// use qubit_io::AsyncByteOutput;
+/// use std::task::{Context, Poll, Waker};
+/// use qubit_io::{AsyncByteOutput, AsyncOutput};
 ///
-/// fn write<S: AsyncByteOutput + ?Sized>(
-///     stream: Pin<&mut S>, cx: &mut Context<'_>, input: & [u8],
-/// ) -> Poll<io::Result<usize>> {
+/// struct ByteSink(Vec<u8>);
+/// impl AsyncOutput for ByteSink {
+///     type Item = u8;
+///     unsafe fn poll_write_unchecked(self: Pin<&mut Self>, _cx: &mut Context<'_>, input: &[u8], index: usize, count: usize) -> Poll<io::Result<usize>> {
+///         let this = self.get_mut();
+///         this.0.extend_from_slice(&input[index..index + count]);
+///         Poll::Ready(Ok(count))
+///     }
+///     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> { Poll::Ready(Ok(())) }
+/// }
+/// fn write<S: AsyncByteOutput + ?Sized>(stream: Pin<&mut S>, cx: &mut Context<'_>, input: &[u8]) -> Poll<io::Result<usize>> {
 ///     stream.poll_write(cx, input)
 /// }
+/// let mut sink = ByteSink(Vec::new());
+/// let mut cx = Context::from_waker(Waker::noop());
+/// assert!(matches!(write(Pin::new(&mut sink), &mut cx, b"QBIT"), Poll::Ready(Ok(4))));
+/// assert_eq!(sink.0, b"QBIT");
+/// assert!(matches!(Pin::new(&mut sink).poll_flush(&mut cx), Poll::Ready(Ok(()))));
 /// ```
-///
 /// Streams with a different item type do not satisfy this bound:
 ///
 /// ```compile_fail

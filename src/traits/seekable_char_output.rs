@@ -20,16 +20,48 @@ use crate::SeekableOutput;
 /// constant-time seeking.
 ///
 /// # Examples
+/// This example seeks by Unicode scalar value; its bounds are an example
+/// policy:
 ///
 /// ```
-/// use std::io::{Result, SeekFrom};
-/// use qubit_io::SeekableCharOutput;
-///
-/// fn rewind(stream: &mut dyn SeekableCharOutput) -> Result<u64> {
-///     stream.seek_to(SeekFrom::Start(0))
+/// use std::io;
+/// use std::io::SeekFrom;
+/// use qubit_io::{Output, Seekable, SeekableCharOutput};
+/// struct CharCursor { items: Vec<char>, position: usize }
+/// impl Output for CharCursor {
+///     type Item = char;
+///     unsafe fn write_unchecked(&mut self, input: &[char], index: usize, count: usize) -> io::Result<usize> {
+///         let n = count.min(self.items.len() - self.position);
+///         self.items[self.position..self.position + n].copy_from_slice(&input[index..index + n]);
+///         self.position += n;
+///         Ok(n)
+///     }
+///     fn flush(&mut self) -> io::Result<()> { Ok(()) }
 /// }
+/// impl Seekable for CharCursor {
+///     type Unit = char;
+///     fn seek_to(&mut self, position: SeekFrom) -> io::Result<u64> {
+///         let target = match position {
+///             SeekFrom::Start(offset) => i128::from(offset),
+///             SeekFrom::Current(offset) => self.position as i128 + i128::from(offset),
+///             SeekFrom::End(offset) => self.items.len() as i128 + i128::from(offset),
+///         };
+///         if target < 0 || target > self.items.len() as i128 {
+///             return Err(io::Error::new(io::ErrorKind::InvalidInput, "outside the example output"));
+///         }
+///         self.position = target as usize;
+///         Ok(self.position as u64)
+///     }
+/// }
+/// let mut cursor = CharCursor { items: vec!['你', '🦀'], position: 0 };
+/// let stream: &mut dyn SeekableCharOutput = &mut cursor;
+/// assert_eq!(stream.seek_to(SeekFrom::Start(1))?, 1);
+/// stream.write_fully(&['好'])?;
+/// assert_eq!(stream.seek_to(SeekFrom::Start(0))?, 0);
+/// assert_eq!(cursor.items, ['你', '好']);
+/// assert_eq!(cursor.position, 0);
+/// # Ok::<(), io::Error>(())
 /// ```
-///
 /// Streams with a different item type do not satisfy this bound:
 ///
 /// ```compile_fail

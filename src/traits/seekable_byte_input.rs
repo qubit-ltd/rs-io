@@ -16,16 +16,24 @@ use crate::SeekableInput;
 /// automatically. Implement the underlying input and seek traits instead.
 ///
 /// # Examples
+/// A byte cursor supports seeking through the trait object interface:
 ///
 /// ```
-/// use std::io::{Result, SeekFrom};
+/// use std::io::{Cursor, Result, SeekFrom};
 /// use qubit_io::SeekableByteInput;
-///
-/// fn rewind(stream: &mut dyn SeekableByteInput) -> Result<u64> {
-///     stream.seek_to(SeekFrom::Start(0))
-/// }
+/// fn rewind(stream: &mut dyn SeekableByteInput) -> Result<u64> { stream.seek_to(SeekFrom::Start(0)) }
+/// let mut cursor = Cursor::new(b"QBIT");
+/// let stream: &mut dyn SeekableByteInput = &mut cursor;
+/// assert_eq!(stream.seek_to(SeekFrom::Start(3))?, 3);
+/// assert_eq!(rewind(stream)?, 0);
+/// let mut byte = [0];
+/// assert_eq!(stream.read(&mut byte)?, 1);
+/// assert_eq!(&byte, b"Q");
+/// assert_eq!(stream.seek_to(SeekFrom::Start(1))?, 1);
+/// assert_eq!(stream.read(&mut byte)?, 1);
+/// assert_eq!(&byte, b"B");
+/// # Ok::<(), std::io::Error>(())
 /// ```
-///
 /// Streams with a different item type do not satisfy this bound:
 ///
 /// ```compile_fail

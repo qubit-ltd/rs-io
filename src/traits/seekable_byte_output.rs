@@ -16,16 +16,21 @@ use crate::SeekableOutput;
 /// automatically. Implement the underlying output and seek traits instead.
 ///
 /// # Examples
+/// A byte cursor can be written and repositioned through the trait object:
 ///
 /// ```
-/// use std::io::{Result, SeekFrom};
+/// use std::io::{Cursor, Result, SeekFrom};
 /// use qubit_io::SeekableByteOutput;
-///
-/// fn rewind(stream: &mut dyn SeekableByteOutput) -> Result<u64> {
-///     stream.seek_to(SeekFrom::Start(0))
-/// }
+/// fn rewind(stream: &mut dyn SeekableByteOutput) -> Result<u64> { stream.seek_to(SeekFrom::Start(0)) }
+/// let mut cursor = Cursor::new(Vec::<u8>::new());
+/// let stream: &mut dyn SeekableByteOutput = &mut cursor;
+/// stream.write_fully(b"QBIT")?;
+/// assert_eq!(stream.seek_to(SeekFrom::Current(0))?, 4);
+/// assert_eq!(rewind(stream)?, 0);
+/// stream.write_fully(b"R")?;
+/// assert_eq!(cursor.into_inner(), b"RBIT");
+/// # Ok::<(), std::io::Error>(())
 /// ```
-///
 /// Streams with a different item type do not satisfy this bound:
 ///
 /// ```compile_fail

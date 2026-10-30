@@ -19,19 +19,37 @@ use crate::Input;
 /// grapheme clusters. This trait does not encode or decode text.
 ///
 /// # Examples
+/// A character input can be implemented directly over Unicode scalar values:
 ///
 /// ```
 /// use std::io;
+/// use qubit_io::{CharInput, Input};
 ///
-/// use qubit_io::CharInput;
-///
+/// struct CharSlice<'a> { items: &'a [char], position: usize }
+/// impl Input for CharSlice<'_> {
+///     type Item = char;
+///     unsafe fn read_unchecked(&mut self, output: &mut [char], index: usize, count: usize) -> io::Result<usize> {
+///         let n = count.min(self.items.len() - self.position);
+///         output[index..index + n].copy_from_slice(&self.items[self.position..self.position + n]);
+///         self.position += n;
+///         Ok(n)
+///     }
+/// }
 /// fn read_char(input: &mut impl CharInput) -> io::Result<char> {
 ///     let mut chars = ['\0'];
 ///     input.read_exactly(&mut chars)?;
 ///     Ok(chars[0])
 /// }
+/// let mut input = CharSlice { items: &['你', '🦀'], position: 0 };
+/// assert_eq!(read_char(&mut input)?, '你');
+/// assert_eq!(read_char(&mut input)?, '🦀');
+/// let mut empty = [];
+/// assert_eq!(Input::read(&mut input, &mut empty)?, 0);
+/// assert_eq!(input.position, 2);
+/// let mut extra = ['\0'];
+/// assert_eq!(Input::read(&mut input, &mut extra)?, 0);
+/// # Ok::<(), io::Error>(())
 /// ```
-///
 /// Streams with a different item type do not satisfy this bound:
 /// ```compile_fail
 /// use qubit_io::CharInput;
