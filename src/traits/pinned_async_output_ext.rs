@@ -88,6 +88,9 @@ pub trait PinnedAsyncOutputExt {
     /// Resolves with the output error if a write fails, or
     /// [`std::io::ErrorKind::InvalidData`] if the output reports accepting more
     /// items than requested.
+    /// The returned future converts `WouldBlock` and `Interrupted` errors to
+    /// `InvalidData`, retaining the original error in the cause chain. It does
+    /// not retry those errors or undo progress from earlier successful calls.
     fn write_async<'a>(&'a mut self, input: &'a [<Self::Output as AsyncOutput>::Item])
     -> WriteFuture<'a, Self::Output>;
 
@@ -111,6 +114,9 @@ pub trait PinnedAsyncOutputExt {
     /// [`std::io::ErrorKind::WriteZero`] if the output makes no progress, or
     /// with [`std::io::ErrorKind::InvalidData`] if it reports an impossible
     /// item count.
+    /// The returned future converts `WouldBlock` and `Interrupted` errors to
+    /// `InvalidData`, retaining the original error in the cause chain. It does
+    /// not retry those errors or undo progress from earlier successful calls.
     fn write_fully_async<'a>(
         &'a mut self,
         input: &'a [<Self::Output as AsyncOutput>::Item],
@@ -171,6 +177,9 @@ where
     /// Resolves with the output error if a write fails, or
     /// [`std::io::ErrorKind::InvalidData`] if the output reports accepting more
     /// items than requested.
+    /// The returned future converts `WouldBlock` and `Interrupted` errors to
+    /// `InvalidData`, retaining the original error in the cause chain. It does
+    /// not retry those errors or undo progress from earlier successful calls.
     #[inline(always)]
     fn write_async<'a>(&'a mut self, input: &'a [O::Item]) -> WriteFuture<'a, Self::Output> {
         WriteFuture::new(self.as_mut(), input)
@@ -196,6 +205,9 @@ where
     /// [`std::io::ErrorKind::WriteZero`] if the output makes no progress, or
     /// with [`std::io::ErrorKind::InvalidData`] if it reports an impossible
     /// item count.
+    /// The returned future converts `WouldBlock` and `Interrupted` errors to
+    /// `InvalidData`, retaining the original error in the cause chain. It does
+    /// not retry those errors or undo progress from earlier successful calls.
     #[inline(always)]
     fn write_fully_async<'a>(&'a mut self, input: &'a [O::Item]) -> WriteFullyFuture<'a, Self::Output> {
         WriteFullyFuture::new(self.as_mut(), input)

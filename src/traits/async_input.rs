@@ -143,9 +143,12 @@ pub trait AsyncInput {
     ///
     /// # Errors
     ///
-    /// Returns the implementation's input error. Returns
-    /// [`std::io::ErrorKind::InvalidData`] if the implementation reports more
-    /// items than requested.
+    /// The default implementation converts `WouldBlock` and `Interrupted`
+    /// errors from the underlying operation to
+    /// [`std::io::ErrorKind::InvalidData`], retaining the original error in
+    /// the cause chain. Other errors are returned unchanged. It also
+    /// returns `InvalidData` if the implementation reports more items than
+    /// requested.
     #[inline]
     fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, output: &mut [Self::Item]) -> Poll<Result<usize>> {
         if output.is_empty() {

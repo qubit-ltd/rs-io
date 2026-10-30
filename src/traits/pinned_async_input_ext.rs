@@ -101,6 +101,9 @@ pub trait PinnedAsyncInputExt {
     ///
     /// Resolves with the input error if a read fails, or `InvalidData` if the
     /// input reports more items than requested.
+    /// The returned future converts `WouldBlock` and `Interrupted` errors to
+    /// `InvalidData`, retaining the original error in the cause chain. It does
+    /// not retry those errors or undo progress from earlier successful calls.
     fn read_async<'a>(&'a mut self, output: &'a mut [<Self::Input as AsyncInput>::Item])
     -> ReadFuture<'a, Self::Input>;
 
@@ -122,6 +125,9 @@ pub trait PinnedAsyncInputExt {
     ///
     /// Resolves with the input error if a read fails, or `InvalidData` if the
     /// input reports more items than requested.
+    /// The returned future converts `WouldBlock` and `Interrupted` errors to
+    /// `InvalidData`, retaining the original error in the cause chain. It does
+    /// not retry those errors or undo progress from earlier successful calls.
     fn read_fully_async<'a>(
         &'a mut self,
         output: &'a mut [<Self::Input as AsyncInput>::Item],
@@ -146,6 +152,9 @@ pub trait PinnedAsyncInputExt {
     /// Resolves with `UnexpectedEof` if EOF occurs before `output` is full,
     /// with the input error if a read fails, or with `InvalidData` if the
     /// input reports more items than requested.
+    /// The returned future converts `WouldBlock` and `Interrupted` errors to
+    /// `InvalidData`, retaining the original error in the cause chain. It does
+    /// not retry those errors or undo progress from earlier successful calls.
     fn read_exactly_async<'a>(
         &'a mut self,
         output: &'a mut [<Self::Input as AsyncInput>::Item],
@@ -177,6 +186,9 @@ where
     ///
     /// Resolves with the input error if a read fails, or `InvalidData` if the
     /// input reports more items than requested.
+    /// The returned future converts `WouldBlock` and `Interrupted` errors to
+    /// `InvalidData`, retaining the original error in the cause chain. It does
+    /// not retry those errors or undo progress from earlier successful calls.
     #[inline(always)]
     fn read_async<'a>(&'a mut self, output: &'a mut [I::Item]) -> ReadFuture<'a, Self::Input> {
         ReadFuture::new(self.as_mut(), output)
@@ -200,6 +212,9 @@ where
     ///
     /// Resolves with the input error if a read fails, or `InvalidData` if the
     /// input reports more items than requested.
+    /// The returned future converts `WouldBlock` and `Interrupted` errors to
+    /// `InvalidData`, retaining the original error in the cause chain. It does
+    /// not retry those errors or undo progress from earlier successful calls.
     #[inline(always)]
     fn read_fully_async<'a>(&'a mut self, output: &'a mut [I::Item]) -> ReadFullyFuture<'a, Self::Input> {
         ReadFullyFuture::new(self.as_mut(), output)
@@ -224,6 +239,9 @@ where
     /// Resolves with `UnexpectedEof` if EOF occurs before `output` is full,
     /// with the input error if a read fails, or with `InvalidData` if the
     /// input reports more items than requested.
+    /// The returned future converts `WouldBlock` and `Interrupted` errors to
+    /// `InvalidData`, retaining the original error in the cause chain. It does
+    /// not retry those errors or undo progress from earlier successful calls.
     #[inline(always)]
     fn read_exactly_async<'a>(&'a mut self, output: &'a mut [I::Item]) -> ReadExactFuture<'a, Self::Input> {
         ReadExactFuture::new(self.as_mut(), output)
