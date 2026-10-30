@@ -48,25 +48,25 @@ pub use adapters::BoxAsyncInput;
 pub use adapters::BoxAsyncOutput;
 pub use adapters::BoxInput;
 pub use adapters::BoxOutput;
-#[cfg(all(feature = "futures-io", not(miri)))]
+#[cfg(feature = "futures-io")]
 pub use adapters::FuturesAsyncRead;
-#[cfg(all(feature = "futures-io", not(miri)))]
+#[cfg(feature = "futures-io")]
 pub use adapters::FuturesAsyncWrite;
-#[cfg(all(feature = "futures-io", not(miri)))]
+#[cfg(feature = "futures-io")]
 pub use adapters::FuturesInput;
-#[cfg(all(feature = "futures-io", not(miri)))]
+#[cfg(feature = "futures-io")]
 pub use adapters::FuturesOutput;
 pub use adapters::InputRef;
 pub use adapters::OutputRef;
 pub use adapters::StdRead;
 pub use adapters::StdWrite;
-#[cfg(all(feature = "tokio", not(miri)))]
+#[cfg(feature = "tokio")]
 pub use adapters::TokioAsyncRead;
-#[cfg(all(feature = "tokio", not(miri)))]
+#[cfg(feature = "tokio")]
 pub use adapters::TokioAsyncWrite;
-#[cfg(all(feature = "tokio", not(miri)))]
+#[cfg(feature = "tokio")]
 pub use adapters::TokioInput;
-#[cfg(all(feature = "tokio", not(miri)))]
+#[cfg(feature = "tokio")]
 pub use adapters::TokioOutput;
 pub use async_io::CloseFuture;
 #[cfg(feature = "digest")]

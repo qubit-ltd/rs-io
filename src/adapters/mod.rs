@@ -13,48 +13,48 @@ mod box_async_input;
 mod box_async_output;
 mod box_input;
 mod box_output;
-#[cfg(all(feature = "futures-io", not(miri)))]
+#[cfg(feature = "futures-io")]
 mod futures_async_read;
-#[cfg(all(feature = "futures-io", not(miri)))]
+#[cfg(feature = "futures-io")]
 mod futures_async_write;
-#[cfg(all(feature = "futures-io", not(miri)))]
+#[cfg(feature = "futures-io")]
 mod futures_input;
-#[cfg(all(feature = "futures-io", not(miri)))]
+#[cfg(feature = "futures-io")]
 mod futures_output;
 mod input_ref;
 mod output_ref;
 mod std_read;
 mod std_write;
-#[cfg(all(feature = "tokio", not(miri)))]
+#[cfg(feature = "tokio")]
 mod tokio_async_read;
-#[cfg(all(feature = "tokio", not(miri)))]
+#[cfg(feature = "tokio")]
 mod tokio_async_write;
-#[cfg(all(feature = "tokio", not(miri)))]
+#[cfg(feature = "tokio")]
 mod tokio_input;
-#[cfg(all(feature = "tokio", not(miri)))]
+#[cfg(feature = "tokio")]
 mod tokio_output;
 
 pub use box_async_input::BoxAsyncInput;
 pub use box_async_output::BoxAsyncOutput;
 pub use box_input::BoxInput;
 pub use box_output::BoxOutput;
-#[cfg(all(feature = "futures-io", not(miri)))]
+#[cfg(feature = "futures-io")]
 pub use futures_async_read::FuturesAsyncRead;
-#[cfg(all(feature = "futures-io", not(miri)))]
+#[cfg(feature = "futures-io")]
 pub use futures_async_write::FuturesAsyncWrite;
-#[cfg(all(feature = "futures-io", not(miri)))]
+#[cfg(feature = "futures-io")]
 pub use futures_input::FuturesInput;
-#[cfg(all(feature = "futures-io", not(miri)))]
+#[cfg(feature = "futures-io")]
 pub use futures_output::FuturesOutput;
 pub use input_ref::InputRef;
 pub use output_ref::OutputRef;
 pub use std_read::StdRead;
 pub use std_write::StdWrite;
-#[cfg(all(feature = "tokio", not(miri)))]
+#[cfg(feature = "tokio")]
 pub use tokio_async_read::TokioAsyncRead;
-#[cfg(all(feature = "tokio", not(miri)))]
+#[cfg(feature = "tokio")]
 pub use tokio_async_write::TokioAsyncWrite;
-#[cfg(all(feature = "tokio", not(miri)))]
+#[cfg(feature = "tokio")]
 pub use tokio_input::TokioInput;
-#[cfg(all(feature = "tokio", not(miri)))]
+#[cfg(feature = "tokio")]
 pub use tokio_output::TokioOutput;
