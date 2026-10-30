@@ -207,7 +207,8 @@ where
         Ok(written)
     }
 
-    /// Flushes the primary output and then the branch output.
+    /// Reports a latched branch error, or flushes the primary and then the
+    /// branch.
     ///
     /// # Returns
     ///
@@ -215,8 +216,15 @@ where
     ///
     /// # Errors
     ///
-    /// Returns the primary flush error without flushing the branch, or returns
-    /// the branch flush error after the primary has flushed successfully.
+    /// Returns a previously latched branch write error without flushing either
+    /// output. The primary may still contain buffered items; use
+    /// [`into_parts`](Self::into_parts) to recover the outputs and inspect
+    /// their state before deciding how to continue. Do not blindly replay
+    /// items already accepted by the primary.
+    ///
+    /// If no branch write error is latched, returns the primary flush error
+    /// without flushing the branch, or returns the branch flush error after the
+    /// primary has flushed successfully.
     #[inline]
     fn flush(&mut self) -> io::Result<()> {
         self.failure.check()?;
