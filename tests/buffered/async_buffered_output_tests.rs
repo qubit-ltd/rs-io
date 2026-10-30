@@ -8,6 +8,7 @@
 
 use std::cell::Cell;
 use std::cell::RefCell;
+use std::future::Future;
 use std::io;
 use std::marker::PhantomPinned;
 use std::pin::Pin;
@@ -489,6 +490,70 @@ fn drive_output<T>(mut poll: impl FnMut(&mut Context<'_>) -> Poll<io::Result<T>>
         }
     }
     panic!("pinned output exceeded the poll limit")
+}
+
+#[derive(Clone, Default)]
+struct NonUnpinItem {
+    value: u8,
+    _pinned: PhantomPinned,
+}
+
+struct NonUnpinItemOutput {
+    values: Vec<u8>,
+    flushes: usize,
+}
+
+impl AsyncOutput for NonUnpinItemOutput {
+    type Item = NonUnpinItem;
+
+    unsafe fn poll_write_unchecked(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+        input: &[Self::Item],
+        index: usize,
+        count: usize,
+    ) -> Poll<io::Result<usize>> {
+        let this = self.get_mut();
+        let written = count.min(1);
+        this.values
+            .extend(input[index..index + written].iter().map(|item| item.value));
+        Poll::Ready(Ok(written))
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        self.get_mut().flushes += 1;
+        Poll::Ready(Ok(()))
+    }
+}
+
+#[test]
+fn test_async_buffered_output_helper_accepts_non_unpin_items() {
+    fn require_unpin<T: Unpin>(_: &T) {}
+
+    let sink = NonUnpinItemOutput {
+        values: Vec::new(),
+        flushes: 0,
+    };
+    let mut output = AsyncBufferedOutput::with_capacity(sink, 4);
+    require_unpin(&output);
+    let values: Vec<NonUnpinItem> = (1..=3)
+        .map(|value| NonUnpinItem {
+            value,
+            _pinned: PhantomPinned,
+        })
+        .collect();
+    {
+        let mut operation = Box::pin(async {
+            output.write_fully_async(&values).await?;
+            assert_eq!(output.pending().len(), 3);
+            output.ensure_spare_capacity_async(4).await?;
+            assert!(output.pending().is_empty());
+            Ok(())
+        });
+        drive_output(|cx| operation.as_mut().poll(cx));
+    }
+    assert_eq!(output.inner().values, vec![1, 2, 3]);
+    assert_eq!(output.inner().flushes, 0, "capacity helper must not flush inner output");
 }
 
 #[test]

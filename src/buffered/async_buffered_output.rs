@@ -118,6 +118,14 @@ where
     buffer: Buffer<O::Item>,
 }
 
+// The buffer is not structurally pinned.
+impl<O> Unpin for AsyncBufferedOutput<O>
+where
+    O: AsyncOutput + Unpin,
+    O::Item: Clone + Default,
+{
+}
+
 impl<O> AsyncBufferedOutput<O>
 where
     O: AsyncOutput,
@@ -508,7 +516,7 @@ where
 impl<O> AsyncBufferedOutput<O>
 where
     O: AsyncOutput + Unpin,
-    O::Item: Clone + Default + Unpin,
+    O::Item: Clone + Default,
 {
     /// Asynchronously ensures that the pending buffer has room for at least
     /// `count` more items.

@@ -81,6 +81,14 @@ where
     buffer: Buffer<I::Item>,
 }
 
+// The buffer is not structurally pinned.
+impl<I> Unpin for AsyncBufferedInput<I>
+where
+    I: AsyncInput + Unpin,
+    I::Item: Clone + Default,
+{
+}
+
 impl<I> AsyncBufferedInput<I>
 where
     I: AsyncInput,
@@ -499,7 +507,7 @@ where
 impl<I> AsyncBufferedInput<I>
 where
     I: AsyncInput + Unpin,
-    I::Item: Clone + Default + Unpin,
+    I::Item: Clone + Default,
 {
     /// Asynchronously reads and appends at least one item to the unread buffer.
     ///

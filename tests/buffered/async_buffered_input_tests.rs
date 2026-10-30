@@ -8,6 +8,7 @@
 
 use std::cell::Cell;
 use std::cell::RefCell;
+use std::future::Future;
 use std::io;
 use std::marker::PhantomPinned;
 use std::pin::Pin;
@@ -359,6 +360,73 @@ fn drive_input<T>(mut poll: impl FnMut(&mut Context<'_>) -> Poll<io::Result<T>>)
         }
     }
     panic!("pinned input exceeded the poll limit")
+}
+
+#[derive(Clone, Default)]
+struct NonUnpinItem {
+    value: u8,
+    _pinned: PhantomPinned,
+}
+
+struct NonUnpinItemInput {
+    values: Vec<u8>,
+    position: usize,
+    pending_once: bool,
+}
+
+impl AsyncInput for NonUnpinItemInput {
+    type Item = NonUnpinItem;
+
+    unsafe fn poll_read_unchecked(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        output: &mut [Self::Item],
+        index: usize,
+        count: usize,
+    ) -> Poll<io::Result<usize>> {
+        let this = self.get_mut();
+        if count == 0 {
+            return Poll::Ready(Ok(0));
+        }
+        if this.pending_once {
+            this.pending_once = false;
+            cx.waker().wake_by_ref();
+            return Poll::Pending;
+        }
+        let read = count.min(1).min(this.values.len() - this.position);
+        for (item, value) in output[index..index + read]
+            .iter_mut()
+            .zip(&this.values[this.position..this.position + read])
+        {
+            item.value = *value;
+        }
+        this.position += read;
+        Poll::Ready(Ok(read))
+    }
+}
+
+#[test]
+fn test_async_buffered_input_helpers_accept_non_unpin_items() {
+    fn require_unpin<T: Unpin>(_: &T) {}
+
+    let source = NonUnpinItemInput {
+        values: (1..=3).collect(),
+        position: 0,
+        pending_once: true,
+    };
+    let mut input = AsyncBufferedInput::with_capacity(source, 4);
+    require_unpin(&input);
+    let mut operation = Box::pin(async {
+        assert!(input.fill_more_async().await?);
+        assert_eq!(input.unread()[0].value, 1);
+        assert!(input.fill_until_async(2).await?);
+        assert_eq!(input.unread().len(), 2);
+        input.ensure_available_async(3).await?;
+        let actual: Vec<u8> = input.unread().iter().map(|item| item.value).collect();
+        assert_eq!(actual, vec![1, 2, 3]);
+        Ok(())
+    });
+    drive_input(|cx| operation.as_mut().poll(cx));
 }
 
 #[test]
