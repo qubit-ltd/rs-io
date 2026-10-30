@@ -82,6 +82,26 @@ impl Read for FailingReader {
     }
 }
 
+struct OverreportedReader {
+    prefix_pending: bool,
+    calls: usize,
+}
+
+impl Read for OverreportedReader {
+    fn read(&mut self, output: &mut [u8]) -> std::io::Result<usize> {
+        self.calls += 1;
+        if output.is_empty() {
+            return Ok(0);
+        }
+        if self.prefix_pending {
+            self.prefix_pending = false;
+            output[0] = b'a';
+            return Ok(1);
+        }
+        Ok(output.len() + 1)
+    }
+}
+
 struct PartialThenFailReader {
     data: Vec<u8>,
     position: usize,
@@ -707,6 +727,84 @@ fn test_read_to_end_limited_into_zero_limit_rejects_non_empty_input() {
 
     assert_eq!(ErrorKind::InvalidData, error.kind());
     assert_eq!(b"prefix", output.as_slice());
+}
+
+#[test]
+fn test_read_exact_or_eof_rejects_overreported_count() {
+    for prefix_pending in [false, true] {
+        let mut reader = OverreportedReader {
+            prefix_pending,
+            calls: 0,
+        };
+        let mut output = [b'.'; 4];
+        let error = reader.read_exact_or_eof(&mut output).expect_err("invalid count");
+        assert_eq!(ErrorKind::InvalidData, error.kind());
+        assert_eq!(if prefix_pending { 2 } else { 1 }, reader.calls);
+        if prefix_pending {
+            assert_eq!(b'a', output[0]);
+        }
+    }
+}
+
+#[test]
+fn test_read_exact_or_eof_unchecked_rejects_overreported_count() {
+    for prefix_pending in [false, true] {
+        let mut reader = OverreportedReader {
+            prefix_pending,
+            calls: 0,
+        };
+        let mut output = [b'.'; 6];
+        // SAFETY: output[1..5] is valid; only the reader's reported count is invalid.
+        let error = unsafe { reader.read_exact_or_eof_unchecked(&mut output, 1, 4) }.expect_err("invalid count");
+        assert_eq!(ErrorKind::InvalidData, error.kind());
+        assert_eq!(if prefix_pending { 2 } else { 1 }, reader.calls);
+        assert_eq!(b'.', output[0]);
+        assert_eq!(b'.', output[5]);
+        if prefix_pending {
+            assert_eq!(b'a', output[1]);
+        }
+    }
+}
+
+#[test]
+fn test_discard_exact_or_eof_rejects_overreported_count() {
+    for prefix_pending in [false, true] {
+        let mut reader = OverreportedReader {
+            prefix_pending,
+            calls: 0,
+        };
+        let error = reader.discard_exact_or_eof(4).expect_err("invalid count");
+        assert_eq!(ErrorKind::InvalidData, error.kind());
+        assert_eq!(if prefix_pending { 2 } else { 1 }, reader.calls);
+    }
+}
+
+#[test]
+fn test_read_to_end_limited_into_rolls_back_overreported_count() {
+    for prefix_pending in [false, true] {
+        let mut reader = OverreportedReader {
+            prefix_pending,
+            calls: 0,
+        };
+        let mut output = b"existing".to_vec();
+        let error = reader
+            .read_to_end_limited_into(&mut output, 10_000)
+            .expect_err("invalid count");
+        assert_eq!(ErrorKind::InvalidData, error.kind());
+        assert_eq!(b"existing", output.as_slice());
+        assert_eq!(if prefix_pending { 2 } else { 1 }, reader.calls);
+    }
+}
+
+#[test]
+fn test_read_to_end_limited_rejects_overreported_count() {
+    let mut reader = OverreportedReader {
+        prefix_pending: false,
+        calls: 0,
+    };
+    let error = reader.read_to_end_limited(10_000).expect_err("invalid count");
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!(1, reader.calls);
 }
 
 #[test]

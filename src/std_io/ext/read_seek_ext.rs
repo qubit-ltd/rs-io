@@ -54,7 +54,9 @@ pub trait ReadSeekExt: Read + Seek {
     /// Returns an error when reading the current position, reading bytes, or
     /// restoring the original position fails. If both reading and restoration
     /// fail, the restoration error is returned because the caller's stream
-    /// position contract was not preserved.
+    /// position contract was not preserved. Returns
+    /// [`std::io::ErrorKind::InvalidData`] if the reader reports more bytes
+    /// than requested.
     fn peek_exact_or_eof(&mut self, buffer: &mut [u8]) -> Result<usize>;
 
     /// Reads from `offset` and restores the original position.
@@ -73,7 +75,9 @@ pub trait ReadSeekExt: Read + Seek {
     /// # Errors
     /// Returns an error when reading the current position, seeking to `offset`,
     /// reading bytes, or restoring the original position fails. If restoration
-    /// fails, the restoration error is returned.
+    /// fails, the restoration error is returned. Returns
+    /// [`std::io::ErrorKind::InvalidData`] if the reader reports more bytes
+    /// than requested.
     fn read_exact_or_eof_at(&mut self, offset: u64, buffer: &mut [u8]) -> Result<usize>;
 }
 
@@ -88,7 +92,8 @@ pub trait ReadSeekExt: Read + Seek {
 ///
 /// # Errors
 /// Returns an error when reading, querying, or restoring the stream position
-/// fails.
+/// fails. Returns [`std::io::ErrorKind::InvalidData`] if the reader reports
+/// more bytes than requested.
 fn peek_exact_or_eof_impl(reader: &mut dyn ReadSeek, buffer: &mut [u8]) -> Result<usize> {
     let position = reader.stream_position()?;
     let read_result = read_ext_impl::read_exact_or_eof(reader, buffer);
@@ -112,7 +117,8 @@ fn peek_exact_or_eof_impl(reader: &mut dyn ReadSeek, buffer: &mut [u8]) -> Resul
 ///
 /// # Errors
 /// Returns an error when querying, changing, or restoring the stream position,
-/// or when reading fails.
+/// or when reading fails. Returns [`std::io::ErrorKind::InvalidData`] if the
+/// reader reports more bytes than requested.
 fn read_exact_or_eof_at_impl(reader: &mut dyn ReadSeek, offset: u64, buffer: &mut [u8]) -> Result<usize> {
     let position = reader.stream_position()?;
     let read_result = match reader.seek(SeekFrom::Start(offset)) {

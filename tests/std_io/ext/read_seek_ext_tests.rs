@@ -16,6 +16,44 @@ use std::io::SeekFrom;
 use qubit_io::std_io::ReadSeek;
 use qubit_io::std_io::ext::ReadSeekExt;
 
+struct OverreportedReadSeek {
+    position: u64,
+    fail_restore: bool,
+    restore_attempts: usize,
+}
+
+impl Read for OverreportedReadSeek {
+    fn read(&mut self, output: &mut [u8]) -> std::io::Result<usize> {
+        if output.is_empty() {
+            return Ok(0);
+        }
+        output[0] = b'x';
+        self.position += 1;
+        Ok(output.len() + 1)
+    }
+}
+
+impl Seek for OverreportedReadSeek {
+    fn seek(&mut self, position: SeekFrom) -> std::io::Result<u64> {
+        match position {
+            SeekFrom::Current(0) => Ok(self.position),
+            SeekFrom::Start(7) => {
+                self.restore_attempts += 1;
+                if self.fail_restore {
+                    return Err(Error::new(ErrorKind::PermissionDenied, "restore failed"));
+                }
+                self.position = 7;
+                Ok(7)
+            }
+            SeekFrom::Start(position) => {
+                self.position = position;
+                Ok(position)
+            }
+            _ => Err(Error::new(ErrorKind::Unsupported, "unsupported seek")),
+        }
+    }
+}
+
 struct RestoreFailingReader {
     original_position: u64,
     position: u64,
@@ -521,4 +559,36 @@ fn test_peek_exact_or_eof_works_on_dyn_read_seek() {
     assert_eq!(2, count);
     assert_eq!(b"bc", &buffer);
     assert_eq!(1, stream.stream_position().expect("stream position should be restored"),);
+}
+
+#[test]
+fn test_position_preserving_reads_restore_after_overreported_count() {
+    for at_offset in [false, true] {
+        for fail_restore in [false, true] {
+            let mut reader = OverreportedReadSeek {
+                position: 7,
+                fail_restore,
+                restore_attempts: 0,
+            };
+            let mut output = [0; 2];
+            let result = if at_offset {
+                reader.read_exact_or_eof_at(2, &mut output)
+            } else {
+                reader.peek_exact_or_eof(&mut output)
+            };
+            let error = result.expect_err("invalid count or failed restore");
+            assert_eq!(
+                if fail_restore {
+                    ErrorKind::PermissionDenied
+                } else {
+                    ErrorKind::InvalidData
+                },
+                error.kind()
+            );
+            assert_eq!(1, reader.restore_attempts);
+            if !fail_restore {
+                assert_eq!(7, reader.position);
+            }
+        }
+    }
 }

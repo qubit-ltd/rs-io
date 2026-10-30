@@ -20,6 +20,7 @@ use std::io::Read;
 use std::io::Result;
 use std::string::FromUtf8Error;
 
+use crate::traits::validate_read_count;
 use crate::util::allocation_error;
 use crate::util::try_reserve_vec;
 
@@ -37,12 +38,17 @@ pub(crate) const READ_TO_END_BUFFER_SIZE: usize = 8 * 1024;
 ///
 /// # Errors
 /// Returns the first non-interrupted read error reported by `reader`.
+/// Returns [`ErrorKind::InvalidData`] if the reader reports more bytes than
+/// requested.
 pub(crate) fn read_exact_or_eof(reader: &mut dyn Read, buffer: &mut [u8]) -> Result<usize> {
     let mut total = 0;
     while total < buffer.len() {
         match reader.read(&mut buffer[total..]) {
             Ok(0) => break,
-            Ok(count) => total += count,
+            Ok(count) => {
+                validate_read_count(count, buffer.len() - total)?;
+                total += count;
+            }
             Err(error) => {
                 if error.kind() == ErrorKind::Interrupted {
                     continue;
@@ -172,6 +178,10 @@ pub(crate) fn read_to_end_limited_into(reader: &mut dyn Read, output: &mut Vec<u
         let requested = remaining.saturating_add(1).min(READ_TO_END_BUFFER_SIZE);
         match reader.read(&mut buffer[..requested]) {
             Ok(count) => {
+                if let Err(error) = validate_read_count(count, requested) {
+                    output.truncate(original_len);
+                    return Err(error);
+                }
                 if count == 0 {
                     return Ok(appended);
                 } else if count <= remaining {

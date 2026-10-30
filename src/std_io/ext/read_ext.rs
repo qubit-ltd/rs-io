@@ -16,6 +16,7 @@ use std::io::copy as copy_all;
 
 use crate::Streams;
 use crate::std_io::ext::internal::read_ext_impl;
+use crate::traits::validate_read_count;
 use crate::util::SliceRange;
 use crate::util::UncheckedSlice;
 use crate::util::allocation_error;
@@ -121,7 +122,9 @@ pub trait ReadExt: Read {
     ///
     /// # Errors
     /// Returns the first non-[`ErrorKind::Interrupted`] error reported by the
-    /// underlying reader. Interrupted reads are retried.
+    /// underlying reader. Interrupted reads are retried. Returns
+    /// [`ErrorKind::InvalidData`] if the reader reports more bytes than
+    /// requested.
     ///
     /// # Panics
     /// Panics in debug builds if the requested destination range does not fit.
@@ -153,7 +156,9 @@ pub trait ReadExt: Read {
     ///
     /// # Errors
     /// Returns the first non-[`ErrorKind::Interrupted`] error reported by the
-    /// underlying reader. Interrupted reads are retried.
+    /// underlying reader. Interrupted reads are retried. Returns
+    /// [`ErrorKind::InvalidData`] if the reader reports more bytes than
+    /// requested.
     fn read_exact_or_eof(&mut self, buffer: &mut [u8]) -> Result<usize>;
 
     /// Reads exactly `N` bytes into a stack-allocated array.
@@ -233,7 +238,9 @@ pub trait ReadExt: Read {
     ///
     /// # Errors
     /// Returns the first non-[`ErrorKind::Interrupted`] error reported by the
-    /// underlying reader. Interrupted reads are retried.
+    /// underlying reader. Interrupted reads are retried. Returns
+    /// [`ErrorKind::InvalidData`] if the reader reports more bytes than
+    /// requested.
     fn discard_exact_or_eof(&mut self, bytes: u64) -> Result<u64>;
 
     /// Copies all remaining bytes from this reader into `writer`.
@@ -321,7 +328,8 @@ pub trait ReadExt: Read {
     /// `max_len` bytes. Returns [`ErrorKind::OutOfMemory`] when the result
     /// vector cannot grow. Returns the first non-[`ErrorKind::Interrupted`]
     /// error reported by the underlying reader; interrupted reads are
-    /// retried.
+    /// retried. Returns [`ErrorKind::InvalidData`] if the reader reports more
+    /// bytes than requested.
     fn read_to_end_limited(&mut self, max_len: usize) -> Result<Vec<u8>>;
 
     /// Reads the remaining bytes into `output` with a maximum accepted length.
@@ -344,7 +352,9 @@ pub trait ReadExt: Read {
     /// Returns [`ErrorKind::InvalidData`] when the stream contains more than
     /// `max_len` bytes. Returns [`ErrorKind::OutOfMemory`] when `output` cannot
     /// grow. Returns the first non-[`ErrorKind::Interrupted`] error reported by
-    /// the underlying reader; interrupted reads are retried.
+    /// the underlying reader; interrupted reads are retried. Returns
+    /// [`ErrorKind::InvalidData`] if the reader reports more bytes than
+    /// requested.
     fn read_to_end_limited_into(&mut self, output: &mut Vec<u8>, max_len: usize) -> Result<usize>;
 
     /// Reads the remaining bytes as UTF-8 text with a maximum accepted length.
@@ -427,9 +437,13 @@ unsafe fn read_exact_or_eof_unchecked_impl(
         // SAFETY: The caller guarantees that `start_index..start_index + count`
         // is valid for `buffer`; `total < count`, so this suffix is valid.
         let target = unsafe { UncheckedSlice::subslice_mut(buffer, start_index + total, count - total) };
+        let requested = count - total;
         match reader.read(target) {
             Ok(0) => break,
-            Ok(read) => total += read,
+            Ok(read) => {
+                validate_read_count(read, requested)?;
+                total += read;
+            }
             Err(error) => {
                 if error.kind() == ErrorKind::Interrupted {
                     continue;
@@ -491,7 +505,8 @@ fn read_exact_vec_limited_impl(reader: &mut dyn Read, len: usize, max_len: usize
 /// The number of bytes discarded before the limit or EOF was reached.
 ///
 /// # Errors
-/// Returns the first non-interrupted read error.
+/// Returns the first non-interrupted read error, or [`ErrorKind::InvalidData`]
+/// if the reader reports more bytes than requested.
 fn discard_exact_or_eof_impl(reader: &mut dyn Read, bytes: u64) -> Result<u64> {
     let mut buffer = [0; DISCARD_BUFFER_SIZE];
     let mut remaining = bytes;
@@ -501,6 +516,7 @@ fn discard_exact_or_eof_impl(reader: &mut dyn Read, bytes: u64) -> Result<u64> {
         match reader.read(&mut buffer[..requested]) {
             Ok(0) => break,
             Ok(count) => {
+                validate_read_count(count, requested)?;
                 let count = count as u64;
                 remaining -= count;
                 discarded += count;
@@ -601,7 +617,9 @@ where
     /// The number of bytes read into the requested range.
     ///
     /// # Errors
-    /// Returns the first non-interrupted read error.
+    /// Returns the first non-interrupted read error, or
+    /// [`ErrorKind::InvalidData`] if the reader reports more bytes than
+    /// requested.
     ///
     /// # Panics
     /// Panics in debug builds if the requested output range does not fit.
@@ -657,7 +675,9 @@ where
     /// The number of bytes read into `buffer`.
     ///
     /// # Errors
-    /// Returns the first non-interrupted read error.
+    /// Returns the first non-interrupted read error, or
+    /// [`ErrorKind::InvalidData`] if the reader reports more bytes than
+    /// requested.
     #[inline(always)]
     fn read_exact_or_eof(&mut self, buffer: &mut [u8]) -> Result<usize> {
         let mut reader = self;
@@ -798,7 +818,7 @@ where
     /// # Errors
     /// Returns [`ErrorKind::OutOfMemory`] if the result vector cannot grow, a
     /// read error, or [`ErrorKind::InvalidData`] when the remaining input
-    /// exceeds `max_len`.
+    /// exceeds `max_len` or the reader reports more bytes than requested.
     #[inline(always)]
     fn read_to_end_limited(&mut self, max_len: usize) -> Result<Vec<u8>> {
         let mut reader = self;
@@ -817,7 +837,7 @@ where
     /// # Errors
     /// Returns [`ErrorKind::OutOfMemory`] if `output` cannot grow, a read
     /// error, or [`ErrorKind::InvalidData`] when the remaining input
-    /// exceeds `max_len`.
+    /// exceeds `max_len` or the reader reports more bytes than requested.
     #[inline(always)]
     fn read_to_end_limited_into(&mut self, output: &mut Vec<u8>, max_len: usize) -> Result<usize> {
         let mut reader = self;
