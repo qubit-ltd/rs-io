@@ -21,8 +21,9 @@ use crate::Output;
 /// Vectored writes forward the inner [`Output::write_vectored`] override when
 /// buffers are non-empty; actual scatter/gather behavior depends on that
 /// implementation and the platform. Constructing the adapter does not
-/// allocate, but a vectored call may allocate temporary descriptors without
-/// copying the payload. Length overflow returns `InvalidInput` and descriptor
+/// allocate. Exactly one descriptor uses stack storage; multiple descriptors
+/// may allocate temporary descriptor storage, and the inner output may allocate
+/// independently. Length overflow returns `InvalidInput` and descriptor
 /// allocation failure returns `OutOfMemory` before the inner call. A count
 /// larger than the total capacity returns `InvalidData` after the inner call;
 /// its side effects are not undone. Short progress and inner errors are
@@ -97,8 +98,13 @@ where
         if capacity == 0 {
             return Ok(0);
         }
-        let slices = crate::util::byte_slices(buffers)?;
-        let count = Output::write_vectored(&mut self.inner, &slices)?;
+        let count = if let [buffer] = buffers {
+            let slices = [&buffer[..]];
+            Output::write_vectored(&mut self.inner, &slices)?
+        } else {
+            let slices = crate::util::byte_slices(buffers)?;
+            Output::write_vectored(&mut self.inner, &slices)?
+        };
         crate::traits::validate_write_count(count, capacity)?;
         Ok(count)
     }

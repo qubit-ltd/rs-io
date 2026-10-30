@@ -77,8 +77,10 @@ where
     }
 
     /// Writes from the buffers in order using the standard writer's vectored
-    /// method. Returns `InvalidInput` if their total length overflows,
-    /// `OutOfMemory` if descriptor preparation fails before I/O, or
+    /// method. A single descriptor uses stack storage; multiple descriptors
+    /// may allocate descriptor storage, and the writer may allocate
+    /// independently. Returns `InvalidInput` if their total length overflows,
+    /// `OutOfMemory` if multiple-descriptor preparation fails before I/O, or
     /// `InvalidData` if the writer reports more than the total capacity. Short
     /// progress and writer errors are returned without retrying or undoing
     /// underlying side effects.
@@ -87,8 +89,13 @@ where
         if capacity == 0 {
             return Ok(0);
         }
-        let slices = crate::util::io_slices(buffers)?;
-        let count = Write::write_vectored(self, &slices)?;
+        let count = if let [buffer] = buffers {
+            let slices = [std::io::IoSlice::new(buffer)];
+            Write::write_vectored(self, &slices)?
+        } else {
+            let slices = crate::util::io_slices(buffers)?;
+            Write::write_vectored(self, &slices)?
+        };
         validate_write_count(count, capacity)?;
         Ok(count)
     }

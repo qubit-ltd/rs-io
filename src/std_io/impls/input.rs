@@ -76,8 +76,10 @@ where
     }
 
     /// Reads from the buffers in order using the standard reader's vectored
-    /// method. Returns `InvalidInput` if their total length overflows,
-    /// `OutOfMemory` if descriptor preparation fails before I/O, or
+    /// method. A single descriptor uses stack storage; multiple descriptors
+    /// may allocate descriptor storage, and the reader may allocate
+    /// independently. Returns `InvalidInput` if their total length overflows,
+    /// `OutOfMemory` if multiple-descriptor preparation fails before I/O, or
     /// `InvalidData` if the reader reports more than the total capacity. Short
     /// progress and reader errors are returned without retrying or undoing
     /// underlying side effects.
@@ -86,8 +88,13 @@ where
         if capacity == 0 {
             return Ok(0);
         }
-        let mut slices = crate::util::io_slices_mut(buffers)?;
-        let count = Read::read_vectored(self, &mut slices)?;
+        let count = if let [buffer] = buffers {
+            let mut slices = [std::io::IoSliceMut::new(buffer)];
+            Read::read_vectored(self, &mut slices)?
+        } else {
+            let mut slices = crate::util::io_slices_mut(buffers)?;
+            Read::read_vectored(self, &mut slices)?
+        };
         validate_read_count(count, capacity)?;
         Ok(count)
     }

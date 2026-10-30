@@ -21,8 +21,9 @@ use crate::Input;
 /// Vectored reads forward the inner [`Input::read_vectored`] override when
 /// buffers are non-empty; actual scatter/gather behavior depends on that
 /// implementation and the platform. Constructing the adapter does not
-/// allocate, but a vectored call may allocate temporary descriptors without
-/// copying the payload. Length overflow returns `InvalidInput` and descriptor
+/// allocate. Exactly one descriptor uses stack storage; multiple descriptors
+/// may allocate temporary descriptor storage, and the inner input may allocate
+/// independently. Length overflow returns `InvalidInput` and descriptor
 /// allocation failure returns `OutOfMemory` before the inner call. A count
 /// larger than the total capacity returns `InvalidData` after the inner call;
 /// its side effects are not undone. Short progress and inner errors are
@@ -99,8 +100,13 @@ where
         if capacity == 0 {
             return Ok(0);
         }
-        let mut slices = crate::util::byte_slices_mut(buffers)?;
-        let count = Input::read_vectored(&mut self.inner, &mut slices)?;
+        let count = if let [buffer] = buffers {
+            let mut slices = [&mut buffer[..]];
+            Input::read_vectored(&mut self.inner, &mut slices)?
+        } else {
+            let mut slices = crate::util::byte_slices_mut(buffers)?;
+            Input::read_vectored(&mut self.inner, &mut slices)?
+        };
         crate::traits::validate_read_count(count, capacity)?;
         Ok(count)
     }
