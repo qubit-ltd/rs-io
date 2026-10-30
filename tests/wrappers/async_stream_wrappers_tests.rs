@@ -67,10 +67,16 @@ impl AsyncInput for ScriptedInput {
         index: usize,
         count: usize,
     ) -> Poll<io::Result<usize>> {
+        if count == 0 {
+            return Poll::Ready(Ok(0));
+        }
         match self.steps.pop_front().unwrap_or(ReadStep::Eof) {
             ReadStep::Data(bytes) => {
                 let read = count.min(bytes.len());
                 output[index..index + read].copy_from_slice(&bytes[..read]);
+                if read < bytes.len() {
+                    self.steps.push_front(ReadStep::Data(bytes[read..].to_vec()));
+                }
                 Poll::Ready(Ok(read))
             }
             ReadStep::Error(kind) => Poll::Ready(Err(Error::new(kind, "scripted read failure"))),
@@ -496,6 +502,7 @@ fn test_async_limit_input_bounds_reads_and_preserves_state_on_pending_or_error()
             .expect("limited read should succeed")
     );
     assert_eq!(0, input.remaining());
+    assert!(matches!(input.inner().steps.front(), Some(ReadStep::Data(bytes)) if bytes == &[3]));
     assert_eq!(
         0,
         Pin::new(&mut input)
@@ -503,7 +510,78 @@ fn test_async_limit_input_bounds_reads_and_preserves_state_on_pending_or_error()
             .expect_ready("exhausted limited read should be ready")
             .expect("exhausted limited read should succeed")
     );
-    assert_eq!(1, input.into_inner().marker);
+    let mut inner = input.into_inner();
+    assert_eq!(1, inner.marker);
+    assert_eq!(
+        1,
+        Pin::new(&mut inner)
+            .poll_read(&mut cx, &mut output)
+            .expect_ready("inner should return the retained suffix")
+            .expect("inner read should succeed")
+    );
+    assert_eq!([3, 2, 0, 0], output);
+    assert_eq!(
+        0,
+        Pin::new(&mut inner)
+            .poll_read(&mut cx, &mut output)
+            .expect_ready("inner should reach EOF after the suffix")
+            .expect("inner EOF read should succeed")
+    );
+}
+
+#[test]
+fn test_scripted_input_retains_data_suffix_across_small_reads() {
+    let mut input = ScriptedInput::new([ReadStep::Data(vec![1, 2, 3]), ReadStep::Eof], false);
+    let mut cx = Context::from_waker(Waker::noop());
+    let mut first = [0_u8; 1];
+    let mut rest = [0_u8; 2];
+    assert_eq!(
+        1,
+        Pin::new(&mut input)
+            .poll_read(&mut cx, &mut first)
+            .expect_ready("first byte should be ready")
+            .expect("first read should succeed")
+    );
+    assert_eq!(
+        2,
+        Pin::new(&mut input)
+            .poll_read(&mut cx, &mut rest)
+            .expect_ready("suffix should be ready")
+            .expect("suffix read should succeed")
+    );
+    assert_eq!([1, 2, 3], [first[0], rest[0], rest[1]]);
+    assert_eq!(
+        0,
+        Pin::new(&mut input)
+            .poll_read(&mut cx, &mut rest)
+            .expect_ready("EOF should be ready")
+            .expect("EOF should succeed")
+    );
+}
+
+#[test]
+fn test_scripted_input_zero_count_does_not_consume_scripted_events() {
+    for steps in [
+        vec![ReadStep::Data(vec![7])],
+        vec![ReadStep::Pending],
+        vec![ReadStep::Error(ErrorKind::Other)],
+    ] {
+        let mut input = ScriptedInput::new(steps, false);
+        let mut cx = Context::from_waker(Waker::noop());
+        let mut output = [0_u8; 1];
+        assert_eq!(
+            0,
+            unsafe { Pin::new(&mut input).poll_read_unchecked(&mut cx, &mut output, 0, 0) }
+                .expect_ready("zero count should be ready")
+                .expect("zero count should succeed")
+        );
+        match Pin::new(&mut input).poll_read(&mut cx, &mut output) {
+            Poll::Ready(Ok(1)) if output[0] == 7 => {}
+            Poll::Pending => {}
+            Poll::Ready(Err(error)) if error.kind() == ErrorKind::Other => {}
+            other => panic!("scripted event was consumed or changed: {other:?}"),
+        }
+    }
 }
 
 #[test]

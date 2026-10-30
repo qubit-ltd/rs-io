@@ -90,10 +90,16 @@ impl AsyncInput for ScriptedInput {
         index: usize,
         count: usize,
     ) -> Poll<io::Result<usize>> {
+        if count == 0 {
+            return Poll::Ready(Ok(0));
+        }
         match self.steps.pop_front().unwrap_or(ReadStep::Eof) {
             ReadStep::Data(values) => {
                 let read = count.min(values.len());
                 output[index..index + read].copy_from_slice(&values[..read]);
+                if read < values.len() {
+                    self.steps.push_front(ReadStep::Data(values[read..].to_vec()));
+                }
                 Poll::Ready(Ok(read))
             }
             ReadStep::Error(kind) => Poll::Ready(Err(Error::new(kind, "scripted read failure"))),
@@ -261,6 +267,52 @@ fn test_async_buffered_input_preserves_generic_items_across_pending_refills() ->
     assert_eq!(20, second[0]);
     assert_eq!(1, complete(input.read_async(&mut second[1..]))?);
     assert_eq!([20, 30, 0], second);
+    Ok(())
+}
+
+#[test]
+fn test_scripted_input_retains_data_suffix_across_small_reads() {
+    let mut input = ScriptedInput::new([ReadStep::Data(vec![1, 2, 3]), ReadStep::Eof]);
+    let mut cx = Context::from_waker(Waker::noop());
+    let mut first = [0_u16; 1];
+    let mut rest = [0_u16; 2];
+    assert_eq!(
+        1,
+        unsafe { Pin::new(&mut input).poll_read_unchecked(&mut cx, &mut first, 0, 1) }
+            .expect_ready("first item should be ready")
+            .expect("first read should succeed")
+    );
+    assert_eq!(
+        2,
+        unsafe { Pin::new(&mut input).poll_read_unchecked(&mut cx, &mut rest, 0, 2) }
+            .expect_ready("suffix should be ready")
+            .expect("suffix read should succeed")
+    );
+    assert_eq!([1, 2, 3], [first[0], rest[0], rest[1]]);
+    assert_eq!(
+        0,
+        unsafe { Pin::new(&mut input).poll_read_unchecked(&mut cx, &mut rest, 0, 2) }
+            .expect_ready("EOF should be ready")
+            .expect("EOF should succeed")
+    );
+}
+
+#[test]
+fn test_async_buffered_input_refills_across_scripted_data_suffixes() -> io::Result<()> {
+    let inner = ScriptedInput::new([ReadStep::Data(vec![1, 2, 3, 4, 5]), ReadStep::Eof]);
+    let mut input = AsyncBufferedInput::with_capacity(inner, 2);
+    let mut result = Vec::new();
+    for _ in 0..3 {
+        let mut chunk = [0_u16; 2];
+        let read = complete(input.read_async(&mut chunk))?;
+        result.extend_from_slice(&chunk[..read]);
+        if read == 0 {
+            break;
+        }
+    }
+    assert_eq!([1, 2, 3, 4, 5], result.as_slice());
+    let mut eof = [0_u16; 1];
+    assert_eq!(0, complete(input.read_async(&mut eof))?);
     Ok(())
 }
 
