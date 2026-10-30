@@ -427,7 +427,8 @@ cargo test --all-features
 若要检查本地同级 checkout 的依赖来源而不编译下游代码，可运行
 `python3 -B scripts/check-downstream.py --metadata-only`。检查器默认使用 `--locked`，并显式注入本地
 patch，因此需要配置中的同级 checkout；只有单仓的远端 checkout 不适合直接运行。
-`--allow-lock-update` 允许 Cargo 创建或更新下游锁文件。metadata 只验证依赖解析和来源路径，不会编译下游代码。
+`--allow-lock-update` 允许 Cargo 创建或更新下游锁文件。精确的 registry 依赖版本维护在
+`scripts/downstream.toml` 的 `project.registry_versions` 中。metadata 只验证依赖解析和来源路径，不会编译下游代码。
 
 ## 许可证
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 import tomllib
@@ -141,6 +142,16 @@ def load_config(config_path: Path) -> tuple[Path, dict[str, Path], list[tuple[Pa
         # Unit tests may use a temporary tree; a real invocation is expected in Git.
         canonical_project_root = script_root
     project = data["project"]
+    registry_versions = project.get("registry_versions")
+    if not isinstance(registry_versions, dict) or set(registry_versions) != {"qubit-budget"}:
+        raise ValueError(
+            f"{config_path}: project.registry_versions must contain exactly qubit-budget"
+        )
+    for name, version in registry_versions.items():
+        if not isinstance(version, str) or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
+            raise ValueError(
+                f"{config_path}: project.registry_versions.{name} must be a three-part numeric version"
+            )
     repository_root = canonical(canonical_project_root / project["repository_root"])
     expected = load_local_patches(repository_root, project)
     # Keep the configured sibling manifest as an independent repository identity check.
@@ -156,6 +167,7 @@ def load_config(config_path: Path) -> tuple[Path, dict[str, Path], list[tuple[Pa
         path = (repository_root / item["path"]).resolve()
         settings = dict(item)
         settings["io_manifest"] = io_manifest
+        settings["registry_versions"] = dict(registry_versions)
         manifests.append((path, settings))
     return repository_root, expected, manifests
 
@@ -263,10 +275,11 @@ def check_config(
                 metadata = metadata_runner(
                     manifest, all_features, manifest_patches, allow_lock_update
                 )
+                registry_versions = settings["registry_versions"]
                 graph_errors = inspect_graph(
                     metadata, manifest, graph_paths, required,
-                    expected_versions={"qubit-io": "0.19", "qubit-budget": "0.9.1"},
-                    registry_packages={"qubit-budget"},
+                    expected_versions={"qubit-io": "0.19", **registry_versions},
+                    registry_packages=set(registry_versions),
                 )
             except (RuntimeError, ValueError, KeyError, json.JSONDecodeError) as error:
                 errors.append(f"{manifest} [{mode}]: {error}")

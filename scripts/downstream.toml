@@ -2,6 +2,9 @@
 repository_root = ".."
 io_manifest = "rs-io/Cargo.toml"
 
+[project.registry_versions]
+qubit-budget = "0.10.0"
+
 [project.local_patches]
 qubit-fs = "rs-fs/Cargo.toml"
 qubit-fs-testkit = "rs-fs-testkit/Cargo.toml"

@@ -465,8 +465,9 @@ run `python3 -B scripts/check-downstream.py --metadata-only`. The checker uses
 `--locked` by default and injects explicit local patches, so it requires the
 configured sibling checkouts and is not suitable for a standalone remote
 checkout. `--allow-lock-update` permits Cargo to create or update downstream
-lockfiles. Metadata verifies dependency resolution and source paths; it does
-not compile downstream code.
+lockfiles. Exact registry dependency versions are maintained in
+`scripts/downstream.toml` under `project.registry_versions`. Metadata verifies
+dependency resolution and source paths; it does not compile downstream code.
 
 ## License
 

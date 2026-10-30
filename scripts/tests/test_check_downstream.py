@@ -197,6 +197,7 @@ class MetadataGraphTests(unittest.TestCase):
             config = scripts / "downstream.toml"
             config.write_text(
                 '[project]\nrepository_root = "."\nio_manifest = "io/Cargo.toml"\n'
+                '[project.registry_versions]\nqubit-budget = "0.10.0"\n'
                 '[project.local_patches]\n'
                 'qubit-fs = "fs/Cargo.toml"\nqubit-fs-testkit = "fs-testkit/Cargo.toml"\n'
                 '[[manifest]]\npath = "missing/Cargo.toml"\n',
@@ -232,6 +233,7 @@ class MetadataGraphTests(unittest.TestCase):
             config = scripts / "downstream.toml"
             config.write_text(
                 '[project]\nrepository_root = ".."\nio_manifest = "rs-io/Cargo.toml"\n'
+                '[project.registry_versions]\nqubit-budget = "0.10.0"\n'
                 '[project.local_patches]\n'
                 'qubit-fs = "rs-fs/Cargo.toml"\n'
                 'qubit-fs-testkit = "rs-fs-testkit/Cargo.toml"\n'
@@ -246,6 +248,43 @@ class MetadataGraphTests(unittest.TestCase):
 
 
 class DownstreamCommandTests(unittest.TestCase):
+    def test_registry_versions_configuration_errors_name_config_key(self) -> None:
+        malformed = (
+            ("", "project.registry_versions"),
+            ("registry_versions = \"bad\"\n", "project.registry_versions"),
+            ("[project.registry_versions]\n", "project.registry_versions"),
+            ("[project.registry_versions]\nqubit-budget = []\n", "project.registry_versions.qubit-budget"),
+            ("[project.registry_versions]\nqubit-budget = 1\n", "project.registry_versions.qubit-budget"),
+            ("[project.registry_versions]\nqubit-budget = \"\"\n", "project.registry_versions.qubit-budget"),
+            ("[project.registry_versions]\nqubit-budget = \"0.10\"\n", "project.registry_versions.qubit-budget"),
+            ("[project.registry_versions]\nqubit-budget = \"0.10.0\"\nother = \"1.2.3\"\n", "project.registry_versions"),
+        )
+        for table, expected in malformed:
+            with self.subTest(table=table), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                scripts = root / "scripts"
+                scripts.mkdir()
+                for relative, name in (("rs-io", "qubit-io"), ("rs-fs", "qubit-fs"),
+                                       ("rs-fs-testkit", "qubit-fs-testkit")):
+                    manifest = root / relative / "Cargo.toml"
+                    manifest.parent.mkdir(parents=True)
+                    manifest.write_text(f'[package]\nname = "{name}"\nversion = "1.0.0"\n', encoding="utf-8")
+                config = scripts / "downstream.toml"
+                config.write_text(
+                    '[project]\nrepository_root = ".."\nio_manifest = "rs-io/Cargo.toml"\n'
+                    + table
+                    + '[project.local_patches]\nqubit-fs = "rs-fs/Cargo.toml"\n'
+                    'qubit-fs-testkit = "rs-fs-testkit/Cargo.toml"\n',
+                    encoding="utf-8",
+                )
+                with self.assertRaisesRegex(ValueError, expected):
+                    checker.load_config(config)
+
+    def test_project_registry_versions_come_from_default_config(self) -> None:
+        _, _, manifests = checker.load_config(SCRIPT.parent / "downstream.toml")
+        self.assertTrue(manifests)
+        self.assertEqual(manifests[0][1]["registry_versions"], {"qubit-budget": "0.10.0"})
+
     def create_source_config(self, root: Path) -> tuple[Path, Path, Path]:
         scripts = root / "scripts"
         scripts.mkdir(parents=True)
@@ -266,12 +305,51 @@ class DownstreamCommandTests(unittest.TestCase):
         config = scripts / "downstream.toml"
         config.write_text(
             '[project]\nrepository_root = "."\nio_manifest = "rs-io/Cargo.toml"\n'
-            '[project.local_patches]\nqubit-fs = "rs-fs/Cargo.toml"\n'
+            '[project.registry_versions]\nqubit-budget = "0.10.0"\n'
+                '[project.local_patches]\nqubit-fs = "rs-fs/Cargo.toml"\n'
             'qubit-fs-testkit = "rs-fs-testkit/Cargo.toml"\n'
             '[[manifest]]\npath = "consumer/Cargo.toml"\n'
             '[[manifest]]\npath = "s3-contract/Cargo.toml"\n'
             '', encoding="utf-8")
         return config, candidate.resolve(), (root / "rs-io/Cargo.toml").resolve()
+
+    def test_configured_registry_version_is_used_for_both_metadata_policies(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config, _, _ = self.create_source_config(root)
+            budget_manifest = root / "rs-budget/Cargo.toml"
+            calls = []
+
+            def fake_runner(manifest, all_features, _patches, _allow_lock_update):
+                calls.append(all_features)
+                return {
+                    "packages": [
+                        {"id": "root", "name": "consumer", "version": "1.0.0",
+                         "manifest_path": str(manifest), "source": None},
+                        {"id": "budget", "name": "qubit-budget", "version": "0.10.0",
+                         "manifest_path": str(budget_manifest), "source": checker.CRATES_IO_SOURCE},
+                    ],
+                    "resolve": {"nodes": [
+                        {"id": "root", "deps": [{"pkg": "budget"}]},
+                        {"id": "budget", "deps": []},
+                    ]},
+                }
+
+            errors = checker.check_config(
+                config, metadata_runner=fake_runner,
+                workspace_locator=lambda manifest: manifest,
+            )
+            self.assertEqual(errors, [])
+            self.assertEqual(calls, [False, True, False, True])
+            config.write_text(
+                config.read_text(encoding="utf-8").replace('"0.10.0"', '"0.11.0"'),
+                encoding="utf-8",
+            )
+            errors = checker.check_config(
+                config, metadata_runner=fake_runner,
+                workspace_locator=lambda manifest: manifest,
+            )
+            self.assertTrue(any("expected crates.io version 0.11.0" in error for error in errors))
 
     def test_metadata_command_quotes_all_local_patches_and_lock_policy(self) -> None:
         patches = {
@@ -316,6 +394,7 @@ class DownstreamCommandTests(unittest.TestCase):
             config = scripts / "downstream.toml"
             config.write_text(
                 '[project]\nrepository_root = ".."\nio_manifest = "rs-io/Cargo.toml"\n'
+                '[project.registry_versions]\nqubit-budget = "0.10.0"\n'
                 '[project.local_patches]\nqubit-fs = "rs-fs/Cargo.toml"\n'
                 'qubit-fs-testkit = "rs-fs-testkit/Cargo.toml"\n'
                 '[[manifest]]\npath = "rs-json/Cargo.toml"\n', encoding="utf-8")
@@ -416,6 +495,7 @@ class DownstreamCommandTests(unittest.TestCase):
             config = scripts / "downstream.toml"
             config.write_text(
                 '[project]\nrepository_root = "."\nio_manifest = "rs-io/Cargo.toml"\n'
+                '[project.registry_versions]\nqubit-budget = "0.10.0"\n'
                 '[project.local_patches]\nqubit-fs = "rs-fs/Cargo.toml"\n'
                 'qubit-fs-testkit = "rs-fs-testkit/Cargo.toml"\n'
                 '[[manifest]]\npath = "consumer/Cargo.toml"\n', encoding="utf-8")
