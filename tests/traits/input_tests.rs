@@ -9,6 +9,7 @@
 use std::collections::VecDeque;
 use std::io::Error;
 use std::io::ErrorKind;
+use std::io::Result;
 
 use qubit_io::Input;
 
@@ -19,6 +20,73 @@ impl Input for OverreportingInput {
 
     unsafe fn read_unchecked(&mut self, _output: &mut [u8], _index: usize, count: usize) -> std::io::Result<usize> {
         Ok(count + 1)
+    }
+}
+
+struct FullyOverrideInput {
+    reported: usize,
+    error: Option<ErrorKind>,
+    calls: usize,
+}
+
+impl Input for FullyOverrideInput {
+    type Item = u8;
+
+    unsafe fn read_unchecked(&mut self, _: &mut [u8], _: usize, _: usize) -> Result<usize> {
+        panic!("read_exactly must use the safe read_fully override")
+    }
+
+    fn read_fully(&mut self, output: &mut [u8]) -> Result<usize> {
+        self.calls += 1;
+        if let Some(kind) = self.error {
+            return Err(Error::new(kind, "safe read_fully error"));
+        }
+        let actual = self.reported.min(output.len());
+        output[..actual].fill(7);
+        Ok(self.reported)
+    }
+}
+
+#[test]
+fn test_read_exactly_override_rejects_overreported_count() {
+    for requested in [0, 2] {
+        let mut input = FullyOverrideInput {
+            reported: requested + 1,
+            error: None,
+            calls: 0,
+        };
+        let mut output = vec![0; requested];
+        let error = input.read_exactly(&mut output).expect_err("overreport must fail");
+        assert_eq!(ErrorKind::InvalidData, error.kind(), "requested={requested}");
+        assert_eq!(1, input.calls, "read_fully must be called exactly once");
+        assert_eq!(vec![7; requested], output, "validation does not undo inner writes");
+    }
+}
+
+#[test]
+fn test_read_exactly_override_preserves_valid_results_and_errors() {
+    for (requested, reported, expected) in [(0, 0, None), (2, 2, None), (2, 1, Some(ErrorKind::UnexpectedEof))] {
+        let mut input = FullyOverrideInput {
+            reported,
+            error: None,
+            calls: 0,
+        };
+        let mut output = vec![0; requested];
+        let result = input.read_exactly(&mut output).map_err(|error| error.kind());
+        assert_eq!(expected.map_or(Ok(()), Err), result);
+        assert_eq!(1, input.calls);
+        assert_eq!(vec![7; reported], output[..reported]);
+    }
+    for kind in [ErrorKind::Interrupted, ErrorKind::PermissionDenied] {
+        let mut input = FullyOverrideInput {
+            reported: 0,
+            error: Some(kind),
+            calls: 0,
+        };
+        let error = input.read_exactly(&mut [0; 2]).expect_err("inner error must propagate");
+        assert_eq!(kind, error.kind());
+        assert_eq!("safe read_fully error", error.to_string());
+        assert_eq!(1, input.calls, "the wrapper must not add retries");
     }
 }
 

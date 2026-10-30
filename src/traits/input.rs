@@ -264,7 +264,9 @@ pub trait Input {
     /// item count.
     #[inline]
     fn read_exactly(&mut self, output: &mut [Self::Item]) -> Result<()> {
-        if self.read_fully(output)? == output.len() {
+        let read = self.read_fully(output)?;
+        validate_read_count(read, output.len())?;
+        if read == output.len() {
             Ok(())
         } else {
             Err(Error::new(
