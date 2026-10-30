@@ -14,9 +14,25 @@ use qubit_io::Input;
 use qubit_io::Seekable;
 use qubit_io::TeeInput;
 
+use super::support_tests::ErrorBranch;
 use super::support_tests::InputAction;
 use super::support_tests::ScriptedInput;
 use super::support_tests::ScriptedOutput;
+use super::support_tests::assert_original_os_error;
+
+#[test]
+fn test_tee_input_repeated_error_retains_original_source() {
+    let mut input = TeeInput::new(std::io::Cursor::new(b"abc"), ErrorBranch::os_error());
+    let mut byte = [0];
+    assert_eq!(1, input.read(&mut byte).unwrap());
+    assert_eq!(b'a', byte[0]);
+    let error = input.read(&mut byte).unwrap_err();
+    assert_original_os_error(&error);
+    assert_original_os_error(&input.seek_to(SeekFrom::Start(0)).unwrap_err());
+    assert_eq!(1, input.inner().position());
+    assert_eq!(1, input.branch().write_calls);
+    assert_eq!(0, input.branch().seek_calls);
+}
 
 #[test]
 fn test_tee_input_mirrors_generic_items_and_exposes_parts() {

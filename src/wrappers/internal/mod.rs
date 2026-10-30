@@ -8,4 +8,5 @@
 
 //! Private implementation details shared by wrapper types.
 
+mod shared_tee_error;
 pub(crate) mod tee_failure;

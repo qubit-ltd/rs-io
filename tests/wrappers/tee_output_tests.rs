@@ -18,8 +18,68 @@ use qubit_io::Output;
 use qubit_io::Seekable;
 use qubit_io::TeeOutput;
 
+use super::support_tests::ErrorBranch;
 use super::support_tests::ScriptedOutput;
 use super::support_tests::SeekFailOnceOutput;
+use super::support_tests::assert_original_os_error;
+
+#[test]
+fn test_tee_output_repeated_error_retains_original_source() {
+    let mut output = TeeOutput::new(Cursor::new(Vec::new()), ErrorBranch::os_error());
+    assert_eq!(3, output.write(b"abc").unwrap());
+    assert_original_os_error(&output.write(b"d").unwrap_err());
+    assert_original_os_error(&output.flush().unwrap_err());
+    assert_original_os_error(&output.seek_to(SeekFrom::Start(0)).unwrap_err());
+    assert_eq!(b"abc", output.inner().get_ref().as_slice());
+    assert_eq!(3, output.inner().position());
+    assert_eq!(1, output.branch().write_calls);
+    assert_eq!(0, output.branch().seek_calls);
+}
+
+#[test]
+fn test_tee_output_shared_into_parts_retains_original_source() {
+    let mut output = TeeOutput::new(Cursor::new(Vec::new()), ErrorBranch::os_error());
+    output.write(b"a").unwrap();
+    let report = output.write(b"b").unwrap_err();
+    let (_, _, error) = output.into_parts();
+    let error = error.unwrap();
+    assert_original_os_error(&report);
+    assert_original_os_error(&error);
+}
+
+#[test]
+fn test_tee_output_unique_into_parts_returns_original_error() {
+    let mut output = TeeOutput::new(Cursor::new(Vec::new()), ErrorBranch::os_error());
+    output.write(b"a").unwrap();
+    let (_, _, error) = output.into_parts();
+    assert_eq!(Some(2), error.unwrap().raw_os_error());
+}
+
+#[test]
+fn test_tee_output_custom_payload_survives_shared_report() {
+    #[derive(Debug)]
+    struct TestCause;
+    impl std::fmt::Display for TestCause {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str("test cause")
+        }
+    }
+    impl std::error::Error for TestCause {}
+
+    let branch = ErrorBranch {
+        make_error: || std::io::Error::other(TestCause),
+        write_calls: 0,
+        seek_calls: 0,
+        position: 0,
+    };
+    let mut output = TeeOutput::new(Cursor::new(Vec::new()), branch);
+    output.write(b"a").unwrap();
+    let report = output.write(b"b").unwrap_err();
+    let original = std::error::Error::source(&report)
+        .and_then(|error| error.downcast_ref::<std::io::Error>())
+        .unwrap();
+    assert!(original.get_ref().unwrap().is::<TestCause>());
+}
 
 #[test]
 fn test_tee_output_mirrors_primary_prefix_and_exposes_parts() {

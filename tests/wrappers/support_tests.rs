@@ -6,6 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
+use std::error::Error as StdError;
 use std::io;
 use std::io::Cursor;
 use std::io::Error;
@@ -16,6 +17,65 @@ use std::io::Write;
 use qubit_io::Input;
 use qubit_io::Output;
 use qubit_io::Seekable;
+
+/// Branch that fails a nonempty write with a generated error.
+pub(super) struct ErrorBranch {
+    pub(super) make_error: fn() -> io::Error,
+    pub(super) write_calls: usize,
+    pub(super) seek_calls: usize,
+    pub(super) position: u64,
+}
+
+impl ErrorBranch {
+    pub(super) fn os_error() -> Self {
+        Self {
+            make_error: || io::Error::from_raw_os_error(2),
+            write_calls: 0,
+            seek_calls: 0,
+            position: 0,
+        }
+    }
+}
+
+impl Output for ErrorBranch {
+    type Item = u8;
+
+    unsafe fn write_unchecked(&mut self, _: &[u8], _: usize, count: usize) -> io::Result<usize> {
+        if count == 0 {
+            return Ok(0);
+        }
+        self.write_calls += 1;
+        Err((self.make_error)())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+impl Seekable for ErrorBranch {
+    type Unit = u8;
+
+    fn seek_to(&mut self, position: SeekFrom) -> io::Result<u64> {
+        self.seek_calls += 1;
+        match position {
+            SeekFrom::Start(position) => {
+                self.position = position;
+                Ok(position)
+            }
+            _ => Err(Error::new(ErrorKind::InvalidInput, "unsupported test seek")),
+        }
+    }
+}
+
+pub(super) fn assert_original_os_error(error: &io::Error) {
+    let original = error
+        .source()
+        .and_then(|source| source.downcast_ref::<io::Error>())
+        .expect("tee report must expose the original io::Error as its source");
+    assert_eq!(original.kind(), error.kind());
+    assert_eq!(Some(2), original.raw_os_error());
+}
 
 /// Stores bytes at real cursor offsets and can reject the next seek.
 pub(super) struct SeekFailOnceOutput {

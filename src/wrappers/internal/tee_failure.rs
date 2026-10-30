@@ -9,6 +9,8 @@
 use std::io;
 use std::sync::Arc;
 
+use crate::wrappers::internal::shared_tee_error::SharedTeeError;
+
 /// Stores the first branch failure shared by tee wrapper operations.
 #[derive(Debug)]
 pub(crate) struct TeeFailure {
@@ -68,13 +70,14 @@ impl TeeFailure {
     ///
     /// `Interrupted` is normalized to `Other` so an aggregate operation does
     /// not retry a branch failure that has already been latched. The primary
-    /// path's progress is not rolled back.
+    /// path's progress is not rolled back. OS-specific codes on shared reports
+    /// are available through the source chain rather than the outer error.
     fn shared_error(error: Arc<io::Error>) -> io::Error {
         let kind = if error.kind() == io::ErrorKind::Interrupted {
             io::ErrorKind::Other
         } else {
             error.kind()
         };
-        io::Error::new(kind, error)
+        io::Error::new(kind, SharedTeeError::new(error))
     }
 }
