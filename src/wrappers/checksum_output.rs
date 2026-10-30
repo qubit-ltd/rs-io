@@ -37,10 +37,15 @@ use crate::traits::validate_write_count;
 /// use std::collections::hash_map::DefaultHasher;
 /// use std::hash::Hasher;
 ///
-/// use qubit_io::ChecksumOutput;
+/// use qubit_io::{ChecksumOutput, Output};
 ///
-/// let output = ChecksumOutput::new(Vec::<u8>::new(), DefaultHasher::new());
-/// assert_eq!(output.checksum(), DefaultHasher::new().finish());
+/// let mut output = ChecksumOutput::new(Vec::<u8>::new(), DefaultHasher::new());
+/// output.write_fully(b"abc").unwrap();
+/// output.flush().unwrap();
+/// let mut expected = DefaultHasher::new();
+/// expected.write(b"abc");
+/// assert_eq!(output.checksum(), expected.finish());
+/// assert_eq!(output.inner(), b"abc");
 /// ```
 #[must_use]
 #[derive(Debug)]

@@ -35,10 +35,14 @@ use crate::traits::validate_write_count;
 /// use sha2::Digest;
 /// use sha2::Sha256;
 ///
-/// use qubit_io::DigestOutput;
+/// use qubit_io::{DigestOutput, Output};
 ///
-/// let output = DigestOutput::new(Vec::<u8>::new(), Sha256::new());
-/// assert_eq!(output.digest(), Sha256::digest(b""));
+/// let mut output = DigestOutput::new(Vec::<u8>::new(), Sha256::new());
+/// output.write_fully(b"abc").unwrap();
+/// output.flush().unwrap();
+/// let (sink, digest) = output.finalize();
+/// assert_eq!(sink, b"abc");
+/// assert_eq!(digest, Sha256::digest(b"abc"));
 /// ```
 #[must_use]
 #[derive(Debug)]

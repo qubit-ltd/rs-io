@@ -21,6 +21,46 @@ use crate::traits::validate_read_count;
 
 /// Future that reads the remaining bytes of an input and returns their digest.
 ///
+/// # Examples
+///
+/// Read a short in-memory input to EOF and verify its SHA-256 digest:
+///
+/// ```
+/// use std::future::Future;
+/// use std::io::Result;
+/// use std::pin::Pin;
+/// use std::task::{Context, Poll, Waker};
+///
+/// use qubit_io::{AsyncInput, DigestAllFuture};
+/// use sha2::{Digest, Sha256};
+///
+/// struct Input { bytes: &'static [u8], position: usize }
+///
+/// impl AsyncInput for Input {
+///     type Item = u8;
+///
+///     unsafe fn poll_read_unchecked(
+///         mut self: Pin<&mut Self>, _cx: &mut Context<'_>, output: &mut [u8],
+///         index: usize, count: usize,
+///     ) -> Poll<Result<usize>> {
+///         let read = (self.bytes.len() - self.position).min(count);
+///         output[index..index + read]
+///             .copy_from_slice(&self.bytes[self.position..self.position + read]);
+///         self.position += read;
+///         Poll::Ready(Ok(read))
+///     }
+/// }
+///
+/// let mut input = Input { bytes: b"abc", position: 0 };
+/// let mut future = DigestAllFuture::<_, Sha256>::new(Pin::new(&mut input));
+/// let mut cx = Context::from_waker(Waker::noop());
+/// let digest = match Future::poll(Pin::new(&mut future), &mut cx) {
+///     Poll::Ready(Ok(digest)) => digest,
+///     other => panic!("unexpected result: {other:?}"),
+/// };
+/// assert_eq!(digest, Sha256::digest(b"abc"));
+/// ```
+///
 /// Available with the `digest` feature. Uses a fresh algorithm state and a
 /// fixed-size bulk-read buffer. Progress survives `Pending`; cancellation
 /// discards the partial digest without rewinding the input. One poll performs

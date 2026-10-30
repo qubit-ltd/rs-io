@@ -27,9 +27,9 @@ use crate::WriteFuture;
 ///
 /// ```
 /// use std::io::Result;
+/// use std::future::Future;
 /// use std::pin::Pin;
-/// use std::task::Context;
-/// use std::task::Poll;
+/// use std::task::{Context, Poll, Waker};
 ///
 /// use qubit_io::AsyncOutput;
 /// use qubit_io::PinnedAsyncOutputExt;
@@ -57,7 +57,13 @@ use crate::WriteFuture;
 ///
 /// let mut output = VecOutput(Vec::new());
 /// let mut pinned = Pin::new(&mut output);
-/// let _write = pinned.as_mut().write_async(&[1, 2, 3]);
+/// {
+///     let mut future = pinned.write_async(&[1, 2, 3]);
+///     let mut cx = Context::from_waker(Waker::noop());
+///     assert!(matches!(Future::poll(Pin::new(&mut future), &mut cx), Poll::Ready(Ok(3))));
+/// }
+/// drop(pinned);
+/// assert_eq!(output.0, [1, 2, 3]);
 /// ```
 pub trait PinnedAsyncOutputExt {
     /// The pinned asynchronous output type.

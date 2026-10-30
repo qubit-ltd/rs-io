@@ -20,6 +20,51 @@ use crate::CloseFuture;
 /// any required buffered output and underlying close operation asynchronously.
 /// This capability remains separate from AsyncOutput because not every output
 /// has a meaningful graceful-close operation.
+///
+/// # Examples
+///
+/// Close an output and verify that the operation completed:
+///
+/// ```
+/// use std::future::Future;
+/// use std::io::Result;
+/// use std::pin::Pin;
+/// use std::task::{Context, Poll, Waker};
+///
+/// use qubit_io::{AsyncClose, AsyncOutput};
+///
+/// struct Output { closed: bool }
+///
+/// impl AsyncOutput for Output {
+///     type Item = u8;
+///
+///     unsafe fn poll_write_unchecked(
+///         self: Pin<&mut Self>, _cx: &mut Context<'_>, _input: &[u8],
+///         _index: usize, _count: usize,
+///     ) -> Poll<Result<usize>> {
+///         unreachable!("this example only closes the output")
+///     }
+///
+///     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<()>> {
+///         Poll::Ready(Ok(()))
+///     }
+/// }
+///
+/// impl AsyncClose for Output {
+///     fn poll_close(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<()>> {
+///         self.closed = true;
+///         Poll::Ready(Ok(()))
+///     }
+/// }
+///
+/// let mut output = Output { closed: false };
+/// {
+///     let mut future = output.close_async();
+///     let mut cx = Context::from_waker(Waker::noop());
+///     assert!(matches!(Future::poll(Pin::new(&mut future), &mut cx), Poll::Ready(Ok(()))));
+/// }
+/// assert!(output.closed);
+/// ```
 pub trait AsyncClose: AsyncOutput {
     /// Polls the closing of this output.
     ///

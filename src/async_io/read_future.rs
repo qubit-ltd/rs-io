@@ -17,6 +17,43 @@ use crate::traits::validate_read_count;
 
 /// Future for one [`AsyncInput`] read operation.
 ///
+/// # Examples
+///
+/// Poll one in-memory read and inspect both its count and data:
+///
+/// ```
+/// use std::future::Future;
+/// use std::io::Result;
+/// use std::pin::Pin;
+/// use std::task::{Context, Poll, Waker};
+///
+/// use qubit_io::{AsyncInput, ReadFuture};
+///
+/// struct Input { read: bool }
+///
+/// impl AsyncInput for Input {
+///     type Item = u8;
+///
+///     unsafe fn poll_read_unchecked(
+///         mut self: Pin<&mut Self>, _cx: &mut Context<'_>, output: &mut [u8],
+///         index: usize, count: usize,
+///     ) -> Poll<Result<usize>> {
+///         if count == 0 || self.read { return Poll::Ready(Ok(0)); }
+///         output[index] = b'x';
+///         self.read = true;
+///         Poll::Ready(Ok(1))
+///     }
+/// }
+///
+/// let mut input = Input { read: false };
+/// let mut output = [0_u8; 2];
+/// let mut future = ReadFuture::new(Pin::new(&mut input), &mut output);
+/// let mut cx = Context::from_waker(Waker::noop());
+/// assert!(matches!(Future::poll(Pin::new(&mut future), &mut cx), Poll::Ready(Ok(1))));
+/// drop(future);
+/// assert_eq!(output, [b'x', 0]);
+/// ```
+///
 /// # Panics
 ///
 /// [`Future::poll`] panics when called again after this future has returned
