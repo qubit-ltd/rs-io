@@ -18,16 +18,72 @@ use crate::SeekableInput;
 /// Positions count Unicode scalar values, not encoded bytes or grapheme
 /// clusters. This trait does not encode or decode text, and does not promise
 /// constant-time seeking.
+/// Seeking to position 1 selects the second Unicode scalar, not a UTF-8 byte
+/// offset.
 ///
 /// # Examples
 ///
+/// This memory stream checks seek bounds as an example policy; the trait does
+/// not impose that restriction:
 /// ```
-/// use std::io::{Result, SeekFrom};
+/// use std::io;
+/// use std::io::SeekFrom;
+///
+/// use qubit_io::Input;
+/// use qubit_io::Seekable;
 /// use qubit_io::SeekableCharInput;
 ///
-/// fn rewind(stream: &mut dyn SeekableCharInput) -> Result<u64> {
+/// struct CharCursor<'a> {
+///     items: &'a [char],
+///     position: usize,
+/// }
+///
+/// impl Input for CharCursor<'_> {
+///     type Item = char;
+///
+///     unsafe fn read_unchecked(
+///         &mut self,
+///         output: &mut [char],
+///         index: usize,
+///         count: usize,
+///     ) -> io::Result<usize> {
+///         let read = count.min(self.items.len() - self.position);
+///         output[index..index + read]
+///             .copy_from_slice(&self.items[self.position..self.position + read]);
+///         self.position += read;
+///         Ok(read)
+///     }
+/// }
+///
+/// impl Seekable for CharCursor<'_> {
+///     type Unit = char;
+///
+///     fn seek_to(&mut self, position: SeekFrom) -> io::Result<u64> {
+///         let target = match position {
+///             SeekFrom::Start(offset) => i128::from(offset),
+///             SeekFrom::Current(offset) => self.position as i128 + i128::from(offset),
+///             SeekFrom::End(offset) => self.items.len() as i128 + i128::from(offset),
+///         };
+///         if target < 0 || target > self.items.len() as i128 {
+///             return Err(io::Error::new(io::ErrorKind::InvalidInput, "outside the example input"));
+///         }
+///         self.position = target as usize;
+///         Ok(self.position as u64)
+///     }
+/// }
+///
+/// fn rewind(stream: &mut dyn SeekableCharInput) -> io::Result<u64> {
 ///     stream.seek_to(SeekFrom::Start(0))
 /// }
+///
+/// let mut stream = CharCursor { items: &['你', '🦀', 'a'], position: 0 };
+/// assert_eq!(stream.seek_to(SeekFrom::Start(1)).unwrap(), 1);
+/// let mut output = ['\0'; 1];
+/// assert_eq!(stream.read(&mut output).unwrap(), 1);
+/// assert_eq!(output, ['🦀']);
+/// assert_eq!(rewind(&mut stream).unwrap(), 0);
+/// assert_eq!(stream.read(&mut output).unwrap(), 1);
+/// assert_eq!(output, ['你']);
 /// ```
 ///
 /// Streams with a different item type do not satisfy this bound:

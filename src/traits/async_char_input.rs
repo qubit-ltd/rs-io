@@ -23,17 +23,55 @@ use crate::AsyncInput;
 ///
 /// # Examples
 ///
+/// `CharSlice` is always ready, so it does not need to register a waker:
 /// ```
 /// use std::io;
 /// use std::pin::Pin;
-/// use std::task::{Context, Poll};
+/// use std::task::Context;
+/// use std::task::Poll;
+/// use std::task::Waker;
+///
 /// use qubit_io::AsyncCharInput;
+/// use qubit_io::AsyncInput;
+///
+/// struct CharSlice<'a> {
+///     items: &'a [char],
+///     position: usize,
+/// }
+///
+/// impl AsyncInput for CharSlice<'_> {
+///     type Item = char;
+///
+///     unsafe fn poll_read_unchecked(
+///         self: Pin<&mut Self>,
+///         _cx: &mut Context<'_>,
+///         output: &mut [char],
+///         index: usize,
+///         count: usize,
+///     ) -> Poll<io::Result<usize>> {
+///         let this = self.get_mut();
+///         let read = count.min(this.items.len() - this.position);
+///         output[index..index + read]
+///             .copy_from_slice(&this.items[this.position..this.position + read]);
+///         this.position += read;
+///         Poll::Ready(Ok(read))
+///     }
+/// }
 ///
 /// fn read<S: AsyncCharInput + ?Sized>(
-///     stream: Pin<&mut S>, cx: &mut Context<'_>, output: &mut [char],
+///     stream: Pin<&mut S>,
+///     cx: &mut Context<'_>,
+///     output: &mut [char],
 /// ) -> Poll<io::Result<usize>> {
 ///     stream.poll_read(cx, output)
 /// }
+///
+/// let mut stream = CharSlice { items: &['你', '🦀'], position: 0 };
+/// let mut cx = Context::from_waker(Waker::noop());
+/// let mut output = ['\0'; 2];
+/// assert!(matches!(read(Pin::new(&mut stream), &mut cx, &mut output), Poll::Ready(Ok(2))));
+/// assert_eq!(output, ['你', '🦀']);
+/// assert!(matches!(read(Pin::new(&mut stream), &mut cx, &mut output), Poll::Ready(Ok(0))));
 /// ```
 ///
 /// Streams with a different item type do not satisfy this bound:
