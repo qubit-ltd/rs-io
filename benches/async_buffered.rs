@@ -13,6 +13,9 @@
 //! an executor. Successful sink writes consume the accepted input range through
 //! `black_box`, so results include buffering, polling, and consumption
 //! overhead.
+//! Each configuration validates transferred lengths and contents before timing.
+//! Input measurements include a nonempty EOF probe and any terminal `Pending`.
+//! Output recording is used only for untimed validation, not measured writes.
 
 use std::hint::black_box;
 use std::io;
@@ -152,6 +155,35 @@ impl AsyncInput for ScriptedInput {
     }
 }
 
+/// Captures successful prefixes during untimed benchmark validation only.
+struct RecordingOutput {
+    inner: ScriptedOutput,
+    bytes: Vec<u8>,
+}
+
+impl AsyncOutput for RecordingOutput {
+    type Item = u8;
+
+    unsafe fn poll_write_unchecked(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        input: &[u8],
+        index: usize,
+        count: usize,
+    ) -> Poll<io::Result<usize>> {
+        let this = self.get_mut();
+        let result = Pin::new(&mut this.inner).poll_write(cx, &input[index..index + count]);
+        if let Poll::Ready(Ok(written)) = &result {
+            this.bytes.extend_from_slice(&input[index..index + *written]);
+        }
+        result
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.get_mut().inner).poll_flush(cx)
+    }
+}
+
 /// Records bytes supplied to an `AsyncOutput` implementation.
 struct ScriptedOutput {
     /// Number of accepted bytes.
@@ -236,16 +268,27 @@ fn read_to_end<I>(input: &mut I, output: &mut [u8], width: usize) -> PollStats
 where
     I: AsyncInput<Item = u8> + Unpin,
 {
+    assert!(width > 0, "benchmark read width must be nonzero");
     let mut context = Context::from_waker(Waker::noop());
     let mut position = 0_usize;
     let mut caller_polls = 0_usize;
     let mut pending_polls = 0_usize;
+    let mut eof_probe = [0_u8; 1];
     loop {
-        let end = (position + width).min(output.len());
+        let probing_eof = position == output.len();
+        let destination = if probing_eof {
+            &mut eof_probe[..]
+        } else {
+            let end = (position + width).min(output.len());
+            &mut output[position..end]
+        };
         caller_polls += 1;
-        match Pin::new(&mut *input).poll_read(&mut context, &mut output[position..end]) {
+        match Pin::new(&mut *input).poll_read(&mut context, destination) {
             Poll::Ready(Ok(0)) => break,
-            Poll::Ready(Ok(count)) => position += count,
+            Poll::Ready(Ok(count)) => {
+                assert!(!probing_eof, "benchmark input exceeds the destination capacity");
+                position += count;
+            }
             Poll::Ready(Err(error)) => {
                 panic!("async input benchmark read failed: {error}")
             }
@@ -264,6 +307,7 @@ fn write_and_flush<O>(output: &mut O, input: &[u8], width: usize) -> PollStats
 where
     O: AsyncOutput<Item = u8> + Unpin,
 {
+    assert!(width > 0, "benchmark write width must be nonzero");
     let mut context = Context::from_waker(Waker::noop());
     let mut position = 0_usize;
     let mut caller_polls = 0_usize;
@@ -272,6 +316,7 @@ where
         let end = (position + width).min(input.len());
         caller_polls += 1;
         match Pin::new(&mut *output).poll_write(&mut context, &input[position..end]) {
+            Poll::Ready(Ok(0)) => panic!("async output benchmark made no write progress"),
             Poll::Ready(Ok(count)) => position += count,
             Poll::Ready(Err(error)) => {
                 panic!("async output benchmark write failed: {error}")
@@ -296,8 +341,89 @@ where
     }
 }
 
+/// Checks that a full destination does not suppress terminal Pending or EOF.
+fn verify_read_terminal_polling() {
+    for buffered in [false, true] {
+        let source = ScriptedInput {
+            data: vec![7],
+            position: 0,
+            poll_count: 0,
+            progress_limit: usize::MAX,
+            pending_every: Some(2),
+        };
+        let mut bytes = [0; 1];
+        let (stats, polls) = if buffered {
+            let mut input = AsyncBufferedInput::with_capacity(source, BUFFER_CAPACITY);
+            let stats = read_to_end(&mut input, &mut bytes, 1);
+            let (inner, pending) = input.into_parts();
+            assert_eq!(0, pending.available(), "terminal input window must be empty");
+            (stats, inner.poll_count())
+        } else {
+            let mut input = source;
+            let stats = read_to_end(&mut input, &mut bytes, 1);
+            (stats, input.poll_count())
+        };
+        assert_eq!([7], bytes);
+        assert_eq!(1, stats.bytes);
+        assert_eq!(1, stats.pending_polls, "terminal Pending must be observed");
+        assert_eq!(3, polls, "data, terminal Pending, and true EOF must reach the source");
+    }
+    let mut input = ScriptedInput::new(Vec::new(), ProgressMode::ReadyFull);
+    let stats = read_to_end(&mut input, &mut [], 1);
+    assert_eq!(0, stats.bytes);
+    assert_eq!(
+        1,
+        input.poll_count(),
+        "even an empty fixture needs a nonempty EOF probe"
+    );
+}
+
+/// Validates buffered and unbuffered input results before timing a case.
+fn verify_input_case(fixture: &[u8], mode: ProgressMode, width: usize) {
+    let mut buffered = AsyncBufferedInput::with_capacity(ScriptedInput::new(fixture.to_vec(), mode), BUFFER_CAPACITY);
+    let mut buffered_bytes = vec![0; fixture.len()];
+    let stats = read_to_end(&mut buffered, &mut buffered_bytes, width);
+    let (source, pending) = buffered.into_parts();
+    assert_eq!(fixture.len(), stats.bytes, "buffered input transfer length");
+    assert_eq!(fixture, buffered_bytes.as_slice(), "buffered input contents");
+    assert_eq!(fixture.len(), source.position, "buffered source consumption");
+    assert_eq!(0, pending.available(), "buffered input must have no unread tail");
+
+    let mut source = ScriptedInput::new(fixture.to_vec(), mode);
+    let mut bytes = vec![0; fixture.len()];
+    let stats = read_to_end(&mut source, &mut bytes, width);
+    assert_eq!(fixture.len(), stats.bytes, "unbuffered input transfer length");
+    assert_eq!(fixture, bytes.as_slice(), "unbuffered input contents");
+    assert_eq!(fixture.len(), source.position, "unbuffered source consumption");
+}
+
+/// Validates accepted output contents and final buffering before timing a case.
+fn verify_output_case(fixture: &[u8], mode: ProgressMode, width: usize) {
+    let recording = RecordingOutput {
+        inner: ScriptedOutput::new(mode),
+        bytes: Vec::new(),
+    };
+    let mut buffered = AsyncBufferedOutput::with_capacity(recording, BUFFER_CAPACITY);
+    let stats = write_and_flush(&mut buffered, fixture, width);
+    let (sink, pending) = buffered.into_parts();
+    assert_eq!(fixture.len(), stats.bytes, "buffered output transfer length");
+    assert_eq!(fixture.len(), sink.inner.written(), "buffered sink accepted length");
+    assert_eq!(fixture, sink.bytes.as_slice(), "buffered output contents");
+    assert_eq!(0, pending.available(), "successful flush must drain the output buffer");
+
+    let mut sink = RecordingOutput {
+        inner: ScriptedOutput::new(mode),
+        bytes: Vec::new(),
+    };
+    let stats = write_and_flush(&mut sink, fixture, width);
+    assert_eq!(fixture.len(), stats.bytes, "unbuffered output transfer length");
+    assert_eq!(fixture.len(), sink.inner.written(), "unbuffered sink accepted length");
+    assert_eq!(fixture, sink.bytes.as_slice(), "unbuffered output contents");
+}
+
 /// Benchmarks asynchronous reads for each scripted progress mode.
 fn benchmark_async_input(criterion: &mut Criterion) {
+    verify_read_terminal_polling();
     let fixture = benchmark_fixture();
     let mut group = criterion.benchmark_group("async_buffered_input");
     group.measurement_time(Duration::from_secs(2));
@@ -306,6 +432,7 @@ fn benchmark_async_input(criterion: &mut Criterion) {
 
     for mode in PROGRESS_MODES {
         for width in TRANSFER_WIDTHS {
+            verify_input_case(&fixture, mode, width);
             let parameter = format!("{}/{}", mode.label(), width);
             group.bench_with_input(BenchmarkId::new("buffered", &parameter), &width, |bencher, &width| {
                 bencher.iter_batched(
@@ -364,6 +491,7 @@ fn benchmark_async_output(criterion: &mut Criterion) {
 
     for mode in PROGRESS_MODES {
         for width in TRANSFER_WIDTHS {
+            verify_output_case(&fixture, mode, width);
             let parameter = format!("{}/{}", mode.label(), width);
             group.bench_with_input(BenchmarkId::new("buffered", &parameter), &width, |bencher, &width| {
                 bencher.iter_batched(
