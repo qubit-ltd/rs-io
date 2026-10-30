@@ -50,6 +50,17 @@ use std::io::SeekFrom;
 /// }
 /// ```
 ///
+/// A standard-library byte stream can use the blanket implementation:
+///
+/// ```
+/// use std::io::SeekFrom;
+///
+/// use qubit_io::Seekable;
+///
+/// let mut stream = std::io::Cursor::new(b"hello".to_vec());
+/// assert_eq!(Seekable::seek_to(&mut stream, SeekFrom::Start(2)), Ok(2));
+/// ```
+///
 /// # Coherence note
 ///
 /// The standard I/O integration maps [`std::io::Seek`] to `Unit = u8` for

@@ -96,24 +96,46 @@ pub struct StdWrite<O> {
 
 impl<O> StdWrite<O> {
     /// Creates a standard writer around `inner`.
+    ///
+    /// # Parameters
+    ///
+    /// - `inner`: Byte output to expose through [`std::io::Write`].
+    ///
+    /// # Returns
+    ///
+    /// A writer adapter that owns `inner` without performing I/O.
     #[inline]
     pub const fn new(inner: O) -> Self {
         Self { inner }
     }
 
     /// Returns a shared reference to the wrapped output.
+    ///
+    /// # Returns
+    ///
+    /// A reference tied to the borrow of this adapter.
+    #[must_use = "inspect the wrapped output"]
     #[inline]
     pub const fn get_ref(&self) -> &O {
         &self.inner
     }
 
     /// Returns mutable access to the wrapped output.
+    ///
+    /// # Returns
+    ///
+    /// A mutable reference tied to the mutable borrow of this adapter.
+    #[must_use = "use the mutable access to the wrapped output"]
     #[inline]
     pub fn get_mut(&mut self) -> &mut O {
         &mut self.inner
     }
 
     /// Unwraps and returns the wrapped output.
+    ///
+    /// # Returns
+    ///
+    /// The original output, with ownership transferred to the caller.
     #[inline]
     pub fn into_inner(self) -> O {
         self.inner

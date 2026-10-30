@@ -22,6 +22,7 @@ use crate::Input;
 ///
 /// ```
 /// use std::io;
+///
 /// use qubit_io::CharInput;
 ///
 /// fn read_char(input: &mut impl CharInput) -> io::Result<char> {
@@ -32,9 +33,9 @@ use crate::Input;
 /// ```
 ///
 /// Streams with a different item type do not satisfy this bound:
-///
 /// ```compile_fail
-/// use qubit_io::{Input, CharInput};
+/// use qubit_io::CharInput;
+/// use qubit_io::Input;
 ///
 /// fn accept(stream: impl CharInput) {}
 ///
@@ -42,6 +43,8 @@ use crate::Input;
 ///     accept(stream);
 /// }
 /// ```
-pub trait CharInput: Input<Item = char> {}
+pub trait CharInput: Input<Item = char> {
+    // empty
+}
 
 impl<T: Input<Item = char> + ?Sized> CharInput for T {}

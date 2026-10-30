@@ -12,6 +12,7 @@ use std::task::Context;
 use std::task::Poll;
 
 use digest::Digest;
+use digest::Output;
 
 use crate::AsyncByteInput;
 use crate::AsyncInput;
@@ -152,7 +153,7 @@ where
     /// Returns the algorithm's full, fixed-size digest of bytes tracked so far.
     #[inline]
     #[must_use]
-    pub fn digest(&self) -> digest::Output<D>
+    pub fn digest(&self) -> Output<D>
     where
         D: Clone,
     {
@@ -169,7 +170,7 @@ where
     /// Returns the wrapped stream and the algorithm's full, fixed-size digest.
     #[inline]
     #[must_use]
-    pub fn finalize(self) -> (I, digest::Output<D>) {
+    pub fn finalize(self) -> (I, Output<D>) {
         (self.inner, self.hasher.finalize())
     }
 

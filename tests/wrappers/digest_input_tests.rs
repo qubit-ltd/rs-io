@@ -8,10 +8,13 @@
 //! Contract tests for digesting byte input.
 
 use std::io::Cursor;
+use std::io::Error;
 use std::io::ErrorKind;
 use std::io::Read;
+use std::io::Result;
 use std::io::SeekFrom;
 
+use qubit_io::DEFAULT_COPY_BUFFER_SIZE;
 use qubit_io::DigestInput;
 use qubit_io::Input;
 use qubit_io::Seekable;
@@ -26,7 +29,7 @@ struct InterruptedSource {
 }
 
 impl Read for InterruptedSource {
-    fn read(&mut self, output: &mut [u8]) -> std::io::Result<usize> {
+    fn read(&mut self, output: &mut [u8]) -> Result<usize> {
         self.step += 1;
         match self.step {
             1 => {
@@ -48,11 +51,11 @@ struct OverreportedRead;
 impl Input for OverreportedRead {
     type Item = u8;
 
-    fn read(&mut self, output: &mut [u8]) -> std::io::Result<usize> {
+    fn read(&mut self, output: &mut [u8]) -> Result<usize> {
         Ok(output.len() + 1)
     }
 
-    unsafe fn read_unchecked(&mut self, _output: &mut [u8], _index: usize, count: usize) -> std::io::Result<usize> {
+    unsafe fn read_unchecked(&mut self, _output: &mut [u8], _index: usize, count: usize) -> Result<usize> {
         Ok(count + 1)
     }
 }
@@ -63,9 +66,9 @@ struct LargeInterruptedSource {
 }
 
 impl Read for LargeInterruptedSource {
-    fn read(&mut self, output: &mut [u8]) -> std::io::Result<usize> {
-        let total = qubit_io::DEFAULT_COPY_BUFFER_SIZE * 2 + 3;
-        if self.position == qubit_io::DEFAULT_COPY_BUFFER_SIZE * 2 && !self.interrupted {
+    fn read(&mut self, output: &mut [u8]) -> Result<usize> {
+        let total = DEFAULT_COPY_BUFFER_SIZE * 2 + 3;
+        if self.position == DEFAULT_COPY_BUFFER_SIZE * 2 && !self.interrupted {
             self.interrupted = true;
             return Err(ErrorKind::Interrupted.into());
         }
@@ -81,7 +84,7 @@ struct InterruptedFirstSource {
 }
 
 impl Read for InterruptedFirstSource {
-    fn read(&mut self, output: &mut [u8]) -> std::io::Result<usize> {
+    fn read(&mut self, output: &mut [u8]) -> Result<usize> {
         self.step += 1;
         match self.step {
             1 => Err(ErrorKind::Interrupted.into()),
@@ -99,13 +102,13 @@ struct ProgressThenError {
 }
 
 impl Read for ProgressThenError {
-    fn read(&mut self, output: &mut [u8]) -> std::io::Result<usize> {
+    fn read(&mut self, output: &mut [u8]) -> Result<usize> {
         if self.position == 0 {
             output[..2].copy_from_slice(b"ab");
             self.position = 2;
             Ok(2)
         } else {
-            Err(std::io::Error::other("read failure after progress"))
+            Err(Error::other("read failure after progress"))
         }
     }
 }
@@ -201,7 +204,7 @@ fn test_digest_input_seek_tracks_transfer_history_and_indexed_reads() {
 
 #[test]
 fn test_digest_input_non_clone_algorithm_can_transfer_and_finalize() {
-    let stream = std::io::Cursor::new(b"abc");
+    let stream = Cursor::new(b"abc");
     let mut wrapper = DigestInput::new(stream, super::digest_support_tests::NonCloneDigest::default());
     let mut bytes = [0; 3];
     assert_eq!(3, wrapper.read(&mut bytes).expect("transfer bytes"));
@@ -212,11 +215,11 @@ fn test_digest_input_non_clone_algorithm_can_transfer_and_finalize() {
 #[test]
 fn test_digest_input_digest_all_reads_remaining_input_with_fresh_state() {
     for buffered in [false, true] {
-        let mut input = ScriptedInput::items(vec![b'x'; qubit_io::DEFAULT_COPY_BUFFER_SIZE * 2 + 3]);
+        let mut input = ScriptedInput::items(vec![b'x'; DEFAULT_COPY_BUFFER_SIZE * 2 + 3]);
         input.buffered = buffered;
         let fingerprint = DigestInput::<_, Sha256>::digest_all(&mut input).expect("digest to EOF");
         assert_eq!(
-            Sha256::digest(vec![b'x'; qubit_io::DEFAULT_COPY_BUFFER_SIZE * 2 + 3]),
+            Sha256::digest(vec![b'x'; DEFAULT_COPY_BUFFER_SIZE * 2 + 3]),
             fingerprint
         );
         assert_eq!(0, input.remaining_len());
@@ -298,7 +301,7 @@ fn test_digest_all_retries_interrupted_after_multiple_buffers() {
         interrupted: false,
     };
     assert_eq!(
-        Sha256::digest(vec![b'x'; qubit_io::DEFAULT_COPY_BUFFER_SIZE * 2 + 3]),
+        Sha256::digest(vec![b'x'; DEFAULT_COPY_BUFFER_SIZE * 2 + 3]),
         DigestInput::<_, Sha256>::digest_all(&mut input).expect("retry after multiple buffers")
     );
 }
@@ -320,8 +323,7 @@ fn test_digest_input_rejects_safe_overreported_count() {
     let mut input = DigestInput::new(super::support_tests::SafeOverreportInput, Sha256::new());
     let before = input.digest();
     let mut output = [0_u8; 4];
-    let error =
-        unsafe { qubit_io::Input::read_unchecked(&mut input, &mut output, 1, 2) }.expect_err("overreport should fail");
+    let error = unsafe { Input::read_unchecked(&mut input, &mut output, 1, 2) }.expect_err("overreport should fail");
 
     assert_eq!(ErrorKind::InvalidData, error.kind());
     assert_eq!(before, input.digest());

@@ -9,14 +9,19 @@
 
 use std::io::Cursor;
 use std::io::ErrorKind;
+use std::io::Read;
+use std::io::Result as IoResult;
 use std::io::SeekFrom;
 
 use qubit_io::Input;
+use qubit_io::Output;
 use qubit_io::Seekable;
+use qubit_io::StdRead;
 use qubit_io::SyncSeekTeeInput;
 
 use super::support_tests::ErrorBranch;
 use super::support_tests::InputAction;
+use super::support_tests::SafeOverreportInput;
 use super::support_tests::ScriptedInput;
 use super::support_tests::ScriptedOutput;
 use super::support_tests::SeekFailOnceOutput;
@@ -26,10 +31,16 @@ use super::support_tests::assert_original_os_error;
 fn test_sync_seek_tee_input_repeated_error_retains_original_source() {
     let mut input = SyncSeekTeeInput::new(Cursor::new(b"abc"), ErrorBranch::os_error());
     let mut byte = [0];
-    assert_eq!(1, input.read(&mut byte).unwrap());
-    let error = input.read(&mut byte).unwrap_err();
+    assert_eq!(1, input.read(&mut byte).expect("first read should succeed"));
+    let error = input
+        .read(&mut byte)
+        .expect_err("repeated read should return the original error");
     assert_original_os_error(&error);
-    assert_original_os_error(&input.seek_to(SeekFrom::Start(0)).unwrap_err());
+    assert_original_os_error(
+        &input
+            .seek_to(SeekFrom::Start(0))
+            .expect_err("seek should return the latched error"),
+    );
     assert_eq!(1, input.inner().position());
     assert_eq!(1, input.branch().write_calls);
     assert_eq!(0, input.branch().seek_calls);
@@ -101,7 +112,13 @@ fn test_sync_seek_tee_input_propagates_read_path_errors() {
             .read(&mut output)
             .expect("primary progress should be returned")
     );
-    assert_eq!(ErrorKind::Other, branch_failure.branch_error().unwrap().kind());
+    assert_eq!(
+        ErrorKind::Other,
+        branch_failure
+            .branch_error()
+            .expect("branch failure should be retained")
+            .kind()
+    );
     assert_eq!([1, 2], output);
     assert_eq!(0, branch_failure.inner().remaining_len());
     let source_position = branch_failure.inner().position;
@@ -124,38 +141,50 @@ fn test_sync_seek_tee_input_propagates_read_path_errors() {
     );
     assert_eq!(source_position, branch_failure.inner().position);
     assert_eq!(branch_position, branch_failure.branch().position);
-    assert_eq!(ErrorKind::Other, branch_failure.read(&mut output).unwrap_err().kind());
+    assert_eq!(
+        ErrorKind::Other,
+        branch_failure
+            .read(&mut output)
+            .expect_err("later read should return the retained branch error")
+            .kind()
+    );
     assert_eq!(0, branch_failure.inner().remaining_len());
 }
 
 #[test]
 fn test_sync_seek_tee_input_std_read_preserves_primary_progress() {
     let tee = SyncSeekTeeInput::new(Cursor::new(&b"abcd"[..]), FailingSeekableOutput);
-    let mut reader = qubit_io::StdRead::new(tee);
+    let mut reader = StdRead::new(tee);
     let mut bytes = [0; 3];
-    assert_eq!(3, std::io::Read::read(&mut reader, &mut bytes).unwrap());
+    assert_eq!(
+        3,
+        Read::read(&mut reader, &mut bytes).expect("first standard read should succeed")
+    );
     assert_eq!(&bytes, b"abc");
     assert_eq!(
         ErrorKind::WriteZero,
-        std::io::Read::read(&mut reader, &mut [0]).unwrap_err().kind()
+        Read::read(&mut reader, &mut [0])
+            .expect_err("standard read should expose the branch failure")
+            .kind()
     );
     assert_eq!(3, reader.get_ref().inner().position());
 }
 
+/// Accepts unchecked writes while failing the standard-reader write path.
 struct FailingSeekableOutput;
 
-impl qubit_io::Output for FailingSeekableOutput {
+impl Output for FailingSeekableOutput {
     type Item = u8;
 
-    unsafe fn write_unchecked(&mut self, _input: &[u8], _index: usize, count: usize) -> std::io::Result<usize> {
+    unsafe fn write_unchecked(&mut self, _input: &[u8], _index: usize, count: usize) -> IoResult<usize> {
         Ok(count)
     }
 
-    fn write_fully(&mut self, _input: &[u8]) -> std::io::Result<()> {
+    fn write_fully(&mut self, _input: &[u8]) -> IoResult<()> {
         Err(ErrorKind::WriteZero.into())
     }
 
-    fn flush(&mut self) -> std::io::Result<()> {
+    fn flush(&mut self) -> IoResult<()> {
         Ok(())
     }
 }
@@ -163,7 +192,7 @@ impl qubit_io::Output for FailingSeekableOutput {
 impl Seekable for FailingSeekableOutput {
     type Unit = u8;
 
-    fn seek_to(&mut self, _position: SeekFrom) -> std::io::Result<u64> {
+    fn seek_to(&mut self, _position: SeekFrom) -> IoResult<u64> {
         Ok(0)
     }
 }
@@ -199,7 +228,13 @@ fn test_sync_seek_tee_input_seek_failure_recovery_contract() {
         fail_next_seek: true,
     };
     let mut input = SyncSeekTeeInput::new(Cursor::new(b"abcdef".to_vec()), branch);
-    assert_eq!(ErrorKind::Other, input.seek_to(SeekFrom::Start(2)).unwrap_err().kind());
+    assert_eq!(
+        ErrorKind::Other,
+        input
+            .seek_to(SeekFrom::Start(2))
+            .expect_err("first branch seek should fail")
+            .kind()
+    );
     assert!(input.branch_error().is_none());
     assert_eq!(2, input.inner().position());
     assert_eq!(0, input.branch().inner.position());
@@ -228,12 +263,9 @@ fn test_sync_seek_tee_input_seek_failure_recovery_contract() {
 
 #[test]
 fn test_sync_seek_tee_input_rejects_safe_overreported_count() {
-    let mut wrapper = qubit_io::SyncSeekTeeInput::new(
-        super::support_tests::SafeOverreportInput,
-        super::support_tests::ScriptedOutput::<u8>::accepting(),
-    );
+    let mut wrapper = SyncSeekTeeInput::new(SafeOverreportInput, ScriptedOutput::<u8>::accepting());
     let mut bytes = [0_u8; 2];
-    let error = qubit_io::Input::read(&mut wrapper, &mut bytes).unwrap_err();
-    assert_eq!(std::io::ErrorKind::InvalidData, error.kind());
+    let error = Input::read(&mut wrapper, &mut bytes).expect_err("overreported read count should be rejected");
+    assert_eq!(ErrorKind::InvalidData, error.kind());
     assert!(wrapper.branch().items.is_empty());
 }

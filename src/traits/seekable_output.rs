@@ -28,10 +28,8 @@ use super::Seekable;
 /// # Examples
 ///
 /// ```
-/// use std::io::{
-///     Cursor,
-///     SeekFrom,
-/// };
+/// use std::io::Cursor;
+/// use std::io::SeekFrom;
 ///
 /// use qubit_io::SeekableOutput;
 ///

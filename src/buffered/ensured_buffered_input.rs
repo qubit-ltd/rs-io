@@ -91,7 +91,8 @@ where
     ///
     /// # Safety
     ///
-    /// The range `index..index + count` must be valid for `output`.
+    /// The range `index..index + count` must be valid for `output`, and the
+    /// addition must not overflow.
     #[inline]
     unsafe fn read_unchecked(&mut self, output: &mut [Self::Item], index: usize, count: usize) -> Result<usize> {
         match self {
@@ -146,7 +147,8 @@ where
     ///
     /// # Safety
     ///
-    /// The range `index..index + count` must be valid for `output`.
+    /// The range `index..index + count` must be valid for `output`, and the
+    /// addition must not overflow.
     #[inline]
     unsafe fn read_fully_unchecked(&mut self, output: &mut [Self::Item], index: usize, count: usize) -> Result<usize> {
         match self {

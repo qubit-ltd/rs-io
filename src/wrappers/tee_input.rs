@@ -51,6 +51,7 @@ pub struct TeeInput<I, B> {
     inner: I,
     /// Branch output receiving mirrored items.
     branch: B,
+    /// First branch write error, retained after source progress.
     failure: TeeFailure,
 }
 

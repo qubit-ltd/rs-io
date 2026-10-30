@@ -6,6 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
+use std::any::type_name;
 use std::future::Future;
 use std::io::ErrorKind;
 use std::pin::Pin;
@@ -20,7 +21,7 @@ use super::support_tests::TestOutput;
 
 #[test]
 fn test_flush_future_type_is_public() {
-    assert!(std::any::type_name::<FlushFuture<'static, TestOutput>>().contains("FlushFuture"));
+    assert!(type_name::<FlushFuture<'static, TestOutput>>().contains("FlushFuture"));
 }
 
 #[test]

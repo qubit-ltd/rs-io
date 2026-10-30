@@ -29,9 +29,12 @@ use crate::CloseFuture;
 /// use std::future::Future;
 /// use std::io::Result;
 /// use std::pin::Pin;
-/// use std::task::{Context, Poll, Waker};
+/// use std::task::Context;
+/// use std::task::Poll;
+/// use std::task::Waker;
 ///
-/// use qubit_io::{AsyncClose, AsyncOutput};
+/// use qubit_io::AsyncClose;
+/// use qubit_io::AsyncOutput;
 ///
 /// struct Output { closed: bool }
 ///

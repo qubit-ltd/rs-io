@@ -16,6 +16,8 @@ use qubit_io::Output;
 use qubit_io::OutputRef;
 
 struct VectorCharOutput(Rc<RefCell<Vec<char>>>);
+
+// Rejects scalar writes so the test verifies vectored-write forwarding.
 impl Output for VectorCharOutput {
     type Item = char;
     unsafe fn write_unchecked(&mut self, _: &[char], _: usize, _: usize) -> io::Result<usize> {
@@ -35,7 +37,7 @@ impl Output for VectorCharOutput {
 }
 
 #[test]
-fn vectored_forward_box_output_keeps_override() {
+fn test_vectored_forward_box_output_keeps_override() {
     let values = Rc::new(RefCell::new(Vec::new()));
     let inner: Box<dyn Output<Item = char>> = Box::new(VectorCharOutput(Rc::clone(&values)));
     let mut output = BoxOutput::new(inner);
@@ -66,7 +68,7 @@ impl Output for EmptyErrorOutput {
 }
 
 #[test]
-fn vectored_forward_box_output_preserves_empty_list_error() {
+fn test_vectored_forward_box_output_preserves_empty_list_error() {
     let calls = Rc::new(Cell::new(0));
     let mut sink = EmptyErrorOutput(Rc::clone(&calls));
     let borrowed: &mut dyn Output<Item = char> = &mut sink;

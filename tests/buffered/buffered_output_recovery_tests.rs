@@ -78,7 +78,7 @@ fn test_panic_marks_recovery_indeterminate_and_blocks_io() {
     output.write_fully(b"abc").expect("buffer should accept input");
     state.lock().expect("state mutex should be available").panic_next_write = true;
 
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| output.flush()));
+    let result = catch_unwind(AssertUnwindSafe(|| output.flush()));
     assert!(result.is_err());
     let calls_after_panic = state.lock().expect("state mutex should be available").calls;
 

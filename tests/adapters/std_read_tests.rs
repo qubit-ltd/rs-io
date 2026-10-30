@@ -6,9 +6,13 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
+use std::collections::hash_map::DefaultHasher;
 use std::io::Cursor;
+use std::io::Error;
+use std::io::ErrorKind;
 use std::io::IoSliceMut;
 use std::io::Read;
+use std::io::Result;
 use std::io::Seek;
 use std::io::SeekFrom;
 
@@ -16,16 +20,19 @@ use qubit_io::ChecksumInput;
 use qubit_io::Input;
 use qubit_io::InputRef;
 use qubit_io::LimitOutput;
+use qubit_io::Seekable;
+use qubit_io::StdRead;
 use qubit_io::TeeInput;
 
 struct VectorInput;
 
 impl Input for VectorInput {
     type Item = u8;
-    unsafe fn read_unchecked(&mut self, _: &mut [u8], _: usize, _: usize) -> std::io::Result<usize> {
+
+    unsafe fn read_unchecked(&mut self, _: &mut [u8], _: usize, _: usize) -> Result<usize> {
         panic!("scalar read called")
     }
-    fn read_vectored(&mut self, buffers: &mut [&mut [u8]]) -> std::io::Result<usize> {
+    fn read_vectored(&mut self, buffers: &mut [&mut [u8]]) -> Result<usize> {
         let mut bytes = b"abcd".iter();
         let mut total = 0;
         for buffer in buffers {
@@ -42,8 +49,8 @@ impl Input for VectorInput {
 }
 
 #[test]
-fn vectored_std_adapter_keeps_inner_override() {
-    let mut reader = qubit_io::StdRead::new(VectorInput);
+fn test_vectored_std_adapter_keeps_inner_override() {
+    let mut reader = StdRead::new(VectorInput);
     let mut first = [0; 2];
     let mut second = [0; 2];
     assert_eq!(
@@ -58,20 +65,20 @@ fn vectored_std_adapter_keeps_inner_override() {
 }
 
 struct EdgeInput {
-    reply: Result<usize, std::io::ErrorKind>,
+    reply: std::result::Result<usize, ErrorKind>,
     calls: usize,
 }
 
 impl Input for EdgeInput {
     type Item = u8;
 
-    unsafe fn read_unchecked(&mut self, _: &mut [u8], _: usize, _: usize) -> std::io::Result<usize> {
+    unsafe fn read_unchecked(&mut self, _: &mut [u8], _: usize, _: usize) -> Result<usize> {
         panic!("scalar read called")
     }
 
-    fn read_vectored(&mut self, buffers: &mut [&mut [u8]]) -> std::io::Result<usize> {
+    fn read_vectored(&mut self, buffers: &mut [&mut [u8]]) -> Result<usize> {
         self.calls += 1;
-        let count = self.reply.map_err(std::io::Error::from)?;
+        let count = self.reply.map_err(Error::from)?;
         let mut remaining = count;
         for buffer in buffers {
             for slot in buffer.iter_mut() {
@@ -87,8 +94,8 @@ impl Input for EdgeInput {
 }
 
 #[test]
-fn vectored_std_adapter_preserves_empty_short_error_and_count_contracts() {
-    let mut reader = qubit_io::StdRead::new(EdgeInput { reply: Ok(0), calls: 0 });
+fn test_vectored_std_adapter_preserves_empty_short_error_and_count_contracts() {
+    let mut reader = StdRead::new(EdgeInput { reply: Ok(0), calls: 0 });
     assert_eq!(Read::read_vectored(&mut reader, &mut []).unwrap(), 0);
     assert_eq!(
         Read::read_vectored(&mut reader, &mut [IoSliceMut::new(&mut [])]).unwrap(),
@@ -96,7 +103,7 @@ fn vectored_std_adapter_preserves_empty_short_error_and_count_contracts() {
     );
     assert_eq!(reader.get_ref().calls, 0);
 
-    let mut reader = qubit_io::StdRead::new(EdgeInput { reply: Ok(1), calls: 0 });
+    let mut reader = StdRead::new(EdgeInput { reply: Ok(1), calls: 0 });
     let mut first = [b'!'; 2];
     let mut second = [b'?'; 2];
     assert_eq!(
@@ -111,8 +118,8 @@ fn vectored_std_adapter_preserves_empty_short_error_and_count_contracts() {
     assert_eq!(second, [b'?', b'?']);
     assert_eq!(reader.get_ref().calls, 1);
 
-    for kind in [std::io::ErrorKind::Interrupted, std::io::ErrorKind::PermissionDenied] {
-        let mut reader = qubit_io::StdRead::new(EdgeInput {
+    for kind in [ErrorKind::Interrupted, ErrorKind::PermissionDenied] {
+        let mut reader = StdRead::new(EdgeInput {
             reply: Err(kind),
             calls: 0,
         });
@@ -125,7 +132,7 @@ fn vectored_std_adapter_preserves_empty_short_error_and_count_contracts() {
         assert_eq!(reader.get_ref().calls, 1);
     }
 
-    let mut reader = qubit_io::StdRead::new(EdgeInput { reply: Ok(5), calls: 0 });
+    let mut reader = StdRead::new(EdgeInput { reply: Ok(5), calls: 0 });
     let mut first = [0; 2];
     let mut second = [0; 2];
     assert_eq!(
@@ -135,14 +142,14 @@ fn vectored_std_adapter_preserves_empty_short_error_and_count_contracts() {
         )
         .unwrap_err()
         .kind(),
-        std::io::ErrorKind::InvalidData
+        ErrorKind::InvalidData
     );
     assert_eq!(reader.get_ref().calls, 1);
 }
 
 #[test]
-fn vectored_std_read_adapter_nested_bridge_does_not_recurse() {
-    let mut reader = qubit_io::StdRead::new(qubit_io::StdRead::new(VectorInput));
+fn test_vectored_std_read_adapter_nested_bridge_does_not_recurse() {
+    let mut reader = StdRead::new(StdRead::new(VectorInput));
     let mut first = [0; 2];
     let mut second = [0; 2];
     assert_eq!(
@@ -168,14 +175,14 @@ fn test_std_read_delegates_to_input() {
 #[test]
 fn test_std_read_reports_tee_primary_progress_before_branch_failure() {
     let tee = TeeInput::new(Cursor::new(b"abcd"), LimitOutput::new(Vec::<u8>::new(), 2));
-    let mut reader = qubit_io::StdRead::new(tee);
+    let mut reader = StdRead::new(tee);
     let mut bytes = [0; 3];
-    assert_eq!(std::io::Read::read(&mut reader, &mut bytes).unwrap(), 3);
+    assert_eq!(Read::read(&mut reader, &mut bytes).unwrap(), 3);
     assert_eq!(&bytes, b"abc");
     let mut next = [9];
     assert_eq!(
-        std::io::Read::read(&mut reader, &mut next).unwrap_err().kind(),
-        std::io::ErrorKind::WriteZero
+        Read::read(&mut reader, &mut next).unwrap_err().kind(),
+        ErrorKind::WriteZero
     );
     assert_eq!(next, [9]);
     assert_eq!(reader.get_ref().inner().position(), 3);
@@ -183,7 +190,7 @@ fn test_std_read_reports_tee_primary_progress_before_branch_failure() {
 
 #[test]
 fn test_into_std_read_preserves_checksum_state_and_stream_position() {
-    let input = ChecksumInput::new(Cursor::new(b"abcd"), std::collections::hash_map::DefaultHasher::new());
+    let input = ChecksumInput::new(Cursor::new(b"abcd"), DefaultHasher::new());
     let mut reader = input.into_std_read();
     let mut bytes = [0; 2];
     reader.read_exact(&mut bytes).expect("reader should fill output");
@@ -226,11 +233,11 @@ fn test_std_read_seek_forwards_position_and_errors() {
 #[test]
 fn test_std_read_supports_read_only_inner() {
     fn assert_read<T: Read>(_: &T) {}
-    let reader = qubit_io::StdRead::new(ReadOnlyInput);
+    let reader = StdRead::new(ReadOnlyInput);
     assert_read(&reader);
-    let mut reader = qubit_io::StdRead::new(ReadOnlyInput);
+    let mut reader = StdRead::new(ReadOnlyInput);
     assert_eq!(
-        std::io::ErrorKind::UnexpectedEof,
+        ErrorKind::UnexpectedEof,
         reader.read_exact(&mut [0]).unwrap_err().kind()
     );
 }
@@ -252,7 +259,7 @@ struct ReadOnlyInput;
 impl Input for ReadOnlyInput {
     type Item = u8;
 
-    unsafe fn read_unchecked(&mut self, _output: &mut [u8], _index: usize, _count: usize) -> std::io::Result<usize> {
+    unsafe fn read_unchecked(&mut self, _output: &mut [u8], _index: usize, _count: usize) -> Result<usize> {
         Ok(0)
     }
 }
@@ -262,16 +269,16 @@ struct ErrorSeekInput;
 impl Input for ErrorSeekInput {
     type Item = u8;
 
-    unsafe fn read_unchecked(&mut self, _output: &mut [u8], _index: usize, _count: usize) -> std::io::Result<usize> {
+    unsafe fn read_unchecked(&mut self, _output: &mut [u8], _index: usize, _count: usize) -> Result<usize> {
         Ok(0)
     }
 }
 
-impl qubit_io::Seekable for ErrorSeekInput {
+impl Seekable for ErrorSeekInput {
     type Unit = u8;
 
-    fn seek_to(&mut self, _position: SeekFrom) -> std::io::Result<u64> {
-        Err(std::io::Error::other("seek failed"))
+    fn seek_to(&mut self, _position: SeekFrom) -> Result<u64> {
+        Err(Error::other("seek failed"))
     }
 }
 
@@ -283,10 +290,10 @@ struct ShortInput {
 impl Input for ShortInput {
     type Item = u8;
 
-    unsafe fn read_unchecked(&mut self, output: &mut [u8], index: usize, count: usize) -> std::io::Result<usize> {
+    unsafe fn read_unchecked(&mut self, output: &mut [u8], index: usize, count: usize) -> Result<usize> {
         if self.interrupted {
             self.interrupted = false;
-            return Err(std::io::ErrorKind::Interrupted.into());
+            return Err(ErrorKind::Interrupted.into());
         }
         let read = count.min(1).min(self.bytes.len());
         output[index..index + read].copy_from_slice(&self.bytes[..read]);

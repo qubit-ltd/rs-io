@@ -227,7 +227,7 @@ where
 
 impl<I> Seekable for InputRef<'_, I>
 where
-    I: Input + crate::Seekable + ?Sized,
+    I: Input + Seekable + ?Sized,
 {
     /// The seek unit inherited from the borrowed input.
     type Unit = I::Unit;

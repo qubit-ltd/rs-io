@@ -21,13 +21,42 @@ pub(crate) struct TeeFailure {
 
 impl TeeFailure {
     /// Creates a failure state with no recorded branch error.
+    ///
+    /// # Returns
+    ///
+    /// A failure state that has not recorded a branch error.
+    #[must_use]
+    #[inline]
     pub(crate) const fn new() -> Self {
         Self { error: None }
     }
 
     /// Borrows the original recorded branch error, if any.
+    ///
+    /// # Returns
+    ///
+    /// The original branch error when one has been recorded, or `None`
+    /// otherwise.
+    #[inline]
     pub(crate) fn error(&self) -> Option<&io::Error> {
         self.error.as_deref()
+    }
+
+    /// Returns the recorded error, if any, recovering the original when unique.
+    ///
+    /// If the `Arc` is uniquely owned, this returns the original error and its
+    /// original kind. Otherwise, it returns a shared representation that keeps
+    /// the original in its source chain; an `Interrupted` kind is normalized to
+    /// `Other` to prevent retrying the already-latched failure. This does not
+    /// roll back progress already made on the primary path.
+    ///
+    /// # Returns
+    ///
+    /// The original error when uniquely owned, a shared report otherwise, or
+    /// `None` if no error was recorded.
+    pub(crate) fn into_error(self) -> Option<io::Error> {
+        self.error
+            .map(|error| Arc::try_unwrap(error).unwrap_or_else(Self::shared_error))
     }
 
     /// Records `error` only if no branch error has been recorded yet.
@@ -35,6 +64,10 @@ impl TeeFailure {
     /// Later failures do not replace or clear the first error. Recording a
     /// branch failure also does not roll back progress already made on the
     /// primary path; recovery or compensation is the caller's responsibility.
+    ///
+    /// # Parameters
+    ///
+    /// * `error` - The branch error to retain if this state has no prior error.
     pub(crate) fn record(&mut self, error: io::Error) {
         if self.error.is_none() {
             self.error = Some(Arc::new(error));
@@ -47,23 +80,21 @@ impl TeeFailure {
     /// original `Interrupted` error is presented as `Other` so aggregate
     /// operations do not retry a branch failure that has already been latched.
     /// This does not roll back progress already made on the primary path.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` when no branch error was recorded, or an error representing
+    /// the recorded failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns the recorded branch failure, preserving the original as its
+    /// source and normalizing `Interrupted` to `Other`.
     pub(crate) fn check(&self) -> io::Result<()> {
         match &self.error {
             Some(error) => Err(Self::shared_error(Arc::clone(error))),
             None => Ok(()),
         }
-    }
-
-    /// Returns the recorded error, if any, recovering the original when unique.
-    ///
-    /// If the `Arc` is uniquely owned, this returns the original error and its
-    /// original kind. Otherwise, it returns a shared representation that keeps
-    /// the original in its source chain; an `Interrupted` kind is normalized to
-    /// `Other` to prevent retrying the already-latched failure. This does not
-    /// roll back progress already made on the primary path.
-    pub(crate) fn into_error(self) -> Option<io::Error> {
-        self.error
-            .map(|error| Arc::try_unwrap(error).unwrap_or_else(Self::shared_error))
     }
 
     /// Builds a reportable error that retains the original error as its cause.
@@ -72,6 +103,15 @@ impl TeeFailure {
     /// not retry a branch failure that has already been latched. The primary
     /// path's progress is not rolled back. OS-specific codes on shared reports
     /// are available through the source chain rather than the outer error.
+    ///
+    /// # Parameters
+    ///
+    /// * `error` - The original branch error to retain as the source.
+    ///
+    /// # Returns
+    ///
+    /// A reportable I/O error with the original error preserved in its source
+    /// chain.
     fn shared_error(error: Arc<io::Error>) -> io::Error {
         let kind = if error.kind() == io::ErrorKind::Interrupted {
             io::ErrorKind::Other

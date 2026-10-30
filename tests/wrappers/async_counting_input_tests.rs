@@ -6,8 +6,17 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-use qubit_io::AsyncCountingInput;
+use std::io::ErrorKind;
+use std::pin::Pin;
+use std::task::Context;
+use std::task::Poll;
+use std::task::Waker;
 
+use qubit_io::AsyncCountingInput;
+use qubit_io::AsyncInput;
+
+use super::support_tests::SafeOverreportInput;
+use super::support_tests::SafeProgressThenOverreportInput;
 use super::support_tests::TestStream;
 
 #[test]
@@ -18,30 +27,28 @@ fn test_async_counting_input_starts_at_zero() {
 
 #[test]
 fn test_async_counting_input_rejects_safe_overreported_count() {
-    let mut wrapper = qubit_io::AsyncCountingInput::new(super::support_tests::SafeOverreportInput);
-    let waker = std::task::Waker::noop();
-    let mut cx = std::task::Context::from_waker(waker);
+    let mut wrapper = AsyncCountingInput::new(SafeOverreportInput);
+    let waker = Waker::noop();
+    let mut cx = Context::from_waker(waker);
     let mut bytes = [0_u8; 2];
-    let result = qubit_io::AsyncInput::poll_read(std::pin::Pin::new(&mut wrapper), &mut cx, &mut bytes);
-    assert!(
-        matches!(result, std::task::Poll::Ready(Err(ref error)) if error.kind() == std::io::ErrorKind::InvalidData)
-    );
+    let result = AsyncInput::poll_read(Pin::new(&mut wrapper), &mut cx, &mut bytes);
+    assert!(matches!(result, Poll::Ready(Err(ref error)) if error.kind() == ErrorKind::InvalidData));
     assert_eq!(0, wrapper.items_read());
 }
 
 #[test]
 fn test_async_counting_input_preserves_short_progress_before_overreport() {
-    let mut input = qubit_io::AsyncCountingInput::new(super::support_tests::SafeProgressThenOverreportInput::default());
-    let waker = std::task::Waker::noop();
-    let mut cx = std::task::Context::from_waker(waker);
+    let mut input = AsyncCountingInput::new(SafeProgressThenOverreportInput::default());
+    let waker = Waker::noop();
+    let mut cx = Context::from_waker(waker);
     let mut output = [0_u8; 2];
 
     assert!(matches!(
-        qubit_io::AsyncInput::poll_read(std::pin::Pin::new(&mut input), &mut cx, &mut output),
-        std::task::Poll::Ready(Ok(1))
+        AsyncInput::poll_read(Pin::new(&mut input), &mut cx, &mut output),
+        Poll::Ready(Ok(1))
     ));
     assert!(
-        matches!(qubit_io::AsyncInput::poll_read(std::pin::Pin::new(&mut input), &mut cx, &mut output), std::task::Poll::Ready(Err(ref error)) if error.kind() == std::io::ErrorKind::InvalidData)
+        matches!(AsyncInput::poll_read(Pin::new(&mut input), &mut cx, &mut output), Poll::Ready(Err(ref error)) if error.kind() == ErrorKind::InvalidData)
     );
     assert_eq!(1, input.items_read());
 }

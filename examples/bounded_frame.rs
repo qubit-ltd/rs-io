@@ -57,8 +57,8 @@ where
 ///
 /// # Errors
 ///
-/// Returns an error when an expected frame result or error category does not
-/// match the decoder contract.
+/// Returns an I/O error when decoding a frame fails. Assertions panic if a
+/// decoded result or error category does not match the decoder contract.
 fn main() -> io::Result<()> {
     let mut frame = Cursor::new([0, 0, 0, 3, b'f', b'o', b'o']);
     assert_eq!(b"foo", read_frame(&mut frame)?.as_slice());

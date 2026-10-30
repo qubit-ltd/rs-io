@@ -240,6 +240,17 @@ where
         &self.inner
     }
 
+    /// Returns the internal buffer capacity.
+    ///
+    /// # Returns
+    ///
+    /// The total number of items that can be held by the internal buffer.
+    #[inline(always)]
+    #[must_use]
+    pub fn capacity(&self) -> usize {
+        self.buffer.capacity()
+    }
+
     /// Returns an exclusive reference to the wrapped writer.
     ///
     /// Pending items may still be present in the internal buffer and are not
@@ -288,22 +299,16 @@ where
         }
     }
 
-    fn ensure_not_panicked(&self) -> Result<()> {
-        if self.panicked {
-            return Err(Error::other("buffered output is poisoned after an inner I/O panic"));
-        }
-        Ok(())
-    }
-
-    /// Returns the internal buffer capacity.
+    /// Returns the unused capacity in the internal buffer.
     ///
     /// # Returns
     ///
-    /// The total number of items that can be held by the internal buffer.
+    /// Returns the number of items that can still be appended to the internal
+    /// buffer before it must be flushed.
     #[inline(always)]
     #[must_use]
-    pub fn capacity(&self) -> usize {
-        self.buffer.capacity()
+    pub fn spare_capacity(&self) -> usize {
+        self.buffer.spare_capacity()
     }
 
     /// Tries to ensure that the internal buffer has at least `capacity` items.
@@ -332,18 +337,6 @@ where
         capacity: usize,
     ) -> std::result::Result<(), std::collections::TryReserveError> {
         self.buffer.try_reserve_capacity(capacity)
-    }
-
-    /// Returns the unused capacity in the internal buffer.
-    ///
-    /// # Returns
-    ///
-    /// Returns the number of items that can still be appended to the internal
-    /// buffer before it must be flushed.
-    #[inline(always)]
-    #[must_use]
-    pub fn spare_capacity(&self) -> usize {
-        self.buffer.spare_capacity()
     }
 
     /// Returns raw spare-buffer parts for hot-path callers.
@@ -680,6 +673,14 @@ where
                 result
             }
         }
+    }
+
+    /// Rejects further operations after an inner I/O call panicked.
+    fn ensure_not_panicked(&self) -> Result<()> {
+        if self.panicked {
+            return Err(Error::other("buffered output is poisoned after an inner I/O panic"));
+        }
+        Ok(())
     }
 
     /// Flushes buffered items to the wrapped writer.

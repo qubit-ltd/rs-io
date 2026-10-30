@@ -9,15 +9,18 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::Hasher;
 use std::io;
+use std::io::ErrorKind;
 use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
+use std::task::Waker;
 
 use qubit_io::AsyncChecksumInput;
 use qubit_io::AsyncInput;
 
 use super::support_tests::TestStream;
 
+/// Records each hasher write call so tests can inspect chunk boundaries.
 #[derive(Default)]
 struct RecordingHasher {
     calls: Vec<Vec<u8>>,
@@ -37,7 +40,7 @@ struct SliceInput {
     position: usize,
 }
 
-impl qubit_io::AsyncInput for SliceInput {
+impl AsyncInput for SliceInput {
     type Item = u8;
 
     unsafe fn poll_read_unchecked(
@@ -65,18 +68,13 @@ fn test_async_checksum_input_starts_with_hasher_checksum() {
 
 #[test]
 fn test_async_checksum_input_rejects_safe_overreported_count() {
-    let mut wrapper = qubit_io::AsyncChecksumInput::new(
-        super::support_tests::SafeOverreportInput,
-        std::collections::hash_map::DefaultHasher::new(),
-    );
-    let waker = std::task::Waker::noop();
-    let mut cx = std::task::Context::from_waker(waker);
+    let mut wrapper = AsyncChecksumInput::new(super::support_tests::SafeOverreportInput, DefaultHasher::new());
+    let waker = Waker::noop();
+    let mut cx = Context::from_waker(waker);
     let before = wrapper.checksum();
     let mut bytes = [0_u8; 2];
-    let result = qubit_io::AsyncInput::poll_read(std::pin::Pin::new(&mut wrapper), &mut cx, &mut bytes);
-    assert!(
-        matches!(result, std::task::Poll::Ready(Err(ref error)) if error.kind() == std::io::ErrorKind::InvalidData)
-    );
+    let result = AsyncInput::poll_read(Pin::new(&mut wrapper), &mut cx, &mut bytes);
+    assert!(matches!(result, Poll::Ready(Err(ref error)) if error.kind() == ErrorKind::InvalidData));
     assert_eq!(before, wrapper.checksum());
 }
 
@@ -89,7 +87,7 @@ fn test_async_checksum_input_preserves_chunks_and_skips_empty_reads() {
         },
         RecordingHasher::default(),
     );
-    let waker = std::task::Waker::noop();
+    let waker = Waker::noop();
     let mut cx = Context::from_waker(waker);
     let mut empty = [];
     assert!(matches!(

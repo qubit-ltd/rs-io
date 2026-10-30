@@ -10,7 +10,8 @@
 
 use std::io::Result;
 use std::io::Seek;
-use std::io::SeekFrom;
+
+use crate::std_io::ext::internal::seek_ext_impl;
 
 /// Extension methods for [`Seek`] values.
 ///
@@ -54,28 +55,6 @@ pub trait SeekExt: Seek {
     fn stream_size(&mut self) -> Result<u64>;
 }
 
-/// Implements stream-size inspection through a type-erased stream.
-///
-/// # Parameters
-/// - `stream`: Stream to measure and restore.
-///
-/// # Returns
-/// The stream size in bytes.
-///
-/// # Errors
-/// Returns an error when querying, changing, or restoring the stream position
-/// fails.
-fn stream_size_impl(stream: &mut dyn Seek) -> Result<u64> {
-    let position = stream.stream_position()?;
-    let size_result = stream.seek(SeekFrom::End(0));
-    let restore_result = stream.seek(SeekFrom::Start(position));
-    match (size_result, restore_result) {
-        (Ok(size), Ok(_)) => Ok(size),
-        (Err(error), Ok(_)) => Err(error),
-        (_, Err(error)) => Err(error),
-    }
-}
-
 impl<T> SeekExt for T
 where
     T: Seek + ?Sized,
@@ -91,6 +70,6 @@ where
     #[inline(always)]
     fn stream_size(&mut self) -> Result<u64> {
         let mut stream = self;
-        stream_size_impl(&mut stream)
+        seek_ext_impl::stream_size(&mut stream)
     }
 }

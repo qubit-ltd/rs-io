@@ -236,7 +236,7 @@ where
 
 impl<O> Seekable for OutputRef<'_, O>
 where
-    O: Output + crate::Seekable + ?Sized,
+    O: Output + Seekable + ?Sized,
 {
     /// The seek unit inherited from the borrowed output.
     type Unit = O::Unit;

@@ -6,12 +6,15 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
+use std::any::type_name;
 use std::io::Cursor;
 use std::io::Error;
 use std::io::ErrorKind;
+use std::io::Result;
 use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
+use std::task::Waker;
 
 use qubit_io::AsyncClose;
 use qubit_io::AsyncOutput;
@@ -20,7 +23,7 @@ use tokio::io::AsyncWrite;
 
 #[test]
 fn test_tokio_async_write_type_is_public() {
-    assert!(std::any::type_name::<TokioAsyncWrite<Cursor<Vec<u8>>>>().contains("TokioAsyncWrite"));
+    assert!(type_name::<TokioAsyncWrite<Cursor<Vec<u8>>>>().contains("TokioAsyncWrite"));
 }
 
 #[derive(Clone, Copy)]
@@ -29,7 +32,9 @@ enum Action {
     Error(ErrorKind),
     Pending,
 }
+
 struct Writer(Action, usize);
+
 impl AsyncOutput for Writer {
     type Item = u8;
     unsafe fn poll_write_unchecked(
@@ -38,10 +43,10 @@ impl AsyncOutput for Writer {
         _input: &[u8],
         _index: usize,
         _count: usize,
-    ) -> Poll<std::io::Result<usize>> {
+    ) -> Poll<Result<usize>> {
         panic!("safe poll_write override must be used")
     }
-    fn poll_write(mut self: Pin<&mut Self>, _cx: &mut Context<'_>, _input: &[u8]) -> Poll<std::io::Result<usize>> {
+    fn poll_write(mut self: Pin<&mut Self>, _cx: &mut Context<'_>, _input: &[u8]) -> Poll<Result<usize>> {
         self.1 += 1;
         match self.0 {
             Action::Count(n) => Poll::Ready(Ok(n)),
@@ -49,21 +54,25 @@ impl AsyncOutput for Writer {
             Action::Pending => Poll::Pending,
         }
     }
-    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<()>> {
         Poll::Ready(Ok(()))
     }
 }
+
 impl AsyncClose for Writer {
-    fn poll_close(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+    fn poll_close(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<()>> {
         Poll::Ready(Ok(()))
     }
 }
-fn poll(action: Action, input: &[u8]) -> (Poll<std::io::Result<usize>>, usize) {
+
+fn poll(action: Action, input: &[u8]) -> (Poll<Result<usize>>, usize) {
     let mut writer = TokioAsyncWrite::new(Writer(action, 0));
-    let mut cx = Context::from_waker(std::task::Waker::noop());
+    let mut cx = Context::from_waker(Waker::noop());
     let result = AsyncWrite::poll_write(Pin::new(&mut writer), &mut cx, input);
     (result, writer.get_ref().1)
 }
+
 #[test]
 fn test_tokio_async_write_validates_count_and_errors() {
     let (result, calls) = poll(Action::Count(1), b"ab");

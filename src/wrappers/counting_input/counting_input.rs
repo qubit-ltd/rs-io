@@ -1,0 +1,204 @@
+// =============================================================================
+//    Copyright (c) 2026 Haixing Hu.
+//
+//    SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0.
+// =============================================================================
+
+use std::io;
+use std::io::SeekFrom;
+
+use crate::ByteInput;
+use crate::Input;
+use crate::Seekable;
+use crate::traits::validate_read_count;
+
+/// Input wrapper that counts successfully returned items.
+///
+/// Failed reads and invalid counts reported by the wrapped input do not change
+/// the counter. The counter saturates at [`u64::MAX`].
+///
+/// # Type Parameters
+///
+/// * `I` - Wrapped input type.
+///
+/// # Examples
+///
+/// ```
+/// use qubit_io::CountingInput;
+/// use qubit_io::Input;
+///
+/// let input = std::io::Cursor::new(&b"abc"[..]);
+/// let mut counting_input = CountingInput::new(input);
+/// let mut buffer = [0; 3];
+///
+/// assert_eq!(counting_input.read(&mut buffer).unwrap(), 3);
+/// assert_eq!(buffer, *b"abc");
+/// assert_eq!(counting_input.bytes_read(), 3);
+/// ```
+#[must_use]
+#[derive(Debug)]
+pub struct CountingInput<I> {
+    /// Input whose successful transfers are counted.
+    inner: I,
+    /// Saturating count of returned items.
+    items_read: u64,
+}
+
+impl<I> CountingInput<I> {
+    /// Creates a counting input around `inner` with a zero item count.
+    ///
+    /// # Parameters
+    ///
+    /// - `inner`: Input whose successful transfers are counted.
+    ///
+    /// # Returns
+    ///
+    /// Returns a wrapper with its item count initialized to zero.
+    #[inline(always)]
+    pub const fn new(inner: I) -> Self {
+        Self { inner, items_read: 0 }
+    }
+
+    /// Returns the saturating number of items successfully returned through
+    /// this wrapper.
+    ///
+    /// # Returns
+    ///
+    /// Returns the saturating count of successful item transfers.
+    #[inline(always)]
+    #[must_use]
+    pub const fn items_read(&self) -> u64 {
+        self.items_read
+    }
+
+    /// Returns a shared reference to the wrapped input.
+    ///
+    /// # Returns
+    ///
+    /// Returns the wrapped input without allowing mutation.
+    #[inline(always)]
+    #[must_use]
+    pub const fn inner(&self) -> &I {
+        &self.inner
+    }
+
+    /// Returns mutable access to the wrapped input.
+    ///
+    /// Reads through the returned reference do not affect this wrapper's
+    /// counter.
+    ///
+    /// # Returns
+    ///
+    /// Returns mutable access to the wrapped input.
+    #[inline(always)]
+    #[must_use]
+    pub fn inner_mut(&mut self) -> &mut I {
+        &mut self.inner
+    }
+
+    /// Consumes this wrapper and returns the wrapped input.
+    ///
+    /// # Returns
+    ///
+    /// Returns the wrapped input.
+    #[inline(always)]
+    #[must_use]
+    pub fn into_inner(self) -> I {
+        self.inner
+    }
+}
+
+impl<I> CountingInput<I>
+where
+    I: ByteInput,
+{
+    /// Returns the successfully returned byte count.
+    ///
+    /// # Returns
+    ///
+    /// Returns the saturating number of successfully returned bytes.
+    #[inline(always)]
+    #[must_use]
+    pub const fn bytes_read(&self) -> u64 {
+        self.items_read
+    }
+}
+
+impl<I> Input for CountingInput<I>
+where
+    I: Input,
+{
+    /// Item type returned by the wrapped input.
+    type Item = I::Item;
+
+    /// Returns the wrapped input's buffering declaration.
+    ///
+    /// # Returns
+    ///
+    /// Returns whether the wrapped input reports itself as buffered.
+    #[inline(always)]
+    fn is_buffered(&self) -> bool {
+        self.inner.is_buffered()
+    }
+
+    /// Reads items and counts only a successful, validated result.
+    ///
+    /// # Parameters
+    ///
+    /// - `output`: Destination item slice.
+    /// - `index`: Starting destination index.
+    /// - `count`: Maximum number of items to read.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of items read and added to the counter.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error from the wrapped input, including
+    /// [`io::ErrorKind::InvalidData`] when it reports an impossible count.
+    ///
+    /// An invalid count returns [`io::ErrorKind::InvalidData`] without changing
+    /// the counter.
+    ///
+    /// # Safety
+    ///
+    /// `index..index + count` must be a valid range in `output`.
+    #[inline]
+    unsafe fn read_unchecked(&mut self, output: &mut [Self::Item], index: usize, count: usize) -> io::Result<usize> {
+        let destination = &mut output[index..index + count];
+        let read = self.inner.read(destination)?;
+        validate_read_count(read, destination.len())?;
+        let read_u64 = u64::try_from(read).unwrap_or(u64::MAX);
+        self.items_read = self.items_read.saturating_add(read_u64);
+        Ok(read)
+    }
+}
+
+impl<I> Seekable for CountingInput<I>
+where
+    I: Seekable,
+{
+    /// Unit used by the wrapped input for stream positions.
+    type Unit = I::Unit;
+
+    /// Seeks the wrapped input without changing the item count.
+    ///
+    /// # Parameters
+    ///
+    /// - `position`: Target stream position.
+    ///
+    /// # Returns
+    ///
+    /// Returns the resulting absolute stream position.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error reported by the wrapped input.
+    #[inline(always)]
+    fn seek_to(&mut self, position: SeekFrom) -> io::Result<u64> {
+        self.inner.seek_to(position)
+    }
+}

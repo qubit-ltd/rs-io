@@ -9,3 +9,4 @@
 //! Crate-private implementations shared by standard I/O extension traits.
 
 pub(crate) mod read_ext_impl;
+pub(crate) mod seek_ext_impl;

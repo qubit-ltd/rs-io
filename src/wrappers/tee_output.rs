@@ -48,6 +48,7 @@ pub struct TeeOutput<P, B> {
     inner: P,
     /// Branch output receiving mirrored items.
     branch: B,
+    /// First branch write failure retained for later reporting.
     failure: TeeFailure,
 }
 
@@ -77,7 +78,7 @@ impl<P, B> TeeOutput<P, B> {
     ///
     /// Returns the primary output without allowing mutation.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "the primary output should be inspected or used"]
     pub const fn inner(&self) -> &P {
         &self.inner
     }
@@ -90,7 +91,7 @@ impl<P, B> TeeOutput<P, B> {
     ///
     /// Returns mutable access to the primary output.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "the primary output should be used or updated"]
     pub fn inner_mut(&mut self) -> &mut P {
         &mut self.inner
     }
@@ -101,7 +102,7 @@ impl<P, B> TeeOutput<P, B> {
     ///
     /// Returns the branch output without allowing mutation.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "the branch output should be inspected or used"]
     pub const fn branch(&self) -> &B {
         &self.branch
     }
@@ -114,7 +115,7 @@ impl<P, B> TeeOutput<P, B> {
     ///
     /// Returns mutable access to the branch output.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "the branch output should be used or updated"]
     pub fn branch_mut(&mut self) -> &mut B {
         &mut self.branch
     }
@@ -123,6 +124,13 @@ impl<P, B> TeeOutput<P, B> {
     /// while mirroring has not failed.
     ///
     /// This state does not cover panics or arbitrary effects of custom streams.
+    ///
+    /// # Returns
+    ///
+    /// Returns the first recorded branch error, or `None` if mirroring has not
+    /// failed.
+    #[must_use = "the branch error should be handled before continuing"]
+    #[inline]
     pub fn branch_error(&self) -> Option<&io::Error> {
         self.failure.error()
     }
@@ -136,7 +144,7 @@ impl<P, B> TeeOutput<P, B> {
     ///
     /// Returns the primary output, branch output, and first branch error.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "the outputs and first branch error should be handled"]
     pub fn into_parts(self) -> (P, B, Option<io::Error>) {
         (self.inner, self.branch, self.failure.into_error())
     }

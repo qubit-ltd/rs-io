@@ -70,7 +70,7 @@ impl<T> TokioOutput<T> {
     ///
     /// Returns the wrapped Tokio writer.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "the wrapped writer reference must be used"]
     pub const fn get_ref(&self) -> &T {
         &self.inner
     }
@@ -81,7 +81,7 @@ impl<T> TokioOutput<T> {
     ///
     /// Returns the wrapped Tokio writer with mutable access.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "the wrapped writer reference must be used"]
     pub const fn get_mut(&mut self) -> &mut T {
         &mut self.inner
     }

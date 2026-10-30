@@ -17,10 +17,10 @@ use qubit_io::OutputRef;
 struct VectorCharOutput(Rc<RefCell<Vec<char>>>);
 impl Output for VectorCharOutput {
     type Item = char;
-    unsafe fn write_unchecked(&mut self, _: &[char], _: usize, _: usize) -> std::io::Result<usize> {
+    unsafe fn write_unchecked(&mut self, _: &[char], _: usize, _: usize) -> io::Result<usize> {
         panic!("scalar write called")
     }
-    fn write_vectored(&mut self, buffers: &[&[char]]) -> std::io::Result<usize> {
+    fn write_vectored(&mut self, buffers: &[&[char]]) -> io::Result<usize> {
         let mut total = 0;
         for buffer in buffers {
             self.0.borrow_mut().extend_from_slice(buffer);
@@ -28,13 +28,13 @@ impl Output for VectorCharOutput {
         }
         Ok(total)
     }
-    fn flush(&mut self) -> std::io::Result<()> {
+    fn flush(&mut self) -> io::Result<()> {
         Ok(())
     }
 }
 
 #[test]
-fn vectored_forward_output_ref_keeps_override() {
+fn test_output_ref_forwards_vectored_override() {
     let values = Rc::new(RefCell::new(Vec::new()));
     let mut sink = VectorCharOutput(Rc::clone(&values));
     let borrowed: &mut dyn Output<Item = char> = &mut sink;
@@ -51,29 +51,29 @@ struct EmptyErrorOutput(Rc<Cell<usize>>);
 impl Output for EmptyErrorOutput {
     type Item = char;
 
-    unsafe fn write_unchecked(&mut self, _: &[char], _: usize, _: usize) -> std::io::Result<usize> {
+    unsafe fn write_unchecked(&mut self, _: &[char], _: usize, _: usize) -> io::Result<usize> {
         panic!("scalar write called")
     }
 
-    fn write_vectored(&mut self, _: &[&[char]]) -> std::io::Result<usize> {
+    fn write_vectored(&mut self, _: &[&[char]]) -> io::Result<usize> {
         self.0.set(self.0.get() + 1);
-        Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied))
+        Err(io::Error::from(io::ErrorKind::PermissionDenied))
     }
 
-    fn flush(&mut self) -> std::io::Result<()> {
+    fn flush(&mut self) -> io::Result<()> {
         Ok(())
     }
 }
 
 #[test]
-fn vectored_forward_output_ref_preserves_empty_list_error() {
+fn test_output_ref_preserves_empty_vectored_write_error() {
     let calls = Rc::new(Cell::new(0));
     let mut sink = EmptyErrorOutput(Rc::clone(&calls));
     let borrowed: &mut dyn Output<Item = char> = &mut sink;
     let mut output = OutputRef::new(borrowed);
     assert_eq!(
         Output::write_vectored(&mut output, &[]).unwrap_err().kind(),
-        std::io::ErrorKind::PermissionDenied
+        io::ErrorKind::PermissionDenied
     );
     assert_eq!(calls.get(), 1);
 }

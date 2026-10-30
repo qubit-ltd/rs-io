@@ -9,6 +9,7 @@
 use std::io::Cursor;
 use std::io::Error;
 use std::io::ErrorKind;
+use std::io::Result;
 use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
@@ -21,15 +22,15 @@ use tokio::io::AsyncWrite;
 struct ErrorWriter(ErrorKind);
 
 impl AsyncWrite for ErrorWriter {
-    fn poll_write(self: Pin<&mut Self>, _cx: &mut Context<'_>, _buffer: &[u8]) -> Poll<std::io::Result<usize>> {
+    fn poll_write(self: Pin<&mut Self>, _cx: &mut Context<'_>, _buffer: &[u8]) -> Poll<Result<usize>> {
         Poll::Ready(Err(Error::new(self.0, "invalid async write error")))
     }
 
-    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<()>> {
         Poll::Ready(Err(Error::new(self.0, "invalid async flush error")))
     }
 
-    fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+    fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<()>> {
         Poll::Ready(Ok(()))
     }
 }

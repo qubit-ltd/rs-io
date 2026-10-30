@@ -19,6 +19,7 @@ use std::task::Poll;
 
 use digest::FixedOutput;
 use digest::HashMarker;
+use digest::Output;
 use digest::OutputSizeUser;
 use digest::Update;
 use qubit_io::AsyncClose;
@@ -40,7 +41,7 @@ impl Update for NonCloneDigest {
 }
 
 impl FixedOutput for NonCloneDigest {
-    fn finalize_into(self, output: &mut digest::Output<Self>) {
+    fn finalize_into(self, output: &mut Output<Self>) {
         FixedOutput::finalize_into(self.0, output);
     }
 }

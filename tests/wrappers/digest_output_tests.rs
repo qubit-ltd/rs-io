@@ -17,6 +17,8 @@ use sha2::Digest;
 use sha2::Sha256;
 use sha2::Sha512;
 
+use super::digest_support_tests::NonCloneDigest;
+use super::support_tests::SafeOverreportOutput;
 use super::support_tests::ScriptedOutput;
 
 #[test]
@@ -32,7 +34,10 @@ fn test_digest_output_short_writes_snapshots_and_finalization() {
     assert_eq!(b"abc", inner.items.as_slice());
     assert_eq!(0, inner.flush_calls);
     assert_eq!(Sha256::digest(b"abc"), fingerprint);
-    assert_eq!(b"\xba\x78\x16\xbf\x8f\x01\xcf\xea\x41\x41\x40\xde\x5d\xae\x22\x23\xb0\x03\x61\xa3\x96\x17\x7a\x9c\xb4\x10\xff\x61\xf2\x00\x15\xad", fingerprint.as_slice());
+    assert_eq!(
+        b"\xba\x78\x16\xbf\x8f\x01\xcf\xea\x41\x41\x40\xde\x5d\xae\x22\x23\xb0\x03\x61\xa3\x96\x17\x7a\x9c\xb4\x10\xff\x61\xf2\x00\x15\xad",
+        fingerprint.as_slice()
+    );
 }
 
 #[test]
@@ -73,10 +78,9 @@ fn test_digest_output_prefix_accessors_and_parts_do_not_flush() {
 
 #[test]
 fn test_digest_output_rejects_safe_overreported_count() {
-    let mut output = DigestOutput::new(super::support_tests::SafeOverreportOutput, Sha256::new());
+    let mut output = DigestOutput::new(SafeOverreportOutput, Sha256::new());
     let before = output.digest();
-    let error =
-        unsafe { qubit_io::Output::write_unchecked(&mut output, b"abcd", 1, 2) }.expect_err("overreport should fail");
+    let error = unsafe { Output::write_unchecked(&mut output, b"abcd", 1, 2) }.expect_err("overreport should fail");
 
     assert_eq!(ErrorKind::InvalidData, error.kind());
     assert_eq!(before, output.digest());
@@ -120,7 +124,7 @@ fn test_digest_output_flush_and_seek_forward_without_resetting_digest() {
 #[test]
 fn test_digest_output_non_clone_algorithm_can_transfer_and_finalize() {
     let stream = Vec::<u8>::new();
-    let mut wrapper = DigestOutput::new(stream, super::digest_support_tests::NonCloneDigest::default());
+    let mut wrapper = DigestOutput::new(stream, NonCloneDigest::default());
 
     assert_eq!(3, wrapper.write(b"abc").expect("transfer bytes"));
     let (_, fingerprint) = wrapper.finalize();

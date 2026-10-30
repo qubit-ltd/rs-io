@@ -261,7 +261,8 @@ where
     ///
     /// # Safety
     ///
-    /// `index..index + count` must be valid in `output`.
+    /// `index..index + count` must be valid in `output`, and adding `index` and
+    /// `count` must not overflow.
     #[inline]
     unsafe fn read_unchecked(&mut self, output: &mut [u8], index: usize, count: usize) -> io::Result<usize> {
         let read = self.inner.read(&mut output[index..index + count])?;

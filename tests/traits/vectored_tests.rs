@@ -52,7 +52,7 @@ impl<T: Copy> Output for Sink<T> {
 }
 
 #[test]
-fn vectored_defaults_use_first_nonempty_slice_and_keep_suffix() {
+fn test_vectored_defaults_use_first_nonempty_slice_and_keep_suffix() {
     let mut source = Source { value: '甲', calls: 0 };
     let mut first = ['!'; 2];
     let mut second = ['?'; 2];
@@ -76,7 +76,7 @@ fn vectored_defaults_use_first_nonempty_slice_and_keep_suffix() {
 }
 
 #[test]
-fn vectored_empty_lists_do_not_call_inner() {
+fn test_vectored_empty_lists_do_not_call_inner() {
     let mut source = Source { value: 7_u8, calls: 0 };
     let mut sink = Sink::<u8> {
         values: Vec::new(),
@@ -137,7 +137,7 @@ impl Output for Report {
 }
 
 #[test]
-fn vectored_defaults_preserve_errors_and_validate_progress() {
+fn test_vectored_defaults_preserve_errors_and_validate_progress() {
     for kind in [
         io::ErrorKind::Interrupted,
         io::ErrorKind::WouldBlock,
@@ -199,7 +199,7 @@ impl Output for Token {
 }
 
 #[test]
-fn vectored_defaults_accept_non_copy_items_and_trait_objects() {
+fn test_vectored_defaults_accept_non_copy_items_and_trait_objects() {
     let mut input_value = Token;
     let mut output_value = Token;
     let input: &mut dyn Input<Item = Token> = &mut input_value;
@@ -255,7 +255,7 @@ impl Output for SafeOverride {
 }
 
 #[test]
-fn vectored_defaults_validate_overreported_safe_methods() {
+fn test_vectored_defaults_validate_overreported_safe_methods() {
     let mut stream = SafeOverride;
     assert_eq!(
         Input::read_vectored(&mut stream, &mut [&mut [0_u8; 2][..]])

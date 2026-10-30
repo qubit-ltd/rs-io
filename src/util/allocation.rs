@@ -25,11 +25,39 @@ thread_local! {
 }
 
 /// Converts a reserve error into an I/O allocation error.
+///
+/// # Parameters
+///
+/// - `error`: The collection reserve failure to preserve as the I/O error's
+///   source.
+///
+/// # Returns
+///
+/// An I/O error with the `OutOfMemory` kind.
+#[must_use]
+#[inline]
 pub(crate) fn allocation_error(error: TryReserveError) -> std::io::Error {
     qubit_allocation_error(error)
 }
 
 /// Creates a vector with `len` cloned elements using the local reserve path.
+///
+/// # Type Parameters
+///
+/// - `T`: Cloneable element type stored in the vector.
+///
+/// # Parameters
+///
+/// - `len`: Number of elements in the returned vector.
+/// - `fill`: Value cloned into each element.
+///
+/// # Returns
+///
+/// A vector containing `len` clones of `fill`.
+///
+/// # Errors
+///
+/// Returns an I/O allocation error if reserving the requested capacity fails.
 pub(crate) fn create_vec<T>(len: usize, fill: T) -> std::io::Result<Vec<T>>
 where
     T: Clone,
@@ -41,6 +69,24 @@ where
 }
 
 /// Reserves vector capacity, applying local coverage failure injection first.
+///
+/// # Type Parameters
+///
+/// - `T`: Element type stored in the vector.
+///
+/// # Parameters
+///
+/// - `output`: Vector whose capacity is increased.
+/// - `additional`: Number of additional elements to reserve.
+///
+/// # Returns
+///
+/// `Ok(())` if the capacity is reserved.
+///
+/// # Errors
+///
+/// Returns the reserve error if allocation fails, capacity overflows, or a
+/// coverage hook injects a failure.
 pub(crate) fn try_reserve_vec<T>(output: &mut Vec<T>, additional: usize) -> Result<(), TryReserveError> {
     #[cfg(coverage)]
     if let Some(result) = coverage_maybe_fail_reserve::<()>(additional) {
@@ -50,6 +96,20 @@ pub(crate) fn try_reserve_vec<T>(output: &mut Vec<T>, additional: usize) -> Resu
 }
 
 /// Reserves string capacity, applying local coverage failure injection first.
+///
+/// # Parameters
+///
+/// - `output`: String whose capacity is increased.
+/// - `additional`: Number of additional bytes to reserve.
+///
+/// # Returns
+///
+/// `Ok(())` if the capacity is reserved.
+///
+/// # Errors
+///
+/// Returns the reserve error if allocation fails, capacity overflows, or a
+/// coverage hook injects a failure.
 pub(crate) fn try_reserve_string(output: &mut String, additional: usize) -> Result<(), TryReserveError> {
     #[cfg(coverage)]
     if COVERAGE_FAIL_NEXT_STRING_RESERVE.with(|state| {
@@ -76,6 +136,11 @@ pub fn coverage_fail_next_reserve() {
 }
 
 /// Makes a later vector reserve fail after successful attempts.
+///
+/// # Parameters
+///
+/// - `successful_attempts`: Number of vector reserves allowed to succeed before
+///   the injected failure.
 #[cfg(coverage)]
 #[doc(hidden)]
 pub fn coverage_fail_reserve_after(successful_attempts: usize) {
@@ -83,6 +148,10 @@ pub fn coverage_fail_reserve_after(successful_attempts: usize) {
 }
 
 /// Makes vector reserves above `max_additional` fail in coverage builds.
+///
+/// # Parameters
+///
+/// - `max_additional`: Largest additional capacity request allowed to succeed.
 #[cfg(coverage)]
 #[doc(hidden)]
 pub fn coverage_fail_reserve_above(max_additional: usize) {
@@ -105,17 +174,44 @@ pub fn coverage_reset_reserve_hooks() {
     COVERAGE_FAIL_NEXT_STRING_RESERVE.with(|state| state.set(false));
 }
 
-#[cfg(coverage)]
 /// Creates a reserve error by requesting more capacity than a vector can hold.
+///
+/// # Returns
+///
+/// A synthetic capacity-overflow reserve error.
+///
+/// # Panics
+///
+/// Panics if reserving `usize::MAX` bytes unexpectedly succeeds.
+#[cfg(coverage)]
 fn coverage_reserve_error() -> TryReserveError {
     Vec::<u8>::new()
         .try_reserve(usize::MAX)
         .expect_err("reserving usize::MAX bytes must exceed Vec capacity")
 }
 
-#[cfg(coverage)]
 /// Fails requests above the configured limit or when the successful-attempt
 /// counter reaches zero; the latter failure resets that counter.
+///
+/// # Type Parameters
+///
+/// - `T`: Success type expected by the reserve operation.
+///
+/// # Parameters
+///
+/// - `additional`: Additional capacity requested by the reserve operation.
+///
+/// # Returns
+///
+/// `Some(Err(_))` when a configured hook injects a failure, including the
+/// capacity-limit and remaining-attempt cases; `None` lets the real reserve
+/// operation proceed.
+///
+/// # Panics
+///
+/// Panics if constructing the synthetic reserve error unexpectedly succeeds.
+#[cfg(coverage)]
+#[must_use]
 fn coverage_maybe_fail_reserve<T>(additional: usize) -> Option<Result<T, TryReserveError>> {
     if COVERAGE_RESERVE_MAX_ADDITIONAL.with(|state| additional > state.get()) {
         return Some(Err(coverage_reserve_error()));

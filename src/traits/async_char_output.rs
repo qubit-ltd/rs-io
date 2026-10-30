@@ -30,7 +30,7 @@ use crate::AsyncOutput;
 /// use qubit_io::AsyncCharOutput;
 ///
 /// fn write<S: AsyncCharOutput + ?Sized>(
-///     stream: Pin<&mut S>, cx: &mut Context<'_>, input: & [char],
+///     stream: Pin<&mut S>, cx: &mut Context<'_>, input: &[char],
 /// ) -> Poll<io::Result<usize>> {
 ///     stream.poll_write(cx, input)
 /// }

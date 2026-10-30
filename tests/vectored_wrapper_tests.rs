@@ -282,7 +282,7 @@ fn single_descriptor_std_write_adapter_keeps_vectored_dispatch_and_validates_onc
 }
 
 #[test]
-fn vectored_default_keeps_limit_count_buffering_and_tee_semantics() {
+fn test_vectored_default_keeps_limit_count_buffering_and_tee_semantics() {
     let mut input = CountingInput::new(LimitInput::new(Cursor::new(b"abcdef"), 3));
     let mut first = [0; 4];
     let mut second = [b'!'; 2];
@@ -320,7 +320,7 @@ fn vectored_default_keeps_limit_count_buffering_and_tee_semantics() {
 }
 
 #[test]
-fn vectored_default_updates_checksum_for_transferred_prefix_only() {
+fn test_vectored_default_updates_checksum_for_transferred_prefix_only() {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::Hasher;
 
@@ -338,7 +338,7 @@ fn vectored_default_updates_checksum_for_transferred_prefix_only() {
 
 #[cfg(feature = "digest")]
 #[test]
-fn vectored_default_updates_digest_for_transferred_prefix_only() {
+fn test_vectored_default_updates_digest_for_transferred_prefix_only() {
     use qubit_io::DigestInput;
     use qubit_io::DigestOutput;
     use sha2::Digest;

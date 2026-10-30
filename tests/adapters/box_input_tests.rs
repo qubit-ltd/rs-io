@@ -37,7 +37,7 @@ impl Input for VectorCharInput {
 }
 
 #[test]
-fn vectored_forward_box_input_keeps_override() {
+fn test_vectored_forward_box_input_keeps_override() {
     let inner: Box<dyn Input<Item = char>> = Box::new(VectorCharInput);
     let mut input = BoxInput::new(inner);
     let mut first = ['!'; 2];
@@ -65,7 +65,7 @@ impl Input for EmptyErrorInput {
 }
 
 #[test]
-fn vectored_forward_box_input_preserves_empty_list_error() {
+fn test_vectored_forward_box_input_preserves_empty_list_error() {
     let calls = Rc::new(Cell::new(0));
     let mut source = EmptyErrorInput(Rc::clone(&calls));
     let borrowed: &mut dyn Input<Item = char> = &mut source;

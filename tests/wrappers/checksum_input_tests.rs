@@ -13,6 +13,13 @@ use std::io::Cursor;
 use std::io::ErrorKind;
 use std::io::SeekFrom;
 
+use qubit_io::ChecksumInput;
+use qubit_io::Input;
+use qubit_io::Seekable;
+
+use super::support_tests::SafeOverreportInput;
+use super::support_tests::ScriptedInput;
+
 #[derive(Default)]
 struct RecordingHasher {
     calls: Vec<Vec<u8>>,
@@ -26,12 +33,6 @@ impl Hasher for RecordingHasher {
         self.calls.push(bytes.to_vec());
     }
 }
-
-use qubit_io::ChecksumInput;
-use qubit_io::Input;
-use qubit_io::Seekable;
-
-use super::support_tests::ScriptedInput;
 
 fn expected_checksum(bytes: &[u8]) -> u64 {
     let mut hasher = DefaultHasher::new();
@@ -84,15 +85,12 @@ fn test_checksum_input_forwards_seek_without_hashing() {
 
 #[test]
 fn test_checksum_input_rejects_safe_overreported_count() {
-    let mut wrapper = qubit_io::ChecksumInput::new(
-        super::support_tests::SafeOverreportInput,
-        std::collections::hash_map::DefaultHasher::new(),
-    );
-    let before = std::hash::Hasher::finish(wrapper.hasher());
+    let mut wrapper = ChecksumInput::new(SafeOverreportInput, DefaultHasher::new());
+    let before = wrapper.hasher().finish();
     let mut bytes = [0_u8; 4];
-    let error = unsafe { qubit_io::Input::read_unchecked(&mut wrapper, &mut bytes, 1, 2) }.unwrap_err();
-    assert_eq!(std::io::ErrorKind::InvalidData, error.kind());
-    assert_eq!(before, std::hash::Hasher::finish(wrapper.hasher()));
+    let error = unsafe { Input::read_unchecked(&mut wrapper, &mut bytes, 1, 2) }.unwrap_err();
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert_eq!(before, wrapper.hasher().finish());
 }
 
 #[test]

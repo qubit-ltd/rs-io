@@ -271,6 +271,54 @@ where
         self.buffer.readable()
     }
 
+    /// Returns the unused capacity in the internal buffer.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of items that can be buffered without draining.
+    #[inline(always)]
+    #[must_use]
+    pub fn spare_capacity(&self) -> usize {
+        self.buffer.spare_capacity()
+    }
+
+    /// Returns the full backing storage and the start and length of its spare
+    /// tail.
+    ///
+    /// Call [`Self::advance`] after writing initialized items into the returned
+    /// spare range.
+    ///
+    /// # Returns
+    ///
+    /// Returns `(storage, index, count)`, where `storage` is the full backing
+    /// storage, `index` is the start of the spare range, and `count` is the
+    /// number of spare items. The spare range is
+    /// `storage[index..index + count]`.
+    #[inline(always)]
+    #[must_use]
+    pub fn spare_raw_parts_mut(&mut self) -> (&mut [O::Item], usize, usize) {
+        self.buffer.spare_raw_parts_mut()
+    }
+
+    /// Returns the spare item window through a pinned borrow.
+    ///
+    /// The returned slice does not structurally pin its items and is tied to
+    /// this mutable borrow. Write initialized items in `storage[index..index +
+    /// count]`, then call [`Self::advance_pinned`] before borrowing again.
+    ///
+    /// # Returns
+    ///
+    /// Returns `(storage, index, count)`, where the writable range is
+    /// `storage[index..index + count]` and `count` is measured in items.
+    #[inline]
+    #[must_use]
+    pub fn spare_raw_parts_mut_pinned(self: Pin<&mut Self>) -> (&mut [O::Item], usize, usize) {
+        // SAFETY: The returned ordinary slice does not structurally pin items;
+        // the pinned inner output remains untouched.
+        let this = unsafe { self.get_unchecked_mut() };
+        this.buffer.spare_raw_parts_mut()
+    }
+
     /// Tries to ensure that the internal item capacity is at least `capacity`.
     ///
     /// Pending items are retained and this method performs no I/O.
@@ -324,54 +372,6 @@ where
         // pinned inner output remains untouched.
         let this = unsafe { self.get_unchecked_mut() };
         this.buffer.try_reserve_capacity(capacity)
-    }
-
-    /// Returns the unused capacity in the internal buffer.
-    ///
-    /// # Returns
-    ///
-    /// Returns the number of items that can be buffered without draining.
-    #[inline(always)]
-    #[must_use]
-    pub fn spare_capacity(&self) -> usize {
-        self.buffer.spare_capacity()
-    }
-
-    /// Returns the full backing storage and the start and length of its spare
-    /// tail.
-    ///
-    /// Call [`Self::advance`] after writing initialized items into the returned
-    /// spare range.
-    ///
-    /// # Returns
-    ///
-    /// Returns `(storage, index, count)`, where `storage` is the full backing
-    /// storage, `index` is the start of the spare range, and `count` is the
-    /// number of spare items. The spare range is
-    /// `storage[index..index + count]`.
-    #[inline(always)]
-    #[must_use]
-    pub fn spare_raw_parts_mut(&mut self) -> (&mut [O::Item], usize, usize) {
-        self.buffer.spare_raw_parts_mut()
-    }
-
-    /// Returns the spare item window through a pinned borrow.
-    ///
-    /// The returned slice does not structurally pin its items and is tied to
-    /// this mutable borrow. Write initialized items in `storage[index..index +
-    /// count]`, then call [`Self::advance_pinned`] before borrowing again.
-    ///
-    /// # Returns
-    ///
-    /// Returns `(storage, index, count)`, where the writable range is
-    /// `storage[index..index + count]` and `count` is measured in items.
-    #[inline]
-    #[must_use]
-    pub fn spare_raw_parts_mut_pinned(self: Pin<&mut Self>) -> (&mut [O::Item], usize, usize) {
-        // SAFETY: The returned ordinary slice does not structurally pin items;
-        // the pinned inner output remains untouched.
-        let this = unsafe { self.get_unchecked_mut() };
-        this.buffer.spare_raw_parts_mut()
     }
 
     /// Advances the pending-item limit without checking bounds.

@@ -83,11 +83,13 @@ pub struct WriteFuture<'a, O>
 where
     O: AsyncOutput + ?Sized,
 {
-    /// Output being written.
+    /// Pinned output borrowed until the write operation completes.
     output: Pin<&'a mut O>,
-    /// Source for the write.
+    /// Items offered to the output; the shared borrow keeps the source alive
+    /// for every poll.
     input: &'a [O::Item],
-    /// Whether the write operation has completed.
+    /// Set after a ready result to prevent polling the completed operation
+    /// again.
     completed: bool,
 }
 

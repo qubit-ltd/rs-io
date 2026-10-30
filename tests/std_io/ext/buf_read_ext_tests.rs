@@ -110,14 +110,25 @@ fn test_read_until_limited_into_appends_through_delimiter() {
 fn test_read_until_limited_retries_interrupted() {
     let mut reader = interrupted_reader(vec![1]);
 
-    assert_eq!(b"abc\n", reader.read_until_limited(b'\n', 4).unwrap().as_slice());
+    assert_eq!(
+        b"abc\n",
+        reader
+            .read_until_limited(b'\n', 4)
+            .expect("line should be read after retrying an interrupted read")
+            .as_slice()
+    );
 }
 
 #[test]
 fn test_read_until_limited_into_retries_interrupted_after_progress() {
     let mut reader = interrupted_reader(vec![2]);
     let mut output = b"prefix-".to_vec();
-    assert_eq!(4, reader.read_until_limited_into(b'\n', &mut output, 4).unwrap());
+    assert_eq!(
+        4,
+        reader
+            .read_until_limited_into(b'\n', &mut output, 4)
+            .expect("line should be appended after retrying an interrupted read")
+    );
     assert_eq!(b"prefix-abc\n", output.as_slice());
 }
 
@@ -125,7 +136,12 @@ fn test_read_until_limited_into_retries_interrupted_after_progress() {
 fn test_read_line_limited_retries_interrupted() {
     let mut reader = interrupted_reader(vec![1, 2]);
 
-    assert_eq!("abc\n", reader.read_line_limited(4).unwrap());
+    assert_eq!(
+        "abc\n",
+        reader
+            .read_line_limited(4)
+            .expect("line should be read after retrying interrupted reads")
+    );
 }
 
 #[test]
@@ -133,7 +149,12 @@ fn test_read_line_limited_into_retries_interrupted_after_progress() {
     let mut reader = interrupted_reader(vec![2]);
     let mut output = String::from("prefix-");
 
-    assert_eq!(4, reader.read_line_limited_into(&mut output, 4).unwrap());
+    assert_eq!(
+        4,
+        reader
+            .read_line_limited_into(&mut output, 4)
+            .expect("line should be appended after retrying an interrupted read")
+    );
     assert_eq!("prefix-abc\n", output);
 }
 
@@ -141,8 +162,19 @@ fn test_read_line_limited_into_retries_interrupted_after_progress() {
 fn test_discard_until_limited_retries_interrupted_after_progress() {
     let mut reader = interrupted_reader(vec![2]);
 
-    assert_eq!(4, reader.discard_until_limited(b'\n', 4).unwrap());
-    assert!(reader.fill_buf().unwrap().is_empty());
+    assert_eq!(
+        4,
+        reader
+            .discard_until_limited(b'\n', 4)
+            .expect("line should be discarded after retrying an interrupted read")
+    );
+    assert!(
+        reader
+            .fill_buf()
+            .expect("buffer should be readable after discarding the line")
+            .is_empty(),
+        "buffer should be empty after discarding through the delimiter"
+    );
 }
 
 #[test]
@@ -154,7 +186,12 @@ fn test_read_until_limited_into_preserves_limit_behavior_after_interrupted() {
 
     assert_eq!(ErrorKind::InvalidData, error.kind());
     assert_eq!(b"prefix-", output.as_slice());
-    assert_eq!(b"\n", reader.fill_buf().unwrap());
+    assert_eq!(
+        b"\n",
+        reader
+            .fill_buf()
+            .expect("buffer should be readable after the limit error")
+    );
 }
 
 #[test]
@@ -164,7 +201,12 @@ fn test_discard_until_limited_preserves_limit_behavior_after_interrupted() {
     let error = reader.discard_until_limited(b'\n', 3).unwrap_err();
 
     assert_eq!(ErrorKind::InvalidData, error.kind());
-    assert_eq!(b"\n", reader.fill_buf().unwrap());
+    assert_eq!(
+        b"\n",
+        reader
+            .fill_buf()
+            .expect("buffer should be readable after the limit error")
+    );
 }
 
 #[test]
@@ -183,7 +225,12 @@ fn test_read_until_limited_into_restores_output_on_other_error_after_progress() 
 
     assert_eq!(ErrorKind::Other, error.kind());
     assert_eq!(b"prefix-", output.as_slice());
-    assert_eq!(b"c\n", reader.fill_buf().unwrap());
+    assert_eq!(
+        b"c\n",
+        reader
+            .fill_buf()
+            .expect("buffer should be readable after the underlying error")
+    );
 }
 
 #[test]
@@ -226,7 +273,7 @@ fn test_read_until_limited_into_rejects_oversized_input_after_partial_reads() {
         .expect_err("input beyond the limit should be rejected");
 
     assert_eq!(ErrorKind::InvalidData, error.kind());
-    assert!(output.is_empty());
+    assert!(output.is_empty(), "output should remain unchanged on error");
 }
 
 #[test]
@@ -304,7 +351,10 @@ fn test_read_line_limited_rejects_invalid_utf8() {
         .expect_err("invalid UTF-8 line should be rejected");
 
     assert_eq!(ErrorKind::InvalidData, error.kind());
-    assert!(error.to_string().starts_with("limited line is not valid UTF-8"));
+    assert!(
+        error.to_string().starts_with("limited line is not valid UTF-8"),
+        "error should identify the invalid UTF-8 line"
+    );
 }
 
 #[test]
@@ -317,7 +367,10 @@ fn test_read_line_limited_into_rejects_invalid_utf8_without_appending() {
         .expect_err("invalid UTF-8 line should be rejected");
 
     assert_eq!(ErrorKind::InvalidData, error.kind());
-    assert!(error.to_string().starts_with("limited line is not valid UTF-8"));
+    assert!(
+        error.to_string().starts_with("limited line is not valid UTF-8"),
+        "error should identify the invalid UTF-8 line"
+    );
     assert_eq!("prefix", output);
 }
 

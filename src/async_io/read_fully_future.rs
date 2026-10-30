@@ -89,9 +89,16 @@ pub struct ReadFullyFuture<'a, I>
 where
     I: AsyncInput + ?Sized,
 {
-    /// Input being read.
+    /// Pinned mutable borrow of the input used for every read poll.
+    ///
+    /// The pin preserves the input's address while this future may be polled;
+    /// the borrow lasts for the future's lifetime.
     input: Pin<&'a mut I>,
-    /// Destination being filled.
+    /// Mutable destination slice that receives the items read so far.
+    ///
+    /// The slice remains exclusively borrowed for the future's lifetime, and
+    /// its initialized prefix contains the progress retained if the future is
+    /// cancelled.
     output: &'a mut [I::Item],
     /// Number of items read so far.
     read: usize,

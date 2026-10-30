@@ -46,7 +46,8 @@ pub trait WriteSeekExt: Write + Seek {
     /// - `buffer`: Bytes to write.
     ///
     /// # Returns
-    /// `Ok(())` after all bytes have been written and the position restored.
+    /// Returns `Ok(())` after all bytes have been written and the original
+    /// stream position has been restored.
     ///
     /// # Errors
     /// Returns an error when reading the current position, seeking to `offset`,

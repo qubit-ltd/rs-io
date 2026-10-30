@@ -22,17 +22,46 @@ use crate::Output;
 ///
 /// ```
 /// use std::io;
+///
 /// use qubit_io::CharOutput;
+/// use qubit_io::Output;
 ///
 /// fn write_char(output: &mut impl CharOutput, value: char) -> io::Result<()> {
 ///     output.write_fully(&[value])
 /// }
+///
+/// #[derive(Default)]
+/// struct CharBuffer(Vec<char>);
+///
+/// impl Output for CharBuffer {
+///     type Item = char;
+///
+///     unsafe fn write_unchecked(
+///         &mut self,
+///         input: &[char],
+///         index: usize,
+///         count: usize,
+///     ) -> io::Result<usize> {
+///         self.0.extend_from_slice(&input[index..index + count]);
+///         Ok(count)
+///     }
+///
+///     fn flush(&mut self) -> io::Result<()> {
+///         Ok(())
+///     }
+/// }
+///
+/// let mut output = CharBuffer::default();
+/// write_char(&mut output, '🦀')?;
+/// assert_eq!(output.0, ['🦀']);
+/// # Ok::<(), io::Error>(())
 /// ```
 ///
 /// Streams with a different item type do not satisfy this bound:
 ///
 /// ```compile_fail
-/// use qubit_io::{Output, CharOutput};
+/// use qubit_io::CharOutput;
+/// use qubit_io::Output;
 ///
 /// fn accept(stream: impl CharOutput) {}
 ///

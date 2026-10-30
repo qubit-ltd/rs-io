@@ -7,10 +7,18 @@
 // =============================================================================
 //! Tests for [`qubit_io::TeeInput`].
 
+use std::error::Error as StdError;
+use std::fmt::Display;
+use std::fmt::Formatter;
+use std::fmt::Result as FmtResult;
+use std::io::Cursor;
+use std::io::Error;
 use std::io::ErrorKind;
+use std::io::Result as IoResult;
 use std::io::SeekFrom;
 
 use qubit_io::Input;
+use qubit_io::Output;
 use qubit_io::Seekable;
 use qubit_io::TeeInput;
 
@@ -22,7 +30,7 @@ use super::support_tests::assert_original_os_error;
 
 #[test]
 fn test_tee_input_repeated_error_retains_original_source() {
-    let mut input = TeeInput::new(std::io::Cursor::new(b"abc"), ErrorBranch::os_error());
+    let mut input = TeeInput::new(Cursor::new(b"abc"), ErrorBranch::os_error());
     let mut byte = [0];
     assert_eq!(1, input.read(&mut byte).unwrap());
     assert_eq!(b'a', byte[0]);
@@ -138,7 +146,7 @@ fn test_tee_input_supports_non_copy_items() {
 #[test]
 fn test_tee_input_read_exactly_keeps_primary_success_and_error_cause() {
     let branch = FailingCauseOutput;
-    let mut input = TeeInput::new(std::io::Cursor::new(*b"abc"), branch);
+    let mut input = TeeInput::new(Cursor::new(*b"abc"), branch);
     let mut bytes = [0; 3];
     input
         .read_exactly(&mut bytes)
@@ -154,18 +162,18 @@ fn test_tee_input_read_exactly_keeps_primary_success_and_error_cause() {
 
 struct FailingCauseOutput;
 
-impl qubit_io::Output for FailingCauseOutput {
+impl Output for FailingCauseOutput {
     type Item = u8;
 
-    unsafe fn write_unchecked(&mut self, _input: &[u8], _index: usize, count: usize) -> std::io::Result<usize> {
+    unsafe fn write_unchecked(&mut self, _input: &[u8], _index: usize, count: usize) -> IoResult<usize> {
         Ok(count)
     }
 
-    fn write_fully(&mut self, _input: &[u8]) -> std::io::Result<()> {
-        Err(std::io::Error::other(UnderlyingCause))
+    fn write_fully(&mut self, _input: &[u8]) -> IoResult<()> {
+        Err(Error::other(UnderlyingCause))
     }
 
-    fn flush(&mut self) -> std::io::Result<()> {
+    fn flush(&mut self) -> IoResult<()> {
         Ok(())
     }
 }
@@ -173,13 +181,13 @@ impl qubit_io::Output for FailingCauseOutput {
 #[derive(Debug)]
 struct UnderlyingCause;
 
-impl std::fmt::Display for UnderlyingCause {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Display for UnderlyingCause {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         formatter.write_str("underlying cause")
     }
 }
 
-impl std::error::Error for UnderlyingCause {}
+impl StdError for UnderlyingCause {}
 
 #[test]
 fn test_tee_input_rejects_invalid_source_progress() {
@@ -214,12 +222,12 @@ fn test_tee_input_can_create_synchronized_seek_variant() {
 
 #[test]
 fn test_tee_input_rejects_safe_overreported_count() {
-    let mut wrapper = qubit_io::TeeInput::new(
+    let mut wrapper = TeeInput::new(
         super::support_tests::SafeOverreportInput,
         super::support_tests::ScriptedOutput::<u8>::accepting(),
     );
     let mut bytes = [0_u8; 4];
-    let error = unsafe { qubit_io::Input::read_unchecked(&mut wrapper, &mut bytes, 1, 2) }.unwrap_err();
-    assert_eq!(std::io::ErrorKind::InvalidData, error.kind());
+    let error = unsafe { Input::read_unchecked(&mut wrapper, &mut bytes, 1, 2) }.unwrap_err();
+    assert_eq!(ErrorKind::InvalidData, error.kind());
     assert!(wrapper.branch().items.is_empty());
 }

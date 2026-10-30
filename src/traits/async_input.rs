@@ -176,6 +176,12 @@ pub trait AsyncInput {
     /// # Returns
     ///
     /// A future that resolves with the number of items read.
+    ///
+    /// # Errors
+    ///
+    /// The future returns the input error or
+    /// [`std::io::ErrorKind::InvalidData`] if the implementation reports more
+    /// items than requested.
     #[inline(always)]
     fn read_async<'a>(&'a mut self, output: &'a mut [Self::Item]) -> ReadFuture<'a, Self>
     where
@@ -200,6 +206,12 @@ pub trait AsyncInput {
     /// # Returns
     ///
     /// A future that resolves with the total number of items read.
+    ///
+    /// # Errors
+    ///
+    /// The future returns the input error or
+    /// [`std::io::ErrorKind::InvalidData`] if the implementation reports more
+    /// items than the remaining destination can hold.
     #[inline(always)]
     fn read_fully_async<'a>(&'a mut self, output: &'a mut [Self::Item]) -> ReadFullyFuture<'a, Self>
     where
@@ -224,6 +236,13 @@ pub trait AsyncInput {
     /// # Returns
     ///
     /// A future that resolves after filling `output` or encountering an error.
+    ///
+    /// # Errors
+    ///
+    /// The future returns [`std::io::ErrorKind::UnexpectedEof`] if the input
+    /// ends before `output` is full. It also returns input errors and
+    /// [`std::io::ErrorKind::InvalidData`] if the implementation reports more
+    /// items than the remaining destination can hold.
     #[inline(always)]
     fn read_exactly_async<'a>(&'a mut self, output: &'a mut [Self::Item]) -> ReadExactFuture<'a, Self>
     where

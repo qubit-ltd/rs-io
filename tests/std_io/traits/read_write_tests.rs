@@ -6,11 +6,13 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
+use std::io::Cursor;
+
 use qubit_io::std_io::ReadWrite;
 
 #[test]
 fn test_read_write_trait_object_supports_reading_and_writing() {
-    let mut cursor = std::io::Cursor::new(b"ping".to_vec());
+    let mut cursor = Cursor::new(b"ping".to_vec());
 
     {
         let stream: &mut dyn ReadWrite = &mut cursor;

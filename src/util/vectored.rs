@@ -16,6 +16,18 @@ use super::try_reserve_vec;
 
 /// Sums requested slice lengths, returning `InvalidInput` on `usize` overflow.
 /// Bridges use this check before preparing descriptors or invoking I/O.
+///
+/// # Parameters
+///
+/// - `lengths`: The lengths to sum, in transfer order.
+///
+/// # Returns
+///
+/// The total length when it fits in `usize`.
+///
+/// # Errors
+///
+/// Returns `InvalidInput` if the sum exceeds `usize::MAX`.
 pub(crate) fn requested_items(mut lengths: impl Iterator<Item = usize>) -> io::Result<usize> {
     lengths.try_fold(0_usize, |total, len| {
         total
@@ -29,6 +41,18 @@ pub(crate) fn requested_items(mut lengths: impl Iterator<Item = usize>) -> io::R
 /// The returned descriptors borrow the original payloads for `'a`; payload
 /// bytes are not copied. The descriptor vector may allocate and returns
 /// `OutOfMemory` if that allocation fails.
+///
+/// # Parameters
+///
+/// - `buffers`: The payload slices to describe, in transfer order.
+///
+/// # Returns
+///
+/// Descriptors borrowing each input payload in order.
+///
+/// # Errors
+///
+/// Returns `OutOfMemory` if reserving descriptor storage fails.
 pub(crate) fn io_slices<'a>(buffers: &[&'a [u8]]) -> io::Result<Vec<IoSlice<'a>>> {
     let mut result = Vec::new();
     try_reserve_vec(&mut result, buffers.len()).map_err(allocation_error)?;
@@ -41,6 +65,18 @@ pub(crate) fn io_slices<'a>(buffers: &[&'a [u8]]) -> io::Result<Vec<IoSlice<'a>>
 /// The returned descriptors exclusively borrow the original payloads for
 /// `'a`; payload bytes are not copied. The descriptor vector may allocate and
 /// returns `OutOfMemory` if that allocation fails.
+///
+/// # Parameters
+///
+/// - `buffers`: The mutable payload slices to describe, in read order.
+///
+/// # Returns
+///
+/// Descriptors exclusively borrowing each input payload in order.
+///
+/// # Errors
+///
+/// Returns `OutOfMemory` if reserving descriptor storage fails.
 pub(crate) fn io_slices_mut<'a>(buffers: &'a mut [&mut [u8]]) -> io::Result<Vec<IoSliceMut<'a>>> {
     let mut result = Vec::new();
     try_reserve_vec(&mut result, buffers.len()).map_err(allocation_error)?;
@@ -53,6 +89,18 @@ pub(crate) fn io_slices_mut<'a>(buffers: &'a mut [&mut [u8]]) -> io::Result<Vec<
 /// The result borrows `buffers` for `'a`, which keeps each descriptor alive
 /// while its payload slice is used. It does not copy payload bytes. The result
 /// vector may allocate and returns `OutOfMemory` if that allocation fails.
+///
+/// # Parameters
+///
+/// - `buffers`: The write descriptors whose payload slices are extracted.
+///
+/// # Returns
+///
+/// Payload slices borrowing the descriptors in their original order.
+///
+/// # Errors
+///
+/// Returns `OutOfMemory` if reserving the result vector fails.
 pub(crate) fn byte_slices<'a>(buffers: &'a [IoSlice<'_>]) -> io::Result<Vec<&'a [u8]>> {
     let mut result = Vec::new();
     try_reserve_vec(&mut result, buffers.len()).map_err(allocation_error)?;
@@ -65,20 +113,22 @@ pub(crate) fn byte_slices<'a>(buffers: &'a [IoSlice<'_>]) -> io::Result<Vec<&'a 
 /// The result borrows `buffers` for `'a`, keeping each descriptor alive while
 /// its payload slice is used. It does not copy payload bytes. The result vector
 /// may allocate and returns `OutOfMemory` if that allocation fails.
+///
+/// # Parameters
+///
+/// - `buffers`: The read descriptors whose mutable payload slices are
+///   extracted.
+///
+/// # Returns
+///
+/// Mutable payload slices borrowing the descriptors in their original order.
+///
+/// # Errors
+///
+/// Returns `OutOfMemory` if reserving the result vector fails.
 pub(crate) fn byte_slices_mut<'a>(buffers: &'a mut [IoSliceMut<'_>]) -> io::Result<Vec<&'a mut [u8]>> {
     let mut result = Vec::new();
     try_reserve_vec(&mut result, buffers.len()).map_err(allocation_error)?;
     result.extend(buffers.iter_mut().map(|buffer| &mut buffer[..]));
     Ok(result)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::requested_items;
-
-    #[test]
-    fn vectored_lengths_reject_overflow_without_io() {
-        let error = requested_items([usize::MAX, 1].into_iter()).unwrap_err();
-        assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
-    }
 }

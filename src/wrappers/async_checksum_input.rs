@@ -120,7 +120,7 @@ where
     ///
     /// Returns the wrapped asynchronous byte input.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "inspect the wrapped input"]
     pub const fn inner(&self) -> &I {
         &self.inner
     }
@@ -134,7 +134,7 @@ where
     ///
     /// Returns the wrapped asynchronous byte input.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "use the returned reference to access the wrapped input"]
     pub fn inner_mut(&mut self) -> &mut I {
         &mut self.inner
     }
@@ -145,7 +145,7 @@ where
     ///
     /// Returns the current hasher state.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "inspect the current hasher state"]
     pub const fn hasher(&self) -> &H {
         &self.hasher
     }
@@ -159,7 +159,7 @@ where
     ///
     /// Returns the current hasher state mutably.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "use the returned reference to access the hasher"]
     pub fn hasher_mut(&mut self) -> &mut H {
         &mut self.hasher
     }

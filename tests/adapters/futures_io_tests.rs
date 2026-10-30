@@ -144,6 +144,7 @@ fn context() -> Context<'static> {
 
 #[derive(Default)]
 struct WakeCounter(AtomicUsize);
+
 impl Wake for WakeCounter {
     fn wake(self: Arc<Self>) {
         self.0.fetch_add(1, Ordering::SeqCst);
@@ -152,6 +153,7 @@ impl Wake for WakeCounter {
         self.0.fetch_add(1, Ordering::SeqCst);
     }
 }
+
 #[derive(Default)]
 struct Gate {
     ready: bool,
@@ -167,6 +169,7 @@ impl Gate {
         }
     }
 }
+
 fn release(gate: &Arc<Mutex<Gate>>) {
     let waker = {
         let mut gate = gate.lock().expect("wake gate mutex");
@@ -180,6 +183,7 @@ struct WakeableFuturesReader {
     gate: Arc<Mutex<Gate>>,
     read: bool,
 }
+
 impl AsyncRead for WakeableFuturesReader {
     fn poll_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>, out: &mut [u8]) -> Poll<std::io::Result<usize>> {
         if self.gate.lock().expect("wake gate mutex").poll(cx).is_pending() {
@@ -193,10 +197,12 @@ impl AsyncRead for WakeableFuturesReader {
         Poll::Ready(Ok(1))
     }
 }
+
 struct WakeableQubitReader {
     gate: Arc<Mutex<Gate>>,
     read: bool,
 }
+
 impl AsyncInput for WakeableQubitReader {
     type Item = u8;
     unsafe fn poll_read_unchecked(
@@ -217,6 +223,7 @@ impl AsyncInput for WakeableQubitReader {
         Poll::Ready(Ok(1))
     }
 }
+
 #[test]
 fn test_futures_read_bridges_save_wake_and_resume() {
     let counter = Arc::new(WakeCounter::default());
@@ -273,6 +280,7 @@ struct WakeableFuturesWriter {
     data: Vec<u8>,
     closed: bool,
 }
+
 impl AsyncWrite for WakeableFuturesWriter {
     fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, input: &[u8]) -> Poll<std::io::Result<usize>> {
         if self.write_gate.lock().expect("write gate mutex").poll(cx).is_pending() {
@@ -297,6 +305,7 @@ impl AsyncWrite for WakeableFuturesWriter {
         Poll::Ready(Ok(()))
     }
 }
+
 struct WakeableQubitWriter {
     write_gate: Arc<Mutex<Gate>>,
     flush_gate: Arc<Mutex<Gate>>,
@@ -304,6 +313,7 @@ struct WakeableQubitWriter {
     data: Vec<u8>,
     closed: bool,
 }
+
 impl AsyncOutput for WakeableQubitWriter {
     type Item = u8;
     unsafe fn poll_write_unchecked(
@@ -328,6 +338,7 @@ impl AsyncOutput for WakeableQubitWriter {
             .map(|()| Ok(()))
     }
 }
+
 impl AsyncClose for WakeableQubitWriter {
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         if self.close_gate.lock().expect("close gate mutex").poll(cx).is_pending() {
@@ -337,6 +348,7 @@ impl AsyncClose for WakeableQubitWriter {
         Poll::Ready(Ok(()))
     }
 }
+
 #[test]
 fn test_futures_write_bridges_save_wake_and_resume_each_stage() {
     let counter = Arc::new(WakeCounter::default());
@@ -413,6 +425,7 @@ struct PinnedFuturesInput {
     position: usize,
     _pin: PhantomPinned,
 }
+
 impl PinnedFuturesInput {
     fn check(&self) {
         let address = self as *const Self as usize;
@@ -420,6 +433,7 @@ impl PinnedFuturesInput {
         assert!(old == 0 || old == address, "pinned futures input moved");
     }
 }
+
 impl AsyncRead for PinnedFuturesInput {
     fn poll_read(self: Pin<&mut Self>, _cx: &mut Context<'_>, output: &mut [u8]) -> Poll<std::io::Result<usize>> {
         // SAFETY: only ordinary fields are accessed; the !Unpin inner remains in its
@@ -434,6 +448,7 @@ impl AsyncRead for PinnedFuturesInput {
         Poll::Ready(Ok(0))
     }
 }
+
 impl AsyncInput for PinnedFuturesInput {
     type Item = u8;
     unsafe fn poll_read_unchecked(
@@ -455,11 +470,13 @@ impl AsyncInput for PinnedFuturesInput {
         Poll::Ready(Ok(0))
     }
 }
+
 struct PinnedFuturesOutput {
     address: Cell<usize>,
     data: Vec<u8>,
     _pin: PhantomPinned,
 }
+
 impl PinnedFuturesOutput {
     fn check(&self) {
         let address = self as *const Self as usize;
@@ -467,6 +484,7 @@ impl PinnedFuturesOutput {
         assert!(old == 0 || old == address, "pinned futures output moved");
     }
 }
+
 impl AsyncWrite for PinnedFuturesOutput {
     fn poll_write(self: Pin<&mut Self>, _cx: &mut Context<'_>, input: &[u8]) -> Poll<std::io::Result<usize>> {
         // SAFETY: only an ordinary Vec field is changed; the pinned value is not moved.
@@ -486,6 +504,7 @@ impl AsyncWrite for PinnedFuturesOutput {
         Poll::Ready(Ok(()))
     }
 }
+
 impl AsyncOutput for PinnedFuturesOutput {
     type Item = u8;
     unsafe fn poll_write_unchecked(
@@ -507,6 +526,7 @@ impl AsyncOutput for PinnedFuturesOutput {
         Poll::Ready(Ok(()))
     }
 }
+
 impl AsyncClose for PinnedFuturesOutput {
     fn poll_close(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         // SAFETY: only an ordinary field is read; the pinned value is not moved.
@@ -514,6 +534,7 @@ impl AsyncClose for PinnedFuturesOutput {
         Poll::Ready(Ok(()))
     }
 }
+
 #[test]
 fn test_futures_bridges_support_pinned_inner_values() {
     let mut cx = context();

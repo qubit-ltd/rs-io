@@ -46,9 +46,6 @@ use crate::wrappers::internal::tee_failure::TeeFailure;
 /// operations are ordered but not transactional; a branch error can leave the
 /// source advanced while the branch is behind.
 ///
-/// Operations are ordered and not transactional. A branch write or seek
-/// failure can leave the source advanced while the branch is behind.
-///
 /// # Type Parameters
 ///
 /// * `I` - Source input type.
@@ -60,6 +57,7 @@ pub struct SyncSeekTeeInput<I, B> {
     inner: I,
     /// Branch output receiving mirrored items.
     branch: B,
+    /// First branch write error, retained so later operations can report it.
     failure: TeeFailure,
 }
 
@@ -135,6 +133,11 @@ impl<I, B> SyncSeekTeeInput<I, B> {
     /// while mirroring has not failed.
     ///
     /// This state does not cover panics or arbitrary effects of custom streams.
+    ///
+    /// # Returns
+    ///
+    /// `Some(error)` if a branch write failure was recorded, or `None` if
+    /// mirroring has not failed.
     pub fn branch_error(&self) -> Option<&io::Error> {
         self.failure.error()
     }
@@ -145,7 +148,7 @@ impl<I, B> SyncSeekTeeInput<I, B> {
     ///
     /// Returns the source input, branch output, and first branch error.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "inspect the returned branch error before discarding the parts"]
     pub fn into_parts(self) -> (I, B, Option<io::Error>) {
         (self.inner, self.branch, self.failure.into_error())
     }

@@ -14,6 +14,8 @@ use std::io::ErrorKind;
 use std::io::SeekFrom;
 use std::io::Write;
 
+use qubit_io::AsyncInput;
+use qubit_io::AsyncOutput;
 use qubit_io::Input;
 use qubit_io::Output;
 use qubit_io::Seekable;
@@ -354,7 +356,7 @@ impl Input for SafeOverreportInput {
     }
 }
 
-impl qubit_io::AsyncInput for SafeOverreportInput {
+impl AsyncInput for SafeOverreportInput {
     type Item = u8;
 
     fn poll_read(
@@ -395,7 +397,7 @@ impl Output for SafeOverreportOutput {
     }
 }
 
-impl qubit_io::AsyncOutput for SafeOverreportOutput {
+impl AsyncOutput for SafeOverreportOutput {
     type Item = u8;
 
     fn poll_write(
@@ -441,7 +443,7 @@ impl Input for SafeProgressThenOverreportInput {
     }
 }
 
-impl qubit_io::AsyncInput for SafeProgressThenOverreportInput {
+impl AsyncInput for SafeProgressThenOverreportInput {
     type Item = u8;
 
     fn poll_read(
@@ -493,7 +495,7 @@ impl Output for SafeProgressThenOverreportOutput {
     }
 }
 
-impl qubit_io::AsyncOutput for SafeProgressThenOverreportOutput {
+impl AsyncOutput for SafeProgressThenOverreportOutput {
     type Item = u8;
 
     fn poll_write(

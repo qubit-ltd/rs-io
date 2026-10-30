@@ -20,6 +20,7 @@ use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
 use std::task::Waker;
+use std::time::Duration;
 
 use criterion::BatchSize;
 use criterion::BenchmarkId;
@@ -299,7 +300,7 @@ where
 fn benchmark_async_input(criterion: &mut Criterion) {
     let fixture = benchmark_fixture();
     let mut group = criterion.benchmark_group("async_buffered_input");
-    group.measurement_time(std::time::Duration::from_secs(2));
+    group.measurement_time(Duration::from_secs(2));
     group.sample_size(10);
     group.throughput(Throughput::Bytes(DATA_LEN as u64));
 
@@ -357,7 +358,7 @@ fn benchmark_async_input(criterion: &mut Criterion) {
 fn benchmark_async_output(criterion: &mut Criterion) {
     let fixture = benchmark_fixture();
     let mut group = criterion.benchmark_group("async_buffered_output");
-    group.measurement_time(std::time::Duration::from_secs(2));
+    group.measurement_time(Duration::from_secs(2));
     group.sample_size(10);
     group.throughput(Throughput::Bytes(DATA_LEN as u64));
 

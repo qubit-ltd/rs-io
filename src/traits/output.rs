@@ -24,6 +24,19 @@ use crate::util::SliceRange;
 /// bounds checks. Safe full-slice writes are available through
 /// [`Output::write`] and complete writes through [`Output::write_fully`].
 ///
+/// # Examples
+///
+/// ```
+/// use std::io::Cursor;
+///
+/// use qubit_io::Output;
+///
+/// let mut output = Cursor::new(Vec::new());
+/// output.write_fully(b"hello")?;
+/// assert_eq!(output.into_inner(), b"hello");
+/// # Ok::<(), std::io::Error>(())
+/// ```
+///
 /// # Coherence note
 ///
 /// Every [`std::io::Write`] value automatically implements `Output<Item = u8>`

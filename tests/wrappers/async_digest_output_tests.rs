@@ -10,6 +10,7 @@
 use std::io::ErrorKind;
 use std::pin::Pin;
 use std::task::Context;
+use std::task::Poll;
 use std::task::Waker;
 
 use qubit_io::AsyncClose;
@@ -25,6 +26,7 @@ use super::digest_support_tests::PinnedStream;
 use super::digest_support_tests::Step;
 use super::digest_support_tests::error_kind;
 use super::digest_support_tests::ready;
+use super::support_tests::SafeOverreportOutput;
 
 #[test]
 fn test_async_digest_output_pending_short_writes_errors_and_pinning() {
@@ -138,16 +140,11 @@ fn test_async_digest_output_non_clone_algorithm_can_write_and_finalize() {
 
 #[test]
 fn test_async_digest_output_rejects_safe_overreported_count() {
-    let mut wrapper = qubit_io::AsyncDigestOutput::new(
-        super::support_tests::SafeOverreportOutput,
-        <sha2::Sha256 as digest::Digest>::new(),
-    );
-    let waker = std::task::Waker::noop();
-    let mut cx = std::task::Context::from_waker(waker);
+    let mut wrapper = AsyncDigestOutput::new(SafeOverreportOutput, <Sha256 as Digest>::new());
+    let waker = Waker::noop();
+    let mut cx = Context::from_waker(waker);
     let before = wrapper.digest();
-    let result = qubit_io::AsyncOutput::poll_write(std::pin::Pin::new(&mut wrapper), &mut cx, b"ab");
-    assert!(
-        matches!(result, std::task::Poll::Ready(Err(ref error)) if error.kind() == std::io::ErrorKind::InvalidData)
-    );
+    let result = AsyncOutput::poll_write(Pin::new(&mut wrapper), &mut cx, b"ab");
+    assert!(matches!(result, Poll::Ready(Err(ref error)) if error.kind() == ErrorKind::InvalidData));
     assert_eq!(before, wrapper.digest());
 }

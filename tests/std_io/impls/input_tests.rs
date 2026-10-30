@@ -43,7 +43,7 @@ impl Read for VectorStdReader {
 }
 
 #[test]
-fn vectored_std_reader_keeps_native_override() {
+fn test_vectored_std_reader_keeps_native_override() {
     let mut reader = VectorStdReader;
     let mut first = [0; 2];
     let mut second = [0; 2];
@@ -82,7 +82,7 @@ impl Read for EdgeStdReader {
 }
 
 #[test]
-fn vectored_std_reader_preserves_empty_short_error_and_count_contracts() {
+fn test_vectored_std_reader_preserves_empty_short_error_and_count_contracts() {
     let mut reader = EdgeStdReader { reply: Ok(0), calls: 0 };
     assert_eq!(Input::read_vectored(&mut reader, &mut []).unwrap(), 0);
     assert_eq!(Input::read_vectored(&mut reader, &mut [&mut [], &mut []]).unwrap(), 0);

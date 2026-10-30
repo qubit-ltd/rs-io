@@ -9,9 +9,11 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::Hasher;
 use std::io;
+use std::io::ErrorKind;
 use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
+use std::task::Waker;
 
 use qubit_io::AsyncChecksumOutput;
 use qubit_io::AsyncOutput;
@@ -35,7 +37,7 @@ impl Hasher for RecordingHasher {
 #[derive(Default)]
 struct VecOutput(Vec<u8>);
 
-impl qubit_io::AsyncOutput for VecOutput {
+impl AsyncOutput for VecOutput {
     type Item = u8;
 
     unsafe fn poll_write_unchecked(
@@ -65,24 +67,19 @@ fn test_async_checksum_output_starts_with_hasher_checksum() {
 
 #[test]
 fn test_async_checksum_output_rejects_safe_overreported_count() {
-    let mut wrapper = qubit_io::AsyncChecksumOutput::new(
-        super::support_tests::SafeOverreportOutput,
-        std::collections::hash_map::DefaultHasher::new(),
-    );
-    let waker = std::task::Waker::noop();
-    let mut cx = std::task::Context::from_waker(waker);
+    let mut wrapper = AsyncChecksumOutput::new(super::support_tests::SafeOverreportOutput, DefaultHasher::new());
+    let waker = Waker::noop();
+    let mut cx = Context::from_waker(waker);
     let before = wrapper.checksum();
-    let result = qubit_io::AsyncOutput::poll_write(std::pin::Pin::new(&mut wrapper), &mut cx, b"ab");
-    assert!(
-        matches!(result, std::task::Poll::Ready(Err(ref error)) if error.kind() == std::io::ErrorKind::InvalidData)
-    );
+    let result = AsyncOutput::poll_write(Pin::new(&mut wrapper), &mut cx, b"ab");
+    assert!(matches!(result, Poll::Ready(Err(ref error)) if error.kind() == ErrorKind::InvalidData));
     assert_eq!(before, wrapper.checksum());
 }
 
 #[test]
 fn test_async_checksum_output_preserves_chunks_and_skips_empty_writes() {
     let mut output = AsyncChecksumOutput::new(VecOutput::default(), RecordingHasher::default());
-    let waker = std::task::Waker::noop();
+    let waker = Waker::noop();
     let mut cx = Context::from_waker(waker);
     assert!(matches!(
         Pin::new(&mut output).poll_write(&mut cx, b""),

@@ -15,6 +15,10 @@ use crate::Buffer;
 /// `Indeterminate` means an inner I/O operation panicked and may have produced
 /// external effects that cannot be matched to the retained buffer.
 ///
+/// # Type Parameters
+///
+/// - `T`: Cloneable item type retained by the recovery buffer.
+///
 /// # Examples
 ///
 /// ```

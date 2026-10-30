@@ -6,6 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
+use std::io::Result;
 use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
@@ -186,7 +187,7 @@ where
         output: &mut [u8],
         index: usize,
         count: usize,
-    ) -> Poll<std::io::Result<usize>> {
+    ) -> Poll<Result<usize>> {
         if count == 0 {
             return Poll::Ready(Ok(0));
         }

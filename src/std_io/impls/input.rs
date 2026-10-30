@@ -14,6 +14,8 @@ use std::io::Result;
 use crate::Input;
 use crate::traits::validate_read_count;
 use crate::util::UncheckedSlice;
+use crate::util::io_slices_mut;
+use crate::util::requested_items;
 
 /// Bridges byte-oriented standard readers to item-oriented input.
 impl<R> Input for R
@@ -34,6 +36,10 @@ where
     /// # Returns
     ///
     /// The number of bytes reported by the standard reader.
+    ///
+    /// A successful call may read fewer than `count` bytes. A return value of
+    /// zero indicates that no bytes were read; for a nonempty request this
+    /// normally signals end of input. This method does not retry short reads.
     ///
     /// # Errors
     ///
@@ -64,6 +70,10 @@ where
     ///
     /// The number of bytes read into `output`.
     ///
+    /// A successful call may fill only part of `output`; zero means no bytes
+    /// were read and normally signals end of input for a nonempty buffer. This
+    /// method does not retry short reads.
+    ///
     /// # Errors
     ///
     /// Returns [`std::io::ErrorKind::InvalidData`] if the reader reports more
@@ -78,13 +88,27 @@ where
     /// Reads from the buffers in order using the standard reader's vectored
     /// method. A single descriptor uses stack storage; multiple descriptors
     /// may allocate descriptor storage, and the reader may allocate
-    /// independently. Returns `InvalidInput` if their total length overflows,
-    /// `OutOfMemory` if multiple-descriptor preparation fails before I/O, or
-    /// `InvalidData` if the reader reports more than the total capacity. Short
-    /// progress and reader errors are returned without retrying or undoing
-    /// underlying side effects.
+    /// independently. Short progress and reader errors are returned without
+    /// retrying or undoing underlying side effects.
+    ///
+    /// # Parameters
+    ///
+    /// - `buffers`: Mutable byte buffers to fill in order.
+    ///
+    /// # Returns
+    ///
+    /// The number of bytes reported by the standard reader, up to the total
+    /// capacity of `buffers`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`std::io::ErrorKind::InvalidInput`] if the total buffer length
+    /// overflows, [`std::io::ErrorKind::OutOfMemory`] if multiple-descriptor
+    /// preparation fails before I/O, [`std::io::ErrorKind::InvalidData`] if
+    /// the reader reports more than the total capacity, or the error reported
+    /// by the standard reader.
     fn read_vectored(&mut self, buffers: &mut [&mut [u8]]) -> Result<usize> {
-        let capacity = crate::util::requested_items(buffers.iter().map(|buffer| buffer.len()))?;
+        let capacity = requested_items(buffers.iter().map(|buffer| buffer.len()))?;
         if capacity == 0 {
             return Ok(0);
         }
@@ -92,7 +116,7 @@ where
             let mut slices = [std::io::IoSliceMut::new(buffer)];
             Read::read_vectored(self, &mut slices)?
         } else {
-            let mut slices = crate::util::io_slices_mut(buffers)?;
+            let mut slices = io_slices_mut(buffers)?;
             Read::read_vectored(self, &mut slices)?
         };
         validate_read_count(count, capacity)?;

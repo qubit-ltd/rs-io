@@ -58,6 +58,10 @@ pub trait Input {
     /// allocate. The wrapped input can be recovered with
     /// [`StdRead::into_inner`].
     ///
+    /// # Returns
+    ///
+    /// A standard library reader that owns the converted input.
+    ///
     /// # Examples
     ///
     /// ```
@@ -82,7 +86,6 @@ pub trait Input {
     ///     let _reader = input.into_std_read();
     /// }
     /// ```
-    #[must_use = "the returned reader is the converted input"]
     #[inline]
     fn into_std_read(self) -> StdRead<Self>
     where

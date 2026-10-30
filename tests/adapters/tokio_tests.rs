@@ -218,6 +218,7 @@ struct WakeableTokioReader {
     gate: Arc<Mutex<Gate>>,
     read: bool,
 }
+
 impl AsyncRead for WakeableTokioReader {
     fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, out: &mut ReadBuf<'_>) -> Poll<Result<()>> {
         let this = self.get_mut();
@@ -236,6 +237,7 @@ struct WakeableQubitReader {
     gate: Arc<Mutex<Gate>>,
     read: bool,
 }
+
 impl AsyncInput for WakeableQubitReader {
     type Item = u8;
     unsafe fn poll_read_unchecked(
@@ -313,6 +315,7 @@ struct WakeableTokioWriter {
     data: Vec<u8>,
     closed: bool,
 }
+
 impl AsyncWrite for WakeableTokioWriter {
     fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>, input: &[u8]) -> Poll<Result<usize>> {
         if self.write_gate.lock().expect("write gate mutex").poll(cx).is_pending() {
@@ -345,6 +348,7 @@ struct WakeableQubitWriter {
     data: Vec<u8>,
     closed: bool,
 }
+
 impl AsyncOutput for WakeableQubitWriter {
     type Item = u8;
     unsafe fn poll_write_unchecked(
@@ -369,6 +373,7 @@ impl AsyncOutput for WakeableQubitWriter {
             .map(|()| Ok(()))
     }
 }
+
 impl AsyncClose for WakeableQubitWriter {
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<()>> {
         if self.close_gate.lock().expect("close gate mutex").poll(cx).is_pending() {
@@ -457,6 +462,7 @@ struct PinnedTokioInput {
     position: usize,
     _pin: PhantomPinned,
 }
+
 impl PinnedTokioInput {
     fn check(&self) {
         let address = self as *const Self as usize;
@@ -464,6 +470,7 @@ impl PinnedTokioInput {
         assert!(old == 0 || old == address, "pinned Tokio input moved");
     }
 }
+
 impl AsyncRead for PinnedTokioInput {
     fn poll_read(self: Pin<&mut Self>, _cx: &mut Context<'_>, output: &mut ReadBuf<'_>) -> Poll<Result<()>> {
         // SAFETY: only unpinned fields are accessed; the !Unpin value remains in its
@@ -477,6 +484,7 @@ impl AsyncRead for PinnedTokioInput {
         Poll::Ready(Ok(()))
     }
 }
+
 impl AsyncInput for PinnedTokioInput {
     type Item = u8;
     unsafe fn poll_read_unchecked(
@@ -539,6 +547,7 @@ struct PinnedTokioOutput {
     data: Vec<u8>,
     _pin: PhantomPinned,
 }
+
 impl PinnedTokioOutput {
     fn check(&self) {
         let address = self as *const Self as usize;
@@ -546,6 +555,7 @@ impl PinnedTokioOutput {
         assert!(old == 0 || old == address, "pinned Tokio output moved");
     }
 }
+
 impl AsyncWrite for PinnedTokioOutput {
     fn poll_write(self: Pin<&mut Self>, _cx: &mut Context<'_>, input: &[u8]) -> Poll<Result<usize>> {
         // SAFETY: the !Unpin inner stays in its pinned box; only its Vec field is
@@ -566,6 +576,7 @@ impl AsyncWrite for PinnedTokioOutput {
         Poll::Ready(Ok(()))
     }
 }
+
 impl AsyncOutput for PinnedTokioOutput {
     type Item = u8;
     unsafe fn poll_write_unchecked(
@@ -588,6 +599,7 @@ impl AsyncOutput for PinnedTokioOutput {
         Poll::Ready(Ok(()))
     }
 }
+
 impl AsyncClose for PinnedTokioOutput {
     fn poll_close(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<()>> {
         // SAFETY: only an ordinary field is read; the pinned inner is not moved.

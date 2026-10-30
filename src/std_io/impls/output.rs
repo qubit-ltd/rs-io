@@ -79,11 +79,26 @@ where
     /// Writes from the buffers in order using the standard writer's vectored
     /// method. A single descriptor uses stack storage; multiple descriptors
     /// may allocate descriptor storage, and the writer may allocate
-    /// independently. Returns `InvalidInput` if their total length overflows,
-    /// `OutOfMemory` if multiple-descriptor preparation fails before I/O, or
-    /// `InvalidData` if the writer reports more than the total capacity. Short
-    /// progress and writer errors are returned without retrying or undoing
-    /// underlying side effects.
+    /// independently. Short progress and writer errors are returned without
+    /// retrying or undoing underlying side effects.
+    ///
+    /// # Parameters
+    ///
+    /// - `buffers`: Ordered source byte slices.
+    ///
+    /// # Returns
+    ///
+    /// The number of bytes reported by the standard writer, up to the total
+    /// buffer length. Returns zero without calling the writer when all buffers
+    /// are empty.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`std::io::ErrorKind::InvalidInput`] if the total buffer length
+    /// overflows, [`std::io::ErrorKind::OutOfMemory`] if multiple-descriptor
+    /// preparation fails before I/O, [`std::io::ErrorKind::InvalidData`] if
+    /// the writer reports more than the total buffer length, or the error
+    /// returned by the standard writer.
     fn write_vectored(&mut self, buffers: &[&[u8]]) -> Result<usize> {
         let capacity = crate::util::requested_items(buffers.iter().map(|buffer| buffer.len()))?;
         if capacity == 0 {

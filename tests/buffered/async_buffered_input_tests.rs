@@ -335,10 +335,12 @@ fn pinned_input(pending: usize) -> PinnedInput {
 }
 
 struct FlagWake(Arc<AtomicBool>);
+
 impl Wake for FlagWake {
     fn wake(self: Arc<Self>) {
         self.0.store(true, Ordering::SeqCst);
     }
+
     fn wake_by_ref(self: &Arc<Self>) {
         self.0.store(true, Ordering::SeqCst);
     }

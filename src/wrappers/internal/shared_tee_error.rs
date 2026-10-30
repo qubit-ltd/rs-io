@@ -14,6 +14,7 @@ use std::io;
 use std::sync::Arc;
 
 /// Keeps a latched tee error available to repeated reports.
+#[must_use = "the shared tee error must be reported or retained"]
 #[derive(Debug)]
 pub(super) struct SharedTeeError {
     /// Original branch error shared with the tee failure state.

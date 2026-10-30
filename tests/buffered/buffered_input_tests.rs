@@ -738,6 +738,7 @@ fn test_input_u8_blanket_impl_reuses_std_read_errors() {
 
     assert_eq!(ErrorKind::Other, error.kind());
 }
+
 enum ReadStep {
     Data(Vec<u8>),
     Interrupted,

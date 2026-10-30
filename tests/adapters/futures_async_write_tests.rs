@@ -33,6 +33,7 @@ struct Writer(Action, usize);
 
 impl AsyncOutput for Writer {
     type Item = u8;
+
     unsafe fn poll_write_unchecked(
         self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
@@ -50,10 +51,12 @@ impl AsyncOutput for Writer {
             Action::Pending => Poll::Pending,
         }
     }
+
     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         Poll::Ready(Ok(()))
     }
 }
+
 impl AsyncClose for Writer {
     fn poll_close(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         Poll::Ready(Ok(()))

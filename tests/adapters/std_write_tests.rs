@@ -39,7 +39,7 @@ impl Output for VectorOutput {
 }
 
 #[test]
-fn vectored_std_adapter_keeps_inner_override() {
+fn test_vectored_std_adapter_keeps_inner_override() {
     let mut writer = qubit_io::StdWrite::new(VectorOutput::default());
     assert_eq!(
         Write::write_vectored(&mut writer, &[IoSlice::new(b"ab"), IoSlice::new(b"cd")]).unwrap(),
@@ -82,7 +82,7 @@ impl Output for EdgeOutput {
 }
 
 #[test]
-fn vectored_std_write_adapter_preserves_empty_short_error_and_count_contracts() {
+fn test_vectored_std_write_adapter_preserves_empty_short_error_and_count_contracts() {
     let mut writer = qubit_io::StdWrite::new(EdgeOutput {
         reply: Ok(0),
         bytes: Vec::new(),
@@ -137,7 +137,7 @@ fn vectored_std_write_adapter_preserves_empty_short_error_and_count_contracts() 
 }
 
 #[test]
-fn vectored_std_write_adapter_nested_bridge_does_not_recurse() {
+fn test_vectored_std_write_adapter_nested_bridge_does_not_recurse() {
     let mut writer = qubit_io::StdWrite::new(qubit_io::StdWrite::new(VectorOutput::default()));
     assert_eq!(
         Write::write_vectored(&mut writer, &[IoSlice::new(b"ab"), IoSlice::new(b"cd")]).unwrap(),
