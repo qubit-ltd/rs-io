@@ -383,28 +383,27 @@ impl Streams {
             // SAFETY: `requested` is a valid prefix length inside `buffer`.
             let read = unsafe { input.read_fully_unchecked(&mut buffer, 0, requested)? };
             validate_read_count(read, requested)?;
-            if read == 0 {
-                let count = collected.len();
-                if count == 0 {
-                    return Ok(copied);
-                }
-                // SAFETY: The full collected range is valid.
-                unsafe {
-                    output.write_fully_unchecked(&collected, 0, count)?;
-                }
-                return Ok(copied);
-            }
             if (read as u64) > remaining {
                 return Err(Error::new(
                     ErrorKind::InvalidData,
                     format!("input exceeds maximum length of {max_items} items"),
                 ));
             }
-            try_reserve_vec(&mut collected, read).map_err(allocation_error)?;
-            collected.extend_from_slice(&buffer[..read]);
-            let read = read as u64;
-            remaining -= read;
-            copied = add_item_count(copied, read as usize)?;
+            if read != 0 {
+                try_reserve_vec(&mut collected, read).map_err(allocation_error)?;
+                collected.extend_from_slice(&buffer[..read]);
+                remaining -= read as u64;
+                copied = add_item_count(copied, read)?;
+            }
+            if read < requested {
+                if !collected.is_empty() {
+                    // SAFETY: The entire collected slice is initialized and in range.
+                    unsafe {
+                        output.write_fully_unchecked(&collected, 0, collected.len())?;
+                    }
+                }
+                return Ok(copied);
+            }
         }
     }
 

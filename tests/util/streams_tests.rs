@@ -125,6 +125,34 @@ struct ChunkInput {
     chunks: VecDeque<Vec<u16>>,
 }
 
+struct EofThenInput {
+    calls: usize,
+    error_after_eof: bool,
+}
+
+impl Input for EofThenInput {
+    type Item = u8;
+
+    unsafe fn read_unchecked(&mut self, output: &mut [u8], index: usize, count: usize) -> std::io::Result<usize> {
+        if count == 0 {
+            return Ok(0);
+        }
+        self.calls += 1;
+        match self.calls {
+            1 => {
+                output[index] = b'a';
+                Ok(1)
+            }
+            2 => Ok(0),
+            _ if self.error_after_eof => Err(Error::other("read after EOF")),
+            _ => {
+                output[index] = b'b';
+                Ok(1)
+            }
+        }
+    }
+}
+
 struct StringItemInput {
     values: VecDeque<String>,
 }
@@ -988,6 +1016,42 @@ fn test_copy_input_to_output_end_limited_copies_within_limit() {
 
     assert_eq!(3, copied);
     assert_eq!(&[1, 2, 3], output.values.as_slice());
+}
+
+#[test]
+fn test_copy_input_to_output_end_limited_stops_at_first_eof_before_error() {
+    let mut input = EofThenInput {
+        calls: 0,
+        error_after_eof: true,
+    };
+    let mut output = Vec::new();
+
+    let copied = Streams::copy_input_to_output_end_limited(&mut input, &mut output, 3)
+        .expect("copy should stop at the first EOF");
+
+    assert_eq!(1, copied);
+    assert_eq!(b"a", output.as_slice());
+    assert_eq!(2, input.calls);
+}
+
+#[test]
+fn test_copy_input_to_output_end_limited_preserves_data_after_first_eof() {
+    let mut input = EofThenInput {
+        calls: 0,
+        error_after_eof: false,
+    };
+    let mut output = Vec::new();
+
+    let copied = Streams::copy_input_to_output_end_limited(&mut input, &mut output, 3)
+        .expect("copy should stop at the first EOF");
+
+    assert_eq!(1, copied);
+    assert_eq!(b"a", output.as_slice());
+    assert_eq!(2, input.calls);
+
+    let mut next = [0];
+    assert_eq!(1, input.read(&mut next).expect("remaining item should be readable"));
+    assert_eq!(b'b', next[0]);
 }
 
 #[test]
