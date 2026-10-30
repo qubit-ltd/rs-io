@@ -14,6 +14,7 @@ use tokio::io::AsyncWrite;
 
 use crate::AsyncClose;
 use crate::traits::normalize_async_error;
+use crate::traits::validate_write_count;
 
 /// Exposes a Qubit byte [`crate::AsyncOutput`] as a Tokio [`AsyncWrite`].
 ///
@@ -164,9 +165,17 @@ where
     /// # Errors
     ///
     /// Returns an I/O error reported by the wrapped output.
+    /// Returns [`std::io::ErrorKind::InvalidData`] if the output reports more
+    /// bytes than requested, or reports `WouldBlock` or `Interrupted`. These
+    /// checks cannot roll back output side effects that already occurred.
     #[inline(always)]
     fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, input: &[u8]) -> Poll<std::io::Result<usize>> {
-        self.get_pin_mut().poll_write(cx, input)
+        let requested = input.len();
+        self.get_pin_mut().poll_write(cx, input).map(|result| {
+            let written = result.map_err(normalize_async_error)?;
+            validate_write_count(written, requested)?;
+            Ok(written)
+        })
     }
 
     /// Polls flushing through the wrapped Qubit output.

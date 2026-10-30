@@ -13,6 +13,8 @@ use std::task::Poll;
 use futures_io::AsyncRead;
 
 use crate::AsyncByteInput;
+use crate::traits::normalize_async_error;
+use crate::traits::validate_read_count;
 
 /// Exposes a Qubit [`AsyncByteInput`] as a futures-io [`AsyncRead`].
 ///
@@ -156,11 +158,20 @@ where
     /// # Errors
     ///
     /// Returns an I/O error reported by the wrapped input.
+    /// Returns [`std::io::ErrorKind::InvalidData`] if the input reports more
+    /// bytes than requested, or reports `WouldBlock` or `Interrupted`.
+    /// Validation errors cannot roll back writes the input already made to
+    /// the destination buffer.
     #[inline]
     fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, output: &mut [u8]) -> Poll<std::io::Result<usize>> {
         if output.is_empty() {
             return Poll::Ready(Ok(0));
         }
-        self.get_pin_mut().poll_read(cx, output)
+        let requested = output.len();
+        self.get_pin_mut().poll_read(cx, output).map(|result| {
+            let read = result.map_err(normalize_async_error)?;
+            validate_read_count(read, requested)?;
+            Ok(read)
+        })
     }
 }

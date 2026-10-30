@@ -14,6 +14,8 @@ use tokio::io::AsyncRead;
 use tokio::io::ReadBuf;
 
 use crate::AsyncByteInput;
+use crate::traits::normalize_async_error;
+use crate::traits::validate_read_count;
 
 /// Exposes a Qubit [`AsyncByteInput`] as a Tokio [`AsyncRead`].
 ///
@@ -161,13 +163,23 @@ where
     /// # Errors
     ///
     /// Returns an I/O error reported by the wrapped input.
+    /// Returns [`std::io::ErrorKind::InvalidData`] if the input reports more
+    /// bytes than requested, or reports `WouldBlock` or `Interrupted`.
+    /// Validation errors cannot roll back writes the input already made to
+    /// initialized destination storage.
     #[inline]
     fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, output: &mut ReadBuf<'_>) -> Poll<std::io::Result<()>> {
-        if output.remaining() == 0 {
+        let requested = output.remaining();
+        if requested == 0 {
             return Poll::Ready(Ok(()));
         }
         self.get_pin_mut()
             .poll_read(cx, output.initialize_unfilled())
-            .map(|result| result.map(|read| output.advance(read)))
+            .map(|result| {
+                let read = result.map_err(normalize_async_error)?;
+                validate_read_count(read, requested)?;
+                output.advance(read);
+                Ok(())
+            })
     }
 }
