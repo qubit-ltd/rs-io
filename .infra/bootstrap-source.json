@@ -14,6 +14,10 @@
       "executable": true,
       "sha256": "89c4d73df6915e0575f1e4d9bcf6f94b29d77b8aa4dd9151977a7e263996ab11"
     },
+    ".infra/bin/cargo-update.sh": {
+      "executable": true,
+      "sha256": "9b683689b68156d6840016be915c2ac755c287dcf61c85dc820ef959dd461b14"
+    },
     ".infra/bin/ci-check.sh": {
       "executable": true,
       "sha256": "c308224aa9e6eb8050dc529d887ad549d6267c032551539ce31a55fdefd4d3bf"
@@ -44,7 +48,7 @@
     },
     ".infra/bin/update-dependencies-by-prefix.sh": {
       "executable": true,
-      "sha256": "2a4d1d0e3b8679cde9ee9523721b142776232e7472d1bad6008d27429b46a19b"
+      "sha256": "d4ac94580d20a0c25daa76056665f0a2a9562e0699c64e9594a556d1357bb5dc"
     },
     ".infra/bootstrap-check.py": {
       "executable": true,
@@ -107,8 +111,8 @@
       "sha256": "bd679d654b9a6b06a53fb2e45d6c02f3dceb1cb574be9c95f7aa1603c104760d"
     }
   },
-  "package_sha256": "e0b8188b769030092221e05cc01ed8dc218b577ae240bc8e960001d3dba152ac",
+  "package_sha256": "1bba66a71bfe8a2040c30b8083b521da7110775eb78d7bc6484e595b1b3514d6",
   "schema": 1,
   "source_repository": "https://github.com/qubit-ltd/rs-infra-tools.git",
-  "source_revision": "73f7e55ed45e445bfa5443af5461da0ad57927e3"
+  "source_revision": "4b42751da963fa0c3c7128ca8e748710a0d5ed1f"
 }
