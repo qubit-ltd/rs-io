@@ -26,6 +26,36 @@ struct InterruptedOnceReader {
     data: Cursor<Vec<u8>>,
 }
 
+struct ShortReadReader {
+    data: Cursor<Vec<u8>>,
+    max_read: usize,
+    interrupted: bool,
+}
+
+impl ShortReadReader {
+    fn new(data: &[u8], max_read: usize) -> Self {
+        Self {
+            data: Cursor::new(data.to_vec()),
+            max_read,
+            interrupted: false,
+        }
+    }
+}
+
+impl Read for ShortReadReader {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        if buffer.is_empty() {
+            return Ok(0);
+        }
+        if !self.interrupted {
+            self.interrupted = true;
+            return Err(Error::new(ErrorKind::Interrupted, "interrupted once"));
+        }
+        let count = self.max_read.min(buffer.len());
+        Read::read(&mut self.data, &mut buffer[..count])
+    }
+}
+
 impl InterruptedOnceReader {
     fn new(data: &[u8]) -> Self {
         Self {
@@ -1346,6 +1376,51 @@ fn test_compare_content_with_buffer_size_detects_shorter_stream() {
         Streams::compare_content_with_buffer_size(&mut left, &mut right, 4)
             .expect("shorter stream should compare as less")
     );
+}
+
+#[test]
+fn test_compare_short_reads_ignore_chunk_boundaries() {
+    let cases = [
+        ("equal", b"abcdef".as_slice(), b"abcdef".as_slice(), Ordering::Equal),
+        (
+            "different less",
+            b"abcdef".as_slice(),
+            b"abcxef".as_slice(),
+            Ordering::Less,
+        ),
+        (
+            "different greater",
+            b"abcxef".as_slice(),
+            b"abcdef".as_slice(),
+            Ordering::Greater,
+        ),
+        ("shorter", b"abc".as_slice(), b"abcd".as_slice(), Ordering::Less),
+        ("longer", b"abcd".as_slice(), b"abc".as_slice(), Ordering::Greater),
+    ];
+
+    for (name, left_bytes, right_bytes, expected) in cases {
+        let mut left = ShortReadReader::new(left_bytes, 1);
+        let mut right = ShortReadReader::new(right_bytes, 2);
+        assert_eq!(
+            expected,
+            Streams::compare_content(&mut left, &mut right)
+                .unwrap_or_else(|error| panic!("{name}: streams should compare: {error}")),
+            "{name}: compare_content ordering"
+        );
+        assert!(left.interrupted, "{name}: left reader should have been interrupted");
+        assert!(right.interrupted, "{name}: right reader should have been interrupted");
+
+        let mut left = ShortReadReader::new(left_bytes, 1);
+        let mut right = ShortReadReader::new(right_bytes, 2);
+        assert_eq!(
+            expected == Ordering::Equal,
+            Streams::content_eq(&mut left, &mut right)
+                .unwrap_or_else(|error| panic!("{name}: streams should compare: {error}")),
+            "{name}: content_eq result"
+        );
+        assert!(left.interrupted, "{name}: left reader should have been interrupted");
+        assert!(right.interrupted, "{name}: right reader should have been interrupted");
+    }
 }
 
 #[test]
