@@ -209,7 +209,7 @@ fn test_std_write_seek_forwards_position_and_errors() {
 }
 
 #[test]
-fn test_std_write_is_not_seekable_without_inner_seekability() {
+fn test_std_write_supports_write_only_inner() {
     fn assert_write<T: Write>(_: &T) {}
     let writer = qubit_io::StdWrite::new(WriteOnlyOutput);
     assert_write(&writer);

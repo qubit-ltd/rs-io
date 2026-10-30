@@ -49,6 +49,40 @@ use crate::Input;
 /// reader.read_to_end(&mut bytes).expect("reading should succeed");
 /// assert_eq!(bytes, b"hello");
 /// ```
+///
+/// A read-only input implements `Read` without providing seek capability:
+///
+/// ```
+/// use qubit_io::{Input, StdRead};
+/// use std::io::{Read, Result};
+///
+/// struct ReadOnly;
+/// impl Input for ReadOnly {
+///     type Item = u8;
+///     unsafe fn read_unchecked(&mut self, _: &mut [u8], _: usize, _: usize) -> Result<usize> {
+///         Ok(0)
+///     }
+/// }
+/// fn require_read<T: Read>(_: &T) {}
+/// require_read(&StdRead::new(ReadOnly));
+/// ```
+///
+/// It does not provide `Seek` unless its input is seekable:
+///
+/// ```compile_fail,E0277
+/// use qubit_io::{Input, StdRead};
+/// use std::io::{Result, Seek};
+///
+/// struct ReadOnly;
+/// impl Input for ReadOnly {
+///     type Item = u8;
+///     unsafe fn read_unchecked(&mut self, _: &mut [u8], _: usize, _: usize) -> Result<usize> {
+///         Ok(0)
+///     }
+/// }
+/// fn require_seek<T: Seek>() {}
+/// require_seek::<StdRead<ReadOnly>>();
+/// ```
 #[must_use]
 #[repr(transparent)]
 pub struct StdRead<I> {

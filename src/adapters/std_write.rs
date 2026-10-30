@@ -47,6 +47,46 @@ use crate::Output;
 /// writer.write_all(b"hello").expect("writing should succeed");
 /// assert_eq!(writer.into_inner().into_inner(), b"hello");
 /// ```
+///
+/// A write-only output implements `Write` without providing seek capability:
+///
+/// ```
+/// use qubit_io::{Output, StdWrite};
+/// use std::io::{Result, Write};
+///
+/// struct WriteOnly;
+/// impl Output for WriteOnly {
+///     type Item = u8;
+///     unsafe fn write_unchecked(&mut self, _: &[u8], _: usize, count: usize) -> Result<usize> {
+///         Ok(count)
+///     }
+///     fn flush(&mut self) -> Result<()> {
+///         Ok(())
+///     }
+/// }
+/// fn require_write<T: Write>(_: &T) {}
+/// require_write(&StdWrite::new(WriteOnly));
+/// ```
+///
+/// It does not provide `Seek` unless its output is seekable:
+///
+/// ```compile_fail,E0277
+/// use qubit_io::{Output, StdWrite};
+/// use std::io::{Result, Seek};
+///
+/// struct WriteOnly;
+/// impl Output for WriteOnly {
+///     type Item = u8;
+///     unsafe fn write_unchecked(&mut self, _: &[u8], _: usize, count: usize) -> Result<usize> {
+///         Ok(count)
+///     }
+///     fn flush(&mut self) -> Result<()> {
+///         Ok(())
+///     }
+/// }
+/// fn require_seek<T: Seek>() {}
+/// require_seek::<StdWrite<WriteOnly>>();
+/// ```
 #[must_use]
 #[repr(transparent)]
 pub struct StdWrite<O> {

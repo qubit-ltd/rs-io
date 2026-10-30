@@ -224,7 +224,7 @@ fn test_std_read_seek_forwards_position_and_errors() {
 }
 
 #[test]
-fn test_std_read_is_not_seekable_without_inner_seekability() {
+fn test_std_read_supports_read_only_inner() {
     fn assert_read<T: Read>(_: &T) {}
     let reader = qubit_io::StdRead::new(ReadOnlyInput);
     assert_read(&reader);
