@@ -21,6 +21,7 @@ use crate::AsyncInput;
 use crate::Buffer;
 use crate::async_io::MAX_READY_OPERATIONS_PER_POLL;
 use crate::buffered::DEFAULT_BUFFER_CAPACITY;
+use crate::traits::normalize_async_error;
 use crate::traits::validate_read_count;
 
 /// Buffered asynchronous item input.
@@ -368,8 +369,9 @@ where
     /// Returns [`ErrorKind::InvalidInput`] when the buffer is full with no
     /// consumed prefix to reclaim, [`ErrorKind::InvalidData`] when the wrapped
     /// input reports more items than requested, or another error reported by
-    /// the wrapped input. An invalid count does not advance this buffer's
-    /// readable window.
+    /// the wrapped input. `WouldBlock` and `Interrupted` are normalized to
+    /// [`ErrorKind::InvalidData`] with the original error in the cause chain.
+    /// An error does not advance this buffer's readable window.
     pub fn poll_fill_more(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<bool>> {
         // SAFETY: `inner` remains pinned for the duration of this projection.
         let this = unsafe { self.as_mut().get_unchecked_mut() };
@@ -403,7 +405,7 @@ where
                 }
                 Poll::Ready(Ok(true))
             }
-            Poll::Ready(Err(error)) => Poll::Ready(Err(error)),
+            Poll::Ready(Err(error)) => Poll::Ready(Err(normalize_async_error(error))),
             Poll::Pending => Poll::Pending,
         }
     }

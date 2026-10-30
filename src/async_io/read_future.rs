@@ -13,6 +13,7 @@ use std::task::Context;
 use std::task::Poll;
 
 use crate::AsyncInput;
+use crate::traits::normalize_async_error;
 use crate::traits::validate_read_count;
 
 /// Future for one [`AsyncInput`] read operation.
@@ -120,7 +121,9 @@ where
     ///
     /// # Errors
     ///
-    /// Returns an I/O error reported by the input. Returns
+    /// Returns an I/O error reported by the input, normalizing `WouldBlock`
+    /// and `Interrupted` to [`std::io::ErrorKind::InvalidData`] while retaining
+    /// the original error in the cause chain. Returns
     /// [`std::io::ErrorKind::InvalidData`] if the input reports more items than
     /// requested.
     ///
@@ -134,7 +137,7 @@ where
         let requested = this.output.len();
         let result = this.input.as_mut().poll_read(cx, this.output);
         let result = result.map(|result| {
-            result.and_then(|read| {
+            result.map_err(normalize_async_error).and_then(|read| {
                 validate_read_count(read, requested)?;
                 Ok(read)
             })

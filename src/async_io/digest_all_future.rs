@@ -17,6 +17,7 @@ use digest::Digest;
 use crate::AsyncByteInput;
 use crate::DEFAULT_COPY_BUFFER_SIZE;
 use crate::async_io::MAX_READY_OPERATIONS_PER_POLL;
+use crate::traits::normalize_async_error;
 use crate::traits::validate_read_count;
 
 /// Future that reads the remaining bytes of an input and returns their digest.
@@ -137,7 +138,9 @@ where
     ///
     /// # Errors
     ///
-    /// Returns the input's read error, or [`io::ErrorKind::InvalidData`] if
+    /// Returns the input's read error, normalizing `WouldBlock` and
+    /// `Interrupted` to [`io::ErrorKind::InvalidData`] while retaining the
+    /// original error in the cause chain, or [`io::ErrorKind::InvalidData`] if
     /// the input reports more bytes than requested. Errors do not rewind
     /// consumed bytes or return a partial digest.
     ///
@@ -165,7 +168,7 @@ where
                 }
                 Poll::Ready(Err(error)) => {
                     this.hasher = None;
-                    return Poll::Ready(Err(error));
+                    return Poll::Ready(Err(normalize_async_error(error)));
                 }
                 Poll::Pending => return Poll::Pending,
             }

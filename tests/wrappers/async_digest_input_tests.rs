@@ -49,6 +49,62 @@ struct OverreportedSafeInput {
     transferred: bool,
 }
 
+struct ForbiddenErrorInput;
+
+impl AsyncInput for ForbiddenErrorInput {
+    type Item = u8;
+
+    unsafe fn poll_read_unchecked(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+        _output: &mut [u8],
+        _index: usize,
+        _count: usize,
+    ) -> Poll<Result<usize>> {
+        panic!("the safe override must be used")
+    }
+
+    fn poll_read(self: Pin<&mut Self>, _cx: &mut Context<'_>, _output: &mut [u8]) -> Poll<Result<usize>> {
+        Poll::Ready(Err(std::io::Error::new(
+            ErrorKind::WouldBlock,
+            "digest source would-block",
+        )))
+    }
+}
+
+struct PrefixThenForbiddenErrorInput {
+    transferred: bool,
+    calls: usize,
+}
+
+impl AsyncInput for PrefixThenForbiddenErrorInput {
+    type Item = u8;
+
+    unsafe fn poll_read_unchecked(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+        _output: &mut [u8],
+        _index: usize,
+        _count: usize,
+    ) -> Poll<Result<usize>> {
+        panic!("the safe override must be used")
+    }
+
+    fn poll_read(mut self: Pin<&mut Self>, _cx: &mut Context<'_>, output: &mut [u8]) -> Poll<Result<usize>> {
+        self.calls += 1;
+        if self.transferred {
+            Poll::Ready(Err(std::io::Error::new(
+                ErrorKind::Interrupted,
+                "digest prefix failure",
+            )))
+        } else {
+            self.transferred = true;
+            output[0] = b'a';
+            Poll::Ready(Ok(1))
+        }
+    }
+}
+
 impl AsyncInput for OverreportedSafeInput {
     type Item = u8;
 
@@ -172,6 +228,49 @@ fn test_async_digest_input_digest_all_preserves_progress_across_pending() {
     assert_eq!(3, stream.state.borrow().position);
     let mut future = AsyncDigestInput::<_, Sha256>::digest_all(stream.as_mut());
     assert_eq!(Sha256::digest(b""), ready(Pin::new(&mut future).poll(&mut cx)));
+}
+
+#[test]
+fn test_async_digest_all_normalizes_safe_override_error() {
+    let mut input = ForbiddenErrorInput;
+    let mut future = AsyncDigestInput::<_, Sha256>::digest_all(Pin::new(&mut input));
+    let mut cx = Context::from_waker(Waker::noop());
+    match Pin::new(&mut future).poll(&mut cx) {
+        Poll::Ready(Err(error)) => {
+            assert_eq!(ErrorKind::InvalidData, error.kind());
+            assert!(
+                error
+                    .get_ref()
+                    .and_then(std::error::Error::source)
+                    .is_some_and(|source| source.to_string().contains("digest source would-block"))
+            );
+        }
+        other => panic!("expected normalized error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_async_digest_all_discards_partial_digest_after_normalized_error() {
+    let mut input = PrefixThenForbiddenErrorInput {
+        transferred: false,
+        calls: 0,
+    };
+    let mut future = AsyncDigestInput::<_, Sha256>::digest_all(Pin::new(&mut input));
+    let mut cx = Context::from_waker(Waker::noop());
+    match Pin::new(&mut future).poll(&mut cx) {
+        Poll::Ready(Err(error)) => {
+            assert_eq!(ErrorKind::InvalidData, error.kind());
+            assert!(
+                error
+                    .get_ref()
+                    .and_then(std::error::Error::source)
+                    .is_some_and(|source| source.to_string().contains("digest prefix failure"))
+            );
+        }
+        other => panic!("expected normalized error without a partial digest, got {other:?}"),
+    }
+    assert!(input.transferred);
+    assert_eq!(2, input.calls);
 }
 
 #[test]

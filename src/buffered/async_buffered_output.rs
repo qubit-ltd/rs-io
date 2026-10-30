@@ -463,7 +463,9 @@ where
     /// # Errors
     ///
     /// Returns [`io::ErrorKind::WriteZero`] if the inner output accepts no
-    /// pending item. Other errors are propagated from the inner output.
+    /// pending item. `WouldBlock` and `Interrupted` from the inner output are
+    /// normalized to [`io::ErrorKind::InvalidData`] with the original error in
+    /// the cause chain. Other errors are returned unchanged.
     fn poll_drain_buffer(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         // SAFETY: `inner` is never moved after projecting from this pinned
         // wrapper. `buffer` does not structurally pin any value.
@@ -494,7 +496,7 @@ where
                         return Poll::Pending;
                     }
                 }
-                Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
+                Poll::Ready(Err(error)) => return Poll::Ready(Err(normalize_async_error(error))),
                 Poll::Pending => return Poll::Pending,
             }
         }

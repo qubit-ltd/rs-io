@@ -16,6 +16,7 @@ use std::task::Poll;
 
 use super::read_fully_future::MAX_READY_OPERATIONS_PER_POLL;
 use crate::AsyncInput;
+use crate::traits::normalize_async_error;
 use crate::traits::validate_read_count;
 
 /// Future that reads until its destination is full.
@@ -155,7 +156,9 @@ where
     /// # Errors
     ///
     /// Returns [`ErrorKind::UnexpectedEof`] when EOF is reached before the
-    /// destination is full. Returns [`ErrorKind::InvalidData`] if the input
+    /// destination is full. `WouldBlock` and `Interrupted` are normalized to
+    /// [`ErrorKind::InvalidData`] with the original error in the cause chain.
+    /// Returns [`ErrorKind::InvalidData`] if the input
     /// reports more items than the remaining destination can hold. Other
     /// errors are propagated from the input.
     ///
@@ -191,7 +194,7 @@ where
                 }
                 Poll::Ready(Err(error)) => {
                     this.completed = true;
-                    return Poll::Ready(Err(error));
+                    return Poll::Ready(Err(normalize_async_error(error)));
                 }
                 Poll::Pending => return Poll::Pending,
             }

@@ -23,13 +23,69 @@ use qubit_io::ReadFullyFuture;
 use super::support_tests::BudgetWakeCounter;
 use super::support_tests::CancellationInput;
 use super::support_tests::PollResult;
+use super::support_tests::SafeErrorInput;
 use super::support_tests::SafeOverreportedInput;
+use super::support_tests::SafeScriptedInput;
 use super::support_tests::ScriptedInput;
 use super::support_tests::TestInput;
+use super::support_tests::assert_normalized_error;
 
 #[test]
 fn test_read_fully_future_type_is_public() {
     assert!(std::any::type_name::<ReadFullyFuture<'static, TestInput>>().contains("ReadFullyFuture"));
+}
+
+#[test]
+fn test_read_fully_future_normalizes_safe_override_interrupted() {
+    let mut input = SafeErrorInput(Error::from(ErrorKind::Interrupted));
+    let mut output = [0_u8; 1];
+    let mut future = ReadFullyFuture::new(Pin::new(&mut input), &mut output);
+    let mut cx = Context::from_waker(Waker::noop());
+    match Future::poll(Pin::new(&mut future), &mut cx) {
+        Poll::Ready(Err(error)) => assert_eq!(ErrorKind::InvalidData, error.kind()),
+        other => panic!("expected normalized error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_read_fully_future_preserves_progress_and_normalizes_all_errors() {
+    for kind in [ErrorKind::WouldBlock, ErrorKind::Interrupted] {
+        let mut input = SafeScriptedInput::new([
+            PollResult::Read(1),
+            PollResult::Error(Error::new(kind, "read-fully marker")),
+        ]);
+        let mut output = [0_u8; 2];
+        let mut future = ReadFullyFuture::new(Pin::new(&mut input), &mut output);
+        let mut cx = Context::from_waker(Waker::noop());
+        match Future::poll(Pin::new(&mut future), &mut cx) {
+            Poll::Ready(Err(error)) => assert_normalized_error(&error, kind, "read-fully marker"),
+            other => panic!("expected normalized error, got {other:?}"),
+        }
+        assert_eq!(1, future.items_read());
+        assert!(
+            catch_unwind(AssertUnwindSafe(|| {
+                let _ = Future::poll(Pin::new(&mut future), &mut cx);
+            }))
+            .is_err()
+        );
+        drop(future);
+        assert_eq!([0xA5, 0], output);
+    }
+
+    let mut input = SafeScriptedInput::new([PollResult::Error(Error::new(
+        ErrorKind::PermissionDenied,
+        "read-fully payload",
+    ))]);
+    let mut output = [0_u8; 1];
+    let mut future = ReadFullyFuture::new(Pin::new(&mut input), &mut output);
+    let mut cx = Context::from_waker(Waker::noop());
+    match Future::poll(Pin::new(&mut future), &mut cx) {
+        Poll::Ready(Err(error)) => {
+            assert_eq!(ErrorKind::PermissionDenied, error.kind());
+            assert_eq!("read-fully payload", error.to_string());
+        }
+        other => panic!("expected original error, got {other:?}"),
+    }
 }
 
 #[test]

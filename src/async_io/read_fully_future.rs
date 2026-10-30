@@ -13,6 +13,7 @@ use std::task::Context;
 use std::task::Poll;
 
 use crate::AsyncInput;
+use crate::traits::normalize_async_error;
 use crate::traits::validate_read_count;
 
 /// Maximum successful inner operations performed by one outer poll.
@@ -155,7 +156,9 @@ where
     ///
     /// # Errors
     ///
-    /// Returns an I/O error reported by the input. Returns
+    /// Returns an I/O error reported by the input, normalizing `WouldBlock`
+    /// and `Interrupted` to [`std::io::ErrorKind::InvalidData`] while retaining
+    /// the original error in the cause chain. Returns
     /// [`std::io::ErrorKind::InvalidData`] if the input reports more items than
     /// the remaining destination can hold.
     ///
@@ -188,7 +191,7 @@ where
                 }
                 Poll::Ready(Err(error)) => {
                     this.completed = true;
-                    return Poll::Ready(Err(error));
+                    return Poll::Ready(Err(normalize_async_error(error)));
                 }
                 Poll::Pending => return Poll::Pending,
             }

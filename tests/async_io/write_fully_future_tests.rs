@@ -8,6 +8,7 @@
 
 use std::any::type_name;
 use std::future::Future;
+use std::io::Error;
 use std::io::ErrorKind;
 use std::panic::AssertUnwindSafe;
 use std::panic::catch_unwind;
@@ -23,13 +24,69 @@ use qubit_io::WriteFullyFuture;
 use super::support_tests::BudgetWakeCounter;
 use super::support_tests::CancellationOutput;
 use super::support_tests::PollResult;
+use super::support_tests::SafeErrorOutput;
 use super::support_tests::SafeOverreportedOutput;
+use super::support_tests::SafeScriptedOutput;
 use super::support_tests::ScriptedOutput;
 use super::support_tests::TestOutput;
+use super::support_tests::assert_normalized_error;
 
 #[test]
 fn test_write_fully_future_type_is_public() {
     assert!(type_name::<WriteFullyFuture<'static, TestOutput>>().contains("WriteFullyFuture"));
+}
+
+#[test]
+fn test_write_fully_future_normalizes_safe_override_would_block() {
+    let mut output = SafeErrorOutput(std::io::Error::from(ErrorKind::WouldBlock));
+    let input = [1_u8];
+    let mut future = WriteFullyFuture::new(Pin::new(&mut output), &input);
+    let mut cx = Context::from_waker(Waker::noop());
+    match Future::poll(Pin::new(&mut future), &mut cx) {
+        Poll::Ready(Err(error)) => assert_eq!(ErrorKind::InvalidData, error.kind()),
+        other => panic!("expected normalized error, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_write_fully_future_preserves_progress_and_normalizes_all_errors() {
+    for kind in [ErrorKind::WouldBlock, ErrorKind::Interrupted] {
+        let mut output = SafeScriptedOutput::new([
+            PollResult::Write(1),
+            PollResult::Error(Error::new(kind, "write-fully marker")),
+        ]);
+        let input = [1_u8, 2];
+        let mut future = WriteFullyFuture::new(Pin::new(&mut output), &input);
+        let mut cx = Context::from_waker(Waker::noop());
+        match Future::poll(Pin::new(&mut future), &mut cx) {
+            Poll::Ready(Err(error)) => assert_normalized_error(&error, kind, "write-fully marker"),
+            other => panic!("expected normalized error, got {other:?}"),
+        }
+        assert_eq!(1, future.items_written());
+        assert!(
+            catch_unwind(AssertUnwindSafe(|| {
+                let _ = Future::poll(Pin::new(&mut future), &mut cx);
+            }))
+            .is_err()
+        );
+        drop(future);
+        assert_eq!([1], output.accepted.as_slice());
+    }
+
+    let mut output = SafeScriptedOutput::new([PollResult::Error(Error::new(
+        ErrorKind::PermissionDenied,
+        "write-fully payload",
+    ))]);
+    let input = [1_u8];
+    let mut future = WriteFullyFuture::new(Pin::new(&mut output), &input);
+    let mut cx = Context::from_waker(Waker::noop());
+    match Future::poll(Pin::new(&mut future), &mut cx) {
+        Poll::Ready(Err(error)) => {
+            assert_eq!(ErrorKind::PermissionDenied, error.kind());
+            assert_eq!("write-fully payload", error.to_string());
+        }
+        other => panic!("expected original error, got {other:?}"),
+    }
 }
 
 #[test]

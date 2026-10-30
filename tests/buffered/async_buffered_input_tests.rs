@@ -23,12 +23,155 @@ use std::task::Waker;
 use qubit_io::AsyncBufferedInput;
 use qubit_io::AsyncInput;
 
+use super::support_tests::PrefixThenForbiddenInput;
 use super::support_tests::TestInput;
 
 #[test]
 fn test_async_buffered_input_uses_requested_capacity() {
     let input = AsyncBufferedInput::with_capacity(TestInput, 3);
     assert_eq!(3, input.capacity());
+}
+
+struct ForbiddenInput;
+
+impl AsyncInput for ForbiddenInput {
+    type Item = u8;
+
+    unsafe fn poll_read_unchecked(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+        _output: &mut [u8],
+        _index: usize,
+        _count: usize,
+    ) -> Poll<io::Result<usize>> {
+        panic!("the safe poll_read override must be used")
+    }
+
+    fn poll_read(self: Pin<&mut Self>, _cx: &mut Context<'_>, _output: &mut [u8]) -> Poll<io::Result<usize>> {
+        Poll::Ready(Err(io::Error::new(io::ErrorKind::WouldBlock, "buffered input marker")))
+    }
+}
+
+struct OrdinaryErrorInput;
+
+impl AsyncInput for OrdinaryErrorInput {
+    type Item = u8;
+
+    unsafe fn poll_read_unchecked(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+        _output: &mut [u8],
+        _index: usize,
+        _count: usize,
+    ) -> Poll<io::Result<usize>> {
+        panic!("the safe poll_read override must be used")
+    }
+
+    fn poll_read(self: Pin<&mut Self>, _cx: &mut Context<'_>, _output: &mut [u8]) -> Poll<io::Result<usize>> {
+        Poll::Ready(Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "buffered input permission marker",
+        )))
+    }
+}
+
+#[test]
+fn test_buffered_input_preserves_ordinary_permission_denied_from_fill_more() {
+    let mut wrapper = Box::pin(AsyncBufferedInput::with_capacity(OrdinaryErrorInput, 4));
+    match wrapper.as_mut().poll_fill_more(&mut context()) {
+        Poll::Ready(Err(error)) => {
+            assert_eq!(io::ErrorKind::PermissionDenied, error.kind());
+            assert_eq!("buffered input permission marker", error.to_string());
+        }
+        _ => panic!("expected original PermissionDenied error"),
+    }
+    assert!(wrapper.unread().is_empty());
+}
+
+#[test]
+fn test_buffered_input_normalizes_forbidden_error_from_fill_more() {
+    let mut wrapper = Box::pin(AsyncBufferedInput::with_capacity(ForbiddenInput, 4));
+    assert_invalid_data_source(wrapper.as_mut().poll_fill_more(&mut context()));
+    assert!(wrapper.unread().is_empty());
+}
+
+#[test]
+fn test_buffered_input_normalizes_forbidden_error_from_fill_until() {
+    let mut wrapper = Box::pin(AsyncBufferedInput::with_capacity(ForbiddenInput, 4));
+    assert_invalid_data_source(wrapper.as_mut().poll_fill_until(&mut context(), 1));
+    assert!(wrapper.unread().is_empty());
+}
+
+#[test]
+fn test_buffered_input_normalizes_forbidden_error_from_ensure_available() {
+    let mut wrapper = Box::pin(AsyncBufferedInput::with_capacity(ForbiddenInput, 4));
+    assert_invalid_data_source(wrapper.as_mut().poll_ensure_available(&mut context(), 1));
+    assert!(wrapper.unread().is_empty());
+}
+
+#[test]
+fn test_buffered_input_preserves_unread_prefix_before_fill_until_error() {
+    for kind in [io::ErrorKind::WouldBlock, io::ErrorKind::Interrupted] {
+        let mut wrapper = Box::pin(AsyncBufferedInput::with_capacity(
+            PrefixThenForbiddenInput::new(kind),
+            4,
+        ));
+        assert_invalid_data_cause(
+            wrapper.as_mut().poll_fill_until(&mut context(), 2),
+            "buffered input prefix marker",
+        );
+        assert_eq!(b"x", wrapper.unread());
+        assert_eq!(1, wrapper.unread_len());
+    }
+}
+
+#[test]
+fn test_buffered_input_preserves_unread_prefix_before_ensure_available_error() {
+    for kind in [io::ErrorKind::WouldBlock, io::ErrorKind::Interrupted] {
+        let mut wrapper = Box::pin(AsyncBufferedInput::with_capacity(
+            PrefixThenForbiddenInput::new(kind),
+            4,
+        ));
+        assert_invalid_data_cause(
+            wrapper.as_mut().poll_ensure_available(&mut context(), 2),
+            "buffered input prefix marker",
+        );
+        assert_eq!(b"x", wrapper.unread());
+        assert_eq!(1, wrapper.unread_len());
+    }
+}
+
+#[test]
+fn test_buffered_input_normalizes_forbidden_error_from_fill_more_async() {
+    let mut wrapper = AsyncBufferedInput::with_capacity(ForbiddenInput, 4);
+    let result = {
+        let mut future = std::pin::pin!(wrapper.fill_more_async());
+        std::future::Future::poll(future.as_mut(), &mut context()).map(|result| result.map(|_| ()))
+    };
+    assert_invalid_data_source(result);
+    assert!(wrapper.unread().is_empty());
+}
+
+#[test]
+fn test_buffered_input_normalizes_forbidden_error_from_fill_until_async() {
+    let mut wrapper = AsyncBufferedInput::with_capacity(ForbiddenInput, 4);
+    let result = {
+        let mut future = std::pin::pin!(wrapper.fill_until_async(1));
+        std::future::Future::poll(future.as_mut(), &mut context()).map(|result| result.map(|_| ()))
+    };
+    assert_invalid_data_source(result);
+    assert!(wrapper.unread().is_empty());
+}
+
+#[test]
+fn test_buffered_input_normalizes_forbidden_error_from_ensure_available_async() {
+    let mut wrapper = AsyncBufferedInput::with_capacity(ForbiddenInput, 4);
+    let result = {
+        let mut future = std::pin::pin!(wrapper.ensure_available_async(1));
+        std::future::Future::poll(future.as_mut(), &mut context()).map(|result| result.map(|_| ()))
+    };
+    assert_invalid_data_source(result);
+    assert!(wrapper.unread().is_empty());
 }
 
 #[test]
@@ -71,6 +214,36 @@ fn assert_invalid_data(result: Poll<io::Result<impl Sized>>) {
                 Poll::Ready(Err(_)) => "Ready(Err)",
             }
         ),
+    }
+}
+
+fn assert_invalid_data_source(result: Poll<io::Result<impl Sized>>) {
+    match result {
+        Poll::Ready(Err(error)) => {
+            assert_eq!(io::ErrorKind::InvalidData, error.kind());
+            assert!(
+                error
+                    .get_ref()
+                    .and_then(std::error::Error::source)
+                    .is_some_and(|source| source.to_string().contains("buffered input marker"))
+            );
+        }
+        _ => panic!("expected normalized error with original cause"),
+    }
+}
+
+fn assert_invalid_data_cause(result: Poll<io::Result<impl Sized>>, marker: &str) {
+    match result {
+        Poll::Ready(Err(error)) => {
+            assert_eq!(io::ErrorKind::InvalidData, error.kind());
+            assert!(
+                error
+                    .get_ref()
+                    .and_then(std::error::Error::source)
+                    .is_some_and(|source| source.to_string().contains(marker))
+            );
+        }
+        _ => panic!("expected normalized error with original cause"),
     }
 }
 

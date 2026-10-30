@@ -82,6 +82,58 @@ pub(super) struct SafeOverreportedOutput {
     pub(super) accepted: Vec<u8>,
 }
 
+/// Input whose safe polling override returns a forbidden asynchronous error.
+pub(super) struct SafeErrorInput(pub(super) Error);
+
+impl AsyncInput for SafeErrorInput {
+    type Item = u8;
+
+    unsafe fn poll_read_unchecked(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+        _output: &mut [u8],
+        _index: usize,
+        _count: usize,
+    ) -> Poll<Result<usize>> {
+        unreachable!("test must exercise the safe override")
+    }
+
+    fn poll_read(self: Pin<&mut Self>, _cx: &mut Context<'_>, _output: &mut [u8]) -> Poll<Result<usize>> {
+        Poll::Ready(Err(std::mem::replace(
+            &mut self.get_mut().0,
+            Error::other("polled twice"),
+        )))
+    }
+}
+
+/// Output whose safe polling override returns a forbidden asynchronous error.
+pub(super) struct SafeErrorOutput(pub(super) Error);
+
+impl AsyncOutput for SafeErrorOutput {
+    type Item = u8;
+
+    unsafe fn poll_write_unchecked(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+        _input: &[u8],
+        _index: usize,
+        _count: usize,
+    ) -> Poll<Result<usize>> {
+        unreachable!("test must exercise the safe override")
+    }
+
+    fn poll_write(self: Pin<&mut Self>, _cx: &mut Context<'_>, _input: &[u8]) -> Poll<Result<usize>> {
+        Poll::Ready(Err(std::mem::replace(
+            &mut self.get_mut().0,
+            Error::other("polled twice"),
+        )))
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<()>> {
+        Poll::Ready(Ok(()))
+    }
+}
+
 impl SafeOverreportedOutput {
     pub(super) fn new(prefix: usize) -> Self {
         Self {
@@ -171,9 +223,60 @@ pub(super) enum PollResult {
     Error(Error),
 }
 
+pub(super) fn assert_normalized_error(error: &Error, original_kind: ErrorKind, marker: &str) {
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    assert!(
+        error
+            .get_ref()
+            .and_then(std::error::Error::source)
+            .is_some_and(|source| source.to_string().contains(marker))
+    );
+    assert!(error.to_string().contains(&format!("{original_kind:?}")) || error.to_string().contains(marker));
+}
+
 #[derive(Debug)]
 pub(super) struct ScriptedInput {
     steps: VecDeque<PollResult>,
+}
+
+/// Scripted input overriding the safe polling method.
+pub(super) struct SafeScriptedInput {
+    steps: VecDeque<PollResult>,
+}
+
+impl SafeScriptedInput {
+    pub(super) fn new(steps: impl IntoIterator<Item = PollResult>) -> Self {
+        Self {
+            steps: VecDeque::from_iter(steps),
+        }
+    }
+}
+
+impl AsyncInput for SafeScriptedInput {
+    type Item = u8;
+
+    unsafe fn poll_read_unchecked(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+        _output: &mut [u8],
+        _index: usize,
+        _count: usize,
+    ) -> Poll<Result<usize>> {
+        unreachable!("test must exercise the safe override")
+    }
+
+    fn poll_read(self: Pin<&mut Self>, _cx: &mut Context<'_>, output: &mut [u8]) -> Poll<Result<usize>> {
+        match self.get_mut().steps.pop_front().unwrap_or(PollResult::Read(0)) {
+            PollResult::Pending => Poll::Pending,
+            PollResult::Read(count) => {
+                let count = count.min(output.len());
+                output[..count].fill(0xA5);
+                Poll::Ready(Ok(count))
+            }
+            PollResult::Error(error) => Poll::Ready(Err(error)),
+            PollResult::Write(_) => Poll::Ready(Err(Error::new(ErrorKind::InvalidInput, "read/write script mismatch"))),
+        }
+    }
 }
 
 impl ScriptedInput {
@@ -219,6 +322,53 @@ impl AsyncInput for ScriptedInput {
 pub(super) struct ScriptedOutput {
     steps: VecDeque<PollResult>,
     pub(super) accepted: Vec<u8>,
+}
+
+/// Scripted output overriding the safe polling method.
+pub(super) struct SafeScriptedOutput {
+    steps: VecDeque<PollResult>,
+    pub(super) accepted: Vec<u8>,
+}
+
+impl SafeScriptedOutput {
+    pub(super) fn new(steps: impl IntoIterator<Item = PollResult>) -> Self {
+        Self {
+            steps: VecDeque::from_iter(steps),
+            accepted: Vec::new(),
+        }
+    }
+}
+
+impl AsyncOutput for SafeScriptedOutput {
+    type Item = u8;
+
+    unsafe fn poll_write_unchecked(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+        _input: &[u8],
+        _index: usize,
+        _count: usize,
+    ) -> Poll<Result<usize>> {
+        unreachable!("test must exercise the safe override")
+    }
+
+    fn poll_write(self: Pin<&mut Self>, _cx: &mut Context<'_>, input: &[u8]) -> Poll<Result<usize>> {
+        let this = self.get_mut();
+        match this.steps.pop_front().unwrap_or(PollResult::Write(input.len())) {
+            PollResult::Pending => Poll::Pending,
+            PollResult::Write(count) => {
+                let count = count.min(input.len());
+                this.accepted.extend_from_slice(&input[..count]);
+                Poll::Ready(Ok(count))
+            }
+            PollResult::Error(error) => Poll::Ready(Err(error)),
+            PollResult::Read(_) => Poll::Ready(Err(Error::new(ErrorKind::InvalidInput, "write/read script mismatch"))),
+        }
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<()>> {
+        Poll::Ready(Ok(()))
+    }
 }
 
 impl ScriptedOutput {

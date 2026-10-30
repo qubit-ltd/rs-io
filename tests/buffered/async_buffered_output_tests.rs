@@ -24,12 +24,201 @@ use qubit_io::AsyncBufferedOutput;
 use qubit_io::AsyncClose;
 use qubit_io::AsyncOutput;
 
+use super::support_tests::PrefixThenForbiddenOutput;
 use super::support_tests::TestOutput;
 
 #[test]
 fn test_async_buffered_output_uses_requested_capacity() {
     let output = AsyncBufferedOutput::with_capacity(TestOutput, 3);
     assert_eq!(3, output.capacity());
+}
+
+struct ForbiddenOutput;
+
+impl AsyncOutput for ForbiddenOutput {
+    type Item = u8;
+
+    unsafe fn poll_write_unchecked(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+        _input: &[u8],
+        _index: usize,
+        _count: usize,
+    ) -> Poll<io::Result<usize>> {
+        panic!("the safe poll_write override must be used")
+    }
+
+    fn poll_write(self: Pin<&mut Self>, _cx: &mut Context<'_>, _input: &[u8]) -> Poll<io::Result<usize>> {
+        Poll::Ready(Err(io::Error::new(
+            io::ErrorKind::Interrupted,
+            "buffered output marker",
+        )))
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Poll::Ready(Ok(()))
+    }
+}
+
+struct OrdinaryErrorOutput;
+
+impl AsyncOutput for OrdinaryErrorOutput {
+    type Item = u8;
+
+    unsafe fn poll_write_unchecked(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+        _input: &[u8],
+        _index: usize,
+        _count: usize,
+    ) -> Poll<io::Result<usize>> {
+        panic!("the safe poll_write override must be used")
+    }
+
+    fn poll_write(self: Pin<&mut Self>, _cx: &mut Context<'_>, _input: &[u8]) -> Poll<io::Result<usize>> {
+        Poll::Ready(Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "buffered output permission marker",
+        )))
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Poll::Ready(Ok(()))
+    }
+}
+
+#[test]
+fn test_buffered_output_preserves_ordinary_permission_denied_from_flush() {
+    let mut wrapper = Box::pin(AsyncBufferedOutput::with_capacity(OrdinaryErrorOutput, 4));
+    let mut cx = context();
+    assert!(matches!(
+        unsafe { wrapper.as_mut().poll_write_unchecked(&mut cx, b"ab", 0, 2) },
+        Poll::Ready(Ok(2))
+    ));
+    match wrapper.as_mut().poll_flush(&mut cx) {
+        Poll::Ready(Err(error)) => {
+            assert_eq!(io::ErrorKind::PermissionDenied, error.kind());
+            assert_eq!("buffered output permission marker", error.to_string());
+        }
+        _ => panic!("expected original PermissionDenied error"),
+    }
+    assert_eq!(b"ab", wrapper.pending());
+}
+
+impl AsyncClose for ForbiddenOutput {
+    fn poll_close(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Poll::Ready(Ok(()))
+    }
+}
+
+#[test]
+fn test_buffered_output_normalizes_forbidden_error_from_drain() {
+    let mut wrapper = Box::pin(AsyncBufferedOutput::with_capacity(ForbiddenOutput, 4));
+    let mut cx = context();
+    assert!(matches!(
+        unsafe { wrapper.as_mut().poll_write_unchecked(&mut cx, b"ab", 0, 2) },
+        Poll::Ready(Ok(2))
+    ));
+    assert_invalid_data_source(wrapper.as_mut().poll_flush(&mut cx));
+    assert_eq!(b"ab", wrapper.pending());
+}
+
+#[test]
+fn test_buffered_output_normalizes_forbidden_error_from_capacity_helper() {
+    let mut wrapper = Box::pin(AsyncBufferedOutput::with_capacity(ForbiddenOutput, 4));
+    let mut cx = context();
+    assert!(matches!(
+        unsafe { wrapper.as_mut().poll_write_unchecked(&mut cx, b"ab", 0, 2) },
+        Poll::Ready(Ok(2))
+    ));
+    assert_invalid_data_source(wrapper.as_mut().poll_ensure_spare_capacity(&mut cx, 3));
+    assert_eq!(b"ab", wrapper.pending());
+}
+
+#[test]
+fn test_buffered_output_normalizes_forbidden_error_from_capacity_async_helper() {
+    let mut wrapper = Box::pin(AsyncBufferedOutput::with_capacity(ForbiddenOutput, 4));
+    let mut cx = context();
+    assert!(matches!(
+        unsafe { wrapper.as_mut().poll_write_unchecked(&mut cx, b"ab", 0, 2) },
+        Poll::Ready(Ok(2))
+    ));
+    let result = {
+        let future = wrapper.as_mut().get_mut().ensure_spare_capacity_async(3);
+        let mut future = std::pin::pin!(future);
+        std::future::Future::poll(future.as_mut(), &mut cx)
+    };
+    assert_invalid_data_source(result);
+    assert_eq!(b"ab", wrapper.pending());
+}
+
+#[test]
+fn test_buffered_output_normalizes_forbidden_error_from_flush_async() {
+    let mut wrapper = Box::pin(AsyncBufferedOutput::with_capacity(ForbiddenOutput, 4));
+    let mut cx = context();
+    assert!(matches!(
+        unsafe { wrapper.as_mut().poll_write_unchecked(&mut cx, b"ab", 0, 2) },
+        Poll::Ready(Ok(2))
+    ));
+    let result = {
+        let future = wrapper.as_mut().get_mut().flush_async();
+        let mut future = std::pin::pin!(future);
+        std::future::Future::poll(future.as_mut(), &mut cx)
+    };
+    assert_invalid_data_source(result);
+    assert_eq!(b"ab", wrapper.pending());
+}
+
+#[test]
+fn test_buffered_output_normalizes_forbidden_error_from_close_async() {
+    let mut wrapper = Box::pin(AsyncBufferedOutput::with_capacity(ForbiddenOutput, 4));
+    let mut cx = context();
+    assert!(matches!(
+        unsafe { wrapper.as_mut().poll_write_unchecked(&mut cx, b"ab", 0, 2) },
+        Poll::Ready(Ok(2))
+    ));
+    let result = {
+        let future = wrapper.as_mut().get_mut().close_async();
+        let mut future = std::pin::pin!(future);
+        std::future::Future::poll(future.as_mut(), &mut cx)
+    };
+    assert_invalid_data_source(result);
+    assert_eq!(b"ab", wrapper.pending());
+}
+
+#[test]
+fn test_buffered_output_normalizes_forbidden_error_from_close() {
+    let mut wrapper = Box::pin(AsyncBufferedOutput::with_capacity(ForbiddenOutput, 4));
+    let mut cx = context();
+    assert!(matches!(
+        unsafe { wrapper.as_mut().poll_write_unchecked(&mut cx, b"ab", 0, 2) },
+        Poll::Ready(Ok(2))
+    ));
+    assert_invalid_data_source(AsyncClose::poll_close(wrapper.as_mut(), &mut cx));
+    assert_eq!(b"ab", wrapper.pending());
+}
+
+#[test]
+fn test_buffered_output_keeps_pending_suffix_after_prefix_then_forbidden_error() {
+    for kind in [io::ErrorKind::WouldBlock, io::ErrorKind::Interrupted] {
+        let mut wrapper = Box::pin(AsyncBufferedOutput::with_capacity(
+            PrefixThenForbiddenOutput::new(kind),
+            4,
+        ));
+        let mut cx = context();
+        assert!(matches!(
+            unsafe { wrapper.as_mut().poll_write_unchecked(&mut cx, b"abc", 0, 3) },
+            Poll::Ready(Ok(3))
+        ));
+
+        assert_invalid_data_cause(wrapper.as_mut().poll_flush(&mut cx), "buffered output prefix marker");
+        assert_eq!(b"a", wrapper.inner().accepted());
+        assert_eq!(b"bc", wrapper.pending());
+
+        assert_invalid_data_cause(wrapper.as_mut().poll_flush(&mut cx), "buffered output prefix marker");
+        assert_eq!(b"a", wrapper.inner().accepted());
+        assert_eq!(b"bc", wrapper.pending());
+    }
 }
 
 #[test]
@@ -101,6 +290,36 @@ fn assert_invalid_data(result: Poll<io::Result<impl Sized>>) {
                 Poll::Ready(Err(_)) => "Ready(Err)",
             }
         ),
+    }
+}
+
+fn assert_invalid_data_source(result: Poll<io::Result<impl Sized>>) {
+    match result {
+        Poll::Ready(Err(error)) => {
+            assert_eq!(io::ErrorKind::InvalidData, error.kind());
+            assert!(
+                error
+                    .get_ref()
+                    .and_then(std::error::Error::source)
+                    .is_some_and(|source| source.to_string().contains("buffered output marker"))
+            );
+        }
+        _ => panic!("expected normalized error with original cause"),
+    }
+}
+
+fn assert_invalid_data_cause(result: Poll<io::Result<impl Sized>>, marker: &str) {
+    match result {
+        Poll::Ready(Err(error)) => {
+            assert_eq!(io::ErrorKind::InvalidData, error.kind());
+            assert!(
+                error
+                    .get_ref()
+                    .and_then(std::error::Error::source)
+                    .is_some_and(|source| source.to_string().contains(marker))
+            );
+        }
+        _ => panic!("expected normalized error with original cause"),
     }
 }
 

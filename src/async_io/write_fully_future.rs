@@ -16,6 +16,7 @@ use std::task::Poll;
 
 use super::read_fully_future::MAX_READY_OPERATIONS_PER_POLL;
 use crate::AsyncOutput;
+use crate::traits::normalize_async_error;
 use crate::traits::validate_write_count;
 
 /// Future that writes every item from its source slice.
@@ -148,7 +149,9 @@ where
     /// # Errors
     ///
     /// Returns [`ErrorKind::WriteZero`] if the output accepts no item before
-    /// completion. Returns [`ErrorKind::InvalidData`] if the output reports
+    /// completion. `WouldBlock` and `Interrupted` are normalized to
+    /// [`ErrorKind::InvalidData`] with the original error in the cause chain.
+    /// Returns [`ErrorKind::InvalidData`] if the output reports
     /// accepting more items than the remaining source contains. Other errors
     /// are propagated from the output.
     ///
@@ -184,7 +187,7 @@ where
                 }
                 Poll::Ready(Err(error)) => {
                     this.completed = true;
-                    return Poll::Ready(Err(error));
+                    return Poll::Ready(Err(normalize_async_error(error)));
                 }
                 Poll::Pending => return Poll::Pending,
             }
