@@ -7,7 +7,10 @@
 // =============================================================================
 
 use std::io::Cursor;
+use std::io::Error;
+use std::io::ErrorKind;
 use std::io::IoSlice;
+use std::io::Result;
 use std::io::Seek;
 use std::io::SeekFrom;
 use std::io::Write;
@@ -16,7 +19,76 @@ use qubit_io::ChecksumOutput;
 use qubit_io::LimitOutput;
 use qubit_io::Output;
 use qubit_io::OutputRef;
+use qubit_io::StdWrite;
 use qubit_io::TeeOutput;
+
+struct ScalarOverrideOutput {
+    reported: usize,
+    error: Option<ErrorKind>,
+    calls: usize,
+    bytes: Vec<u8>,
+}
+
+impl Output for ScalarOverrideOutput {
+    type Item = u8;
+
+    unsafe fn write_unchecked(&mut self, _: &[u8], _: usize, _: usize) -> Result<usize> {
+        panic!("StdWrite must forward the safe scalar override")
+    }
+
+    fn write(&mut self, input: &[u8]) -> Result<usize> {
+        self.calls += 1;
+        if let Some(kind) = self.error {
+            return Err(Error::new(kind, "safe scalar write error"));
+        }
+        self.bytes.extend_from_slice(&input[..self.reported.min(input.len())]);
+        Ok(self.reported)
+    }
+
+    fn flush(&mut self) -> Result<()> {
+        panic!("scalar write must not add a flush")
+    }
+}
+
+#[test]
+fn test_std_write_scalar_override_validates_count_and_preserves_contract() {
+    for (requested, reported, error, expected_error) in [
+        (0, 1, None, Some(ErrorKind::InvalidData)),
+        (2, 3, None, Some(ErrorKind::InvalidData)),
+        (0, 0, None, None),
+        (2, 0, None, None),
+        (2, 1, None, None),
+        (2, 2, None, None),
+        (2, 0, Some(ErrorKind::Interrupted), Some(ErrorKind::Interrupted)),
+        (
+            2,
+            0,
+            Some(ErrorKind::PermissionDenied),
+            Some(ErrorKind::PermissionDenied),
+        ),
+    ] {
+        let mut writer = StdWrite::new(ScalarOverrideOutput {
+            reported,
+            error,
+            calls: 0,
+            bytes: Vec::new(),
+        });
+        let input = vec![b'x'; requested];
+        let result = Write::write(&mut writer, &input);
+        if let Some(kind) = expected_error {
+            let returned = result.expect_err("the boundary must report an error");
+            assert_eq!(kind, returned.kind());
+            if error.is_some() {
+                assert_eq!("safe scalar write error", returned.to_string());
+            }
+        } else {
+            assert_eq!(reported, result.expect("valid count must succeed"));
+        }
+        assert_eq!(1, writer.get_ref().calls, "empty and error requests still forward once");
+        let actual = if error.is_some() { 0 } else { reported.min(requested) };
+        assert_eq!(input[..actual], writer.get_ref().bytes);
+    }
+}
 
 #[derive(Default)]
 struct VectorOutput(Vec<u8>);
@@ -49,7 +121,7 @@ fn test_vectored_std_adapter_keeps_inner_override() {
 }
 
 struct EdgeOutput {
-    reply: Result<usize, std::io::ErrorKind>,
+    reply: std::result::Result<usize, std::io::ErrorKind>,
     bytes: Vec<u8>,
     calls: usize,
 }

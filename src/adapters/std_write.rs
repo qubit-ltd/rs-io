@@ -15,6 +15,7 @@ use std::io::Write;
 
 use crate::ByteOutput;
 use crate::Output;
+use crate::traits::validate_write_count;
 
 /// Adapts an [`Output`] of bytes to [`std::io::Write`].
 ///
@@ -146,9 +147,27 @@ impl<O> Write for StdWrite<O>
 where
     O: ByteOutput,
 {
+    /// Writes bytes through the wrapped output without adding retries or
+    /// flushes.
+    ///
+    /// # Parameters
+    ///
+    /// - `input`: Source bytes offered to the wrapped output.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of bytes written, including a short or zero count.
+    ///
+    /// # Errors
+    ///
+    /// Returns the wrapped output's error unchanged. Returns `InvalidData` if
+    /// the wrapped output reports more bytes than `input` contains. Validation
+    /// does not undo side effects of the inner call.
     #[inline]
     fn write(&mut self, input: &[u8]) -> Result<usize> {
-        Output::write(&mut self.inner, input)
+        let written = Output::write(&mut self.inner, input)?;
+        validate_write_count(written, input.len())?;
+        Ok(written)
     }
 
     /// Writes from the supplied buffers in order, forwarding the inner

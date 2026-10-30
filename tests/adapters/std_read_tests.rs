@@ -24,6 +24,70 @@ use qubit_io::Seekable;
 use qubit_io::StdRead;
 use qubit_io::TeeInput;
 
+struct ScalarOverrideInput {
+    reported: usize,
+    error: Option<ErrorKind>,
+    calls: usize,
+}
+
+impl Input for ScalarOverrideInput {
+    type Item = u8;
+
+    unsafe fn read_unchecked(&mut self, _: &mut [u8], _: usize, _: usize) -> Result<usize> {
+        panic!("StdRead must forward the safe scalar override")
+    }
+
+    fn read(&mut self, output: &mut [u8]) -> Result<usize> {
+        self.calls += 1;
+        if let Some(kind) = self.error {
+            return Err(Error::new(kind, "safe scalar read error"));
+        }
+        let actual = self.reported.min(output.len());
+        output[..actual].fill(b'x');
+        Ok(self.reported)
+    }
+}
+
+#[test]
+fn test_std_read_scalar_override_validates_count_and_preserves_contract() {
+    for (requested, reported, error, expected_error) in [
+        (0, 1, None, Some(ErrorKind::InvalidData)),
+        (2, 3, None, Some(ErrorKind::InvalidData)),
+        (0, 0, None, None),
+        (2, 0, None, None),
+        (2, 1, None, None),
+        (2, 2, None, None),
+        (2, 0, Some(ErrorKind::Interrupted), Some(ErrorKind::Interrupted)),
+        (
+            2,
+            0,
+            Some(ErrorKind::PermissionDenied),
+            Some(ErrorKind::PermissionDenied),
+        ),
+    ] {
+        let mut reader = StdRead::new(ScalarOverrideInput {
+            reported,
+            error,
+            calls: 0,
+        });
+        let mut bytes = vec![b'!'; requested];
+        let result = Read::read(&mut reader, &mut bytes);
+        if let Some(kind) = expected_error {
+            let returned = result.expect_err("the boundary must report an error");
+            assert_eq!(kind, returned.kind());
+            if error.is_some() {
+                assert_eq!("safe scalar read error", returned.to_string());
+            }
+        } else {
+            assert_eq!(reported, result.expect("valid count must succeed"));
+        }
+        assert_eq!(1, reader.get_ref().calls, "empty and error requests still forward once");
+        let actual = if error.is_some() { 0 } else { reported.min(requested) };
+        assert_eq!(vec![b'x'; actual], bytes[..actual]);
+        assert_eq!(vec![b'!'; requested - actual], bytes[actual..]);
+    }
+}
+
 struct VectorInput;
 
 impl Input for VectorInput {

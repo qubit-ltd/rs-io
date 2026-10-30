@@ -160,10 +160,14 @@ where
     ///
     /// # Errors
     ///
-    /// Returns the error reported by the wrapped input.
+    /// Returns the wrapped input's error unchanged. Returns `InvalidData` if
+    /// the wrapped input reports more bytes than `output` can hold. Validation
+    /// does not undo side effects of the inner call.
     #[inline]
     fn read(&mut self, output: &mut [u8]) -> Result<usize> {
-        Input::read(&mut self.inner, output)
+        let read = Input::read(&mut self.inner, output)?;
+        validate_read_count(read, output.len())?;
+        Ok(read)
     }
 
     /// Reads into the supplied buffers in order, forwarding the inner
