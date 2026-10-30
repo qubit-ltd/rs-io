@@ -72,7 +72,7 @@ impl<I> LimitInput<I> {
     ///
     /// Returns the wrapped input without allowing mutation.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "use the wrapped input through the returned reference"]
     pub const fn inner(&self) -> &I {
         &self.inner
     }
@@ -86,7 +86,7 @@ impl<I> LimitInput<I> {
     ///
     /// Returns mutable access to the wrapped input.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "use the wrapped input through the returned reference"]
     pub fn inner_mut(&mut self) -> &mut I {
         &mut self.inner
     }

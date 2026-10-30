@@ -129,7 +129,6 @@ impl<P, B> TeeOutput<P, B> {
     ///
     /// Returns the first recorded branch error, or `None` if mirroring has not
     /// failed.
-    #[must_use = "the branch error should be handled before continuing"]
     #[inline]
     pub fn branch_error(&self) -> Option<&io::Error> {
         self.failure.error()

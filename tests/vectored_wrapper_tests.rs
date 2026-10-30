@@ -6,6 +6,8 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
+use std::collections::hash_map::DefaultHasher;
+use std::hash::Hasher;
 use std::io::Cursor;
 use std::io::ErrorKind;
 use std::io::IoSlice;
@@ -19,6 +21,10 @@ use qubit_io::ChecksumInput;
 use qubit_io::ChecksumOutput;
 use qubit_io::CountingInput;
 use qubit_io::CountingOutput;
+#[cfg(feature = "digest")]
+use qubit_io::DigestInput;
+#[cfg(feature = "digest")]
+use qubit_io::DigestOutput;
 use qubit_io::Input;
 use qubit_io::LimitInput;
 use qubit_io::LimitOutput;
@@ -27,6 +33,10 @@ use qubit_io::StdRead;
 use qubit_io::StdWrite;
 use qubit_io::TeeInput;
 use qubit_io::TeeOutput;
+#[cfg(feature = "digest")]
+use sha2::Digest;
+#[cfg(feature = "digest")]
+use sha2::Sha256;
 
 #[derive(Clone, Copy)]
 enum BridgeReply {
@@ -149,7 +159,7 @@ fn write_two<O: Output<Item = u8>>(output: &mut O) {
 }
 
 #[test]
-fn single_descriptor_std_reader_bridge_keeps_vectored_dispatch_and_validates_once() {
+fn test_single_descriptor_std_reader_bridge_keeps_vectored_dispatch_and_validates_once() {
     let mut reader = BridgeReader {
         reply: BridgeReply::Count(1),
         calls: 0,
@@ -184,7 +194,7 @@ fn single_descriptor_std_reader_bridge_keeps_vectored_dispatch_and_validates_onc
 }
 
 #[test]
-fn single_descriptor_std_writer_bridge_keeps_vectored_dispatch_and_validates_once() {
+fn test_single_descriptor_std_writer_bridge_keeps_vectored_dispatch_and_validates_once() {
     let mut writer = BridgeWriter {
         reply: BridgeReply::Count(1),
         calls: 0,
@@ -213,7 +223,7 @@ fn single_descriptor_std_writer_bridge_keeps_vectored_dispatch_and_validates_onc
 }
 
 #[test]
-fn single_descriptor_std_read_adapter_keeps_vectored_dispatch_and_validates_once() {
+fn test_single_descriptor_std_read_adapter_keeps_vectored_dispatch_and_validates_once() {
     let mut reader = StdRead::new(BridgeInput {
         reply: BridgeReply::Count(1),
         calls: 0,
@@ -251,7 +261,7 @@ fn single_descriptor_std_read_adapter_keeps_vectored_dispatch_and_validates_once
 }
 
 #[test]
-fn single_descriptor_std_write_adapter_keeps_vectored_dispatch_and_validates_once() {
+fn test_single_descriptor_std_write_adapter_keeps_vectored_dispatch_and_validates_once() {
     let mut writer = StdWrite::new(BridgeOutput {
         reply: BridgeReply::Count(1),
         calls: 0,
@@ -321,9 +331,6 @@ fn test_vectored_default_keeps_limit_count_buffering_and_tee_semantics() {
 
 #[test]
 fn test_vectored_default_updates_checksum_for_transferred_prefix_only() {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::Hasher;
-
     let mut expected = DefaultHasher::new();
     expected.write(b"ab");
     let expected = expected.finish();
@@ -339,11 +346,6 @@ fn test_vectored_default_updates_checksum_for_transferred_prefix_only() {
 #[cfg(feature = "digest")]
 #[test]
 fn test_vectored_default_updates_digest_for_transferred_prefix_only() {
-    use qubit_io::DigestInput;
-    use qubit_io::DigestOutput;
-    use sha2::Digest;
-    use sha2::Sha256;
-
     let expected = Sha256::digest(b"ab");
     let mut input = DigestInput::new(Cursor::new(b"abcd"), Sha256::new());
     read_two(&mut input);

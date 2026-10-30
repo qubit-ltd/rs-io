@@ -85,7 +85,7 @@ fn assert_allocation_error(result: io::Result<usize>) {
 }
 
 #[test]
-fn vectored_descriptor_reserve_failures_prevent_underlying_io() {
+fn test_vectored_descriptor_reserve_failures_prevent_underlying_io() {
     let mut std_reader = PanicReader;
     let mut read_a = [0_u8; 1];
     let mut read_b = [0_u8; 1];

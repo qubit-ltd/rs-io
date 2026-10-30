@@ -138,6 +138,8 @@ impl<I, B> SyncSeekTeeInput<I, B> {
     ///
     /// `Some(error)` if a branch write failure was recorded, or `None` if
     /// mirroring has not failed.
+    #[inline]
+    #[must_use]
     pub fn branch_error(&self) -> Option<&io::Error> {
         self.failure.error()
     }

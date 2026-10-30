@@ -26,7 +26,7 @@ mod seekable_byte_input_tests;
 mod seekable_byte_output_tests;
 mod seekable_char_input_tests;
 mod seekable_char_output_tests;
-mod seekable_char_support;
+mod seekable_char_support_tests;
 mod seekable_input_tests;
 mod seekable_output_tests;
 mod specialized_stream_support;

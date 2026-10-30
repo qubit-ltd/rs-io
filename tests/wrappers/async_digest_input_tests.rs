@@ -7,7 +7,9 @@
 // =============================================================================
 //! Contract tests for asynchronous digesting byte input.
 
+use std::error::Error as StdError;
 use std::future::Future;
+use std::io::Error;
 use std::io::ErrorKind;
 use std::io::Result;
 use std::pin::Pin;
@@ -31,6 +33,7 @@ use super::digest_support_tests::PinnedStream;
 use super::digest_support_tests::Step;
 use super::digest_support_tests::error_kind;
 use super::digest_support_tests::ready;
+use super::support_tests::SafeOverreportInput;
 
 #[derive(Default)]
 struct BudgetWakeCounter(AtomicUsize);
@@ -65,10 +68,7 @@ impl AsyncInput for ForbiddenErrorInput {
     }
 
     fn poll_read(self: Pin<&mut Self>, _cx: &mut Context<'_>, _output: &mut [u8]) -> Poll<Result<usize>> {
-        Poll::Ready(Err(std::io::Error::new(
-            ErrorKind::WouldBlock,
-            "digest source would-block",
-        )))
+        Poll::Ready(Err(Error::new(ErrorKind::WouldBlock, "digest source would-block")))
     }
 }
 
@@ -93,10 +93,7 @@ impl AsyncInput for PrefixThenForbiddenErrorInput {
     fn poll_read(mut self: Pin<&mut Self>, _cx: &mut Context<'_>, output: &mut [u8]) -> Poll<Result<usize>> {
         self.calls += 1;
         if self.transferred {
-            Poll::Ready(Err(std::io::Error::new(
-                ErrorKind::Interrupted,
-                "digest prefix failure",
-            )))
+            Poll::Ready(Err(Error::new(ErrorKind::Interrupted, "digest prefix failure")))
         } else {
             self.transferred = true;
             output[0] = b'a';
@@ -205,7 +202,7 @@ fn test_async_digest_input_non_clone_algorithm_can_read_and_finalize() {
     let mut input = AsyncDigestInput::new(stream, NonCloneDigest::default());
     let mut cx = Context::from_waker(Waker::noop());
     let mut bytes = [0; 3];
-    assert_eq!(3, ready(std::pin::Pin::new(&mut input).poll_read(&mut cx, &mut bytes)));
+    assert_eq!(3, ready(Pin::new(&mut input).poll_read(&mut cx, &mut bytes)));
     let (_, fingerprint) = input.finalize();
     assert_eq!(Sha256::digest(b"abc"), fingerprint);
 }
@@ -241,7 +238,7 @@ fn test_async_digest_all_normalizes_safe_override_error() {
             assert!(
                 error
                     .get_ref()
-                    .and_then(std::error::Error::source)
+                    .and_then(StdError::source)
                     .is_some_and(|source| source.to_string().contains("digest source would-block"))
             );
         }
@@ -263,7 +260,7 @@ fn test_async_digest_all_discards_partial_digest_after_normalized_error() {
             assert!(
                 error
                     .get_ref()
-                    .and_then(std::error::Error::source)
+                    .and_then(StdError::source)
                     .is_some_and(|source| source.to_string().contains("digest prefix failure"))
             );
         }
@@ -345,17 +342,12 @@ fn test_async_digest_input_digest_all_rejects_poll_after_completion() {
 
 #[test]
 fn test_async_digest_input_rejects_safe_overreported_count() {
-    let mut wrapper = qubit_io::AsyncDigestInput::new(
-        super::support_tests::SafeOverreportInput,
-        <sha2::Sha256 as digest::Digest>::new(),
-    );
-    let waker = std::task::Waker::noop();
-    let mut cx = std::task::Context::from_waker(waker);
+    let mut wrapper = AsyncDigestInput::new(SafeOverreportInput, Sha256::new());
+    let waker = Waker::noop();
+    let mut cx = Context::from_waker(waker);
     let before = wrapper.digest();
     let mut bytes = [0_u8; 2];
-    let result = qubit_io::AsyncInput::poll_read(std::pin::Pin::new(&mut wrapper), &mut cx, &mut bytes);
-    assert!(
-        matches!(result, std::task::Poll::Ready(Err(ref error)) if error.kind() == std::io::ErrorKind::InvalidData)
-    );
+    let result = AsyncInput::poll_read(Pin::new(&mut wrapper), &mut cx, &mut bytes);
+    assert!(matches!(result, Poll::Ready(Err(ref error)) if error.kind() == ErrorKind::InvalidData));
     assert_eq!(before, wrapper.digest());
 }

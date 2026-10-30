@@ -12,6 +12,7 @@ use std::io::ErrorKind;
 use qubit_io::LimitOutput;
 use qubit_io::Output;
 
+use super::support_tests::SafeOverreportOutput;
 use super::support_tests::ScriptedOutput;
 
 #[test]
@@ -61,8 +62,8 @@ fn test_limit_output_forwards_flush() {
 
 #[test]
 fn test_limit_output_rejects_safe_overreported_count() {
-    let mut wrapper = qubit_io::LimitOutput::new(super::support_tests::SafeOverreportOutput, 1);
-    let error = unsafe { qubit_io::Output::write_unchecked(&mut wrapper, b"abcd", 0, 4) }.unwrap_err();
-    assert_eq!(std::io::ErrorKind::InvalidData, error.kind());
+    let mut wrapper = LimitOutput::new(SafeOverreportOutput, 1);
+    let error = unsafe { Output::write_unchecked(&mut wrapper, b"abcd", 0, 4) }.unwrap_err();
+    assert_eq!(ErrorKind::InvalidData, error.kind());
     assert_eq!(1, wrapper.remaining());
 }

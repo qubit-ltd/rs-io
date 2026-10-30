@@ -31,9 +31,18 @@ fn test_parameter_and_borrowed_opaque_return_preserve_pinned_pending_writes() {
     {
         let mut output = Box::pin(output(&mut items));
         let mut cx = Context::from_waker(Waker::noop());
-        assert!(write(output.as_mut(), &mut cx).is_pending());
-        assert!(matches!(write(output.as_mut(), &mut cx), Poll::Ready(Ok(2))));
-        assert!(matches!(output.as_mut().poll_flush(&mut cx), Poll::Ready(Ok(()))));
+        assert!(
+            write(output.as_mut(), &mut cx).is_pending(),
+            "the first write poll should remain pending"
+        );
+        assert!(
+            matches!(write(output.as_mut(), &mut cx), Poll::Ready(Ok(2))),
+            "the second write poll should accept both characters"
+        );
+        assert!(
+            matches!(output.as_mut().poll_flush(&mut cx), Poll::Ready(Ok(()))),
+            "flushing should complete successfully"
+        );
     }
     assert_eq!(items, ['你', '🦀']);
 }
@@ -45,8 +54,14 @@ fn test_unsized_base_trait_automatically_satisfies_specialized_bound() {
         let mut output = Box::pin(ItemOutput::new(&mut items));
         let mut output: Pin<&mut dyn AsyncOutput<Item = char>> = output.as_mut();
         let mut cx = Context::from_waker(Waker::noop());
-        assert!(write(output.as_mut(), &mut cx).is_pending());
-        assert!(matches!(write(output.as_mut(), &mut cx), Poll::Ready(Ok(2))));
+        assert!(
+            write(output.as_mut(), &mut cx).is_pending(),
+            "the first write poll should remain pending"
+        );
+        assert!(
+            matches!(write(output.as_mut(), &mut cx), Poll::Ready(Ok(2))),
+            "the second write poll should accept both characters"
+        );
     }
     assert_eq!(items, ['你', '🦀']);
 }
@@ -57,8 +72,14 @@ fn test_specialized_trait_object_supports_pinned_writes() {
     {
         let mut output: Pin<Box<dyn AsyncCharOutput + '_>> = Box::pin(ItemOutput::new(&mut items));
         let mut cx = Context::from_waker(Waker::noop());
-        assert!(write(output.as_mut(), &mut cx).is_pending());
-        assert!(matches!(write(output.as_mut(), &mut cx), Poll::Ready(Ok(2))));
+        assert!(
+            write(output.as_mut(), &mut cx).is_pending(),
+            "the first write poll should remain pending"
+        );
+        assert!(
+            matches!(write(output.as_mut(), &mut cx), Poll::Ready(Ok(2))),
+            "the second write poll should accept both characters"
+        );
     }
     assert_eq!(items, ['你', '🦀']);
 }

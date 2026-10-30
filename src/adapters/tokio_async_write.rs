@@ -104,7 +104,7 @@ impl<O> TokioAsyncWrite<O> {
     ///
     /// Returns the wrapped Qubit output.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "the wrapped output reference should be used"]
     pub const fn get_ref(&self) -> &O {
         &self.inner
     }
@@ -115,7 +115,7 @@ impl<O> TokioAsyncWrite<O> {
     ///
     /// Returns the wrapped Qubit output with mutable access.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "the wrapped output reference should be used"]
     pub const fn get_mut(&mut self) -> &mut O {
         &mut self.inner
     }
@@ -140,7 +140,7 @@ impl<O> TokioAsyncWrite<O> {
     ///
     /// Returns the owned Qubit output.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "the wrapped output should be used"]
     pub fn into_inner(self) -> O {
         self.inner
     }

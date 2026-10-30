@@ -15,5 +15,8 @@ use qubit_io::EnsuredBufferedInput;
 fn test_ensured_buffered_input_reports_buffered_variant() {
     let input = BufferedInput::new(Cursor::new(Vec::<u8>::new()));
     let ensured = BufferedInput::ensure(input);
-    assert!(matches!(ensured, EnsuredBufferedInput::AlreadyBuffered(_)));
+    assert!(
+        matches!(ensured, EnsuredBufferedInput::AlreadyBuffered(_)),
+        "already-buffered inputs should remain unwrapped"
+    );
 }

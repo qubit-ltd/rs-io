@@ -96,7 +96,7 @@ impl<I, B> TeeInput<I, B> {
     ///
     /// Returns the source input without allowing mutation.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "the source input reference must be used"]
     pub const fn inner(&self) -> &I {
         &self.inner
     }
@@ -109,7 +109,7 @@ impl<I, B> TeeInput<I, B> {
     ///
     /// Returns mutable access to the source input.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "the mutable source input reference must be used"]
     pub fn inner_mut(&mut self) -> &mut I {
         &mut self.inner
     }
@@ -120,7 +120,7 @@ impl<I, B> TeeInput<I, B> {
     ///
     /// Returns the branch output without allowing mutation.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "the branch output reference must be used"]
     pub const fn branch(&self) -> &B {
         &self.branch
     }
@@ -133,7 +133,7 @@ impl<I, B> TeeInput<I, B> {
     ///
     /// Returns mutable access to the branch output.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "the mutable branch output reference must be used"]
     pub fn branch_mut(&mut self) -> &mut B {
         &mut self.branch
     }
@@ -142,6 +142,12 @@ impl<I, B> TeeInput<I, B> {
     /// while mirroring has not failed.
     ///
     /// This state does not cover panics or arbitrary effects of custom streams.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Some(&error)` after a branch write failure, or `None` before
+    /// any branch write failure.
+    #[must_use = "check whether branch mirroring has failed"]
     pub fn branch_error(&self) -> Option<&io::Error> {
         self.failure.error()
     }
@@ -152,8 +158,9 @@ impl<I, B> TeeInput<I, B> {
     /// # Returns
     ///
     /// Returns the source input, branch output, and first branch error, if any.
+    /// The error is `Some` after a branch write failure and `None` otherwise.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "the returned error must be checked when mirroring may have failed"]
     pub fn into_parts(self) -> (I, B, Option<io::Error>) {
         (self.inner, self.branch, self.failure.into_error())
     }

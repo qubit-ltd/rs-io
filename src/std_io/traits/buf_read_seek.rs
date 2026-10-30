@@ -27,7 +27,10 @@ use std::io::Seek;
 ///
 /// ```rust
 /// use qubit_io::std_io::BufReadSeek;
-/// use std::io::{BufRead, BufReader, Cursor, SeekFrom};
+/// use std::io::BufRead;
+/// use std::io::BufReader;
+/// use std::io::Cursor;
+/// use std::io::SeekFrom;
 ///
 /// fn read_after_prefix(input: &mut dyn BufReadSeek) -> std::io::Result<String> {
 ///     input.seek(SeekFrom::Start(4))?;

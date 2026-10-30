@@ -496,6 +496,7 @@ fn test_output_u8_blanket_impl_propagates_std_flush_errors() {
 
     assert_eq!(ErrorKind::Other, error.kind());
 }
+
 #[derive(Debug)]
 enum WriteStep {
     Accept(usize),

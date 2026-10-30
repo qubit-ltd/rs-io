@@ -30,6 +30,7 @@ impl Hasher for RecordingHasher {
     fn finish(&self) -> u64 {
         self.calls.len() as u64
     }
+
     fn write(&mut self, bytes: &[u8]) {
         self.calls.push(bytes.to_vec());
     }

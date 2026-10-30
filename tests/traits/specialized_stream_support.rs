@@ -25,6 +25,7 @@ pub(super) struct ItemInput<T> {
 }
 
 impl<T: Copy> ItemInput<T> {
+    #[must_use]
     pub(super) fn new(items: &[T]) -> Self {
         Self {
             items: items.iter().copied().collect(),
@@ -78,6 +79,7 @@ pub(super) struct ItemOutput<'a, T> {
 }
 
 impl<'a, T> ItemOutput<'a, T> {
+    #[must_use]
     pub(super) fn new(items: &'a mut Vec<T>) -> Self {
         Self {
             items,

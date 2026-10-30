@@ -22,9 +22,10 @@ use crate::Seekable;
 /// # Examples
 ///
 /// ```
-/// use qubit_io::InputRef;
-/// use qubit_io::Input;
 /// use std::io::Cursor;
+///
+/// use qubit_io::Input;
+/// use qubit_io::InputRef;
 ///
 /// let mut source = Cursor::new(b"hello");
 /// let mut input = InputRef::new(&mut source);

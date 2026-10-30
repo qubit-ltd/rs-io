@@ -52,6 +52,7 @@ use crate::traits::validate_write_count;
 ///
 /// ```
 /// use qubit_io::BufferedOutput;
+/// use qubit_io::Output;
 /// use std::io::Cursor;
 ///
 /// let mut output = BufferedOutput::with_capacity(Cursor::new(Vec::new()), 4);
@@ -266,6 +267,44 @@ where
         &mut self.inner
     }
 
+    /// Returns the unused capacity in the internal buffer.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of items that can still be appended to the internal
+    /// buffer before it must be flushed.
+    #[inline(always)]
+    #[must_use]
+    pub fn spare_capacity(&self) -> usize {
+        self.buffer.spare_capacity()
+    }
+
+    /// Returns raw spare-buffer parts for hot-path callers.
+    ///
+    /// The returned slice is the full internal backing storage. `index` is the
+    /// start of the spare item window, and `count` is the number of spare
+    /// items. Callers that need a slice can use `&mut buffer[index..index +
+    /// count]`; callers that already validated bounds can pass `buffer` and
+    /// `index` directly to indexed unchecked codecs.
+    ///
+    /// Mutating items outside `index..index + count` changes pending output
+    /// items and may corrupt the logical stream.
+    ///
+    /// # Returns
+    ///
+    /// Returns the backing storage, the spare start index, and the spare item
+    /// count.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an inner I/O operation previously panicked.
+    #[inline(always)]
+    #[must_use]
+    pub fn spare_raw_parts_mut(&mut self) -> (&mut [O::Item], usize, usize) {
+        assert!(!self.panicked, "buffered output is poisoned after an inner I/O panic");
+        self.buffer.spare_raw_parts_mut()
+    }
+
     /// Consumes this buffered output without flushing pending items.
     ///
     /// This method does not call [`Self::flush`] and performs no I/O. Pending
@@ -299,18 +338,6 @@ where
         }
     }
 
-    /// Returns the unused capacity in the internal buffer.
-    ///
-    /// # Returns
-    ///
-    /// Returns the number of items that can still be appended to the internal
-    /// buffer before it must be flushed.
-    #[inline(always)]
-    #[must_use]
-    pub fn spare_capacity(&self) -> usize {
-        self.buffer.spare_capacity()
-    }
-
     /// Tries to ensure that the internal buffer has at least `capacity` items.
     ///
     /// Pending items are preserved and this method performs no I/O.
@@ -337,32 +364,6 @@ where
         capacity: usize,
     ) -> std::result::Result<(), std::collections::TryReserveError> {
         self.buffer.try_reserve_capacity(capacity)
-    }
-
-    /// Returns raw spare-buffer parts for hot-path callers.
-    ///
-    /// The returned slice is the full internal backing storage. `index` is the
-    /// start of the spare item window, and `count` is the number of spare
-    /// items. Callers that need a slice can use `&mut buffer[index..index +
-    /// count]`; callers that already validated bounds can pass `buffer` and
-    /// `index` directly to indexed unchecked codecs.
-    ///
-    /// Mutating items outside `index..index + count` changes pending output
-    /// items and may corrupt the logical stream.
-    ///
-    /// # Returns
-    ///
-    /// Returns the backing storage, the spare start index, and the spare item
-    /// count.
-    ///
-    /// # Panics
-    ///
-    /// Panics if an inner I/O operation previously panicked.
-    #[inline(always)]
-    #[must_use]
-    pub fn spare_raw_parts_mut(&mut self) -> (&mut [O::Item], usize, usize) {
-        assert!(!self.panicked, "buffered output is poisoned after an inner I/O panic");
-        self.buffer.spare_raw_parts_mut()
     }
 
     /// Marks spare items as written without checking bounds.

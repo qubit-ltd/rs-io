@@ -121,6 +121,7 @@ fn source_bytes(descriptor_count: usize, slice_size: usize, one_nonempty: bool) 
         .collect()
 }
 
+#[inline]
 fn total_capacity(descriptor_count: usize, slice_size: usize) -> usize {
     descriptor_count * slice_size
 }

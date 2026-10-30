@@ -23,7 +23,8 @@ use crate::Input;
 ///
 /// ```
 /// use std::io;
-/// use qubit_io::{CharInput, Input};
+/// use qubit_io::CharInput;
+/// use qubit_io::Input;
 ///
 /// struct CharSlice<'a> { items: &'a [char], position: usize }
 /// impl Input for CharSlice<'_> {

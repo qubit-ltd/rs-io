@@ -74,7 +74,7 @@ fn allocations_during(operation: impl FnOnce()) -> usize {
 }
 
 #[test]
-fn single_descriptor_bridges_do_not_allocate_descriptor_storage() {
+fn test_single_descriptor_bridges_do_not_allocate_descriptor_storage() {
     let mut input = Cursor::new(*b"data");
     let mut destination = [0_u8; 4];
     let count = allocations_during(|| {

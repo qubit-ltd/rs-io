@@ -89,13 +89,19 @@ pub struct ReadExactFuture<'a, I>
 where
     I: AsyncInput + ?Sized,
 {
-    /// Input being read.
+    /// Pinned mutable borrow of the input used for every read poll.
+    ///
+    /// The pin preserves the input's address while this future is polled, and
+    /// the borrow lasts for the future's lifetime.
     input: Pin<&'a mut I>,
-    /// Destination that must be filled.
+    /// Mutable destination slice that receives each item read.
+    ///
+    /// The slice remains exclusively borrowed for the future's lifetime, so
+    /// its initialized prefix preserves progress if the future is cancelled.
     output: &'a mut [I::Item],
-    /// Number of items read so far.
+    /// Number of items successfully read into the destination.
     read: usize,
-    /// Whether the exact-read operation has completed.
+    /// Whether the operation has returned a ready result.
     completed: bool,
 }
 

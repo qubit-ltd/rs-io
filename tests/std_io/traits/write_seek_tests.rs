@@ -6,13 +6,14 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
+use std::io::Cursor;
 use std::io::SeekFrom;
 
 use qubit_io::std_io::WriteSeek;
 
 #[test]
 fn test_write_seek_trait_object_supports_writing_and_seeking() {
-    let mut cursor = std::io::Cursor::new(Vec::new());
+    let mut cursor = Cursor::new(Vec::new());
     let writer: &mut dyn WriteSeek = &mut cursor;
 
     writer

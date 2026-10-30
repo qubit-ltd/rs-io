@@ -21,7 +21,10 @@ fn test_buf_read_seek_trait_object_supports_buffered_reading_and_seeking() {
     let buffered = stream
         .fill_buf()
         .expect("buf-read-seek trait object should fill buffer");
-    assert!(buffered.starts_with(b"abc"));
+    assert!(
+        buffered.starts_with(b"abc"),
+        "buffered data should begin with the first input line"
+    );
     stream
         .seek(SeekFrom::Start(4))
         .expect("buf-read-seek trait object should seek");
@@ -30,5 +33,5 @@ fn test_buf_read_seek_trait_object_supports_buffered_reading_and_seeking() {
     stream
         .read_line(&mut line)
         .expect("buf-read-seek trait object should read line after seek");
-    assert_eq!("def", line);
+    assert_eq!("def", line, "reading after seeking should return the second line");
 }

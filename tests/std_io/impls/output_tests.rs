@@ -40,7 +40,7 @@ impl Write for VectorStdWriter {
 }
 
 #[test]
-fn vectored_std_writer_keeps_native_override() {
+fn test_vectored_std_writer_keeps_native_override() {
     let mut writer = VectorStdWriter::default();
     assert_eq!(Output::write_vectored(&mut writer, &[b"ab", b"cd"]).unwrap(), 4);
     assert_eq!(writer.0, b"abcd");
@@ -78,7 +78,7 @@ impl Write for EdgeStdWriter {
 }
 
 #[test]
-fn vectored_std_writer_preserves_empty_short_error_and_count_contracts() {
+fn test_vectored_std_writer_preserves_empty_short_error_and_count_contracts() {
     let mut writer = EdgeStdWriter {
         reply: Ok(0),
         bytes: Vec::new(),

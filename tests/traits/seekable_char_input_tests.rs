@@ -12,7 +12,7 @@ use qubit_io::CountingInput;
 use qubit_io::SeekableCharInput;
 use qubit_io::SeekableInput;
 
-use super::seekable_char_support::CharStream;
+use super::seekable_char_support_tests::CharStream;
 
 fn transfer<S: SeekableCharInput + ?Sized>(stream: &mut S) {
     assert_eq!(stream.seek_to(SeekFrom::Start(1)).expect("seek should succeed"), 1);

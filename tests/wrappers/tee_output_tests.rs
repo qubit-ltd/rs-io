@@ -7,6 +7,11 @@
 // =============================================================================
 //! Tests for [`qubit_io::TeeOutput`].
 
+use std::error::Error;
+use std::fmt::Display;
+use std::fmt::Formatter;
+use std::fmt::Result as FmtResult;
+use std::io;
 use std::io::Cursor;
 use std::io::ErrorKind;
 use std::io::SeekFrom;
@@ -19,6 +24,7 @@ use qubit_io::Seekable;
 use qubit_io::TeeOutput;
 
 use super::support_tests::ErrorBranch;
+use super::support_tests::SafeOverreportOutput;
 use super::support_tests::ScriptedOutput;
 use super::support_tests::SeekFailOnceOutput;
 use super::support_tests::assert_original_os_error;
@@ -59,15 +65,15 @@ fn test_tee_output_unique_into_parts_returns_original_error() {
 fn test_tee_output_custom_payload_survives_shared_report() {
     #[derive(Debug)]
     struct TestCause;
-    impl std::fmt::Display for TestCause {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    impl Display for TestCause {
+        fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
             f.write_str("test cause")
         }
     }
-    impl std::error::Error for TestCause {}
+    impl Error for TestCause {}
 
     let branch = ErrorBranch {
-        make_error: || std::io::Error::other(TestCause),
+        make_error: || io::Error::other(TestCause),
         write_calls: 0,
         seek_calls: 0,
         position: 0,
@@ -75,8 +81,8 @@ fn test_tee_output_custom_payload_survives_shared_report() {
     let mut output = TeeOutput::new(Cursor::new(Vec::new()), branch);
     output.write(b"a").unwrap();
     let report = output.write(b"b").unwrap_err();
-    let original = std::error::Error::source(&report)
-        .and_then(|error| error.downcast_ref::<std::io::Error>())
+    let original = Error::source(&report)
+        .and_then(|error| error.downcast_ref::<io::Error>())
         .unwrap();
     assert!(original.get_ref().unwrap().is::<TestCause>());
 }
@@ -230,15 +236,15 @@ struct InterruptedFullyOutput;
 impl Output for InterruptedFullyOutput {
     type Item = u8;
 
-    unsafe fn write_unchecked(&mut self, _input: &[u8], _index: usize, count: usize) -> std::io::Result<usize> {
+    unsafe fn write_unchecked(&mut self, _input: &[u8], _index: usize, count: usize) -> io::Result<usize> {
         Ok(count)
     }
 
-    fn write_fully(&mut self, _input: &[u8]) -> std::io::Result<()> {
+    fn write_fully(&mut self, _input: &[u8]) -> io::Result<()> {
         Err(ErrorKind::Interrupted.into())
     }
 
-    fn flush(&mut self) -> std::io::Result<()> {
+    fn flush(&mut self) -> io::Result<()> {
         Ok(())
     }
 }
@@ -338,11 +344,8 @@ fn test_tee_output_seek_failure_recovery_contract() {
 
 #[test]
 fn test_tee_output_rejects_safe_overreported_count() {
-    let mut wrapper = qubit_io::TeeOutput::new(
-        super::support_tests::SafeOverreportOutput,
-        super::support_tests::ScriptedOutput::<u8>::accepting(),
-    );
-    let error = unsafe { qubit_io::Output::write_unchecked(&mut wrapper, b"abcd", 1, 2) }.unwrap_err();
-    assert_eq!(std::io::ErrorKind::InvalidData, error.kind());
+    let mut wrapper = TeeOutput::new(SafeOverreportOutput, ScriptedOutput::<u8>::accepting());
+    let error = unsafe { Output::write_unchecked(&mut wrapper, b"abcd", 1, 2) }.unwrap_err();
+    assert_eq!(ErrorKind::InvalidData, error.kind());
     assert!(wrapper.branch().items.is_empty());
 }

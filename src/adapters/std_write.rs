@@ -8,6 +8,7 @@
 
 //! Adapter from a Qubit synchronous output to the standard library writer.
 
+use std::io::IoSlice;
 use std::io::Result;
 use std::io::Seek;
 use std::io::SeekFrom;
@@ -20,8 +21,8 @@ use crate::traits::validate_write_count;
 /// Adapts an [`Output`] of bytes to [`std::io::Write`].
 ///
 /// Vectored writes forward the inner [`Output::write_vectored`] override when
-/// buffers are non-empty; actual scatter/gather behavior depends on that
-/// implementation and the platform. Constructing the adapter does not
+/// their combined capacity is nonzero; actual scatter/gather behavior depends
+/// on that implementation and the platform. Constructing the adapter does not
 /// allocate. Exactly one descriptor uses stack storage; multiple descriptors
 /// may allocate temporary descriptor storage, and the inner output may allocate
 /// independently. Length overflow returns `InvalidInput` and descriptor
@@ -147,22 +148,22 @@ impl<O> Write for StdWrite<O>
 where
     O: ByteOutput,
 {
-    /// Writes bytes through the wrapped output without adding retries or
-    /// flushes.
+    /// Writes a prefix of `input` through the wrapped byte output.
     ///
     /// # Parameters
     ///
-    /// - `input`: Source bytes offered to the wrapped output.
+    /// - `input`: Bytes offered to the wrapped output.
     ///
     /// # Returns
     ///
-    /// Returns the number of bytes written, including a short or zero count.
+    /// The number of bytes accepted, which may be less than `input.len()`.
     ///
     /// # Errors
     ///
-    /// Returns the wrapped output's error unchanged. Returns `InvalidData` if
-    /// the wrapped output reports more bytes than `input` contains. Validation
-    /// does not undo side effects of the inner call.
+    /// Returns the error reported by the wrapped output. If it reports more
+    /// bytes than `input` contains, returns `InvalidData` after the inner call;
+    /// validation does not undo side effects. Interrupted writes are returned
+    /// without retrying.
     #[inline]
     fn write(&mut self, input: &[u8]) -> Result<usize> {
         let written = Output::write(&mut self.inner, input)?;
@@ -171,10 +172,25 @@ where
     }
 
     /// Writes from the supplied buffers in order, forwarding the inner
-    /// vectored override. Descriptor preparation can fail before the inner
-    /// call; an invalid count is detected after that call.
+    /// vectored override.
+    ///
+    /// # Parameters
+    ///
+    /// - `buffers`: Byte descriptors whose contents are offered in order.
+    ///
+    /// # Returns
+    ///
+    /// The number of bytes accepted, which may be less than their combined
+    /// length.
+    ///
+    /// # Errors
+    ///
+    /// Returns `InvalidInput` if the combined length overflows, `OutOfMemory`
+    /// if descriptor preparation fails, or an error from the wrapped output.
+    /// If the output reports more bytes than the combined capacity, returns
+    /// `InvalidData` after the inner call; its side effects are not undone.
     #[inline]
-    fn write_vectored(&mut self, buffers: &[std::io::IoSlice<'_>]) -> Result<usize> {
+    fn write_vectored(&mut self, buffers: &[IoSlice<'_>]) -> Result<usize> {
         let capacity = crate::util::requested_items(buffers.iter().map(|buffer| buffer.len()))?;
         if capacity == 0 {
             return Ok(0);
@@ -190,6 +206,11 @@ where
         Ok(count)
     }
 
+    /// Flushes the wrapped byte output.
+    ///
+    /// # Errors
+    ///
+    /// Returns the error reported by the wrapped output.
     #[inline]
     fn flush(&mut self) -> Result<()> {
         Output::flush(&mut self.inner)
@@ -200,6 +221,19 @@ impl<O> Seek for StdWrite<O>
 where
     O: ByteOutput + crate::Seekable<Unit = u8>,
 {
+    /// Changes the wrapped output's position.
+    ///
+    /// # Parameters
+    ///
+    /// - `position`: Positioning operation to apply to the wrapped output.
+    ///
+    /// # Returns
+    ///
+    /// The resulting position in bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns the error reported by the wrapped seekable output.
     #[inline]
     fn seek(&mut self, position: SeekFrom) -> Result<u64> {
         crate::Seekable::seek_to(&mut self.inner, position)

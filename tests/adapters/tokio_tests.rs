@@ -783,7 +783,7 @@ fn test_tokio_adapters_preserve_zero_pending_and_error_reads() {
     assert_eq!(0, read);
 
     let mut pending = TokioInput::new(PendingTokioReader);
-    assert!(AsyncInput::poll_read(Pin::new(&mut pending), &mut cx, &mut bytes,).is_pending());
+    assert!(AsyncInput::poll_read(Pin::new(&mut pending), &mut cx, &mut bytes).is_pending());
 
     let mut failed = TokioInput::new(ErrorTokioReader);
     let error = AsyncInput::poll_read(Pin::new(&mut failed), &mut cx, &mut bytes)

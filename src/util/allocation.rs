@@ -211,7 +211,6 @@ fn coverage_reserve_error() -> TryReserveError {
 ///
 /// Panics if constructing the synthetic reserve error unexpectedly succeeds.
 #[cfg(coverage)]
-#[must_use]
 fn coverage_maybe_fail_reserve<T>(additional: usize) -> Option<Result<T, TryReserveError>> {
     if COVERAGE_RESERVE_MAX_ADDITIONAL.with(|state| additional > state.get()) {
         return Some(Err(coverage_reserve_error()));

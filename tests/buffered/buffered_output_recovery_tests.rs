@@ -311,7 +311,8 @@ fn test_seek_panic_is_indeterminate_and_blocks_position_queries() {
 }
 
 thread_local! {
-    static DROP_COUNTS: RefCell<Option<Arc<(AtomicUsize, AtomicUsize)>>> = const { RefCell::new(None) };
+    static DROP_COUNTS: RefCell<Option<Arc<(AtomicUsize, AtomicUsize)>>> =
+        const { RefCell::new(None) };
 }
 
 struct DropItem(Arc<(AtomicUsize, AtomicUsize)>);

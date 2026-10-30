@@ -62,7 +62,7 @@ where
     ///
     /// Returns the wrapped input.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "use the returned reference to access the wrapped input"]
     pub fn get_ref(&self) -> &I {
         self.inner.as_ref()
     }
@@ -73,7 +73,7 @@ where
     ///
     /// Returns the wrapped input with mutable access.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "use the mutable reference to access the wrapped input"]
     pub fn get_mut(&mut self) -> &mut I {
         self.inner.as_mut()
     }

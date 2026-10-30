@@ -44,28 +44,28 @@ fn test_pinned_async_input_ext_supports_non_unpin_trait_object() {
     {
         output.fill(0);
         let mut future = input.read_async(&mut output);
-        assert!(matches!(
-            Future::poll(Pin::new(&mut future), &mut cx),
-            Poll::Ready(Ok(2))
-        ));
+        assert!(
+            matches!(Future::poll(Pin::new(&mut future), &mut cx), Poll::Ready(Ok(2))),
+            "single read should return the number of items read"
+        );
     }
     assert_eq!([1, 1], output);
     {
         output.fill(0);
         let mut future = input.read_fully_async(&mut output);
-        assert!(matches!(
-            Future::poll(Pin::new(&mut future), &mut cx),
-            Poll::Ready(Ok(2))
-        ));
+        assert!(
+            matches!(Future::poll(Pin::new(&mut future), &mut cx), Poll::Ready(Ok(2))),
+            "read fully should return the number of items read"
+        );
     }
     assert_eq!([1, 1], output);
     {
         output.fill(0);
         let mut future = input.read_exactly_async(&mut output);
-        assert!(matches!(
-            Future::poll(Pin::new(&mut future), &mut cx),
-            Poll::Ready(Ok(()))
-        ));
+        assert!(
+            matches!(Future::poll(Pin::new(&mut future), &mut cx), Poll::Ready(Ok(()))),
+            "exact read should complete after filling the destination"
+        );
     }
     assert_eq!([1, 1], output);
 }

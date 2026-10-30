@@ -10,10 +10,9 @@
 
 use std::io::Result;
 use std::io::Seek;
-use std::io::SeekFrom;
 use std::io::Write;
 
-use crate::std_io::WriteSeek;
+mod internal;
 
 /// Extension methods for values that implement both [`Write`] and [`Seek`].
 ///
@@ -56,33 +55,6 @@ pub trait WriteSeekExt: Write + Seek {
     fn write_all_at_preserving_position(&mut self, offset: u64, buffer: &[u8]) -> Result<()>;
 }
 
-/// Implements a position-preserving write through a type-erased stream.
-///
-/// # Parameters
-/// - `output`: Stream to seek, write, and restore.
-/// - `offset`: Absolute byte offset to write at.
-/// - `buffer`: Bytes to write.
-///
-/// # Returns
-/// `Ok(())` after all bytes have been written and the position restored.
-///
-/// # Errors
-/// Returns an error when querying, changing, or restoring the stream position,
-/// or when writing fails.
-fn write_all_at_preserving_position_impl(output: &mut dyn WriteSeek, offset: u64, buffer: &[u8]) -> Result<()> {
-    let position = output.stream_position()?;
-    let write_result = match output.seek(SeekFrom::Start(offset)) {
-        Ok(_) => output.write_all(buffer),
-        Err(error) => Err(error),
-    };
-    let restore_result = output.seek(SeekFrom::Start(position));
-    match (write_result, restore_result) {
-        (Ok(()), Ok(_)) => Ok(()),
-        (Err(error), Ok(_)) => Err(error),
-        (_, Err(error)) => Err(error),
-    }
-}
-
 impl<T> WriteSeekExt for T
 where
     T: Write + Seek + ?Sized,
@@ -102,6 +74,6 @@ where
     #[inline(always)]
     fn write_all_at_preserving_position(&mut self, offset: u64, buffer: &[u8]) -> Result<()> {
         let mut output = self;
-        write_all_at_preserving_position_impl(&mut output, offset, buffer)
+        internal::write_all_at_preserving_position_impl(&mut output, offset, buffer)
     }
 }

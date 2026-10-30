@@ -30,6 +30,9 @@ fn test_async_limit_output_rejects_safe_overreported_count() {
     let waker = Waker::noop();
     let mut cx = Context::from_waker(waker);
     let result = AsyncOutput::poll_write(Pin::new(&mut wrapper), &mut cx, b"ab");
-    assert!(matches!(result, Poll::Ready(Err(ref error)) if error.kind() == ErrorKind::InvalidData));
+    assert!(
+        matches!(result, Poll::Ready(Err(ref error)) if error.kind() == ErrorKind::InvalidData),
+        "expected an InvalidData error for a safe overreported write count"
+    );
     assert_eq!(1, wrapper.remaining());
 }

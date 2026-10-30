@@ -712,7 +712,7 @@ fn test_futures_input_preserves_zero_pending_and_error_reads() {
     assert_eq!(0, read);
 
     let mut pending = FuturesInput::new(PendingFuturesReader);
-    assert!(AsyncInput::poll_read(Pin::new(&mut pending), &mut cx, &mut bytes,).is_pending());
+    assert!(AsyncInput::poll_read(Pin::new(&mut pending), &mut cx, &mut bytes).is_pending());
 
     let mut failed = FuturesInput::new(ErrorFuturesReader);
     let error = AsyncInput::poll_read(Pin::new(&mut failed), &mut cx, &mut bytes)

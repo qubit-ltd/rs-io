@@ -57,9 +57,9 @@ fn test_limit_input_preserves_remaining_on_error_and_invalid_progress() {
 
 #[test]
 fn test_limit_input_rejects_safe_overreported_count() {
-    let mut wrapper = qubit_io::LimitInput::new(super::support_tests::SafeOverreportInput, 1);
+    let mut wrapper = LimitInput::new(super::support_tests::SafeOverreportInput, 1);
     let mut bytes = [0_u8; 4];
-    let error = unsafe { qubit_io::Input::read_unchecked(&mut wrapper, &mut bytes, 0, 4) }.unwrap_err();
-    assert_eq!(std::io::ErrorKind::InvalidData, error.kind());
+    let error = unsafe { Input::read_unchecked(&mut wrapper, &mut bytes, 0, 4) }.unwrap_err();
+    assert_eq!(ErrorKind::InvalidData, error.kind());
     assert_eq!(1, wrapper.remaining());
 }

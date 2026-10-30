@@ -29,6 +29,7 @@ enum Action {
     Error(ErrorKind),
     Pending,
 }
+
 struct Writer(Action, usize);
 
 impl AsyncOutput for Writer {

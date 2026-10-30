@@ -82,13 +82,13 @@ pub struct WriteFullyFuture<'a, O>
 where
     O: AsyncOutput + ?Sized,
 {
-    /// Output being written.
+    /// Pinned output that receives each remaining part of the source slice.
     output: Pin<&'a mut O>,
-    /// Source whose items must all be written.
+    /// Borrowed source storage, kept alive for the future's entire lifetime.
     input: &'a [O::Item],
-    /// Number of items written so far.
+    /// Number of leading source items accepted by the output across polls.
     written: usize,
-    /// Whether the write operation has completed.
+    /// Prevents polling again after a ready result has been returned.
     completed: bool,
 }
 

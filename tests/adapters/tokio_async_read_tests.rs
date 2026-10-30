@@ -29,7 +29,9 @@ enum Action {
     Error(ErrorKind),
     Pending,
 }
+
 struct Reader(Action, usize);
+
 impl AsyncInput for Reader {
     type Item = u8;
     unsafe fn poll_read_unchecked(
@@ -54,6 +56,7 @@ impl AsyncInput for Reader {
         }
     }
 }
+
 fn poll(action: Action, initial: &[u8], capacity: usize) -> (Poll<std::io::Result<()>>, Vec<u8>, usize) {
     let mut reader = TokioAsyncRead::new(Reader(action, 0));
     let mut storage = vec![0; capacity];

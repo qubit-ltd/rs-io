@@ -114,7 +114,7 @@ impl<I> AsyncLimitInput<I> {
     ///
     /// Returns the wrapped asynchronous input.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "the wrapped input should be used"]
     pub const fn inner(&self) -> &I {
         &self.inner
     }
@@ -128,7 +128,7 @@ impl<I> AsyncLimitInput<I> {
     ///
     /// Returns the wrapped asynchronous input.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "the wrapped input should be used"]
     pub fn inner_mut(&mut self) -> &mut I {
         &mut self.inner
     }
@@ -139,7 +139,7 @@ impl<I> AsyncLimitInput<I> {
     ///
     /// Returns the asynchronous input without changing its position.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "the wrapped input should be used"]
     pub fn into_inner(self) -> I {
         self.inner
     }

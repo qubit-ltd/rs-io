@@ -42,6 +42,8 @@ use std::io::Write;
 /// assert_eq!(cursor.into_inner(), b"\x04data");
 /// # Ok::<(), std::io::Error>(())
 /// ```
-pub trait WriteSeek: Write + Seek {}
+pub trait WriteSeek: Write + Seek {
+    // empty
+}
 
 impl<T> WriteSeek for T where T: Write + Seek + ?Sized {}
