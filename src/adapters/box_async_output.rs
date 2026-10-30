@@ -83,6 +83,56 @@ where
         }
     }
 
+    /// Creates an adapter from an already pinned boxed asynchronous output.
+    ///
+    /// This moves only the pinned box handle. It does not unpin or move the
+    /// output, allocate, or perform I/O.
+    ///
+    /// # Parameters
+    ///
+    /// - `inner`: Pinned boxed asynchronous output to adapt.
+    ///
+    /// # Returns
+    ///
+    /// Returns an adapter that owns the same pinned output.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use qubit_io::{AsyncOutput, BoxAsyncOutput};
+    /// use std::io::Result;
+    /// use std::pin::Pin;
+    /// use std::task::{Context, Poll};
+    ///
+    /// struct DiscardOutput;
+    ///
+    /// impl AsyncOutput for DiscardOutput {
+    ///     type Item = u8;
+    ///
+    ///     unsafe fn poll_write_unchecked(
+    ///         self: Pin<&mut Self>,
+    ///         _cx: &mut Context<'_>,
+    ///         _input: &[u8],
+    ///         _index: usize,
+    ///         count: usize,
+    ///     ) -> Poll<Result<usize>> {
+    ///         Poll::Ready(Ok(count))
+    ///     }
+    ///
+    ///     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<()>> {
+    ///         Poll::Ready(Ok(()))
+    ///     }
+    /// }
+    ///
+    /// let output: Pin<Box<dyn AsyncOutput<Item = u8>>> = Box::pin(DiscardOutput);
+    /// let output = BoxAsyncOutput::from_pin(output);
+    /// assert!(!output.is_buffered());
+    /// ```
+    #[inline]
+    pub fn from_pin(inner: Pin<Box<O>>) -> Self {
+        Self { inner }
+    }
+
     /// Returns a shared reference to the boxed asynchronous output.
     ///
     /// # Returns

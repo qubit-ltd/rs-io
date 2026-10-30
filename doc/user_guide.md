@@ -862,24 +862,34 @@ Reverse writer adapters additionally require inner `AsyncClose` to satisfy the e
 
 ### Pinned values, cancellation, and progress
 
-Convenience methods such as `read_async` and `write_fully_async` require `Unpin`. Use `PinnedAsyncInputExt` and `PinnedAsyncOutputExt` for pinned `!Unpin` streams or trait objects. This independent program uses the Tokio dependencies above and reads through a pinned trait object without requiring the trait object to implement `Unpin`:
+Convenience methods such as `read_async` and `write_fully_async` require `Unpin`. Use `PinnedAsyncInputExt` and `PinnedAsyncOutputExt` directly on a pinned borrow when you want to operate on a pinned `!Unpin` stream or trait object. When you need to own a pinned box and compose it with wrappers, use `BoxAsyncInput::from_pin` or `BoxAsyncOutput::from_pin`; these constructors preserve the inner position without allocating or unpinning it. This program reads a prefix, extracts the pinned input, then wraps it again and continues from the same position:
 
 <!-- example: pinned profile=tokio mode=run -->
 ```rust
 use std::io;
 use std::pin::Pin;
-use qubit_io::{AsyncInput, PinnedAsyncInputExt, TokioInput};
+use qubit_io::{AsyncCountingInput, AsyncInput, BoxAsyncInput, TokioInput};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> io::Result<()> {
-    let mut input: Pin<Box<dyn AsyncInput<Item = u8>>> =
+    let input: Pin<Box<dyn AsyncInput<Item = u8>>> =
         Box::pin(TokioInput::new(&b"abc"[..]));
-    let mut bytes = [0; 3];
-    input.as_mut().read_exactly_async(&mut bytes).await?;
-    assert_eq!(&bytes, b"abc");
+    let mut input = AsyncCountingInput::new(BoxAsyncInput::from_pin(input));
+    let mut prefix = [0; 1];
+    input.read_exactly_async(&mut prefix).await?;
+    assert_eq!(&prefix, b"a");
+    assert_eq!(input.items_read(), 1);
+    let inner = input.into_inner().into_inner();
+    let mut input = AsyncCountingInput::new(BoxAsyncInput::from_pin(inner));
+    let mut tail = [0; 2];
+    input.read_exactly_async(&mut tail).await?;
+    assert_eq!(&tail, b"bc");
+    assert_eq!(input.items_read(), 2);
     Ok(())
 }
 ```
+
+The output counterpart is `BoxAsyncOutput::from_pin`. It preserves the inner output's capabilities: closing remains available when the inner type implements `AsyncClose`.
 
 `AsyncBufferedInput` and `AsyncBufferedOutput` also expose pinned window methods for `!Unpin` inner streams. The input window can be inspected through a shared reference, consumed with `consume_pinned`, and retained while `try_reserve_capacity_pinned` grows storage. The output window is `(storage, index, count)`; its writable range is `storage[index..index + count]`. After initializing items in that range, call `advance_pinned`. Both reserve methods can return an allocation error and may panic if item initialization or cloning panics. The unsafe consume/advance calls require their counts to fit the current unread/spare item windows.
 

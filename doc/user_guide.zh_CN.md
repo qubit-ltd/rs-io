@@ -851,24 +851,34 @@ fn main() -> io::Result<()> {
 
 ### 固定值、取消与进度
 
-普通 `read_async`、`write_fully_async` 等便利方法要求 `Unpin`。已固定的 `!Unpin` 流或 trait object 使用 `PinnedAsyncInputExt`、`PinnedAsyncOutputExt`。下面的独立程序沿用 Tokio 依赖，通过 pinned trait object 完成读取；不要求 trait object 为 `Unpin`：
+普通 `read_async`、`write_fully_async` 等便利方法要求 `Unpin`。需要直接操作已固定的 `!Unpin` 流或 trait object 时，可在 pinned borrow 上使用 `PinnedAsyncInputExt`、`PinnedAsyncOutputExt`。需要拥有 pinned box 并与包装器组合时，可使用 `BoxAsyncInput::from_pin` 或 `BoxAsyncOutput::from_pin`；它们不会分配或解除固定，也会保留底层位置。下面的程序先读取前缀，再取出 pinned input 并重新包装，继续从原位置读取：
 
 <!-- example: pinned profile=tokio mode=run -->
 ```rust
 use std::io;
 use std::pin::Pin;
-use qubit_io::{AsyncInput, PinnedAsyncInputExt, TokioInput};
+use qubit_io::{AsyncCountingInput, AsyncInput, BoxAsyncInput, TokioInput};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> io::Result<()> {
-    let mut input: Pin<Box<dyn AsyncInput<Item = u8>>> =
+    let input: Pin<Box<dyn AsyncInput<Item = u8>>> =
         Box::pin(TokioInput::new(&b"abc"[..]));
-    let mut bytes = [0; 3];
-    input.as_mut().read_exactly_async(&mut bytes).await?;
-    assert_eq!(&bytes, b"abc");
+    let mut input = AsyncCountingInput::new(BoxAsyncInput::from_pin(input));
+    let mut prefix = [0; 1];
+    input.read_exactly_async(&mut prefix).await?;
+    assert_eq!(&prefix, b"a");
+    assert_eq!(input.items_read(), 1);
+    let inner = input.into_inner().into_inner();
+    let mut input = AsyncCountingInput::new(BoxAsyncInput::from_pin(inner));
+    let mut tail = [0; 2];
+    input.read_exactly_async(&mut tail).await?;
+    assert_eq!(&tail, b"bc");
+    assert_eq!(input.items_read(), 2);
     Ok(())
 }
 ```
+
+输出可使用对应的 `BoxAsyncOutput::from_pin`。内部类型实现 `AsyncClose` 时，适配后的输出仍保留关闭能力。
 
 `AsyncBufferedInput` 和 `AsyncBufferedOutput` 也为底层 `!Unpin` 流提供 pinned 窗口方法。输入窗口可通过共享引用查看，使用 `consume_pinned` 消费，并在 `try_reserve_capacity_pinned` 扩大存储时保留未读项。输出窗口的形式为 `(storage, index, count)`，可写范围是 `storage[index..index + count]`；初始化该范围中的元素后调用 `advance_pinned`。两个 reserve 方法都可能返回分配错误；元素初始化或克隆 panic 时也可能 panic。unsafe consume/advance 调用要求数量不超过当前未读/空闲元素窗口。
 

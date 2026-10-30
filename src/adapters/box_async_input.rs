@@ -78,6 +78,52 @@ where
         }
     }
 
+    /// Creates an adapter from an already pinned boxed asynchronous input.
+    ///
+    /// This moves only the pinned box handle. It does not unpin or move the
+    /// input, allocate, or perform I/O.
+    ///
+    /// # Parameters
+    ///
+    /// - `inner`: Pinned boxed asynchronous input to adapt.
+    ///
+    /// # Returns
+    ///
+    /// Returns an adapter that owns the same pinned input.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use qubit_io::{AsyncInput, BoxAsyncInput};
+    /// use std::io::Result;
+    /// use std::pin::Pin;
+    /// use std::task::{Context, Poll};
+    ///
+    /// struct EmptyInput;
+    ///
+    /// impl AsyncInput for EmptyInput {
+    ///     type Item = u8;
+    ///
+    ///     unsafe fn poll_read_unchecked(
+    ///         self: Pin<&mut Self>,
+    ///         _cx: &mut Context<'_>,
+    ///         _output: &mut [u8],
+    ///         _index: usize,
+    ///         _count: usize,
+    ///     ) -> Poll<Result<usize>> {
+    ///         Poll::Ready(Ok(0))
+    ///     }
+    /// }
+    ///
+    /// let input: Pin<Box<dyn AsyncInput<Item = u8>>> = Box::pin(EmptyInput);
+    /// let input = BoxAsyncInput::from_pin(input);
+    /// assert!(!input.is_buffered());
+    /// ```
+    #[inline]
+    pub fn from_pin(inner: Pin<Box<I>>) -> Self {
+        Self { inner }
+    }
+
     /// Returns a shared reference to the boxed asynchronous input.
     ///
     /// # Returns

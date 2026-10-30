@@ -111,3 +111,40 @@ fn test_box_async_output_forwards_pinned_trait_object_output() {
     assert!(state.flushed);
     assert!(state.closed);
 }
+
+#[test]
+fn test_box_async_output_from_pin_recomposes_and_preserves_close() {
+    let state = Rc::new(RefCell::new(OutputState::default()));
+    let inner: Pin<Box<dyn AsyncClose<Item = u8>>> = Box::pin(PinnedByteOutput {
+        state: Rc::clone(&state),
+        _pinned: PhantomPinned,
+    });
+    let address = inner.as_ref().get_ref() as *const dyn AsyncClose<Item = u8>;
+    let mut output = BoxAsyncOutput::from_pin(inner);
+    let mut cx = context();
+    assert!(output.is_buffered());
+    assert!(matches!(
+        AsyncOutput::poll_write(Pin::new(&mut output), &mut cx, &[4]),
+        Poll::Ready(Ok(1))
+    ));
+    let inner = output.into_inner();
+    assert!(std::ptr::eq(address, inner.as_ref().get_ref()));
+    let mut output = qubit_io::AsyncCountingOutput::new(BoxAsyncOutput::from_pin(inner));
+    assert!(matches!(
+        AsyncOutput::poll_write(Pin::new(&mut output), &mut cx, &[5, 6]),
+        Poll::Ready(Ok(2))
+    ));
+    assert_eq!(2, output.items_written());
+    assert!(matches!(
+        AsyncOutput::poll_flush(Pin::new(&mut output), &mut cx),
+        Poll::Ready(Ok(()))
+    ));
+    assert!(matches!(
+        AsyncClose::poll_close(Pin::new(&mut output), &mut cx),
+        Poll::Ready(Ok(()))
+    ));
+    let state = state.borrow();
+    assert_eq!(&[4, 5, 6], state.items.as_slice());
+    assert!(state.flushed);
+    assert!(state.closed);
+}

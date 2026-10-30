@@ -80,3 +80,37 @@ fn test_box_async_input_forwards_pinned_trait_object_input() {
     ));
     assert_eq!(3, output[0]);
 }
+
+#[test]
+fn test_box_async_input_from_pin_recomposes_without_resetting_position() {
+    let inner: Pin<Box<dyn AsyncInput<Item = u8>>> = Box::pin(PinnedByteInput {
+        items: vec![1, 2, 3],
+        position: 0,
+        _pinned: PhantomPinned,
+    });
+    let address = inner.as_ref().get_ref() as *const dyn AsyncInput<Item = u8>;
+    let mut input = BoxAsyncInput::from_pin(inner);
+    let mut cx = context();
+    let mut first = [0_u8; 1];
+    assert!(input.is_buffered());
+    assert!(matches!(
+        AsyncInput::poll_read(Pin::new(&mut input), &mut cx, &mut first),
+        Poll::Ready(Ok(1))
+    ));
+    assert_eq!([1], first);
+    let inner = input.into_inner();
+    assert!(std::ptr::eq(address, inner.as_ref().get_ref()));
+    let mut input = qubit_io::AsyncCountingInput::new(BoxAsyncInput::from_pin(inner));
+    let mut rest = [0_u8; 2];
+    assert!(matches!(
+        AsyncInput::poll_read(Pin::new(&mut input), &mut cx, &mut rest),
+        Poll::Ready(Ok(2))
+    ));
+    assert_eq!([2, 3], rest);
+    assert_eq!(2, input.items_read());
+    assert!(matches!(
+        AsyncInput::poll_read(Pin::new(&mut input), &mut cx, &mut first),
+        Poll::Ready(Ok(0))
+    ));
+    assert_eq!(2, input.items_read());
+}
