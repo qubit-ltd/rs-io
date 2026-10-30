@@ -11,12 +11,29 @@ use std::io::Error;
 use std::io::ErrorKind;
 use std::io::Result;
 use std::pin::Pin;
+use std::sync::Arc;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
 use std::task::Context;
 use std::task::Poll;
+use std::task::Wake;
 
 use qubit_io::AsyncClose;
 use qubit_io::AsyncInput;
 use qubit_io::AsyncOutput;
+
+#[derive(Default)]
+pub(super) struct BudgetWakeCounter(pub(super) AtomicUsize);
+
+impl Wake for BudgetWakeCounter {
+    fn wake(self: Arc<Self>) {
+        self.0.fetch_add(1, Ordering::SeqCst);
+    }
+
+    fn wake_by_ref(self: &Arc<Self>) {
+        self.0.fetch_add(1, Ordering::SeqCst);
+    }
+}
 
 /// Input that emits an optional valid prefix, then reports one item too many.
 pub(super) struct SafeOverreportedInput {
@@ -201,12 +218,14 @@ impl AsyncInput for ScriptedInput {
 #[derive(Debug)]
 pub(super) struct ScriptedOutput {
     steps: VecDeque<PollResult>,
+    pub(super) accepted: Vec<u8>,
 }
 
 impl ScriptedOutput {
     pub(super) fn new(steps: impl IntoIterator<Item = PollResult>) -> Self {
         Self {
             steps: VecDeque::from_iter(steps),
+            accepted: Vec::new(),
         }
     }
 }
@@ -217,8 +236,8 @@ impl AsyncOutput for ScriptedOutput {
     unsafe fn poll_write_unchecked(
         self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
-        _input: &[u8],
-        _index: usize,
+        input: &[u8],
+        index: usize,
         _count: usize,
     ) -> Poll<Result<usize>> {
         let this = self.get_mut();
@@ -227,7 +246,12 @@ impl AsyncOutput for ScriptedOutput {
         match step {
             PollResult::Pending => Poll::Pending,
             PollResult::Error(error) => Poll::Ready(Err(error)),
-            PollResult::Write(written) => Poll::Ready(Ok(written)),
+            PollResult::Write(written) => {
+                let start = index.min(input.len());
+                let end = start + written.min(input.len() - start);
+                this.accepted.extend_from_slice(&input[start..end]);
+                Poll::Ready(Ok(written))
+            }
             PollResult::Read(_) => Poll::Ready(Err(Error::new(
                 ErrorKind::InvalidInput,
                 "invalid script: write requested, read provided",

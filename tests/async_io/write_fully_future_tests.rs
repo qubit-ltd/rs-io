@@ -12,12 +12,15 @@ use std::io::ErrorKind;
 use std::panic::AssertUnwindSafe;
 use std::panic::catch_unwind;
 use std::pin::Pin;
+use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::task::Context;
 use std::task::Poll;
 use std::task::Waker;
 
 use qubit_io::WriteFullyFuture;
 
+use super::support_tests::BudgetWakeCounter;
 use super::support_tests::CancellationOutput;
 use super::support_tests::PollResult;
 use super::support_tests::SafeOverreportedOutput;
@@ -140,15 +143,26 @@ fn test_write_fully_future_constructs_and_propagates_io_error() {
 #[test]
 fn test_write_fully_future_pauses_when_ready_budget_is_exhausted() {
     let mut output = ScriptedOutput::new(std::iter::repeat_with(|| PollResult::Write(1)).take(65));
-    let input = [0_u8; 65];
+    let input = [0x5A_u8; 65];
     let mut future = WriteFullyFuture::new(Pin::new(&mut output), &input);
-    let mut cx = Context::from_waker(Waker::noop());
+    let counter = Arc::new(BudgetWakeCounter::default());
+    let waker = Waker::from(Arc::clone(&counter));
+    let mut cx = Context::from_waker(&waker);
+    let before = counter.0.load(Ordering::SeqCst);
 
     assert!(matches!(Future::poll(Pin::new(&mut future), &mut cx), Poll::Pending));
+    assert_eq!(64, future.items_written());
+    assert!(
+        counter.0.load(Ordering::SeqCst) > before,
+        "budget Pending must schedule another poll"
+    );
     assert!(matches!(
         Future::poll(Pin::new(&mut future), &mut cx),
         Poll::Ready(Ok(()))
     ));
+    assert_eq!(65, future.items_written());
+    drop(future);
+    assert_eq!([0x5A; 65], output.accepted.as_slice());
 }
 
 #[test]

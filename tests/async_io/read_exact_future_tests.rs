@@ -11,12 +11,15 @@ use std::io::ErrorKind;
 use std::panic::AssertUnwindSafe;
 use std::panic::catch_unwind;
 use std::pin::Pin;
+use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use std::task::Context;
 use std::task::Poll;
 use std::task::Waker;
 
 use qubit_io::ReadExactFuture;
 
+use super::support_tests::BudgetWakeCounter;
 use super::support_tests::CancellationInput;
 use super::support_tests::PollResult;
 use super::support_tests::SafeOverreportedInput;
@@ -143,13 +146,24 @@ fn test_read_exact_future_pauses_when_ready_budget_is_exhausted() {
     let mut input = ScriptedInput::new(std::iter::repeat_with(|| PollResult::Read(1)).take(65));
     let mut output = [0_u8; 65];
     let mut future = ReadExactFuture::new(Pin::new(&mut input), &mut output);
-    let mut cx = Context::from_waker(Waker::noop());
+    let counter = Arc::new(BudgetWakeCounter::default());
+    let waker = Waker::from(Arc::clone(&counter));
+    let mut cx = Context::from_waker(&waker);
+    let before = counter.0.load(Ordering::SeqCst);
 
     assert!(matches!(Future::poll(Pin::new(&mut future), &mut cx), Poll::Pending));
+    assert_eq!(64, future.items_read());
+    assert!(
+        counter.0.load(Ordering::SeqCst) > before,
+        "budget Pending must schedule another poll"
+    );
     assert!(matches!(
         Future::poll(Pin::new(&mut future), &mut cx),
         Poll::Ready(Ok(()))
     ));
+    assert_eq!(65, future.items_read());
+    drop(future);
+    assert_eq!([0xA5; 65], output);
 }
 
 #[test]
