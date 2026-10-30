@@ -42,19 +42,30 @@ fn test_pinned_async_input_ext_supports_non_unpin_trait_object() {
     let mut output = [0_u8; 2];
     let mut cx = Context::from_waker(Waker::noop());
     {
+        output.fill(0);
         let mut future = input.read_async(&mut output);
-        assert!(Future::poll(Pin::new(&mut future), &mut cx).is_ready());
+        assert!(matches!(
+            Future::poll(Pin::new(&mut future), &mut cx),
+            Poll::Ready(Ok(2))
+        ));
     }
+    assert_eq!([1, 1], output);
     {
+        output.fill(0);
         let mut future = input.read_fully_async(&mut output);
-        assert!(Future::poll(Pin::new(&mut future), &mut cx).is_ready());
+        assert!(matches!(
+            Future::poll(Pin::new(&mut future), &mut cx),
+            Poll::Ready(Ok(2))
+        ));
     }
+    assert_eq!([1, 1], output);
     {
+        output.fill(0);
         let mut future = input.read_exactly_async(&mut output);
-        match Future::poll(Pin::new(&mut future), &mut cx) {
-            Poll::Ready(result) => result.expect("exact read should succeed"),
-            Poll::Pending => panic!("exact read should complete"),
-        }
+        assert!(matches!(
+            Future::poll(Pin::new(&mut future), &mut cx),
+            Poll::Ready(Ok(()))
+        ));
     }
     assert_eq!([1, 1], output);
 }
