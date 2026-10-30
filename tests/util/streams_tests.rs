@@ -53,6 +53,37 @@ impl Read for FailingReader {
     }
 }
 
+struct OverreportingByteReader {
+    valid_prefix: bool,
+    calls: usize,
+}
+
+impl Read for OverreportingByteReader {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        self.calls += 1;
+        if self.valid_prefix && self.calls == 1 {
+            assert!(buffer.len() >= 2);
+            buffer[..2].copy_from_slice(b"ab");
+            return Ok(2);
+        }
+        buffer.fill(b'c');
+        Ok(buffer.len() + 1)
+    }
+}
+
+fn assert_overreported_byte_read(
+    valid_prefix: bool,
+    copy: impl FnOnce(&mut OverreportingByteReader, &mut Vec<u8>) -> std::io::Result<u64>,
+) {
+    let mut reader = OverreportingByteReader { valid_prefix, calls: 0 };
+    let mut output = Vec::new();
+    let error = copy(&mut reader, &mut output).expect_err("overreported byte read must fail");
+    assert_eq!(ErrorKind::InvalidData, error.kind());
+    let expected: &[u8] = if valid_prefix { b"ab" } else { b"" };
+    assert_eq!(expected, output.as_slice());
+    assert_eq!(if valid_prefix { 2 } else { 1 }, reader.calls);
+}
+
 struct FailingWriter;
 
 impl Write for FailingWriter {
@@ -422,6 +453,33 @@ fn test_copy_at_most_copies_at_most_requested_bytes() {
     assert_eq!(4, copied);
     assert_eq!(b"abcd", output.as_slice());
     assert_eq!(4, input.position());
+}
+
+#[test]
+fn test_copy_at_most_rejects_overreported_byte_read() {
+    assert_overreported_byte_read(false, |reader, output| Streams::copy_at_most(reader, output, 3));
+    assert_overreported_byte_read(false, |reader, output| {
+        Streams::copy_at_most_with_buffer_size(reader, output, 3, 2)
+    });
+}
+
+#[test]
+fn test_copy_at_most_tail_rejects_overreported_byte_read() {
+    assert_overreported_byte_read(true, |reader, output| {
+        Streams::copy_at_most_with_buffer_size(reader, output, 3, 2)
+    });
+    assert_overreported_byte_read(true, |reader, output| Streams::copy_at_most(reader, output, 3));
+}
+
+#[test]
+fn test_copy_delegates_reject_overreported_byte_read() {
+    for valid_prefix in [false, true] {
+        assert_overreported_byte_read(valid_prefix, |reader, output| {
+            Streams::copy_to_end_limited(reader, output, 3)
+        });
+        assert_overreported_byte_read(valid_prefix, |reader, output| reader.copy_to_at_most(output, 3));
+        assert_overreported_byte_read(valid_prefix, |reader, output| reader.copy_to_end_limited(output, 3));
+    }
 }
 
 #[test]

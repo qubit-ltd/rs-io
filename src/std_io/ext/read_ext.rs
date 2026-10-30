@@ -782,6 +782,9 @@ where
     /// # Errors
     /// Returns [`ErrorKind::OutOfMemory`] if the temporary copy buffer cannot
     /// be allocated, or the first non-interrupted read error or write error.
+    /// Returns [`ErrorKind::InvalidData`] if the reader reports more bytes than
+    /// requested. Bytes from that invalid read are not written; previously
+    /// copied bytes are not rolled back.
     #[inline(always)]
     fn copy_to_at_most(&mut self, writer: &mut dyn Write, max_bytes: u64) -> Result<u64> {
         let mut reader = self;
@@ -800,7 +803,9 @@ where
     /// # Errors
     /// Returns [`ErrorKind::OutOfMemory`] if the temporary copy buffer cannot
     /// be allocated, a read or write error, or [`ErrorKind::InvalidData`] when
-    /// the remaining input exceeds `max_bytes`.
+    /// the remaining input exceeds `max_bytes` or the reader reports more bytes
+    /// than requested. Bytes from an invalid read are not written; previously
+    /// copied bytes are not rolled back.
     #[inline(always)]
     fn copy_to_end_limited(&mut self, writer: &mut dyn Write, max_bytes: u64) -> Result<u64> {
         let mut reader = self;

@@ -107,7 +107,11 @@ impl Streams {
     /// # Errors
     /// Returns [`ErrorKind::OutOfMemory`] if the temporary copy buffer cannot
     /// be allocated. Returns the first non-interrupted read error or write
-    /// error reported by the underlying streams. Interrupted reads are retried.
+    /// error reported by the underlying streams. Returns
+    /// [`ErrorKind::InvalidData`] if the reader reports more bytes than
+    /// requested; bytes from that invalid read are not written, while
+    /// previously copied bytes are not rolled back. Interrupted reads are
+    /// retried.
     #[inline(always)]
     pub fn copy_at_most<R, W>(reader: &mut R, writer: &mut W, max_bytes: u64) -> Result<u64>
     where
@@ -143,7 +147,10 @@ impl Streams {
     /// Returns [`ErrorKind::InvalidInput`] when `buffer_size == 0`. Returns an
     /// [`ErrorKind::OutOfMemory`] error if the copy buffer cannot be allocated.
     /// Returns the first non-interrupted read error or write error reported by
-    /// the underlying streams. Interrupted reads are retried.
+    /// the underlying streams. Returns [`ErrorKind::InvalidData`] if the reader
+    /// reports more bytes than requested; bytes from that invalid read are not
+    /// written, while previously copied bytes are not rolled back. Interrupted
+    /// reads are retried.
     #[inline(always)]
     pub fn copy_at_most_with_buffer_size<R, W>(
         reader: &mut R,
@@ -188,10 +195,12 @@ impl Streams {
     ///
     /// # Errors
     /// Returns [`std::io::ErrorKind::InvalidData`] when the remaining input is
-    /// longer than `max_bytes`. Returns [`ErrorKind::OutOfMemory`] if the
-    /// temporary copy buffer cannot be allocated. Returns the first
-    /// non-interrupted read error or write error reported by the underlying
-    /// streams. Interrupted reads are retried.
+    /// longer than `max_bytes` or the reader reports more bytes than requested.
+    /// Bytes from an invalid read are not written; previously copied bytes are
+    /// not rolled back. Returns [`ErrorKind::OutOfMemory`] if the temporary
+    /// copy buffer cannot be allocated. Returns the first non-interrupted
+    /// read error or write error reported by the underlying streams.
+    /// Interrupted reads are retried.
     #[inline(always)]
     pub fn copy_to_end_limited<R, W>(reader: &mut R, writer: &mut W, max_bytes: u64) -> Result<u64>
     where
@@ -528,8 +537,11 @@ impl Streams {
 /// # Errors
 /// Returns [`ErrorKind::InvalidInput`] when `buffer_size == 0`. Returns an
 /// [`ErrorKind::OutOfMemory`] error if the copy buffer cannot be allocated.
-/// Returns the first non-interrupted read error or write error reported by the
-/// underlying streams. Interrupted reads are retried.
+/// Returns [`ErrorKind::InvalidData`] if the reader reports more bytes than
+/// requested. No bytes from that invalid read are written; previously copied
+/// bytes are not rolled back. Returns the first non-interrupted read error or
+/// write error reported by the underlying streams. Interrupted reads are
+/// retried.
 fn copy_at_most_impl(reader: &mut dyn Read, writer: &mut dyn Write, max_bytes: u64, buffer_size: usize) -> Result<u64> {
     if buffer_size == 0 {
         return Err(Error::new(
@@ -549,6 +561,7 @@ fn copy_at_most_impl(reader: &mut dyn Read, writer: &mut dyn Write, max_bytes: u
         match reader.read(&mut buffer[..requested]) {
             Ok(0) => break,
             Ok(count) => {
+                validate_read_count(count, requested)?;
                 writer.write_all(&buffer[..count])?;
                 let count = count as u64;
                 remaining -= count;
@@ -578,7 +591,9 @@ fn copy_at_most_impl(reader: &mut dyn Read, writer: &mut dyn Write, max_bytes: u
 /// # Errors
 /// Returns [`ErrorKind::OutOfMemory`] if the temporary copy buffer cannot be
 /// allocated, a read or write error, or [`ErrorKind::InvalidData`] when the
-/// remaining input exceeds `max_bytes`.
+/// remaining input exceeds `max_bytes` or the reader reports more bytes than
+/// requested. Bytes from an invalid read are not written; previously copied
+/// bytes are not rolled back.
 fn copy_to_end_limited_impl(reader: &mut dyn Read, writer: &mut dyn Write, max_bytes: u64) -> Result<u64> {
     let copied = copy_at_most_impl(reader, writer, max_bytes, DEFAULT_COPY_BUFFER_SIZE)?;
     if copied < max_bytes {
