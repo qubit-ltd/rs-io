@@ -58,7 +58,7 @@ use std::io::SeekFrom;
 /// use qubit_io::Seekable;
 ///
 /// let mut stream = std::io::Cursor::new(b"hello".to_vec());
-/// assert_eq!(Seekable::seek_to(&mut stream, SeekFrom::Start(2)), Ok(2));
+/// assert_eq!(Seekable::seek_to(&mut stream, SeekFrom::Start(2)).unwrap(), 2);
 /// ```
 ///
 /// # Coherence note
