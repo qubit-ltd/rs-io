@@ -308,7 +308,7 @@ dependencies = [
 
 [[package]]
 name = "qubit-io"
-version = "0.19.2"
+version = "0.19.3"
 dependencies = [
  "criterion",
  "digest",
