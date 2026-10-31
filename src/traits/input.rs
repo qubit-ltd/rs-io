@@ -243,7 +243,9 @@ pub trait Input {
     #[inline(always)]
     fn read_fully(&mut self, output: &mut [Self::Item]) -> Result<usize> {
         // SAFETY: The full output slice is a valid destination range.
-        unsafe { self.read_fully_unchecked(output, 0, output.len()) }
+        let read = unsafe { self.read_fully_unchecked(output, 0, output.len()) }?;
+        validate_read_count(read, output.len())?;
+        Ok(read)
     }
 
     /// Reads items until the full output slice is filled.

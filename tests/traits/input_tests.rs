@@ -29,6 +29,89 @@ struct FullyOverrideInput {
     calls: usize,
 }
 
+struct FullyUncheckedOverrideInput {
+    reported: usize,
+    error: Option<ErrorKind>,
+    calls: usize,
+}
+
+impl Input for FullyUncheckedOverrideInput {
+    type Item = u8;
+
+    unsafe fn read_unchecked(&mut self, _: &mut [u8], _: usize, _: usize) -> Result<usize> {
+        panic!("read_fully must use the aggregate unchecked override")
+    }
+
+    unsafe fn read_fully_unchecked(&mut self, output: &mut [u8], index: usize, count: usize) -> Result<usize> {
+        self.calls += 1;
+        if let Some(kind) = self.error {
+            return Err(Error::new(kind, "aggregate override error"));
+        }
+        let actual = self.reported.min(count);
+        output[index..index + actual].fill(7);
+        Ok(self.reported)
+    }
+}
+
+#[test]
+fn test_read_fully_unchecked_override_rejects_overreported_count() {
+    for requested in [0, 2] {
+        let mut input = FullyUncheckedOverrideInput {
+            reported: requested + 1,
+            error: None,
+            calls: 0,
+        };
+        let mut output = vec![0; requested];
+        let error = input
+            .read_fully(&mut output)
+            .expect_err("aggregate overreport must fail");
+        assert_eq!(ErrorKind::InvalidData, error.kind(), "requested={requested}");
+        assert_eq!(1, input.calls, "aggregate override must be called once");
+        assert_eq!(vec![7; requested], output, "validation must not undo writes");
+    }
+}
+
+#[test]
+fn test_read_fully_unchecked_override_preserves_valid_counts() {
+    for (requested, reported) in [(0, 0), (2, 0), (2, 1), (2, 2)] {
+        let mut input = FullyUncheckedOverrideInput {
+            reported,
+            error: None,
+            calls: 0,
+        };
+        let mut output = vec![0; requested];
+        let actual = input
+            .read_fully(&mut output)
+            .expect("valid aggregate count must succeed");
+        assert_eq!(reported, actual, "requested={requested}");
+        assert_eq!(1, input.calls, "empty requests also preserve delegation");
+        let mut expected = vec![0; requested];
+        expected[..reported].fill(7);
+        assert_eq!(expected, output, "only the reported prefix is filled");
+    }
+}
+
+#[test]
+fn test_read_fully_unchecked_override_preserves_errors() {
+    for requested in [0, 2] {
+        for kind in [ErrorKind::Interrupted, ErrorKind::PermissionDenied] {
+            let mut input = FullyUncheckedOverrideInput {
+                reported: 0,
+                error: Some(kind),
+                calls: 0,
+            };
+            let mut output = vec![0; requested];
+            let error = input
+                .read_fully(&mut output)
+                .expect_err("aggregate error must propagate");
+            assert_eq!(kind, error.kind(), "requested={requested}");
+            assert_eq!("aggregate override error", error.to_string());
+            assert_eq!(1, input.calls, "the safe wrapper must not add retries");
+            assert_eq!(vec![0; requested], output);
+        }
+    }
+}
+
 impl Input for FullyOverrideInput {
     type Item = u8;
 
