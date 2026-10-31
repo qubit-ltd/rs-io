@@ -147,7 +147,8 @@ where
     ///
     /// # Errors
     /// Returns an error when reading, querying, or restoring the stream
-    /// position fails.
+    /// position fails. Returns [`std::io::ErrorKind::InvalidData`] if the
+    /// reader reports more bytes than requested.
     #[inline(always)]
     fn peek_exact_or_eof(&mut self, buffer: &mut [u8]) -> Result<usize> {
         let mut reader = self;
@@ -165,7 +166,9 @@ where
     ///
     /// # Errors
     /// Returns an error when querying, changing, or restoring the stream
-    /// position, or when reading fails.
+    /// position, or when reading fails. Returns
+    /// [`std::io::ErrorKind::InvalidData`] if the reader reports more bytes
+    /// than requested.
     #[inline(always)]
     fn read_exact_or_eof_at(&mut self, offset: u64, buffer: &mut [u8]) -> Result<usize> {
         let mut reader = self;

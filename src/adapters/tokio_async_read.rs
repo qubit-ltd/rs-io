@@ -99,7 +99,7 @@ impl<I> TokioAsyncRead<I> {
     ///
     /// Returns the wrapped Qubit input.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "the wrapped input reference must be used"]
     pub const fn get_ref(&self) -> &I {
         &self.inner
     }
@@ -110,7 +110,7 @@ impl<I> TokioAsyncRead<I> {
     ///
     /// Returns the wrapped Qubit input with mutable access.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "the mutable wrapped input reference must be used"]
     pub const fn get_mut(&mut self) -> &mut I {
         &mut self.inner
     }
@@ -122,7 +122,7 @@ impl<I> TokioAsyncRead<I> {
     /// Returns a pinned mutable reference to the wrapped Qubit input without
     /// moving it.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "the pinned wrapped input reference must be used"]
     pub fn get_pin_mut(self: Pin<&mut Self>) -> Pin<&mut I> {
         // SAFETY: The projection does not move `inner`, and the transparent
         // adapter never exposes a way to replace a pinned inner value.
@@ -135,7 +135,7 @@ impl<I> TokioAsyncRead<I> {
     ///
     /// Returns the owned Qubit input.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "the wrapped input must be used"]
     pub fn into_inner(self) -> I {
         self.inner
     }

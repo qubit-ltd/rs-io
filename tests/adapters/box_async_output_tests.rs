@@ -15,6 +15,7 @@ use std::task::Poll;
 use std::task::Waker;
 
 use qubit_io::AsyncClose;
+use qubit_io::AsyncCountingOutput;
 use qubit_io::AsyncOutput;
 use qubit_io::BoxAsyncOutput;
 
@@ -129,7 +130,7 @@ fn test_box_async_output_from_pin_recomposes_and_preserves_close() {
     ));
     let inner = output.into_inner();
     assert!(std::ptr::eq(address, inner.as_ref().get_ref()));
-    let mut output = qubit_io::AsyncCountingOutput::new(BoxAsyncOutput::from_pin(inner));
+    let mut output = AsyncCountingOutput::new(BoxAsyncOutput::from_pin(inner));
     assert!(matches!(
         AsyncOutput::poll_write(Pin::new(&mut output), &mut cx, &[5, 6]),
         Poll::Ready(Ok(2))

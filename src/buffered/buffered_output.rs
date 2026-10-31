@@ -252,21 +252,6 @@ where
         self.buffer.capacity()
     }
 
-    /// Returns an exclusive reference to the wrapped writer.
-    ///
-    /// Pending items may still be present in the internal buffer and are not
-    /// flushed by this method. Writing through the returned reference can place
-    /// new items before those pending items.
-    ///
-    /// # Returns
-    ///
-    /// Returns a mutable reference to the underlying writer.
-    #[inline(always)]
-    #[must_use]
-    pub fn inner_mut(&mut self) -> &mut O {
-        &mut self.inner
-    }
-
     /// Returns the unused capacity in the internal buffer.
     ///
     /// # Returns
@@ -303,6 +288,21 @@ where
     pub fn spare_raw_parts_mut(&mut self) -> (&mut [O::Item], usize, usize) {
         assert!(!self.panicked, "buffered output is poisoned after an inner I/O panic");
         self.buffer.spare_raw_parts_mut()
+    }
+
+    /// Returns an exclusive reference to the wrapped writer.
+    ///
+    /// Pending items may still be present in the internal buffer and are not
+    /// flushed by this method. Writing through the returned reference can place
+    /// new items before those pending items.
+    ///
+    /// # Returns
+    ///
+    /// Returns a mutable reference to the underlying writer.
+    #[inline(always)]
+    #[must_use]
+    pub fn inner_mut(&mut self) -> &mut O {
+        &mut self.inner
     }
 
     /// Consumes this buffered output without flushing pending items.

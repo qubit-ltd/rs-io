@@ -51,6 +51,8 @@ impl AsyncInput for SliceInput {
         index: usize,
         count: usize,
     ) -> Poll<io::Result<usize>> {
+        // SAFETY: Accessing fields through this mutable reference does not move
+        // the pinned value, and `SliceInput` has no address-sensitive fields.
         let this = unsafe { self.get_unchecked_mut() };
         let read = count.min(this.bytes.len() - this.position);
         output[index..index + read].copy_from_slice(&this.bytes[this.position..this.position + read]);

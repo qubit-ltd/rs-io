@@ -348,6 +348,9 @@ fn test_async_digest_input_rejects_safe_overreported_count() {
     let before = wrapper.digest();
     let mut bytes = [0_u8; 2];
     let result = AsyncInput::poll_read(Pin::new(&mut wrapper), &mut cx, &mut bytes);
-    assert!(matches!(result, Poll::Ready(Err(ref error)) if error.kind() == ErrorKind::InvalidData));
+    assert!(matches!(
+        result,
+        Poll::Ready(Err(ref error)) if error.kind() == ErrorKind::InvalidData
+    ));
     assert_eq!(before, wrapper.digest());
 }

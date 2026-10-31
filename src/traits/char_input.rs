@@ -19,10 +19,12 @@ use crate::Input;
 /// grapheme clusters. This trait does not encode or decode text.
 ///
 /// # Examples
+///
 /// A character input can be implemented directly over Unicode scalar values:
 ///
 /// ```
 /// use std::io;
+///
 /// use qubit_io::CharInput;
 /// use qubit_io::Input;
 ///

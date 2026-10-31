@@ -28,6 +28,11 @@ use crate::traits::validate_write_count;
 /// Empty writes do not update the hasher. Use a digest API for a content
 /// fingerprint independent of write boundaries.
 ///
+/// # Type Parameters
+///
+/// - `O`: Wrapped asynchronous byte output type.
+/// - `H`: Checksum hasher type.
+///
 /// # Examples
 ///
 /// ```
@@ -75,11 +80,6 @@ use crate::traits::validate_write_count;
 /// expected.write(b"abc");
 /// assert_eq!(output.checksum(), expected.finish());
 /// ```
-///
-/// # Type Parameters
-///
-/// - `O`: Wrapped asynchronous byte output type.
-/// - `H`: Checksum hasher type.
 #[must_use]
 #[derive(Debug)]
 pub struct AsyncChecksumOutput<O, H> {
@@ -156,7 +156,7 @@ where
     ///
     /// Returns the wrapped asynchronous byte output.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "inspect or use the wrapped output"]
     pub const fn inner(&self) -> &O {
         &self.inner
     }
@@ -170,7 +170,7 @@ where
     ///
     /// Returns the wrapped asynchronous byte output.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "inspect or use the wrapped output"]
     pub fn inner_mut(&mut self) -> &mut O {
         &mut self.inner
     }
@@ -181,7 +181,7 @@ where
     ///
     /// Returns the current hasher state.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "inspect or use the hasher state"]
     pub const fn hasher(&self) -> &H {
         &self.hasher
     }
@@ -195,7 +195,7 @@ where
     ///
     /// Returns the current hasher state mutably.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "inspect or use the hasher state"]
     pub fn hasher_mut(&mut self) -> &mut H {
         &mut self.hasher
     }
@@ -210,7 +210,7 @@ where
     ///
     /// Returns the wrapped output and final hasher state.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "use the returned output and hasher state"]
     pub fn into_parts(self) -> (O, H) {
         (self.inner, self.hasher)
     }

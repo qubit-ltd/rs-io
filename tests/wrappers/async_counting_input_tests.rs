@@ -47,8 +47,9 @@ fn test_async_counting_input_preserves_short_progress_before_overreport() {
         AsyncInput::poll_read(Pin::new(&mut input), &mut cx, &mut output),
         Poll::Ready(Ok(1))
     ));
-    assert!(
-        matches!(AsyncInput::poll_read(Pin::new(&mut input), &mut cx, &mut output), Poll::Ready(Err(ref error)) if error.kind() == ErrorKind::InvalidData)
-    );
+    assert!(matches!(
+        AsyncInput::poll_read(Pin::new(&mut input), &mut cx, &mut output),
+        Poll::Ready(Err(ref error)) if error.kind() == ErrorKind::InvalidData
+    ));
     assert_eq!(1, input.items_read());
 }

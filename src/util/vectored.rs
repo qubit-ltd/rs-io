@@ -6,7 +6,6 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
-// qubit-style: allow coverage-cfg
 use std::io;
 use std::io::IoSlice;
 use std::io::IoSliceMut;

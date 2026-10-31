@@ -6,6 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
+use std::io::Result;
 use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
@@ -216,7 +217,7 @@ where
         input: &[Self::Item],
         index: usize,
         count: usize,
-    ) -> Poll<std::io::Result<usize>> {
+    ) -> Poll<Result<usize>> {
         // SAFETY: The caller's valid-range guarantee is forwarded unchanged.
         unsafe { self.get_pin_mut().poll_write_unchecked(cx, input, index, count) }
     }
@@ -235,7 +236,7 @@ where
     ///
     /// Returns an error reported while flushing the wrapped output.
     #[inline(always)]
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<()>> {
         self.get_pin_mut().poll_flush(cx)
     }
 }
@@ -258,7 +259,7 @@ where
     ///
     /// Returns an error reported while closing the wrapped output.
     #[inline(always)]
-    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<()>> {
         self.get_pin_mut().poll_close(cx)
     }
 }

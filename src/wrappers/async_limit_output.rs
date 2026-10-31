@@ -141,7 +141,7 @@ impl<O> AsyncLimitOutput<O> {
     ///
     /// Returns the wrapped asynchronous output.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "the wrapped output should be used"]
     pub const fn inner(&self) -> &O {
         &self.inner
     }
@@ -155,7 +155,7 @@ impl<O> AsyncLimitOutput<O> {
     ///
     /// Returns the wrapped asynchronous output.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "the wrapped output should be used"]
     pub fn inner_mut(&mut self) -> &mut O {
         &mut self.inner
     }
@@ -166,7 +166,7 @@ impl<O> AsyncLimitOutput<O> {
     ///
     /// Returns the asynchronous output.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "the wrapped output should be used"]
     pub fn into_inner(self) -> O {
         self.inner
     }

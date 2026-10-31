@@ -12,21 +12,20 @@ use std::marker::PhantomPinned;
 use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
+use std::task::Waker;
 
+use qubit_io::AsyncByteInput;
 use qubit_io::AsyncInput;
-use qubit_io::AsyncOutput;
 use qubit_io::Input;
-use qubit_io::Output;
 
-pub(super) struct ItemInput<T> {
+struct ItemInput<T> {
     items: VecDeque<T>,
     pending: bool,
     _pinned: PhantomPinned,
 }
 
 impl<T: Copy> ItemInput<T> {
-    #[must_use]
-    pub(super) fn new(items: &[T]) -> Self {
+    fn new(items: &[T]) -> Self {
         Self {
             items: items.iter().copied().collect(),
             pending: true,
@@ -72,61 +71,48 @@ impl<T: Copy> AsyncInput for ItemInput<T> {
     }
 }
 
-pub(super) struct ItemOutput<'a, T> {
-    items: &'a mut Vec<T>,
-    pending: bool,
-    _pinned: PhantomPinned,
+fn read<I: AsyncByteInput + ?Sized>(
+    input: Pin<&mut I>,
+    cx: &mut Context<'_>,
+    output: &mut [u8],
+) -> Poll<io::Result<usize>> {
+    input.poll_read(cx, output)
 }
 
-impl<'a, T> ItemOutput<'a, T> {
-    #[must_use]
-    pub(super) fn new(items: &'a mut Vec<T>) -> Self {
-        Self {
-            items,
-            pending: true,
-            _pinned: PhantomPinned,
-        }
+#[test]
+fn test_parameter_and_opaque_return_preserve_pinned_pending_reads() {
+    fn input() -> impl AsyncByteInput {
+        ItemInput::new(b"AB")
     }
+
+    let mut input = Box::pin(input());
+    let mut cx = Context::from_waker(Waker::noop());
+    let mut items = [0; 2];
+    assert!(read(input.as_mut(), &mut cx, &mut items).is_pending());
+    assert_eq!(items, [0; 2]);
+    assert!(matches!(read(input.as_mut(), &mut cx, &mut items), Poll::Ready(Ok(2))));
+    assert_eq!(items, [b'A', b'B']);
+    assert!(matches!(read(input.as_mut(), &mut cx, &mut items), Poll::Ready(Ok(0))));
 }
 
-impl<T: Copy> Output for ItemOutput<'_, T> {
-    type Item = T;
-
-    unsafe fn write_unchecked(&mut self, input: &[T], index: usize, count: usize) -> io::Result<usize> {
-        self.items.extend_from_slice(&input[index..index + count]);
-        Ok(count)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
+#[test]
+fn test_unsized_base_trait_automatically_satisfies_specialized_bound() {
+    let mut input = Box::pin(ItemInput::new(b"AB"));
+    let input: Pin<&mut dyn AsyncInput<Item = u8>> = input.as_mut();
+    let mut cx = Context::from_waker(Waker::noop());
+    let mut items = [0; 2];
+    let mut input = input;
+    assert!(read(input.as_mut(), &mut cx, &mut items).is_pending());
+    assert!(matches!(read(input.as_mut(), &mut cx, &mut items), Poll::Ready(Ok(2))));
+    assert_eq!(items, [b'A', b'B']);
 }
 
-impl<T: Copy> AsyncOutput for ItemOutput<'_, T> {
-    type Item = T;
-
-    unsafe fn poll_write_unchecked(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        input: &[T],
-        index: usize,
-        count: usize,
-    ) -> Poll<io::Result<usize>> {
-        // SAFETY: No field is structurally pinned or moved out of this value.
-        let this = unsafe { self.get_unchecked_mut() };
-        if count == 0 {
-            return Poll::Ready(Ok(0));
-        }
-        if this.pending {
-            this.pending = false;
-            cx.waker().wake_by_ref();
-            return Poll::Pending;
-        }
-        // SAFETY: The caller supplies a valid source range.
-        Poll::Ready(unsafe { Output::write_unchecked(this, input, index, count) })
-    }
-
-    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Poll::Ready(Ok(()))
-    }
+#[test]
+fn test_specialized_trait_object_supports_pinned_reads() {
+    let mut input: Pin<Box<dyn AsyncByteInput>> = Box::pin(ItemInput::new(b"AB"));
+    let mut cx = Context::from_waker(Waker::noop());
+    let mut items = [0; 2];
+    assert!(read(input.as_mut(), &mut cx, &mut items).is_pending());
+    assert!(matches!(read(input.as_mut(), &mut cx, &mut items), Poll::Ready(Ok(2))));
+    assert_eq!(items, [b'A', b'B']);
 }

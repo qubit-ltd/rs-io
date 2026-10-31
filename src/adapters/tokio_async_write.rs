@@ -25,16 +25,17 @@ use crate::traits::validate_write_count;
 /// # Examples
 ///
 /// ```
-/// use qubit_io::AsyncClose;
-/// use qubit_io::AsyncOutput;
-/// use qubit_io::TokioAsyncWrite;
 /// use std::io::Result;
 /// use std::pin::Pin;
+/// use std::sync::Arc;
 /// use std::task::Context;
 /// use std::task::Poll;
 /// use std::task::Wake;
-/// use std::sync::Arc;
 /// use tokio::io::AsyncWrite;
+///
+/// use qubit_io::AsyncClose;
+/// use qubit_io::AsyncOutput;
+/// use qubit_io::TokioAsyncWrite;
 ///
 /// struct Sink;
 ///

@@ -8,6 +8,7 @@
 
 use std::io::Error;
 use std::io::ErrorKind;
+use std::io::Result;
 use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
@@ -29,7 +30,7 @@ impl AsyncInput for ForbiddenErrorInput {
         _output: &mut [u8],
         _index: usize,
         _count: usize,
-    ) -> Poll<std::io::Result<usize>> {
+    ) -> Poll<Result<usize>> {
         Poll::Ready(Err(Error::new(self.kind, "forbidden async error")))
     }
 }

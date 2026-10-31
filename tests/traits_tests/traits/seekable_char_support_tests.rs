@@ -19,6 +19,8 @@ pub(super) struct CharStream {
 }
 
 impl CharStream {
+    #[must_use]
+    #[inline]
     pub(super) fn new() -> Self {
         Self {
             items: ['你', '🦀', '\u{0301}'],

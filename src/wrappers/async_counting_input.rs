@@ -111,7 +111,7 @@ impl<I> AsyncCountingInput<I> {
     ///
     /// Returns the wrapped asynchronous input.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "inspect the wrapped input"]
     pub const fn inner(&self) -> &I {
         &self.inner
     }
@@ -125,7 +125,7 @@ impl<I> AsyncCountingInput<I> {
     ///
     /// Returns the wrapped asynchronous input.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "use the returned reference to access the wrapped input"]
     pub fn inner_mut(&mut self) -> &mut I {
         &mut self.inner
     }
@@ -170,7 +170,7 @@ where
     /// # Returns
     ///
     /// Returns the wrapped input's buffering declaration.
-    #[inline(always)]
+    #[inline]
     fn is_buffered(&self) -> bool {
         self.inner.is_buffered()
     }

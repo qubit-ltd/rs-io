@@ -24,8 +24,12 @@ use crate::AsyncOutput;
 /// ```
 /// use std::io;
 /// use std::pin::Pin;
-/// use std::task::{Context, Poll, Waker};
-/// use qubit_io::{AsyncByteOutput, AsyncOutput};
+/// use std::task::Context;
+/// use std::task::Poll;
+/// use std::task::Waker;
+///
+/// use qubit_io::AsyncByteOutput;
+/// use qubit_io::AsyncOutput;
 ///
 /// struct ByteSink(Vec<u8>);
 /// impl AsyncOutput for ByteSink {
@@ -49,7 +53,8 @@ use crate::AsyncOutput;
 /// Streams with a different item type do not satisfy this bound:
 ///
 /// ```compile_fail
-/// use qubit_io::{AsyncOutput, AsyncByteOutput};
+/// use qubit_io::AsyncByteOutput;
+/// use qubit_io::AsyncOutput;
 ///
 /// fn accept(stream: impl AsyncByteOutput) {}
 ///

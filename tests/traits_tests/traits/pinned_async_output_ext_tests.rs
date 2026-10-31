@@ -70,10 +70,10 @@ fn test_pinned_async_output_ext_supports_non_unpin_trait_object() {
         let mut output: Pin<&mut dyn AsyncClose<Item = u8>> = output.as_mut();
         {
             let mut future = output.write_async(&input);
-            assert!(matches!(
-                Future::poll(Pin::new(&mut future), &mut cx),
-                Poll::Ready(Ok(2))
-            ));
+            assert!(
+                matches!(Future::poll(Pin::new(&mut future), &mut cx), Poll::Ready(Ok(2))),
+                "write_async should write the requested bytes"
+            );
         }
     }
     assert_eq!([1, 2], output.as_ref().get_ref().bytes.as_slice());
@@ -81,10 +81,10 @@ fn test_pinned_async_output_ext_supports_non_unpin_trait_object() {
         let mut output: Pin<&mut dyn AsyncClose<Item = u8>> = output.as_mut();
         {
             let mut future = output.write_fully_async(&input);
-            assert!(matches!(
-                Future::poll(Pin::new(&mut future), &mut cx),
-                Poll::Ready(Ok(()))
-            ));
+            assert!(
+                matches!(Future::poll(Pin::new(&mut future), &mut cx), Poll::Ready(Ok(()))),
+                "write_fully_async should write all requested bytes"
+            );
         }
     }
     assert_eq!([1, 2, 1, 2], output.as_ref().get_ref().bytes.as_slice());
@@ -92,10 +92,10 @@ fn test_pinned_async_output_ext_supports_non_unpin_trait_object() {
         let mut output: Pin<&mut dyn AsyncClose<Item = u8>> = output.as_mut();
         {
             let mut future = output.flush_async();
-            assert!(matches!(
-                Future::poll(Pin::new(&mut future), &mut cx),
-                Poll::Ready(Ok(()))
-            ));
+            assert!(
+                matches!(Future::poll(Pin::new(&mut future), &mut cx), Poll::Ready(Ok(()))),
+                "flush_async should flush the output"
+            );
         }
     }
     assert_eq!(1, output.as_ref().get_ref().flushes);
@@ -103,10 +103,10 @@ fn test_pinned_async_output_ext_supports_non_unpin_trait_object() {
         let mut output: Pin<&mut dyn AsyncClose<Item = u8>> = output.as_mut();
         {
             let mut future = output.close_async();
-            assert!(matches!(
-                Future::poll(Pin::new(&mut future), &mut cx),
-                Poll::Ready(Ok(()))
-            ));
+            assert!(
+                matches!(Future::poll(Pin::new(&mut future), &mut cx), Poll::Ready(Ok(()))),
+                "close_async should close the output"
+            );
         }
     }
     assert!(output.as_ref().get_ref().closed, "close_async should close the output");

@@ -15,11 +15,14 @@ use qubit_io::Output;
 use qubit_io::OutputRef;
 
 struct VectorCharOutput(Rc<RefCell<Vec<char>>>);
+
 impl Output for VectorCharOutput {
     type Item = char;
+
     unsafe fn write_unchecked(&mut self, _: &[char], _: usize, _: usize) -> io::Result<usize> {
         panic!("scalar write called")
     }
+
     fn write_vectored(&mut self, buffers: &[&[char]]) -> io::Result<usize> {
         let mut total = 0;
         for buffer in buffers {
@@ -28,6 +31,7 @@ impl Output for VectorCharOutput {
         }
         Ok(total)
     }
+
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
     }

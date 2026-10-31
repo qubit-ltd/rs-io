@@ -77,7 +77,8 @@ use crate::AsyncInput;
 /// Streams with a different item type do not satisfy this bound:
 ///
 /// ```compile_fail
-/// use qubit_io::{AsyncInput, AsyncCharInput};
+/// use qubit_io::AsyncCharInput;
+/// use qubit_io::AsyncInput;
 ///
 /// fn accept(stream: impl AsyncCharInput) {}
 ///

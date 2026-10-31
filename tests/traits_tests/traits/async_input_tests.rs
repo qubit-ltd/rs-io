@@ -568,6 +568,7 @@ fn test_read_exactly_async_yields_after_ready_progress_budget() {
 }
 
 trait PollResultExt<T> {
+    #[must_use]
     fn expect_ready(self, message: &str) -> T;
 }
 

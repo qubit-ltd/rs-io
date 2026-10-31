@@ -207,7 +207,7 @@ where
     ///
     /// Returns the wrapped output. Items may still be pending in this wrapper.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "use the wrapped output reference"]
     pub const fn inner(&self) -> &O {
         &self.inner
     }
@@ -220,7 +220,7 @@ where
     ///
     /// Returns the wrapped output.
     #[inline(always)]
-    #[must_use]
+    #[must_use = "use the mutable wrapped output reference"]
     pub fn inner_mut(&mut self) -> &mut O {
         &mut self.inner
     }

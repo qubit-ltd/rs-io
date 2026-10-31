@@ -13,6 +13,7 @@ use std::task::Context;
 use std::task::Poll;
 
 use digest::Digest;
+use digest::Output;
 
 use crate::AsyncByteInput;
 use crate::DEFAULT_COPY_BUFFER_SIZE;
@@ -132,7 +133,7 @@ where
     D: Digest,
 {
     /// Full digest of bytes read from the initial position to EOF.
-    type Output = io::Result<digest::Output<D>>;
+    type Output = io::Result<Output<D>>;
 
     /// Polls bulk reads, retaining digest state across pending operations.
     ///

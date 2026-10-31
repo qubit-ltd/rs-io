@@ -7,7 +7,10 @@
 // =============================================================================
 
 use std::io;
+use std::io::Cursor;
 
+use qubit_io::ByteInput;
+use qubit_io::ByteOutput;
 use qubit_io::Input;
 use qubit_io::Output;
 
@@ -215,10 +218,10 @@ fn test_vectored_defaults_accept_non_copy_items_and_trait_objects() {
         0
     );
 
-    let mut byte_input = std::io::Cursor::new(b"bytes");
-    let byte_input: &mut dyn qubit_io::ByteInput = &mut byte_input;
+    let mut byte_input = Cursor::new(b"bytes");
+    let byte_input: &mut dyn ByteInput = &mut byte_input;
     let mut byte_output = Vec::<u8>::new();
-    let byte_output: &mut dyn qubit_io::ByteOutput = &mut byte_output;
+    let byte_output: &mut dyn ByteOutput = &mut byte_output;
     let mut byte_buffer = [0; 2];
     assert_eq!(Input::read_vectored(byte_input, &mut [&mut byte_buffer]).unwrap(), 2);
     assert_eq!(Output::write_vectored(byte_output, &[b"ok"]).unwrap(), 2);

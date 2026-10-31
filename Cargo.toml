@@ -55,6 +55,106 @@ tokio = { version = "^1.54", features = ["io-util"], optional = true }
 sha2 = "^0.11"
 criterion = { version = "^0.8", default-features = false }
 
+[[test]]
+name = "traits_tests"
+path = "tests/traits_tests/traits/input_tests.rs"
+
+[[test]]
+name = "traits_async_byte_input_tests"
+path = "tests/traits_tests/traits/async_byte_input_tests.rs"
+
+[[test]]
+name = "traits_async_byte_output_tests"
+path = "tests/traits_tests/traits/async_byte_output_tests.rs"
+
+[[test]]
+name = "traits_async_char_input_tests"
+path = "tests/traits_tests/traits/async_char_input_tests.rs"
+
+[[test]]
+name = "traits_async_char_output_tests"
+path = "tests/traits_tests/traits/async_char_output_tests.rs"
+
+[[test]]
+name = "traits_async_close_tests"
+path = "tests/traits_tests/traits/async_close_tests.rs"
+
+[[test]]
+name = "traits_async_contract_error_tests"
+path = "tests/traits_tests/traits/async_contract_error_tests.rs"
+
+[[test]]
+name = "traits_async_input_tests"
+path = "tests/traits_tests/traits/async_input_tests.rs"
+
+[[test]]
+name = "traits_async_output_tests"
+path = "tests/traits_tests/traits/async_output_tests.rs"
+
+[[test]]
+name = "traits_byte_input_tests"
+path = "tests/traits_tests/traits/byte_input_tests.rs"
+
+[[test]]
+name = "traits_byte_output_tests"
+path = "tests/traits_tests/traits/byte_output_tests.rs"
+
+[[test]]
+name = "traits_char_input_tests"
+path = "tests/traits_tests/traits/char_input_tests.rs"
+
+[[test]]
+name = "traits_char_output_tests"
+path = "tests/traits_tests/traits/char_output_tests.rs"
+
+[[test]]
+name = "traits_io_contract_tests"
+path = "tests/traits_tests/traits/io_contract_tests.rs"
+
+[[test]]
+name = "traits_output_tests"
+path = "tests/traits_tests/traits/output_tests.rs"
+
+[[test]]
+name = "traits_pinned_async_input_ext_tests"
+path = "tests/traits_tests/traits/pinned_async_input_ext_tests.rs"
+
+[[test]]
+name = "traits_pinned_async_output_ext_tests"
+path = "tests/traits_tests/traits/pinned_async_output_ext_tests.rs"
+
+[[test]]
+name = "traits_seekable_byte_input_tests"
+path = "tests/traits_tests/traits/seekable_byte_input_tests.rs"
+
+[[test]]
+name = "traits_seekable_byte_output_tests"
+path = "tests/traits_tests/traits/seekable_byte_output_tests.rs"
+
+[[test]]
+name = "traits_seekable_char_input_tests"
+path = "tests/traits_tests/traits/seekable_char_input_tests.rs"
+
+[[test]]
+name = "traits_seekable_char_output_tests"
+path = "tests/traits_tests/traits/seekable_char_output_tests.rs"
+
+[[test]]
+name = "traits_seekable_input_tests"
+path = "tests/traits_tests/traits/seekable_input_tests.rs"
+
+[[test]]
+name = "traits_seekable_output_tests"
+path = "tests/traits_tests/traits/seekable_output_tests.rs"
+
+[[test]]
+name = "traits_support_tests"
+path = "tests/traits_tests/traits/support_tests.rs"
+
+[[test]]
+name = "traits_vectored_tests"
+path = "tests/traits_tests/traits/vectored_tests.rs"
+
 [[bench]]
 name = "buffered"
 harness = false

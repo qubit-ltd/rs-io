@@ -6,10 +6,35 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
+use std::collections::VecDeque;
+use std::io;
+
 use qubit_io::CharInput;
 use qubit_io::Input;
 
-use super::specialized_stream_support::ItemInput;
+struct ItemInput<T> {
+    items: VecDeque<T>,
+}
+
+impl<T: Copy> ItemInput<T> {
+    fn new(items: &[T]) -> Self {
+        Self {
+            items: items.iter().copied().collect(),
+        }
+    }
+}
+
+impl<T: Copy> Input for ItemInput<T> {
+    type Item = T;
+
+    unsafe fn read_unchecked(&mut self, output: &mut [T], index: usize, count: usize) -> io::Result<usize> {
+        let read = count.min(self.items.len());
+        for target in &mut output[index..index + read] {
+            *target = self.items.pop_front().expect("read count must fit the input");
+        }
+        Ok(read)
+    }
+}
 
 fn read<I: CharInput + ?Sized>(input: &mut I) -> [char; 2] {
     let mut chars = ['\0'; 2];

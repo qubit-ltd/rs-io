@@ -6,10 +6,33 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
+use std::io;
+
 use qubit_io::CharOutput;
 use qubit_io::Output;
 
-use super::specialized_stream_support::ItemOutput;
+struct ItemOutput<'a, T> {
+    items: &'a mut Vec<T>,
+}
+
+impl<'a, T> ItemOutput<'a, T> {
+    fn new(items: &'a mut Vec<T>) -> Self {
+        Self { items }
+    }
+}
+
+impl<T: Copy> Output for ItemOutput<'_, T> {
+    type Item = T;
+
+    unsafe fn write_unchecked(&mut self, input: &[T], index: usize, count: usize) -> io::Result<usize> {
+        self.items.extend_from_slice(&input[index..index + count]);
+        Ok(count)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
 
 fn write<O: CharOutput + ?Sized>(output: &mut O) {
     output

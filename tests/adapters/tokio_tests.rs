@@ -183,6 +183,7 @@ impl Wake for WakeCounter {
     fn wake(self: Arc<Self>) {
         self.0.fetch_add(1, Ordering::SeqCst);
     }
+
     fn wake_by_ref(self: &Arc<Self>) {
         self.0.fetch_add(1, Ordering::SeqCst);
     }

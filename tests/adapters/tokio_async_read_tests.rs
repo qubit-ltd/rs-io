@@ -6,6 +6,7 @@
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
 
+use std::any::type_name;
 use std::io::Cursor;
 use std::io::Error;
 use std::io::ErrorKind;
@@ -20,7 +21,7 @@ use tokio::io::ReadBuf;
 
 #[test]
 fn test_tokio_async_read_type_is_public() {
-    assert!(std::any::type_name::<TokioAsyncRead<Cursor<Vec<u8>>>>().contains("TokioAsyncRead"));
+    assert!(type_name::<TokioAsyncRead<Cursor<Vec<u8>>>>().contains("TokioAsyncRead"));
 }
 
 #[derive(Clone, Copy)]
@@ -34,6 +35,7 @@ struct Reader(Action, usize);
 
 impl AsyncInput for Reader {
     type Item = u8;
+
     unsafe fn poll_read_unchecked(
         self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
@@ -43,6 +45,7 @@ impl AsyncInput for Reader {
     ) -> Poll<std::io::Result<usize>> {
         panic!("safe poll_read override must be used")
     }
+
     fn poll_read(mut self: Pin<&mut Self>, _cx: &mut Context<'_>, output: &mut [u8]) -> Poll<std::io::Result<usize>> {
         self.1 += 1;
         match self.0 {

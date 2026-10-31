@@ -5,6 +5,7 @@
 //
 //    Licensed under the Apache License, Version 2.0.
 // =============================================================================
+//! Tests for [`qubit_io::PositionGuard`].
 
 use std::io::Cursor;
 use std::io::Error;

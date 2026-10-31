@@ -21,6 +21,8 @@ pub(super) struct PrefixThenForbiddenInput {
 }
 
 impl PrefixThenForbiddenInput {
+    #[must_use]
+    #[inline]
     pub(super) const fn new(kind: ErrorKind) -> Self {
         Self { kind, emitted: false }
     }
@@ -56,6 +58,8 @@ pub(super) struct PrefixThenForbiddenOutput {
 }
 
 impl PrefixThenForbiddenOutput {
+    #[must_use]
+    #[inline]
     pub(super) const fn new(kind: ErrorKind) -> Self {
         Self {
             kind,
@@ -63,6 +67,8 @@ impl PrefixThenForbiddenOutput {
         }
     }
 
+    #[must_use]
+    #[inline]
     pub(super) fn accepted(&self) -> &[u8] {
         &self.accepted
     }

@@ -13,7 +13,7 @@ use std::task::Poll;
 use qubit_io::AsyncInput;
 use qubit_io::AsyncOutput;
 
-pub(super) struct TestInput;
+struct TestInput;
 
 impl AsyncInput for TestInput {
     type Item = u8;
@@ -29,7 +29,7 @@ impl AsyncInput for TestInput {
     }
 }
 
-pub(super) struct TestOutput;
+struct TestOutput;
 
 impl AsyncOutput for TestOutput {
     type Item = u8;

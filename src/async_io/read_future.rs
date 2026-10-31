@@ -26,9 +26,12 @@ use crate::traits::validate_read_count;
 /// use std::future::Future;
 /// use std::io::Result;
 /// use std::pin::Pin;
-/// use std::task::{Context, Poll, Waker};
+/// use std::task::Context;
+/// use std::task::Poll;
+/// use std::task::Waker;
 ///
-/// use qubit_io::{AsyncInput, ReadFuture};
+/// use qubit_io::AsyncInput;
+/// use qubit_io::ReadFuture;
 ///
 /// struct Input { read: bool }
 ///
@@ -69,11 +72,11 @@ pub struct ReadFuture<'a, I>
 where
     I: AsyncInput + ?Sized,
 {
-    /// Input being read.
+    /// Pinned input whose asynchronous read operation is being polled.
     input: Pin<&'a mut I>,
-    /// Destination for the read.
+    /// Caller-provided storage that receives the items read from `input`.
     output: &'a mut [I::Item],
-    /// Whether the read operation has completed.
+    /// Prevents polling again after the operation has returned `Poll::Ready`.
     completed: bool,
 }
 
