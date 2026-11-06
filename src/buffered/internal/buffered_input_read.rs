@@ -276,6 +276,21 @@ where
 /// Returns the number of cloned items. The caller must guarantee that the
 /// output range contains at least `count` items after `output_index`.
 ///
+/// # Type Parameters
+///
+/// - `T`: Cloneable item type stored in the buffer and output slice.
+///
+/// # Parameters
+///
+/// - `buffer`: Source of the currently available buffered prefix.
+/// - `output`: Destination slice for cloned items.
+/// - `output_index`: Starting index of the destination range.
+/// - `count`: Maximum number of buffered items to clone.
+///
+/// # Panics
+///
+/// Panics if cloning a buffered item panics.
+///
 /// # Safety
 ///
 /// `output_index..output_index + count` must be a valid range in `output`,
@@ -305,6 +320,17 @@ where
 /// Returns the validated item count reported by the wrapped input. The caller
 /// must guarantee that the indexed output range is valid.
 ///
+/// # Type Parameters
+///
+/// - `T`: Item type transferred by the wrapped input.
+///
+/// # Parameters
+///
+/// - `inner`: Input that supplies the requested items.
+/// - `output`: Destination slice for the items.
+/// - `output_index`: Starting index of the destination range.
+/// - `count`: Maximum number of items to read.
+///
 /// # Safety
 ///
 /// `output_index..output_index + count` must be a valid range in `output`,
@@ -332,6 +358,22 @@ unsafe fn read_direct_fully<T>(
 ///
 /// Returns the accumulated number of items read. The caller must guarantee
 /// that the indexed output range is valid.
+///
+/// # Type Parameters
+///
+/// - `T`: Cloneable item type stored in the buffer and output slice.
+///
+/// # Parameters
+///
+/// - `inner`: Input that supplies additional items.
+/// - `buffer`: Temporary storage for items read from `inner`.
+/// - `output`: Destination slice for the requested range.
+/// - `output_index`: Starting index of the destination range.
+/// - `count`: Number of additional items to read at most.
+///
+/// # Panics
+///
+/// Panics if cloning a buffered item panics.
 ///
 /// # Safety
 ///

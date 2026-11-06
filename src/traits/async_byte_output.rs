@@ -62,6 +62,8 @@ use crate::AsyncOutput;
 ///     accept(stream);
 /// }
 /// ```
-pub trait AsyncByteOutput: AsyncOutput<Item = u8> {}
+pub trait AsyncByteOutput: AsyncOutput<Item = u8> {
+    // empty
+}
 
 impl<T: AsyncOutput<Item = u8> + ?Sized> AsyncByteOutput for T {}

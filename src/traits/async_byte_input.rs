@@ -91,6 +91,8 @@ use crate::AsyncInput;
 ///     accept(stream);
 /// }
 /// ```
-pub trait AsyncByteInput: AsyncInput<Item = u8> {}
+pub trait AsyncByteInput: AsyncInput<Item = u8> {
+    // empty
+}
 
 impl<T: AsyncInput<Item = u8> + ?Sized> AsyncByteInput for T {}

@@ -43,7 +43,9 @@ use super::Seekable;
 /// assert_eq!(0, input.seek_to(SeekFrom::Start(0))?);
 /// # Ok::<(), std::io::Error>(())
 /// ```
-pub trait SeekableInput: Input + Seekable<Unit = <Self as Input>::Item> {}
+pub trait SeekableInput: Input + Seekable<Unit = <Self as Input>::Item> {
+    // empty
+}
 
 impl<T> SeekableInput for T
 where

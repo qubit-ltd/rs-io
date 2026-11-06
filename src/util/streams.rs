@@ -628,16 +628,16 @@ thread_local! {
 /// Makes the next [`add_item_count`] call fail.
 ///
 /// Coverage-only helper for exercising overflow propagation inside copy loops.
-#[cfg(coverage)]
 #[doc(hidden)]
+#[cfg(coverage)]
 #[inline(always)]
 pub fn coverage_fail_next_add_item_count() {
     COVERAGE_FAIL_NEXT_ADD_ITEM_COUNT.with(|state| state.set(true));
 }
 
 /// Clears coverage-only [`add_item_count`] hooks between tests.
-#[cfg(coverage)]
 #[doc(hidden)]
+#[cfg(coverage)]
 #[inline(always)]
 pub fn coverage_reset_add_item_count_hooks() {
     COVERAGE_FAIL_NEXT_ADD_ITEM_COUNT.with(|state| state.set(false));
@@ -680,8 +680,8 @@ fn add_item_count(copied: u64, count: usize) -> Result<u64> {
 /// # Errors
 ///
 /// Always returns [`ErrorKind::InvalidData`] for the forced overflow.
-#[cfg(coverage)]
 #[doc(hidden)]
+#[cfg(coverage)]
 #[inline(always)]
 pub fn coverage_add_item_count_overflow() -> Result<u64> {
     add_item_count(u64::MAX, 1)

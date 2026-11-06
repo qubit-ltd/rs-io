@@ -85,6 +85,8 @@ use crate::SeekableOutput;
 ///     accept(stream);
 /// }
 /// ```
-pub trait SeekableCharOutput: CharOutput + SeekableOutput<Item = char, Unit = char> {}
+pub trait SeekableCharOutput: CharOutput + SeekableOutput<Item = char, Unit = char> {
+    // empty
+}
 
 impl<T: SeekableOutput<Item = char, Unit = char> + ?Sized> SeekableCharOutput for T {}

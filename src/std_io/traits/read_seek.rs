@@ -41,6 +41,8 @@ use std::io::Seek;
 /// assert_eq!(read_from_start(&mut cursor)?, b"abc");
 /// # Ok::<(), std::io::Error>(())
 /// ```
-pub trait ReadSeek: Read + Seek {}
+pub trait ReadSeek: Read + Seek {
+    // empty
+}
 
 impl<T> ReadSeek for T where T: Read + Seek + ?Sized {}

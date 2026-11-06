@@ -60,6 +60,8 @@ use crate::AsyncOutput;
 ///     accept(stream);
 /// }
 /// ```
-pub trait AsyncCharOutput: AsyncOutput<Item = char> {}
+pub trait AsyncCharOutput: AsyncOutput<Item = char> {
+    // empty
+}
 
 impl<T: AsyncOutput<Item = char> + ?Sized> AsyncCharOutput for T {}

@@ -86,6 +86,8 @@ use crate::AsyncInput;
 ///     accept(stream);
 /// }
 /// ```
-pub trait AsyncCharInput: AsyncInput<Item = char> {}
+pub trait AsyncCharInput: AsyncInput<Item = char> {
+    // empty
+}
 
 impl<T: AsyncInput<Item = char> + ?Sized> AsyncCharInput for T {}

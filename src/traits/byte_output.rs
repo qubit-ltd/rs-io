@@ -44,6 +44,8 @@ use crate::Output;
 ///     accept(output);
 /// }
 /// ```
-pub trait ByteOutput: Output<Item = u8> {}
+pub trait ByteOutput: Output<Item = u8> {
+    // empty
+}
 
 impl<T: Output<Item = u8> + ?Sized> ByteOutput for T {}

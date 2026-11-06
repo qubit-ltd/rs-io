@@ -46,11 +46,17 @@ where
     ///
     /// The contained buffer remains in logical write order and may be retried,
     /// subject to any direct changes made through `inner_mut`.
-    Pending(Buffer<T>),
+    Pending(
+        #[doc = "The retained items in logical write order; they may be retried after accounting for direct changes made through `inner_mut`."]
+         Buffer<T>,
+    ),
     /// Items retained after an inner I/O operation panicked.
     ///
     /// The inner operation may have committed any prefix of these items, so
     /// automatically replaying the buffer could duplicate output. An empty
     /// buffer does not prove that the panicking operation had no effects.
-    Indeterminate(Buffer<T>),
+    Indeterminate(
+        #[doc = "The retained items whose committed prefix is unknown because an inner I/O operation panicked; replay may duplicate output."]
+         Buffer<T>,
+    ),
 }

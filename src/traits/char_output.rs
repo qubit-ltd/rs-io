@@ -69,6 +69,8 @@ use crate::Output;
 ///     accept(stream);
 /// }
 /// ```
-pub trait CharOutput: Output<Item = char> {}
+pub trait CharOutput: Output<Item = char> {
+    // empty
+}
 
 impl<T: Output<Item = char> + ?Sized> CharOutput for T {}

@@ -12,6 +12,8 @@
 #[cfg(coverage)]
 use std::cell::Cell;
 use std::collections::TryReserveError;
+use std::io::Error;
+use std::io::Result as IoResult;
 
 use qubit_utils::allocation_error as qubit_allocation_error;
 use qubit_utils::try_reserve_string as qubit_try_reserve_string;
@@ -36,7 +38,7 @@ thread_local! {
 /// An I/O error with the `OutOfMemory` kind.
 #[must_use]
 #[inline]
-pub(crate) fn allocation_error(error: TryReserveError) -> std::io::Error {
+pub(crate) fn allocation_error(error: TryReserveError) -> Error {
     qubit_allocation_error(error)
 }
 
@@ -58,7 +60,7 @@ pub(crate) fn allocation_error(error: TryReserveError) -> std::io::Error {
 /// # Errors
 ///
 /// Returns an I/O allocation error if reserving the requested capacity fails.
-pub(crate) fn create_vec<T>(len: usize, fill: T) -> std::io::Result<Vec<T>>
+pub(crate) fn create_vec<T>(len: usize, fill: T) -> IoResult<Vec<T>>
 where
     T: Clone,
 {
@@ -129,8 +131,8 @@ pub(crate) fn try_reserve_string(output: &mut String, additional: usize) -> Resu
 }
 
 /// Makes the next vector reserve fail in coverage builds.
-#[cfg(coverage)]
 #[doc(hidden)]
+#[cfg(coverage)]
 pub fn coverage_fail_next_reserve() {
     COVERAGE_RESERVE_FAIL_AFTER.with(|state| state.set(0));
 }
@@ -141,8 +143,8 @@ pub fn coverage_fail_next_reserve() {
 ///
 /// - `successful_attempts`: Number of vector reserves allowed to succeed before
 ///   the injected failure.
-#[cfg(coverage)]
 #[doc(hidden)]
+#[cfg(coverage)]
 pub fn coverage_fail_reserve_after(successful_attempts: usize) {
     COVERAGE_RESERVE_FAIL_AFTER.with(|state| state.set(successful_attempts));
 }
@@ -152,22 +154,22 @@ pub fn coverage_fail_reserve_after(successful_attempts: usize) {
 /// # Parameters
 ///
 /// - `max_additional`: Largest additional capacity request allowed to succeed.
-#[cfg(coverage)]
 #[doc(hidden)]
+#[cfg(coverage)]
 pub fn coverage_fail_reserve_above(max_additional: usize) {
     COVERAGE_RESERVE_MAX_ADDITIONAL.with(|state| state.set(max_additional));
 }
 
 /// Makes the next string reserve fail in coverage builds.
-#[cfg(coverage)]
 #[doc(hidden)]
+#[cfg(coverage)]
 pub fn coverage_fail_next_string_reserve() {
     COVERAGE_FAIL_NEXT_STRING_RESERVE.with(|state| state.set(true));
 }
 
 /// Resets all local allocation coverage hooks.
-#[cfg(coverage)]
 #[doc(hidden)]
+#[cfg(coverage)]
 pub fn coverage_reset_reserve_hooks() {
     COVERAGE_RESERVE_FAIL_AFTER.with(|state| state.set(usize::MAX));
     COVERAGE_RESERVE_MAX_ADDITIONAL.with(|state| state.set(usize::MAX));

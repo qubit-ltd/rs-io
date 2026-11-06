@@ -109,6 +109,8 @@ use crate::SeekableInput;
 ///     accept(stream);
 /// }
 /// ```
-pub trait SeekableCharInput: CharInput + SeekableInput<Item = char, Unit = char> {}
+pub trait SeekableCharInput: CharInput + SeekableInput<Item = char, Unit = char> {
+    // empty
+}
 
 impl<T: SeekableInput<Item = char, Unit = char> + ?Sized> SeekableCharInput for T {}

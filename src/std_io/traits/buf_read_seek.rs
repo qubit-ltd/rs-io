@@ -45,6 +45,8 @@ use std::io::Seek;
 /// assert_eq!(read_after_prefix(&mut reader)?, "def");
 /// # Ok::<(), std::io::Error>(())
 /// ```
-pub trait BufReadSeek: BufRead + Seek {}
+pub trait BufReadSeek: BufRead + Seek {
+    // empty
+}
 
 impl<T> BufReadSeek for T where T: BufRead + Seek + ?Sized {}

@@ -36,6 +36,8 @@ use std::io::Write;
 /// assert_eq!(cursor.into_inner(), b"ping");
 /// # Ok::<(), std::io::Error>(())
 /// ```
-pub trait ReadWrite: Read + Write {}
+pub trait ReadWrite: Read + Write {
+    // empty
+}
 
 impl<T> ReadWrite for T where T: Read + Write + ?Sized {}

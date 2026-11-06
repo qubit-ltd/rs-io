@@ -46,6 +46,8 @@ use std::io::Write;
 /// assert_eq!(rewrite_first_byte(&mut cursor)?, "zbc");
 /// # Ok::<(), std::io::Error>(())
 /// ```
-pub trait ReadWriteSeek: Read + Write + Seek {}
+pub trait ReadWriteSeek: Read + Write + Seek {
+    // empty
+}
 
 impl<T> ReadWriteSeek for T where T: Read + Write + Seek + ?Sized {}

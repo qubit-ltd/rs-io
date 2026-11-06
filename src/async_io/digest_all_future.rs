@@ -137,6 +137,13 @@ where
 
     /// Polls bulk reads, retaining digest state across pending operations.
     ///
+    /// # Parameters
+    ///
+    /// - `self`: Pinned mutable access to this future; polling after completion
+    ///   panics.
+    /// - `cx`: Task context used to register for input readiness and to wake
+    ///   the executor when another poll is needed for fairness.
+    ///
     /// # Errors
     ///
     /// Returns the input's read error, normalizing `WouldBlock` and

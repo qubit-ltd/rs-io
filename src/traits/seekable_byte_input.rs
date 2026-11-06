@@ -57,6 +57,8 @@ use crate::SeekableInput;
 ///     accept(stream);
 /// }
 /// ```
-pub trait SeekableByteInput: ByteInput + SeekableInput<Item = u8, Unit = u8> {}
+pub trait SeekableByteInput: ByteInput + SeekableInput<Item = u8, Unit = u8> {
+    // empty
+}
 
 impl<T: SeekableInput<Item = u8, Unit = u8> + ?Sized> SeekableByteInput for T {}

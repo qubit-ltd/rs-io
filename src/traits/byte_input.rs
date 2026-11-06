@@ -42,6 +42,8 @@ use crate::Input;
 ///     accept(input);
 /// }
 /// ```
-pub trait ByteInput: Input<Item = u8> {}
+pub trait ByteInput: Input<Item = u8> {
+    // empty
+}
 
 impl<T: Input<Item = u8> + ?Sized> ByteInput for T {}
