@@ -1,8 +1,8 @@
 # Qubit IO 用户手册
 
-[English](user_guide.md) | [项目介绍](../README.zh_CN.md) | [API 文档](https://docs.rs/qubit-io/0.19.1/qubit_io/)
+[English](user_guide.md) | [项目介绍](../README.zh_CN.md) | [API 文档](https://docs.rs/qubit-io/qubit_io/)
 
-本手册面向需要处理字节、字符或业务对象流的 Rust 开发者，以及需要扩展流实现的库作者。内容以 `qubit-io 0.19.1` 当前代码为准，要求 Rust 1.94 或更新版本，使用 Rust 2024 edition。
+本手册面向需要处理字节、字符或业务对象流的 Rust 开发者，以及需要扩展流实现的库作者。内容适用于 `qubit-io 0.19` 系列，要求 Rust 1.94 或更新版本，使用 Rust 2024 edition。API 链接打开最新发布版本的文档；使用其他版本时，请在 docs.rs 选择对应版本。
 
 ## 目录
 
@@ -1003,4 +1003,4 @@ assert_eq!(b"ok", output.as_ref().get_ref().pending());
 | futures-io 双向桥接 | 异步字节流 | `futures-io` |
 | 泛型复制工具 | `Clone + Default` | 同步 `Streams` |
 
-接下来可查阅[API 文档](https://docs.rs/qubit-io/0.19.1/qubit_io/)，或回到[项目介绍](../README.zh_CN.md)。本手册的英文版本见 [English user guide](user_guide.md)。
+接下来可查阅[API 文档](https://docs.rs/qubit-io/qubit_io/)，或回到[项目介绍](../README.zh_CN.md)。本手册的英文版本见 [English user guide](user_guide.md)。

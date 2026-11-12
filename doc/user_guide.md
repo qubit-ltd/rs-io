@@ -1,8 +1,8 @@
 # Qubit IO User Guide
 
-[简体中文](user_guide.zh_CN.md) | [Project overview](../README.md) | [API documentation](https://docs.rs/qubit-io/0.19.1/qubit_io/)
+[简体中文](user_guide.zh_CN.md) | [Project overview](../README.md) | [API documentation](https://docs.rs/qubit-io/qubit_io/)
 
-This guide is for Rust developers processing streams of bytes, characters, or business objects, and library authors implementing new streams. It describes the current `qubit-io 0.19.1` codebase and requires Rust 1.94 or later, using the Rust 2024 edition.
+This guide is for Rust developers processing streams of bytes, characters, or business objects, and library authors implementing new streams. It covers the `qubit-io 0.19` series and requires Rust 1.94 or later, using the Rust 2024 edition. API links open the latest published documentation; select the matching version on docs.rs when using another release.
 
 ## Contents
 
@@ -1014,4 +1014,4 @@ An always-ready memory stream need not manufacture `Pending`. Network streams sh
 | Bidirectional futures-io bridges | Async byte streams | `futures-io` |
 | Generic copy utilities | `Clone + Default` | Synchronous `Streams` |
 
-Continue with the [API documentation](https://docs.rs/qubit-io/0.19.1/qubit_io/) or return to the [project overview](../README.md). The Chinese counterpart is the [简体中文用户手册](user_guide.zh_CN.md).
+Continue with the [API documentation](https://docs.rs/qubit-io/qubit_io/) or return to the [project overview](../README.md). The Chinese counterpart is the [简体中文用户手册](user_guide.zh_CN.md).
