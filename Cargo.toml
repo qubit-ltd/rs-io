@@ -55,6 +55,8 @@ tokio = { version = "^1.54", features = ["io-util"], optional = true }
 sha2 = "^0.11"
 criterion = { version = "^0.8", default-features = false }
 
+# Nested traits tests are discovered through the explicit targets below.
+# Register each new traits test file here; no aggregate module list is used.
 [[test]]
 name = "traits_tests"
 path = "tests/traits_tests/traits/input_tests.rs"
