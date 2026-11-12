@@ -10,7 +10,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "^0.4"
-qubit-io = { path = ".." }
+qubit-io = { path = "../", version = "^0.19" }
 
 [[bin]]
 name = "buffer_state"

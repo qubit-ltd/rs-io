@@ -71,7 +71,7 @@ dependencies = [
 
 [[package]]
 name = "qubit-io"
-version = "0.19.4"
+version = "0.19.5"
 dependencies = [
  "qubit-utils",
 ]
@@ -86,9 +86,9 @@ dependencies = [
 
 [[package]]
 name = "qubit-utils"
-version = "0.3.3"
+version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "584ff83ad66e30417e2b0fd251e36562971fa072236c369b0837df72dc01cce4"
+checksum = "89e16644d9ad9d6eafa3216b8a1d50db0cec09ef364f6cbd082ff49ea87bf154"
 
 [[package]]
 name = "r-efi"
